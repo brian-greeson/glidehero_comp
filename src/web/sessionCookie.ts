@@ -19,7 +19,13 @@ export function createSessionCookie(options: {
         const separator = part.indexOf('=');
         if (separator < 0) continue;
         const name = part.slice(0, separator).trim();
-        if (name === options.name) return decodeURIComponent(part.slice(separator + 1).trim());
+        if (name === options.name) {
+          try {
+            return decodeURIComponent(part.slice(separator + 1).trim());
+          } catch {
+            return null;
+          }
+        }
       }
 
       return null;

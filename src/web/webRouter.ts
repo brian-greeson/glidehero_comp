@@ -13,6 +13,11 @@ const signupSchema = z.object({
 });
 const loginSchema = z.object({ email, password });
 
+function formBody(body: unknown): Record<string, unknown> {
+  if (typeof body !== 'object' || body === null || Array.isArray(body)) return {};
+  return body as Record<string, unknown>;
+}
+
 async function render(res: Response, renderPage: PageRenderer, status: number, model: PageModel) {
   res.status(status).type('html').send(await renderPage(model));
 }
@@ -29,13 +34,15 @@ export function createWebRouter(dependencies: {
   });
 
   router.post('/signup', async (req, res) => {
-    const parsed = signupSchema.safeParse(req.body);
+    const body = formBody(req.body);
+    const parsed = signupSchema.safeParse(body);
     if (!parsed.success) {
       await render(res, dependencies.renderPage, 422, {
         currentUser: null,
-        signupError: 'Enter a valid email and a password of at least 12 characters.',
-        signupEmail: typeof req.body.email === 'string' ? req.body.email : '',
-        signupDisplayName: typeof req.body.displayName === 'string' ? req.body.displayName : '',
+        signupError:
+          'Enter a valid email, an optional display name of up to 48 characters, and a password of 12 to 128 characters.',
+        signupEmail: typeof body.email === 'string' ? body.email : '',
+        signupDisplayName: typeof body.displayName === 'string' ? body.displayName : '',
       });
       return;
     }
@@ -63,12 +70,13 @@ export function createWebRouter(dependencies: {
   });
 
   router.post('/login', async (req, res) => {
-    const parsed = loginSchema.safeParse(req.body);
+    const body = formBody(req.body);
+    const parsed = loginSchema.safeParse(body);
     if (!parsed.success) {
       await render(res, dependencies.renderPage, 401, {
         currentUser: null,
         loginError: 'Email or password is incorrect.',
-        loginEmail: typeof req.body.email === 'string' ? req.body.email : '',
+        loginEmail: typeof body.email === 'string' ? body.email : '',
       });
       return;
     }

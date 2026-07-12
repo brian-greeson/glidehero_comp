@@ -116,3 +116,104 @@ The combined command exited 0.
 ## Concerns
 
 None. HTTP tests must run with loopback permission in this environment because the default sandbox rejects local server binding with `EPERM`.
+
+## Review Fix
+
+### Findings addressed
+
+- `SessionCookie.read` called `decodeURIComponent` without guarding malformed percent encoding, so a request such as `Cookie: glidehero_session=%` raised `URIError` and returned HTTP 500.
+- The invalid login and signup branches parsed `req.body` safely with Zod but then dereferenced `req.body.email` and `req.body.displayName`; unsupported or absent content types left the body undefined and caused HTTP 500.
+- The initial password non-rendering assertions used a fake renderer that never emitted form values, so they could not prove the real Vento response excluded a submitted password.
+- The signup validation message described only email and minimum password length even when display-name length or maximum password length was invalid.
+- Static stylesheet serving had no HTTP regression protecting `/styles/app.css`, its content type, representative content, or its placement before authentication middleware.
+
+### Review-fix RED
+
+Added direct cookie and real HTTP regressions before editing production code, then ran with loopback permission:
+
+```bash
+npx vitest run test/unit/sessionCookie.test.ts test/unit/webRouter.test.ts --reporter=verbose
+```
+
+Relevant output:
+
+```text
+GET / 500
+URIError: URI malformed
+
+POST /login 500
+TypeError: Cannot read properties of undefined (reading 'email')
+
+POST /signup 500
+TypeError: Cannot read properties of undefined (reading 'email')
+
+Test Files  2 failed (2)
+Tests       4 failed | 11 passed (15)
+```
+
+The four expected failures were the direct malformed-cookie read, malformed-cookie GET, bodyless login POST, and bodyless signup POST. The new real-Vento response and stylesheet HTTP tests passed against existing behavior and established coverage for the review's previously unproved requirements.
+
+### Review-fix GREEN
+
+Changed `SessionCookie.read` to return `null` when its named token cannot be decoded. Added a focused `formBody` normalizer that converts null, undefined, arrays, primitives, and other unsupported request bodies to an empty record before validation or safe-field redisplay. Replaced the incomplete signup validation text with a message covering valid email, the optional 48-character display-name maximum, and the 12-to-128-character password range.
+
+Reran the focused command:
+
+```text
+GET / 200
+GET /styles/app.css 200
+POST /login 401
+POST /signup 422
+POST /signup 409
+
+Test Files  2 passed (2)
+Tests       15 passed (15)
+```
+
+The 409 signup case used the real `createPageRenderer()` over HTTP and verified that email and display name were safely redisplayed while the submitted password was absent from the actual Vento HTML.
+
+### Review-fix full verification
+
+Ran:
+
+```bash
+npm test && npm run typecheck && npm run build
+```
+
+Output:
+
+```text
+Test Files  6 passed (6)
+Tests       29 passed (29)
+
+> glidehero@0.1.0 typecheck
+> tsc -p tsconfig.json --noEmit
+
+> glidehero@0.1.0 build
+> tsc -p tsconfig.json
+```
+
+The combined command exited 0.
+
+### Review-fix files
+
+- Updated `src/web/sessionCookie.ts`: treats undecodable named cookies as absent.
+- Updated `src/web/webRouter.ts`: normalizes unknown request bodies and uses complete signup validation copy.
+- Updated `test/unit/sessionCookie.test.ts`: direct malformed-percent regression.
+- Updated `test/unit/webRouter.test.ts`: malformed-cookie middleware, bodyless form, real Vento password omission/safe redisplay, and stylesheet ordering regressions.
+- Updated `.superpowers/sdd/task-5-report.md`: review findings and TDD/verification evidence.
+
+### Review-fix self-review
+
+- Confirmed malformed percent encoding cannot escape `SessionCookie.read` and is represented to current-user middleware as no token, so `AuthService.authenticate` is not called.
+- Confirmed both form handlers normalize unknown input before Zod parsing and access only the normalized record during validation redisplay.
+- Confirmed bodyless login and signup requests return HTML with controlled 401 and 422 statuses rather than the JSON 500 handler.
+- Confirmed the signup validation message accurately covers email, optional display-name maximum length, and both password bounds.
+- Confirmed the real Vento HTTP regression forces `AuthFailure('duplicate_email')`, finds safe email/display-name values in the rendered form, and does not find the submitted password.
+- Confirmed `/styles/app.css` returns 200, `text/css`, and `.auth-grid` content even with a valid session cookie, while `AuthService.authenticate` remains uncalled because static serving precedes injected browser middleware.
+- Confirmed the existing 303 redirect, protected-cookie, logout revocation, anonymous/authenticated Vento, and server-core tests remain green.
+- Confirmed no migration workflow, deferred subsystem, legacy identifier, or unrelated file was added.
+
+### Review-fix concerns
+
+None. As before, real HTTP tests require loopback permission because the default sandbox rejects local server binding.

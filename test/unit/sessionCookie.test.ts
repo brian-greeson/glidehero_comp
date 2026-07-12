@@ -40,4 +40,14 @@ describe('sessionCookie', () => {
       'token value/with=symbols',
     );
   });
+
+  it('treats an undecodable token as absent', () => {
+    const cookie = createSessionCookie({
+      name: 'glidehero_session',
+      secure: false,
+      maxAgeSeconds: 604800,
+    });
+
+    expect(cookie.read('theme=dark; glidehero_session=%; locale=en')).toBeNull();
+  });
 });
