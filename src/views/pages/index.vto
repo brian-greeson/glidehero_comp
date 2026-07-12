@@ -19,7 +19,7 @@
         {{ if loginError }}<p class="error" role="alert">{{ loginError }}</p>{{ /if }}
         <form method="post" action="/login">
           <label>Email<input name="email" type="email" autocomplete="email" required value="{{ loginEmail ?? '' }}"></label>
-          <label>Password<input name="password" type="password" autocomplete="current-password" minlength="12" maxlength="128" required></label>
+          <label>Password<input name="password" type="password" autocomplete="current-password" minlength="3" maxlength="128" required></label>
           <button type="submit">Log in</button>
         </form>
       </section>
@@ -30,7 +30,7 @@
         <form method="post" action="/signup">
           <label>Display name<input name="displayName" maxlength="48" autocomplete="nickname" value="{{ signupDisplayName ?? '' }}"></label>
           <label>Email<input name="email" type="email" autocomplete="email" required value="{{ signupEmail ?? '' }}"></label>
-          <label>Password<input name="password" type="password" autocomplete="new-password" minlength="12" maxlength="128" required></label>
+          <label>Password<input name="password" type="password" autocomplete="new-password" minlength="3" maxlength="128" required></label>
           <button type="submit">Sign up</button>
         </form>
       </section>

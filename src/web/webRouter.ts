@@ -5,7 +5,7 @@ import type { PageModel, PageRenderer } from '../views/renderer.js';
 import type { SessionCookie } from './sessionCookie.js';
 
 const email = z.string().trim().toLowerCase().pipe(z.email());
-const password = z.string().min(12).max(128);
+const password = z.string().min(3).max(128);
 const signupSchema = z.object({
   email,
   password,
