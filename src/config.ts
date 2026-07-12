@@ -4,8 +4,19 @@ const envSchema = z.object({
   DATABASE_URL: z.string().min(1),
   ENVIRONMENT: z.enum(['development', 'test', 'production']).default('development'),
   PORT: z.coerce.number().int().min(0).max(65535).default(3000),
-  SESSION_COOKIE_NAME: z.string().regex(/^[A-Za-z0-9_]+$/).default('glidehero_session'),
-  SESSION_TTL_SECONDS: z.coerce.number().int().positive().default(7 * 24 * 60 * 60),
+  SESSION_COOKIE_NAME: z
+    .string()
+    .regex(/^[A-Za-z0-9_]+$/)
+    .default('glidehero_session'),
+  SESSION_TTL_SECONDS: z.coerce
+    .number()
+    .int()
+    .positive()
+    .default(7 * 24 * 60 * 60),
+  BUCKET_SECRET: z.string(),
+  BUCKET_ID: z.string(),
+  BUCKET_NAME: z.string(),
+  BUCKET_URL: z.string(),
 });
 
 export type AppConfig = {
@@ -15,6 +26,12 @@ export type AppConfig = {
   port: number;
   sessionCookieName: string;
   sessionTtlSeconds: number;
+  bucket: {
+    bucketSecret: string;
+    bucketId: string;
+    bucketName: string;
+    bucketURL: string;
+  };
 };
 
 export function parseConfig(env: NodeJS.ProcessEnv): AppConfig {
@@ -26,5 +43,11 @@ export function parseConfig(env: NodeJS.ProcessEnv): AppConfig {
     port: parsed.PORT,
     sessionCookieName: parsed.SESSION_COOKIE_NAME,
     sessionTtlSeconds: parsed.SESSION_TTL_SECONDS,
+    bucket: {
+      bucketSecret: parsed.BUCKET_SECRET,
+      bucketId: parsed.BUCKET_ID,
+      bucketName: parsed.BUCKET_NAME,
+      bucketURL: parsed.BUCKET_URL,
+    },
   };
 }
