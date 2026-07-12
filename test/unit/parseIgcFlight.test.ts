@@ -69,4 +69,20 @@ describe('parseIgcFlight', () => {
 
     expect(parseIgcFlight(source).distanceMeters).toBe(0);
   });
+
+  it('keeps timestamps ordered across multiple midnight rollovers', () => {
+    const source = [
+      'AXXXGLIDEHERO',
+      'HFDTE120726',
+      'B2359004000000N10500000WA0000000000',
+      'B0001004000000N10500000WA0000000000',
+      'B2359004000000N10500000WA0000000000',
+      'B0001004000000N10500000WA0000000000',
+    ].join('\n');
+
+    const flight = parseIgcFlight(source);
+
+    expect(flight.points[3]?.recordedAt.toISOString()).toBe('2026-07-14T00:01:00.000Z');
+    expect(flight.durationSeconds).toBe(86_520);
+  });
 });

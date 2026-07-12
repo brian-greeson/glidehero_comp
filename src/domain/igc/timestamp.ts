@@ -29,6 +29,6 @@ export function timestampForFix(date: Date, time: string, previous: Date | undef
     Number(time.slice(2, 4)),
     Number(time.slice(4, 6)),
   ));
-  if (previous && value < previous) value.setUTCDate(value.getUTCDate() + 1);
+  while (previous && value < previous) value.setUTCDate(value.getUTCDate() + 1);
   return value;
 }

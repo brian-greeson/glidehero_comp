@@ -70,3 +70,23 @@ B0000024000060N10500060WA0123501235
 In IGC B records, `600`? No: the `060` fields are 0.060 minutes, not 0.060 thousandths of a degree. At latitude 40°, the latitude change is approximately 111.2 m and the longitude change approximately 85.2 m. Their Haversine distance is approximately 140.07 m. Therefore the requested 70–90 m range is incompatible with correct IGC fixed-width decoding and Haversine calculation.
 
 The fixture expectation was corrected without changing the fixed-width decoding or Haversine calculation. A separate regression test proves that identical valid fixes parse successfully with a distance of zero.
+
+## Multiple-rollover regression fix
+
+Added a focused regression case for four valid fixes with times `23:59 → 00:01 → 23:59 → 00:01`. The initial run was RED:
+
+```sh
+npx vitest run test/unit/parseIgcFlight.test.ts
+```
+
+The test failed because the fourth point was assigned `2026-07-13T00:01:00.000Z` rather than `2026-07-14T00:01:00.000Z`.
+
+`timestampForFix` now advances the candidate UTC date repeatedly until it is not earlier than the preceding point. This preserves chronological ordering across more than one midnight rollover and leaves coincident fixes valid.
+
+GREEN verification:
+
+```sh
+npx vitest run test/unit/parseIgcFlight.test.ts && npm run typecheck
+```
+
+Result: PASS — focused parser suite 9/9 and TypeScript type-check exit code 0.
