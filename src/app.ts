@@ -1,3 +1,4 @@
+import { resolve } from 'node:path';
 import express, { type ErrorRequestHandler, type RequestHandler } from 'express';
 import { AppError } from './domain/errors.js';
 import { requestLogger } from './middleware/logMiddleware.js';
@@ -15,6 +16,7 @@ export function createApp(dependencies: AppDependencies = {}) {
   app.use(express.urlencoded({ extended: false, limit: '16kb' }));
   app.use(requestLogger);
   app.use(healthRouter);
+  app.use(express.static(resolve('public'), { fallthrough: true }));
   for (const middleware of dependencies.webMiddleware ?? []) app.use(middleware);
 
   const errorHandler: ErrorRequestHandler = (error, _req, res, _next) => {
