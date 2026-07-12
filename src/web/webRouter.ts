@@ -2,6 +2,7 @@ import { Router, type Request, type Response } from 'express';
 import multer from 'multer';
 import { z } from 'zod';
 import { AuthFailure, type AuthService } from '../services/authService.js';
+import { normalizeTerritoryColor, type ProfileService } from '../services/profileService.js';
 import type { PageModel, PageRenderer } from '../views/renderer.js';
 import type { IgcFileService } from '../services/igcFileService.js';
 import type { SessionCookie } from './sessionCookie.js';
@@ -34,6 +35,7 @@ export function createWebRouter(dependencies: {
   auth: AuthService;
   cookie: SessionCookie;
   igcFiles: IgcFileService;
+  profiles: ProfileService;
   renderPage: PageRenderer;
 }) {
   const router = Router();
@@ -42,6 +44,7 @@ export function createWebRouter(dependencies: {
     await render(res, dependencies.renderPage, 200, {
       currentUser: res.locals.currentUser,
       uploadSuccess: req.query.igcUpload === 'success',
+      territoryColorSuccess: req.query.territoryColor === 'success',
     });
   });
 
@@ -114,6 +117,29 @@ export function createWebRouter(dependencies: {
     if (res.locals.sessionToken) await dependencies.auth.logout(res.locals.sessionToken);
     res.setHeader('set-cookie', dependencies.cookie.clear());
     res.redirect(303, '/');
+  });
+
+  router.post('/profile/territory-color', async (req, res) => {
+    const currentUser = res.locals.currentUser;
+    if (!currentUser) {
+      await render(res, dependencies.renderPage, 401, {
+        currentUser: null,
+        territoryColorError: 'Sign in before changing your map color.',
+      });
+      return;
+    }
+
+    const territoryColor = normalizeTerritoryColor(formBody(req.body).territoryColor);
+    if (!territoryColor) {
+      await render(res, dependencies.renderPage, 422, {
+        currentUser,
+        territoryColorError: 'Choose a valid six-digit hex color.',
+      });
+      return;
+    }
+
+    await dependencies.profiles.updateTerritoryColor({ userId: currentUser.userId, territoryColor });
+    res.redirect(303, '/?territoryColor=success');
   });
 
   router.post('/igc-files', async (req, res, next) => {

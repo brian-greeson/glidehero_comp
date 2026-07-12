@@ -13,6 +13,16 @@
       </form>
     </section>
     <section class="card">
+      <h2>Map color</h2>
+      <p class="muted">Choose the color for your personal territory.</p>
+      {{ if territoryColorSuccess }}<p class="success" role="status">Map color saved.</p>{{ /if }}
+      {{ if territoryColorError }}<p class="error" role="alert">{{ territoryColorError }}</p>{{ /if }}
+      <form method="post" action="/profile/territory-color">
+        <label>Territory color<input name="territoryColor" type="color" value="{{ currentUser.territoryColor }}" required></label>
+        <button type="submit">Save map color</button>
+      </form>
+    </section>
+    <section class="card">
       <h2>Upload IGC flight</h2>
       {{ if uploadSuccess }}<p class="success" role="status">IGC file uploaded.</p>{{ /if }}
       {{ if uploadError }}<p class="error" role="alert">{{ uploadError }}</p>{{ /if }}

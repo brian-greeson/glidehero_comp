@@ -11,6 +11,8 @@ export type PageModel = {
   signupDisplayName?: string;
   uploadError?: string;
   uploadSuccess?: boolean;
+  territoryColorError?: string;
+  territoryColorSuccess?: boolean;
 };
 
 export type PageRenderer = (model: PageModel) => Promise<string>;
@@ -32,6 +34,8 @@ export function createPageRenderer(): PageRenderer {
         signupDisplayName: '',
         uploadError: undefined,
         uploadSuccess: false,
+        territoryColorError: undefined,
+        territoryColorSuccess: false,
         ...model,
       })
     ).content;

@@ -24,6 +24,7 @@ export const profiles = pgTable(
     id: uuid('id').primaryKey().defaultRandom(),
     userId: uuid('user_id').notNull().unique().references(() => users.id, { onDelete: 'cascade' }),
     displayName: text('display_name').notNull(),
+    territoryColor: text('territory_color').notNull().default('#1769AA'),
     ...timestamps,
   },
   (table) => [index('profiles_user_id_idx').on(table.userId)],

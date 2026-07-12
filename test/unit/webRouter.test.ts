@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createApp } from '../../src/app.js';
 import { AuthFailure, type AuthService } from '../../src/services/authService.js';
+import type { ProfileService } from '../../src/services/profileService.js';
 import { createPageRenderer } from '../../src/views/renderer.js';
 import { createCurrentUserMiddleware } from '../../src/web/currentUserMiddleware.js';
 import { createSessionCookie } from '../../src/web/sessionCookie.js';
@@ -12,6 +13,7 @@ const user = {
   sessionId: '00000000-0000-4000-8000-000000000002',
   email: 'pilot@example.com',
   displayName: 'Sky Pilot',
+  territoryColor: '#1769AA',
 };
 
 function dependencies() {
@@ -33,8 +35,9 @@ function dependencies() {
   );
   const middleware = createCurrentUserMiddleware(auth, cookie);
   const igcFiles = { upload: vi.fn(async () => ({ id: '00000000-0000-4000-8000-000000000010', bucketKey: 'glidehero/flight.igc' })) };
-  const router = createWebRouter({ auth, cookie, igcFiles, renderPage });
-  return { auth, igcFiles, app: createApp({ webMiddleware: [middleware, router] }) };
+  const profiles: ProfileService = { updateTerritoryColor: vi.fn(async () => undefined) };
+  const router = createWebRouter({ auth, cookie, igcFiles, profiles, renderPage });
+  return { auth, igcFiles, profiles, renderPage, app: createApp({ webMiddleware: [middleware, router] }) };
 }
 
 describe('webRouter', () => {
@@ -201,6 +204,7 @@ describe('webRouter', () => {
       auth,
       cookie,
       igcFiles: { upload: vi.fn(async () => ({ id: '00000000-0000-4000-8000-000000000010', bucketKey: 'glidehero/flight.igc' })) },
+      profiles: { updateTerritoryColor: vi.fn(async () => undefined) },
       renderPage: createPageRenderer(),
     });
     const app = createApp({ webMiddleware: [middleware, router] });
@@ -238,6 +242,63 @@ describe('webRouter', () => {
         'glidehero_session=; Max-Age=0; Path=/; HttpOnly; SameSite=Lax',
       );
       expect(auth.logout).toHaveBeenCalledWith('valid-token');
+    });
+  });
+
+  it('persists an authenticated pilot map color and redirects with success', async () => {
+    const { app, profiles, renderPage } = dependencies();
+    await withServer(app, async (baseUrl) => {
+      const response = await fetch(`${baseUrl}/profile/territory-color`, {
+        method: 'POST',
+        redirect: 'manual',
+        headers: {
+          cookie: 'glidehero_session=valid-token',
+          'content-type': 'application/x-www-form-urlencoded',
+        },
+        body: new URLSearchParams({ territoryColor: '#a1b2c3' }),
+      });
+
+      expect(response.status).toBe(303);
+      expect(response.headers.get('location')).toBe('/?territoryColor=success');
+      expect(profiles.updateTerritoryColor).toHaveBeenCalledWith({
+        userId: user.userId,
+        territoryColor: '#A1B2C3',
+      });
+    });
+  });
+
+  it('rejects malformed territory colors without updating a profile', async () => {
+    const { app, profiles, renderPage } = dependencies();
+    await withServer(app, async (baseUrl) => {
+      const response = await fetch(`${baseUrl}/profile/territory-color`, {
+        method: 'POST',
+        headers: {
+          cookie: 'glidehero_session=valid-token',
+          'content-type': 'application/x-www-form-urlencoded',
+        },
+        body: new URLSearchParams({ territoryColor: '#ABC' }),
+      });
+
+      expect(response.status).toBe(422);
+      await response.text();
+      expect(profiles.updateTerritoryColor).not.toHaveBeenCalled();
+      expect(renderPage).toHaveBeenCalledWith(expect.objectContaining({
+        territoryColorError: 'Choose a valid six-digit hex color.',
+      }));
+    });
+  });
+
+  it('does not update a profile for an unauthenticated territory-color request', async () => {
+    const { app, profiles } = dependencies();
+    await withServer(app, async (baseUrl) => {
+      const response = await fetch(`${baseUrl}/profile/territory-color`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({ territoryColor: '#A1B2C3' }),
+      });
+
+      expect(response.status).toBe(401);
+      expect(profiles.updateTerritoryColor).not.toHaveBeenCalled();
     });
   });
 

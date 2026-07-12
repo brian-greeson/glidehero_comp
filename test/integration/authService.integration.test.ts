@@ -26,7 +26,11 @@ describe('authService', () => {
       displayName: 'Sky Pilot',
     });
 
-    expect(result.user).toMatchObject({ email: 'pilot@example.com', displayName: 'Sky Pilot' });
+    expect(result.user).toMatchObject({
+      email: 'pilot@example.com',
+      displayName: 'Sky Pilot',
+      territoryColor: '#1769AA',
+    });
     expect(result.token).toMatch(/^[A-Za-z0-9_-]{40,}$/);
 
     const stored = await database.pool.query<{
@@ -88,7 +92,7 @@ describe('authService', () => {
     ).rejects.toEqual(expect.objectContaining({ code: 'invalid_credentials' }));
     await expect(
       auth.login({ email: ' PILOT@example.com ', password: 'correct horse battery staple' }),
-    ).resolves.toMatchObject({ user: { email: 'pilot@example.com' } });
+    ).resolves.toMatchObject({ user: { email: 'pilot@example.com', territoryColor: '#1769AA' } });
 
     const stored = await database.pool.query<{ last_login: Date }>(
       'SELECT last_login FROM users WHERE user_id = $1',
@@ -105,6 +109,7 @@ describe('authService', () => {
     });
     await expect(auth.authenticate(session.token)).resolves.toMatchObject({
       email: 'pilot@example.com',
+      territoryColor: '#1769AA',
     });
     await auth.logout(session.token);
     await expect(auth.authenticate(session.token)).resolves.toBeNull();

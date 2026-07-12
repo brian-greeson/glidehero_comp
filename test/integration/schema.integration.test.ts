@@ -61,4 +61,18 @@ describe('authentication schema', () => {
       { table_name: 'users', column_name: 'email' },
     ]);
   });
+
+  it('stores a required territory color with the pilot map default', async () => {
+    const result = await database.pool.query<{
+      column_default: string | null;
+      is_nullable: string;
+    }>(
+      `SELECT column_default, is_nullable FROM information_schema.columns
+       WHERE table_schema = 'public' AND table_name = 'profiles' AND column_name = 'territory_color'`,
+    );
+
+    expect(result.rows).toEqual([
+      { column_default: "'#1769AA'::text", is_nullable: 'NO' },
+    ]);
+  });
 });

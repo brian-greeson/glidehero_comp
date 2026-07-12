@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createApp } from '../../src/app.js';
 import { createAuthService } from '../../src/services/authService.js';
+import { createProfileService } from '../../src/services/profileService.js';
 import { createPageRenderer } from '../../src/views/renderer.js';
 import { createCurrentUserMiddleware } from '../../src/web/currentUserMiddleware.js';
 import { createSessionCookie } from '../../src/web/sessionCookie.js';
@@ -24,6 +25,7 @@ describe('GlideHero browser authentication flow', () => {
     if (!testDatabase) throw new Error('Test database was not initialized.');
 
     const auth = createAuthService(testDatabase.db, { sessionTtlSeconds: 604800 });
+    const profiles = createProfileService(testDatabase.db);
     const cookie = createSessionCookie({
       name: 'glidehero_session',
       secure: false,
@@ -36,6 +38,7 @@ describe('GlideHero browser authentication flow', () => {
           auth,
           cookie,
           igcFiles: { upload: async () => ({ id: '00000000-0000-4000-8000-000000000010', bucketKey: 'glidehero/test.igc' }) },
+          profiles,
           renderPage: createPageRenderer(),
         }),
       ],

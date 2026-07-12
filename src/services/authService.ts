@@ -8,6 +8,7 @@ export type AuthenticatedUser = {
   userId: string;
   email: string;
   displayName: string;
+  territoryColor: string;
   sessionId: string;
 };
 
@@ -91,6 +92,7 @@ export function createAuthService(
               userId: user.id,
               email: user.email,
               displayName: profile.displayName,
+              territoryColor: profile.territoryColor,
               sessionId: session.sessionId,
             },
           };
@@ -130,6 +132,7 @@ export function createAuthService(
           userId: account.id,
           email: account.email,
           displayName: account.profile.displayName,
+          territoryColor: account.profile.territoryColor,
           sessionId: session.sessionId,
         },
       };
@@ -146,6 +149,7 @@ export function createAuthService(
         userId: session.user.id,
         email: session.user.email,
         displayName: session.user.profile.displayName,
+        territoryColor: session.user.profile.territoryColor,
         sessionId: session.sessionId,
       };
     },

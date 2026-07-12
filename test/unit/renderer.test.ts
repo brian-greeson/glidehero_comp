@@ -21,12 +21,15 @@ describe('Vento page renderer', () => {
         sessionId: '00000000-0000-4000-8000-000000000002',
         email: 'pilot@example.com',
         displayName: 'Sky Pilot',
+        territoryColor: '#1769AA',
       },
     });
 
     expect(authenticated).toContain('Sky Pilot');
     expect(authenticated).toContain('pilot@example.com');
     expect(authenticated).toContain('action="/logout"');
+    expect(authenticated).toContain('action="/profile/territory-color"');
+    expect(authenticated).toContain('value="#1769AA"');
     expect(authenticated).not.toContain('action="/login"');
     expect(authenticated).not.toContain('action="/signup"');
   });

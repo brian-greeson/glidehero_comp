@@ -5,6 +5,7 @@ import { createDatabase } from './db/client.js';
 import { createBucketClient } from './resources/bucketClient.js';
 import { createAuthService } from './services/authService.js';
 import { createIgcFileService } from './services/igcFileService.js';
+import { createProfileService } from './services/profileService.js';
 import { createPageRenderer } from './views/renderer.js';
 import { createCurrentUserMiddleware } from './web/currentUserMiddleware.js';
 import { createSessionCookie } from './web/sessionCookie.js';
@@ -17,6 +18,7 @@ const igcFiles = createIgcFileService(db, {
   s3Client: createBucketClient(config),
   bucketName: config.bucket.bucketName,
 });
+const profiles = createProfileService(db);
 const cookie = createSessionCookie({
   name: config.sessionCookieName,
   secure: config.isProduction,
@@ -24,7 +26,7 @@ const cookie = createSessionCookie({
 });
 const webMiddleware = [
   createCurrentUserMiddleware(auth, cookie),
-  createWebRouter({ auth, cookie, igcFiles, renderPage: createPageRenderer() }),
+  createWebRouter({ auth, cookie, igcFiles, profiles, renderPage: createPageRenderer() }),
 ];
 const server = createServer(createApp({ webMiddleware }));
 
