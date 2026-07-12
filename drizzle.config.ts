@@ -5,7 +5,6 @@ const config = parseConfig(process.env);
 
 export default defineConfig({
   dialect: 'postgresql',
-  out: './migrations',
   schema: './src/db/schema.ts',
   dbCredentials: { url: config.databaseUrl },
   schemaFilter: ['public'],
