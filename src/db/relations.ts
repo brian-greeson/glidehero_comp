@@ -7,6 +7,7 @@ export const relations = defineRelations(schema, (r) => ({
     profile: r.one.profiles({ from: r.users.id, to: r.profiles.userId }),
     sessions: r.many.appSessions({ from: r.users.id, to: r.appSessions.userId }),
     igcFiles: r.many.igcFiles({ from: r.users.id, to: r.igcFiles.userId }),
+    flights: r.many.flights({ from: r.users.id, to: r.flights.userId }),
   },
   userPasswords: {
     user: r.one.users({ from: r.userPasswords.userId, to: r.users.id }),
@@ -19,5 +20,14 @@ export const relations = defineRelations(schema, (r) => ({
   },
   igcFiles: {
     user: r.one.users({ from: r.igcFiles.userId, to: r.users.id }),
+    flight: r.one.flights({ from: r.igcFiles.id, to: r.flights.igcFileId }),
+  },
+  flights: {
+    user: r.one.users({ from: r.flights.userId, to: r.users.id }),
+    igcFile: r.one.igcFiles({ from: r.flights.igcFileId, to: r.igcFiles.id }),
+    trackPoints: r.many.trackPoints({ from: r.flights.id, to: r.trackPoints.flightId }),
+  },
+  trackPoints: {
+    flight: r.one.flights({ from: r.trackPoints.flightId, to: r.flights.id }),
   },
 }));
