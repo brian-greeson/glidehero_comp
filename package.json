@@ -1,0 +1,51 @@
+{
+  "name": "glidehero_comp",
+  "version": "0.1.0",
+  "description": "Paint the sky with your friends",
+  "main": "dist/src/index.js",
+  "engines": {
+    "node": "25.9.0"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate",
+    "db:push": "drizzle-kit push",
+    "db:reset": "tsx --env-file=.env src/scripts/resetDatabase.ts",
+    "db:seed": "tsx --env-file=.env src/scripts/seedDemoDatabase.ts",
+    "db:production:push": "dotenv -e .env.production -- drizzle-kit push --config drizzle.production.config.ts",
+    "db:production:migrate": "dotenv -e .env.production -o -- drizzle-kit migrate --config drizzle.production.config.ts",
+    "db:production:reset": "dotenv -e .env.production tsx --env-file=.env.production src/scripts/resetDatabase.ts",
+    "db:production:seed": "dotenv -e .env.production tsx --env-file=.env.production src/scripts/seedDemoDatabase.ts",
+    "dev": "tsx  watch --env-file=.env src/index.ts",
+    "start": "node dist/src/index.js",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "author": "Mountain Sentry",
+  "license": "UNLICENSED",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.1085.0",
+    "@turf/turf": "^7.3.5",
+    "@valkey/valkey-glide": "^2.4.2",
+    "drizzle-orm": "^1.0.0-rc.4-5d5b77c",
+    "express": "^5.2.1",
+    "jose": "^6.2.3",
+    "pg": "^8.22.0",
+    "ventojs": "^2.4.0",
+    "ws": "^8.21.0",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.6",
+    "@types/node": "^26.1.1",
+    "@types/pg": "^8.20.0",
+    "@types/ws": "^8.18.1",
+    "dotenv-cli": "^11.0.0",
+    "drizzle-kit": "^1.0.0-rc.4-ca0f029",
+    "tsx": "^4.23.0",
+    "typescript": "^7.0.2",
+    "vitest": "^4.1.10"
+  }
+}

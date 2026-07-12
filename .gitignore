@@ -1,0 +1,8 @@
+node_modules/
+dist/
+.env*
+certs/
+.worktrees/
+docs/**
+app.yaml
+.TEMP_app.yaml
