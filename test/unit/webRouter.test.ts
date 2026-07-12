@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { createApp } from '../../src/app.js';
 import { AuthFailure, type AuthService } from '../../src/services/authService.js';
 import type { ProfileService } from '../../src/services/profileService.js';
+import type { FlightProcessingOutcome } from '../../src/services/flightProcessingService.js';
 import { createPageRenderer } from '../../src/views/renderer.js';
 import { createCurrentUserMiddleware } from '../../src/web/currentUserMiddleware.js';
 import { createSessionCookie } from '../../src/web/sessionCookie.js';
@@ -16,7 +17,12 @@ const user = {
   territoryColor: '#1769AA',
 };
 
-function dependencies() {
+function dependencies(
+  outcome: FlightProcessingOutcome = {
+    status: 'completed',
+    flightId: '00000000-0000-4000-8000-000000000020',
+  },
+) {
   const auth: AuthService = {
     signup: vi.fn(async () => ({ token: 'new-token', expiresAt: new Date(), user })),
     login: vi.fn(async () => ({ token: 'login-token', expiresAt: new Date(), user })),
@@ -34,7 +40,7 @@ function dependencies() {
       `<div>${model.loginError ?? model.signupError ?? model.uploadError ?? ''}</div></body></html>`,
   );
   const middleware = createCurrentUserMiddleware(auth, cookie);
-  const igcFiles = { upload: vi.fn(async () => ({ id: '00000000-0000-4000-8000-000000000010', bucketKey: 'glidehero/flight.igc' })) };
+  const igcFiles = { upload: vi.fn(async () => outcome) };
   const profiles: ProfileService = { updateTerritoryColor: vi.fn(async () => undefined) };
   const router = createWebRouter({ auth, cookie, igcFiles, profiles, renderPage });
   return { auth, igcFiles, profiles, renderPage, app: createApp({ webMiddleware: [middleware, router] }) };
@@ -203,7 +209,12 @@ describe('webRouter', () => {
     const router = createWebRouter({
       auth,
       cookie,
-      igcFiles: { upload: vi.fn(async () => ({ id: '00000000-0000-4000-8000-000000000010', bucketKey: 'glidehero/flight.igc' })) },
+      igcFiles: {
+        upload: vi.fn(async (): Promise<FlightProcessingOutcome> => ({
+          status: 'completed',
+          flightId: '00000000-0000-4000-8000-000000000020',
+        })),
+      },
       profiles: { updateTerritoryColor: vi.fn(async () => undefined) },
       renderPage: createPageRenderer(),
     });
@@ -225,6 +236,41 @@ describe('webRouter', () => {
       expect(html).toContain('value="pilot@example.com"');
       expect(html).toContain('value="Sky Pilot"');
       expect(html).not.toContain('never-render-this-password');
+    });
+  });
+
+  it('renders the successful processing message from the success query', async () => {
+    const { auth } = dependencies();
+    const cookie = createSessionCookie({
+      name: 'glidehero_session',
+      secure: false,
+      maxAgeSeconds: 604800,
+    });
+    const app = createApp({
+      webMiddleware: [
+        createCurrentUserMiddleware(auth, cookie),
+        createWebRouter({
+          auth,
+          cookie,
+          igcFiles: {
+            upload: vi.fn(async (): Promise<FlightProcessingOutcome> => ({
+              status: 'completed',
+              flightId: '00000000-0000-4000-8000-000000000020',
+            })),
+          },
+          profiles: { updateTerritoryColor: vi.fn(async () => undefined) },
+          renderPage: createPageRenderer(),
+        }),
+      ],
+    });
+
+    await withServer(app, async (baseUrl) => {
+      const response = await fetch(`${baseUrl}/?igcUpload=success`, {
+        headers: { cookie: 'glidehero_session=valid-token' },
+      });
+
+      expect(response.status).toBe(200);
+      expect(await response.text()).toContain('IGC flight processed successfully.');
     });
   });
 
@@ -314,8 +360,11 @@ describe('webRouter', () => {
     });
   });
 
-  it('uploads a valid IGC file for the authenticated user and redirects home', async () => {
-    const { app, igcFiles } = dependencies();
+  it('redirects after a completed IGC processing result', async () => {
+    const { app, igcFiles } = dependencies({
+      status: 'completed',
+      flightId: '00000000-0000-4000-8000-000000000020',
+    });
     const form = new FormData();
     form.set('igcFile', new Blob(['AXXX IGC flight']), 'flight.igc');
 
@@ -335,6 +384,27 @@ describe('webRouter', () => {
           bytes: Buffer.from('AXXX IGC flight'),
         }),
       );
+    });
+  });
+
+  it('renders the processing failure returned by the service', async () => {
+    const { app } = dependencies({
+      status: 'failed',
+      flightId: '00000000-0000-4000-8000-000000000020',
+      message: 'This IGC file has no valid GPS fixes to process.',
+    });
+    const form = new FormData();
+    form.set('igcFile', new Blob(['AXXX IGC flight']), 'flight.igc');
+
+    await withServer(app, async (baseUrl) => {
+      const response = await fetch(`${baseUrl}/igc-files`, {
+        method: 'POST',
+        headers: { cookie: 'glidehero_session=valid-token' },
+        body: form,
+      });
+
+      expect(response.status).toBe(422);
+      expect(await response.text()).toContain('This IGC file has no valid GPS fixes to process.');
     });
   });
 

@@ -2,6 +2,7 @@ import { DeleteObjectCommand, PutObjectCommand, type S3 } from '@aws-sdk/client-
 import { randomUUID } from 'node:crypto';
 import type { Database } from '../db/client.js';
 import { igcFiles } from '../db/schema.js';
+import type { FlightProcessingOutcome, FlightProcessingService } from './flightProcessingService.js';
 
 export type IgcFileUpload = {
   ownerUserId: string;
@@ -10,15 +11,14 @@ export type IgcFileUpload = {
   bytes: Buffer;
 };
 
-export type StoredIgcFile = { id: string; bucketKey: string };
-
 export interface IgcFileService {
-  upload(input: IgcFileUpload): Promise<StoredIgcFile>;
+  upload(input: IgcFileUpload): Promise<FlightProcessingOutcome>;
 }
 
 export function createIgcFileService(
   database: Database,
   options: { s3Client: Pick<S3, 'send'>; bucketName: string; keyFactory?: () => string },
+  processor: FlightProcessingService,
 ): IgcFileService {
   const keyFactory = options.keyFactory ?? (() => `glidehero/${randomUUID()}.igc`);
 
@@ -34,8 +34,9 @@ export function createIgcFileService(
         }),
       );
 
+      let stored: { id: string; bucketKey: string } | undefined;
       try {
-        const [stored] = await database
+        [stored] = await database
           .insert(igcFiles)
           .values({
             userId: input.ownerUserId,
@@ -46,7 +47,6 @@ export function createIgcFileService(
           })
           .returning({ id: igcFiles.id, bucketKey: igcFiles.bucketKey });
         if (!stored) throw new Error('IGC file insert returned no row.');
-        return stored;
       } catch (error) {
         try {
           await options.s3Client.send(new DeleteObjectCommand({ Bucket: options.bucketName, Key: bucketKey }));
@@ -55,6 +55,12 @@ export function createIgcFileService(
         }
         throw error;
       }
+
+      return processor.process({
+        ownerUserId: input.ownerUserId,
+        igcFileId: stored.id,
+        bucketKey: stored.bucketKey,
+      });
     },
   };
 }

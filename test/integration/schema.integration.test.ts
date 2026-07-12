@@ -12,7 +12,7 @@ afterAll(async () => {
 });
 
 describe('authentication schema', () => {
-  it('contains the IGC file table alongside authentication tables', async () => {
+  it('contains flight and track-point tables with the expected columns', async () => {
     const result = await database.pool.query<{ table_name: string }>(
       `SELECT table_name FROM information_schema.tables
        WHERE table_schema = 'public' AND table_type = 'BASE TABLE'
@@ -20,11 +20,43 @@ describe('authentication schema', () => {
     );
     expect(result.rows.map((row) => row.table_name)).toEqual([
       'app_sessions',
+      'flights',
       'igc_files',
       'profiles',
+      'track_points',
       'user_passwords',
       'users',
     ]);
+
+    const columns = await database.pool.query<{ column_name: string; is_nullable: string }>(
+      `SELECT column_name, is_nullable FROM information_schema.columns
+       WHERE table_schema = 'public' AND table_name = 'flights' ORDER BY column_name`,
+    );
+    expect(columns.rows).toEqual([
+      { column_name: 'created_at', is_nullable: 'NO' },
+      { column_name: 'distance_meters', is_nullable: 'YES' },
+      { column_name: 'duration_seconds', is_nullable: 'YES' },
+      { column_name: 'ended_at', is_nullable: 'YES' },
+      { column_name: 'flight_id', is_nullable: 'NO' },
+      { column_name: 'igc_file_id', is_nullable: 'NO' },
+      { column_name: 'launch_latitude', is_nullable: 'YES' },
+      { column_name: 'launch_longitude', is_nullable: 'YES' },
+      { column_name: 'processing_error', is_nullable: 'YES' },
+      { column_name: 'processing_status', is_nullable: 'NO' },
+      { column_name: 'started_at', is_nullable: 'YES' },
+      { column_name: 'updated_at', is_nullable: 'NO' },
+      { column_name: 'user_id', is_nullable: 'NO' },
+    ]);
+  });
+
+  it('enforces a unique source file and ordered point sequence per flight', async () => {
+    const constraints = await database.pool.query<{ conname: string }>(
+      `SELECT conname FROM pg_constraint
+       WHERE conrelid IN ('flights'::regclass, 'track_points'::regclass)
+       ORDER BY conname`,
+    );
+    expect(constraints.rows.map((row) => row.conname)).toContain('flights_igc_file_id_unique');
+    expect(constraints.rows.map((row) => row.conname)).toContain('track_points_flight_id_sequence_number_unique');
   });
 
   it('stores IGC ownership and retrieval metadata', async () => {

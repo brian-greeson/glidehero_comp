@@ -136,9 +136,9 @@ The process health endpoint is <http://localhost:3000/v1/up>.
 Create a separate disposable test database, then run:
 
 ```bash
-createdb glidehero_test
+createdb glidehero-test
 npm test
-TEST_DATABASE_URL=postgres://localhost/glidehero_test npm run test:integration
+TEST_DATABASE_URL=postgres://localhost/glidehero-test npm run test:integration
 npm run typecheck
 npm run build
 ```

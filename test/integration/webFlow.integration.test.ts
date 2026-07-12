@@ -37,7 +37,7 @@ describe('GlideHero browser authentication flow', () => {
         createWebRouter({
           auth,
           cookie,
-          igcFiles: { upload: async () => ({ id: '00000000-0000-4000-8000-000000000010', bucketKey: 'glidehero/test.igc' }) },
+          igcFiles: { upload: async () => ({ status: 'completed', flightId: '00000000-0000-4000-8000-000000000020' }) },
           profiles,
           renderPage: createPageRenderer(),
         }),

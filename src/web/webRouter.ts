@@ -176,12 +176,16 @@ export function createWebRouter(dependencies: {
           return;
         }
 
-        await dependencies.igcFiles.upload({
+        const outcome = await dependencies.igcFiles.upload({
           ownerUserId: currentUser.userId,
           originalFilename: file.originalname,
           contentType: file.mimetype || 'application/octet-stream',
           bytes: file.buffer,
         });
+        if (outcome.status === 'failed') {
+          await render(res, dependencies.renderPage, 422, { currentUser, uploadError: outcome.message });
+          return;
+        }
         res.redirect(303, '/?igcUpload=success');
       } catch (uploadError) {
         next(uploadError);

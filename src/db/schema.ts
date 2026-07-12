@@ -1,4 +1,4 @@
-import { index, integer, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
+import { doublePrecision, index, integer, pgEnum, pgTable, text, timestamp, unique, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
 
 const timestamps = {
   createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
@@ -57,4 +57,47 @@ export const igcFiles = pgTable(
     ...timestamps,
   },
   (table) => [index('igc_files_user_id_idx').on(table.userId), uniqueIndex('igc_files_bucket_key_idx').on(table.bucketKey)],
+);
+
+export const flightProcessingStatus = pgEnum('flight_processing_status', ['processing', 'completed', 'failed']);
+
+export const flights = pgTable(
+  'flights',
+  {
+    id: uuid('flight_id').primaryKey().defaultRandom(),
+    userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    igcFileId: uuid('igc_file_id').notNull().references(() => igcFiles.id, { onDelete: 'cascade' }),
+    processingStatus: flightProcessingStatus('processing_status').notNull().default('processing'),
+    processingError: text('processing_error'),
+    startedAt: timestamp('started_at', { withTimezone: true, mode: 'date' }),
+    endedAt: timestamp('ended_at', { withTimezone: true, mode: 'date' }),
+    durationSeconds: integer('duration_seconds'),
+    distanceMeters: doublePrecision('distance_meters'),
+    launchLatitude: doublePrecision('launch_latitude'),
+    launchLongitude: doublePrecision('launch_longitude'),
+    ...timestamps,
+  },
+  (table) => [
+    unique('flights_igc_file_id_unique').on(table.igcFileId),
+    index('flights_user_id_idx').on(table.userId),
+    index('flights_igc_file_id_idx').on(table.igcFileId),
+  ],
+);
+
+export const trackPoints = pgTable(
+  'track_points',
+  {
+    id: uuid('track_point_id').primaryKey().defaultRandom(),
+    flightId: uuid('flight_id').notNull().references(() => flights.id, { onDelete: 'cascade' }),
+    sequenceNumber: integer('sequence_number').notNull(),
+    recordedAt: timestamp('recorded_at', { withTimezone: true, mode: 'date' }).notNull(),
+    latitude: doublePrecision('latitude').notNull(),
+    longitude: doublePrecision('longitude').notNull(),
+    gpsAltitudeMeters: integer('gps_altitude_meters').notNull(),
+    pressureAltitudeMeters: integer('pressure_altitude_meters').notNull(),
+  },
+  (table) => [
+    unique('track_points_flight_id_sequence_number_unique').on(table.flightId, table.sequenceNumber),
+    index('track_points_flight_id_sequence_number_idx').on(table.flightId, table.sequenceNumber),
+  ],
 );
