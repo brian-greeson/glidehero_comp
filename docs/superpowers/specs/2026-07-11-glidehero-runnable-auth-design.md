@@ -110,17 +110,17 @@ The README documents these commands and their expected order:
 1. Install the Node version declared by the project.
 2. Install dependencies.
 3. Create a PostgreSQL database and copy `.env.example` to `.env`.
-4. Apply Drizzle migrations.
+4. Synchronize the schema with `npm run db:push -- --force`.
 5. Start the development server.
 6. Open the main page and verify signup, logout, and login.
 
 Broken package scripts that point to nonexistent seed files are removed or deferred. The package name and server log use consistent GlideHero naming.
 
-## Migration Strategy
+## Schema Synchronization Strategy
 
-The Drizzle schema is corrected first, then a new migration is generated rather than editing an already-generated migration in place. The migration adds the constraints and session-token storage required by this design and removes only copied tables that are explicitly judged outside this stage.
+The Drizzle schema is the sole database definition for this application skeleton. `npm run db:push -- --force` synchronizes a target PostgreSQL database directly to the exact four-table authentication schema; no migration history or generated schema artifacts are tracked.
 
-Because this is a new application skeleton, compatibility with production data is not assumed. Nevertheless, migrations remain deterministic and can initialize a blank PostgreSQL database from scratch.
+This stage has no data-preservation requirement. Local setup and integration tests may synchronize a blank database from scratch, and integration setup explicitly drops and recreates the disposable test database's `public` schema before pushing the schema.
 
 ## Error Handling
 
@@ -142,14 +142,14 @@ Vitest will cover focused pure and HTTP behavior:
 - logout revokes the session and clears the cookie;
 - the health endpoint remains public.
 
-Database integration tests use a dedicated PostgreSQL test database and apply migrations before execution. Test helpers inject configuration and database dependencies where practical so unit tests do not require unrelated Apple or bucket services.
+Database integration tests use a dedicated disposable PostgreSQL test database. The shared helper drops and recreates `public`, invokes `npm run db:push -- --force` with `DATABASE_URL` set from `TEST_DATABASE_URL`, and then returns a typed database client. Test helpers inject configuration and database dependencies where practical so unit tests do not require unrelated Apple or bucket services.
 
 Completion requires all of the following evidence:
 
 - `npm run typecheck` succeeds;
 - the Vitest suite succeeds;
 - `npm run build` succeeds;
-- migrations apply cleanly to an empty PostgreSQL database;
+- `npm run db:push -- --force` initializes and synchronizes an empty PostgreSQL database;
 - the built server starts with documented minimal configuration;
 - real HTTP requests demonstrate signup, authenticated main page, logout, and login;
 - a case-insensitive scan of tracked filenames and tracked file contents returns no match for any legacy product identifier named in the task;

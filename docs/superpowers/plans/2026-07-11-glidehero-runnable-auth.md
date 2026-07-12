@@ -16,7 +16,7 @@
 - Browser authentication uses an opaque HTTP-only cookie with `SameSite=Lax`, `Path=/`, a seven-day lifetime, and `Secure` in production.
 - PostgreSQL stores only the SHA-256 digest of a browser session token and a versioned scrypt password encoding; it never stores plaintext credentials.
 - Apple sign-in, object storage, realtime sockets, feeds, follows, games, swings, facilities, teams, and profile claims are outside this milestone.
-- Migrations must initialize a blank PostgreSQL database deterministically.
+- `npm run db:push -- --force` must initialize and synchronize a blank PostgreSQL database; no migration history is tracked.
 - Every task finishes with its focused tests, `npm run typecheck`, and a commit.
 
 ## File Structure
@@ -334,8 +334,6 @@ Delete every file listed under **Delete** for this task. Replace `package.json` 
   "engines": { "node": "25.9.0" },
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "db:generate": "drizzle-kit generate",
-    "db:migrate": "drizzle-kit migrate",
     "dev": "tsx watch --env-file=.env src/index.ts",
     "start": "node dist/src/index.js",
     "test": "vitest run test/unit",
@@ -382,7 +380,7 @@ export default defineConfig({
 });
 ```
 
-Replace `drizzle.config.ts` with the single-environment configuration used by every later migration command:
+Replace `drizzle.config.ts` with the single-environment configuration used by schema synchronization:
 
 ```ts
 import { defineConfig } from 'drizzle-kit';
@@ -392,7 +390,6 @@ const config = parseConfig(process.env);
 
 export default defineConfig({
   dialect: 'postgresql',
-  out: './migrations',
   schema: './src/db/schema.ts',
   dbCredentials: { url: config.databaseUrl },
   schemaFilter: ['public'],
@@ -523,29 +520,31 @@ git commit -m "feat: add secure password hashing"
 
 ---
 
-### Task 3: Focus the Drizzle schema and generate the authentication migration
+### Task 3: Focus and synchronize the Drizzle authentication schema
 
 **Files:**
 - Create: `src/db/schema.ts`
 - Create: `src/db/relations.ts`
 - Create: `src/db/client.ts`
 - Create: `src/db/types.ts`
-- Create: `migrations/20260711000100_glidehero_auth_foundation/migration.sql` via Drizzle Kit generation and directory normalization
-- Create: `migrations/20260711000100_glidehero_auth_foundation/snapshot.json` via Drizzle Kit generation and directory normalization
+- Modify: `package.json`
+- Modify: `drizzle.config.ts`
+- Delete: `migrations/` and all tracked or generated contents
 - Create: `test/integration/database.ts`
 - Create: `test/integration/schema.integration.test.ts`
 
 **Interfaces:**
-- Consumes: `parseConfig(process.env).databaseUrl` and the previous initial migration.
-- Produces: `createDatabase(connectionString): { db, pool }`, `Database`, and inferred row types for `users`, `userPasswords`, `profiles`, and `appSessions`.
+- Consumes: `parseConfig(process.env).databaseUrl`, `TEST_DATABASE_URL`, and the `db:push` package script.
+- Produces: the exact four-table PostgreSQL schema, `resetAndPushTestDatabase()`, `createDatabase(connectionString): { db, pool }`, `Database`, and inferred row types for `users`, `userPasswords`, `profiles`, and `appSessions`.
 
-- [ ] **Step 1: Write the migration-level schema test**
+- [ ] **Step 1: Write the direct schema-synchronization integration test**
 
 Create `test/integration/database.ts`:
 
 ```ts
+import { execFile } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { migrate } from 'drizzle-orm/node-postgres/migrator';
+import pg from 'pg';
 import { createDatabase } from '../../src/db/client.js';
 
 export function testDatabase() {
@@ -554,14 +553,42 @@ export function testDatabase() {
   return createDatabase(connectionString);
 }
 
-export async function resetAndMigrateTestDatabase(): Promise<ReturnType<typeof testDatabase>> {
-  const database = testDatabase();
-  await database.pool.query('DROP SCHEMA IF EXISTS public CASCADE');
-  await database.pool.query('CREATE SCHEMA public');
-  await migrate(database.db, {
-    migrationsFolder: fileURLToPath(new URL('../../migrations', import.meta.url)),
+export async function resetAndPushTestDatabase(): Promise<ReturnType<typeof testDatabase>> {
+  const connectionString = process.env.TEST_DATABASE_URL;
+  if (!connectionString) throw new Error('TEST_DATABASE_URL is required for integration tests.');
+
+  const resetPool = new pg.Pool({ connectionString });
+  try {
+    await resetPool.query('DROP SCHEMA IF EXISTS public CASCADE');
+    await resetPool.query('CREATE SCHEMA public');
+  } finally {
+    await resetPool.end();
+  }
+
+  await new Promise<void>((resolve, reject) => {
+    execFile(
+      'npm',
+      ['run', 'db:push', '--', '--force'],
+      {
+        cwd: fileURLToPath(new URL('../..', import.meta.url)),
+        env: { ...process.env, DATABASE_URL: connectionString },
+      },
+      (error, stdout, stderr) => {
+        if (error) {
+          reject(
+            new Error(
+              `db:push failed.\nstdout:\n${stdout}\nstderr:\n${stderr}`,
+              { cause: error },
+            ),
+          );
+          return;
+        }
+        resolve();
+      },
+    );
   });
-  return database;
+
+  return createDatabase(connectionString);
 }
 ```
 
@@ -569,12 +596,12 @@ Create `test/integration/schema.integration.test.ts`:
 
 ```ts
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { resetAndMigrateTestDatabase } from './database.js';
+import { resetAndPushTestDatabase } from './database.js';
 
-let database: Awaited<ReturnType<typeof resetAndMigrateTestDatabase>>;
+let database: Awaited<ReturnType<typeof resetAndPushTestDatabase>>;
 
 beforeAll(async () => {
-  database = await resetAndMigrateTestDatabase();
+  database = await resetAndPushTestDatabase();
 });
 
 afterAll(async () => {
@@ -615,11 +642,11 @@ describe('authentication schema', () => {
 });
 ```
 
-- [ ] **Step 2: Run the integration test and verify the current schema fails**
+- [ ] **Step 2: Run the integration test and verify the schema foundation is missing**
 
 Run: `TEST_DATABASE_URL=postgres://localhost/glidehero_test npm run test:integration -- schema.integration.test.ts`
 
-Expected: FAIL because the copied table exists and required auth columns/constraints do not.
+Expected: FAIL because the focused schema/client is missing or the pushed copied schema contains extra tables and lacks required authentication columns or constraints.
 
 - [ ] **Step 3: Replace the schema, relations, types, and client**
 
@@ -725,50 +752,27 @@ export type ProfileRow = typeof profiles.$inferSelect;
 export type SessionRow = typeof appSessions.$inferSelect;
 ```
 
-- [ ] **Step 4: Generate and normalize the migration directory**
+- [ ] **Step 4: Remove migration history and expose direct schema synchronization**
 
-Run:
+Delete the entire `migrations/` directory. Add the only database schema command to `package.json`, retain no migration commands, and ensure `drizzle.config.ts` has no migration output path:
 
-```bash
-npm run db:generate -- --name glidehero_auth_foundation
-mv migrations/$(ls -1t migrations | head -1) migrations/20260711000100_glidehero_auth_foundation
+```json
+"db:push": "drizzle-kit push"
 ```
 
-Inspect the generated `migration.sql`. It must express these changes without editing the earlier migration:
+The Drizzle schema in `src/db/schema.ts` is authoritative. No SQL history or generated schema snapshot is tracked, and the disposable integration helper is the only code that resets a database.
 
-```sql
-DROP TABLE "profile_follows" CASCADE;
-ALTER TABLE "users" DROP COLUMN "apple_subject";
-ALTER TABLE "users" DROP COLUMN "deleted_at";
-ALTER TABLE "users" ALTER COLUMN "email" SET NOT NULL;
-ALTER TABLE "users" ADD CONSTRAINT "users_email_unique" UNIQUE("email");
-ALTER TABLE "user_passwords" RENAME COLUMN "password" TO "password_hash";
-ALTER TABLE "user_passwords" ALTER COLUMN "password_hash" SET NOT NULL;
-ALTER TABLE "user_passwords" DROP COLUMN "deleted_at";
-ALTER TABLE "profiles" DROP COLUMN "handedness";
-ALTER TABLE "profiles" DROP COLUMN "avatar_url";
-ALTER TABLE "profiles" DROP COLUMN "created_by_user_id";
-ALTER TABLE "profiles" DROP COLUMN "claimed_at";
-ALTER TABLE "profiles" DROP COLUMN "deleted_at";
-ALTER TABLE "profiles" ALTER COLUMN "user_id" SET NOT NULL;
-ALTER TABLE "app_sessions" ADD COLUMN "token_hash" text;
-DELETE FROM "app_sessions";
-ALTER TABLE "app_sessions" ALTER COLUMN "token_hash" SET NOT NULL;
-CREATE UNIQUE INDEX "app_sessions_token_hash_idx" ON "app_sessions" ("token_hash");
-```
-
-Keep Drizzle's generated statement breakpoints and generated `snapshot.json`. If Drizzle chooses an equivalent safe ordering, preserve its output.
-
-- [ ] **Step 5: Verify blank-database migration and types**
+- [ ] **Step 5: Verify blank-database synchronization and types**
 
 Run: `TEST_DATABASE_URL=postgres://localhost/glidehero_test npm run test:integration -- schema.integration.test.ts && npm run typecheck`
 
-Expected: both schema tests PASS and TypeScript exits 0.
+Expected: the helper drops and recreates `public`, `npm run db:push -- --force` synchronizes the exact four-table schema, both schema tests PASS, and TypeScript exits 0.
 
 - [ ] **Step 6: Commit the database foundation**
 
 ```bash
-git add src/db migrations test/integration
+git add drizzle.config.ts package.json src/db test/integration
+git add -u migrations
 git commit -m "feat: add GlideHero authentication schema"
 ```
 
@@ -790,12 +794,12 @@ Create `test/integration/authService.integration.test.ts`:
 ```ts
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { createAuthService } from '../../src/services/authService.js';
-import { resetAndMigrateTestDatabase } from './database.js';
+import { resetAndPushTestDatabase } from './database.js';
 
-let database: Awaited<ReturnType<typeof resetAndMigrateTestDatabase>>;
+let database: Awaited<ReturnType<typeof resetAndPushTestDatabase>>;
 
 beforeAll(async () => {
-  database = await resetAndMigrateTestDatabase();
+  database = await resetAndPushTestDatabase();
 });
 
 beforeEach(async () => {
@@ -1645,7 +1649,7 @@ git commit -m "feat: add GlideHero login and signup page"
 - Create: `test/integration/webFlow.integration.test.ts`
 
 **Interfaces:**
-- Consumes: the built application, `TEST_DATABASE_URL`, the migration chain, and the four web endpoints.
+- Consumes: the built application, `TEST_DATABASE_URL`, direct Drizzle schema synchronization, and the four web endpoints.
 - Produces: a reproducible setup/run guide and authoritative end-to-end evidence for the milestone.
 
 - [ ] **Step 1: Write the real PostgreSQL plus Vento browser-flow test**
@@ -1661,12 +1665,12 @@ import { createCurrentUserMiddleware } from '../../src/web/currentUserMiddleware
 import { createSessionCookie } from '../../src/web/sessionCookie.js';
 import { createWebRouter } from '../../src/web/webRouter.js';
 import { withServer } from '../support/http.js';
-import { resetAndMigrateTestDatabase } from './database.js';
+import { resetAndPushTestDatabase } from './database.js';
 
-let database: Awaited<ReturnType<typeof resetAndMigrateTestDatabase>>;
+let database: Awaited<ReturnType<typeof resetAndPushTestDatabase>>;
 
 beforeAll(async () => {
-  database = await resetAndMigrateTestDatabase();
+  database = await resetAndPushTestDatabase();
 });
 
 afterAll(async () => {
@@ -1742,7 +1746,7 @@ describe('GlideHero browser authentication flow', () => {
 
 Run: `TEST_DATABASE_URL=postgres://localhost/glidehero_test npm run test:integration -- webFlow.integration.test.ts`
 
-Expected: PASS with a real migrated PostgreSQL database, real password hashing, real Vento rendering, and real cookie headers.
+Expected: PASS with a real PostgreSQL database synchronized by `db:push`, real password hashing, real Vento rendering, and real cookie headers.
 
 - [ ] **Step 3: Add the non-secret environment template**
 
@@ -1787,7 +1791,7 @@ revocable HTTP-only cookie sessions.
 npm install
 createdb glidehero
 cp .env.example .env
-npm run db:migrate
+npm run db:push -- --force
 npm run dev
 ```
 
@@ -1806,15 +1810,16 @@ npm run typecheck
 npm run build
 ```
 
-Integration tests drop and recreate the `public` schema in the test database.
+Integration tests drop and recreate the `public` schema in the test database, then run
+`npm run db:push -- --force` with `DATABASE_URL` set to `TEST_DATABASE_URL`.
 Never point `TEST_DATABASE_URL` at development or production data.
 
 ## Production notes
 
 Set `ENVIRONMENT=production` so the session cookie receives the `Secure`
-attribute. Terminate HTTPS before traffic reaches the application, apply migrations
-before starting a new release, and provide `DATABASE_URL` through the deployment
-secret store.
+attribute. Terminate HTTPS before traffic reaches the application, run
+`npm run db:push -- --force` to synchronize the target database before starting a
+new release, and provide `DATABASE_URL` through the deployment secret store.
 ````
 
 - [ ] **Step 5: Verify all automated gates from a clean build**
@@ -1890,7 +1895,7 @@ git commit -m "docs: add GlideHero startup and verification guide"
 - [ ] `npm test` passes.
 - [ ] PostgreSQL schema, authentication service, and browser-flow integration tests pass.
 - [ ] `npm run typecheck` and `npm run build` pass.
-- [ ] Migrations apply from an empty database.
+- [ ] `npm run db:push -- --force` initializes and synchronizes an empty database.
 - [ ] The built server starts using only the documented runtime settings.
 - [ ] Anonymous, signup, authenticated, logout, and login states work over HTTP.
 - [ ] Session cookies have `HttpOnly`, `SameSite=Lax`, `Path=/`, and production `Secure` attributes.
