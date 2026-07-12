@@ -3,7 +3,9 @@
   "version": "0.1.0",
   "description": "GlideHero web application",
   "main": "dist/src/index.js",
-  "engines": { "node": "25.9.0" },
+  "engines": {
+    "node": "25.9.0"
+  },
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "db:push": "drizzle-kit push",
@@ -18,16 +20,18 @@
   "private": true,
   "type": "module",
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1085.0",
+    "@valkey/valkey-glide": "^2.4.2",
     "drizzle-orm": "^1.0.0-rc.4-5d5b77c",
     "express": "^5.2.1",
+    "multer": "^2.2.0",
     "pg": "^8.22.0",
     "ventojs": "^2.4.0",
-    "zod": "^4.4.3",
-    "@aws-sdk/client-s3": "^3.1085.0",
-    "@valkey/valkey-glide": "^2.4.2"
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@types/express": "^5.0.6",
+    "@types/multer": "^2.2.0",
     "@types/node": "^26.1.1",
     "@types/pg": "^8.20.0",
     "drizzle-kit": "^1.0.0-rc.4-ca0f029",

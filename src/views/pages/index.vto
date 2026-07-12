@@ -12,6 +12,15 @@
         <button type="submit">Log out</button>
       </form>
     </section>
+    <section class="card">
+      <h2>Upload IGC flight</h2>
+      {{ if uploadSuccess }}<p class="success" role="status">IGC file uploaded.</p>{{ /if }}
+      {{ if uploadError }}<p class="error" role="alert">{{ uploadError }}</p>{{ /if }}
+      <form method="post" action="/igc-files" enctype="multipart/form-data">
+        <label>IGC file<input name="igcFile" type="file" accept=".igc" required></label>
+        <button type="submit">Upload flight</button>
+      </form>
+    </section>
   {{ else }}
     <div class="auth-grid">
       <section class="card">

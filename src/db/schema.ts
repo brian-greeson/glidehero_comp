@@ -1,4 +1,4 @@
-import { index, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
+import { index, integer, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
 
 const timestamps = {
   createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
@@ -42,4 +42,18 @@ export const appSessions = pgTable(
     index('app_sessions_user_id_idx').on(table.userId),
     uniqueIndex('app_sessions_token_hash_idx').on(table.tokenHash),
   ],
+);
+
+export const igcFiles = pgTable(
+  'igc_files',
+  {
+    id: uuid('igc_file_id').primaryKey().defaultRandom(),
+    userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    originalFilename: text('original_filename').notNull(),
+    contentType: text('content_type').notNull(),
+    byteSize: integer('byte_size').notNull(),
+    bucketKey: text('bucket_key').notNull(),
+    ...timestamps,
+  },
+  (table) => [index('igc_files_user_id_idx').on(table.userId), uniqueIndex('igc_files_bucket_key_idx').on(table.bucketKey)],
 );

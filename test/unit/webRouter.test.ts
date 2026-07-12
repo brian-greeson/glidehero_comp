@@ -29,11 +29,12 @@ function dependencies() {
   const renderPage = vi.fn(
     async (model) =>
       `<html><body><h1>GlideHero</h1><div>${model.currentUser?.displayName ?? 'anonymous'}</div>` +
-      `<div>${model.loginError ?? model.signupError ?? ''}</div></body></html>`,
+      `<div>${model.loginError ?? model.signupError ?? model.uploadError ?? ''}</div></body></html>`,
   );
   const middleware = createCurrentUserMiddleware(auth, cookie);
-  const router = createWebRouter({ auth, cookie, renderPage });
-  return { auth, app: createApp({ webMiddleware: [middleware, router] }) };
+  const igcFiles = { upload: vi.fn(async () => ({ id: '00000000-0000-4000-8000-000000000010', bucketKey: 'glidehero/flight.igc' })) };
+  const router = createWebRouter({ auth, cookie, igcFiles, renderPage });
+  return { auth, igcFiles, app: createApp({ webMiddleware: [middleware, router] }) };
 }
 
 describe('webRouter', () => {
@@ -196,7 +197,12 @@ describe('webRouter', () => {
       maxAgeSeconds: 604800,
     });
     const middleware = createCurrentUserMiddleware(auth, cookie);
-    const router = createWebRouter({ auth, cookie, renderPage: createPageRenderer() });
+    const router = createWebRouter({
+      auth,
+      cookie,
+      igcFiles: { upload: vi.fn(async () => ({ id: '00000000-0000-4000-8000-000000000010', bucketKey: 'glidehero/flight.igc' })) },
+      renderPage: createPageRenderer(),
+    });
     const app = createApp({ webMiddleware: [middleware, router] });
 
     await withServer(app, async (baseUrl) => {
@@ -232,6 +238,76 @@ describe('webRouter', () => {
         'glidehero_session=; Max-Age=0; Path=/; HttpOnly; SameSite=Lax',
       );
       expect(auth.logout).toHaveBeenCalledWith('valid-token');
+    });
+  });
+
+  it('rejects an unauthenticated IGC upload without storing a file', async () => {
+    const { app, igcFiles } = dependencies();
+    const form = new FormData();
+    form.set('igcFile', new Blob(['AXXX']), 'flight.igc');
+
+    await withServer(app, async (baseUrl) => {
+      const response = await fetch(`${baseUrl}/igc-files`, { method: 'POST', body: form });
+      expect(response.status).toBe(401);
+      expect(igcFiles.upload).not.toHaveBeenCalled();
+    });
+  });
+
+  it('uploads a valid IGC file for the authenticated user and redirects home', async () => {
+    const { app, igcFiles } = dependencies();
+    const form = new FormData();
+    form.set('igcFile', new Blob(['AXXX IGC flight']), 'flight.igc');
+
+    await withServer(app, async (baseUrl) => {
+      const response = await fetch(`${baseUrl}/igc-files`, {
+        method: 'POST',
+        redirect: 'manual',
+        headers: { cookie: 'glidehero_session=valid-token' },
+        body: form,
+      });
+      expect(response.status).toBe(303);
+      expect(response.headers.get('location')).toBe('/?igcUpload=success');
+      expect(igcFiles.upload).toHaveBeenCalledWith(
+        expect.objectContaining({
+          ownerUserId: user.userId,
+          originalFilename: 'flight.igc',
+          bytes: Buffer.from('AXXX IGC flight'),
+        }),
+      );
+    });
+  });
+
+  it('rejects a non-IGC filename without storing a file', async () => {
+    const { app, igcFiles } = dependencies();
+    const form = new FormData();
+    form.set('igcFile', new Blob(['not an IGC']), 'flight.txt');
+
+    await withServer(app, async (baseUrl) => {
+      const response = await fetch(`${baseUrl}/igc-files`, {
+        method: 'POST',
+        headers: { cookie: 'glidehero_session=valid-token' },
+        body: form,
+      });
+      expect(response.status).toBe(422);
+      expect(await response.text()).toContain('Choose an IGC file with a .igc filename.');
+      expect(igcFiles.upload).not.toHaveBeenCalled();
+    });
+  });
+
+  it('rejects an IGC upload larger than 10 MB without storing a file', async () => {
+    const { app, igcFiles } = dependencies();
+    const form = new FormData();
+    form.set('igcFile', new Blob([new Uint8Array(10 * 1024 * 1024 + 1)]), 'flight.igc');
+
+    await withServer(app, async (baseUrl) => {
+      const response = await fetch(`${baseUrl}/igc-files`, {
+        method: 'POST',
+        headers: { cookie: 'glidehero_session=valid-token' },
+        body: form,
+      });
+      expect(response.status).toBe(422);
+      expect(await response.text()).toContain('IGC files must be 10 MB or smaller.');
+      expect(igcFiles.upload).not.toHaveBeenCalled();
     });
   });
 });

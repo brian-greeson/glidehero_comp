@@ -1,7 +1,9 @@
-import { Router, type Response } from 'express';
+import { Router, type Request, type Response } from 'express';
+import multer from 'multer';
 import { z } from 'zod';
 import { AuthFailure, type AuthService } from '../services/authService.js';
 import type { PageModel, PageRenderer } from '../views/renderer.js';
+import type { IgcFileService } from '../services/igcFileService.js';
 import type { SessionCookie } from './sessionCookie.js';
 
 const email = z.string().trim().toLowerCase().pipe(z.email());
@@ -22,15 +24,25 @@ async function render(res: Response, renderPage: PageRenderer, status: number, m
   res.status(status).type('html').send(await renderPage(model));
 }
 
+const igcUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024, files: 1 } });
+
+function isIgcFilename(filename: string): boolean {
+  return filename.toLowerCase().endsWith('.igc');
+}
+
 export function createWebRouter(dependencies: {
   auth: AuthService;
   cookie: SessionCookie;
+  igcFiles: IgcFileService;
   renderPage: PageRenderer;
 }) {
   const router = Router();
 
-  router.get('/', async (_req, res) => {
-    await render(res, dependencies.renderPage, 200, { currentUser: res.locals.currentUser });
+  router.get('/', async (req, res) => {
+    await render(res, dependencies.renderPage, 200, {
+      currentUser: res.locals.currentUser,
+      uploadSuccess: req.query.igcUpload === 'success',
+    });
   });
 
   router.post('/signup', async (req, res) => {
@@ -102,6 +114,53 @@ export function createWebRouter(dependencies: {
     if (res.locals.sessionToken) await dependencies.auth.logout(res.locals.sessionToken);
     res.setHeader('set-cookie', dependencies.cookie.clear());
     res.redirect(303, '/');
+  });
+
+  router.post('/igc-files', async (req, res, next) => {
+    const currentUser = res.locals.currentUser;
+    if (!currentUser) {
+      await render(res, dependencies.renderPage, 401, {
+        currentUser: null,
+        uploadError: 'Sign in before uploading an IGC file.',
+      });
+      return;
+    }
+
+    igcUpload.single('igcFile')(req, res, async (error: unknown) => {
+      try {
+        if (error instanceof multer.MulterError) {
+          const uploadError = error.code === 'LIMIT_FILE_SIZE'
+            ? 'IGC files must be 10 MB or smaller.'
+            : 'Upload one IGC file at a time.';
+          await render(res, dependencies.renderPage, 422, { currentUser, uploadError });
+          return;
+        }
+        if (error) throw error;
+
+        const file = (req as Request & { file?: Express.Multer.File }).file;
+        if (!file) {
+          await render(res, dependencies.renderPage, 422, { currentUser, uploadError: 'Choose an IGC file to upload.' });
+          return;
+        }
+        if (!isIgcFilename(file.originalname)) {
+          await render(res, dependencies.renderPage, 422, {
+            currentUser,
+            uploadError: 'Choose an IGC file with a .igc filename.',
+          });
+          return;
+        }
+
+        await dependencies.igcFiles.upload({
+          ownerUserId: currentUser.userId,
+          originalFilename: file.originalname,
+          contentType: file.mimetype || 'application/octet-stream',
+          bytes: file.buffer,
+        });
+        res.redirect(303, '/?igcUpload=success');
+      } catch (uploadError) {
+        next(uploadError);
+      }
+    });
   });
 
   return router;

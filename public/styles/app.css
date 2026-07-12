@@ -12,6 +12,7 @@ form { gap: 1rem; }
 input, button { width: 100%; padding: .8rem .9rem; border: 1px solid #a9bfd6; border-radius: .6rem; font: inherit; }
 button { border-color: #1769aa; color: white; background: #1769aa; font-weight: 700; cursor: pointer; }
 .error { padding: .75rem; border-radius: .5rem; color: #8a1c1c; background: #ffe9e9; }
+.success { padding: .75rem; border-radius: .5rem; color: #166534; background: #dcfce7; }
 .muted { color: #52657a; }
 @media (prefers-color-scheme: dark) {
   :root { color: #eaf4ff; background: #091522; }

@@ -9,6 +9,8 @@ export type PageModel = {
   loginEmail?: string;
   signupEmail?: string;
   signupDisplayName?: string;
+  uploadError?: string;
+  uploadSuccess?: boolean;
 };
 
 export type PageRenderer = (model: PageModel) => Promise<string>;
@@ -28,6 +30,8 @@ export function createPageRenderer(): PageRenderer {
         loginEmail: '',
         signupEmail: '',
         signupDisplayName: '',
+        uploadError: undefined,
+        uploadSuccess: false,
         ...model,
       })
     ).content;

@@ -12,7 +12,7 @@ afterAll(async () => {
 });
 
 describe('authentication schema', () => {
-  it('contains only the four milestone tables', async () => {
+  it('contains the IGC file table alongside authentication tables', async () => {
     const result = await database.pool.query<{ table_name: string }>(
       `SELECT table_name FROM information_schema.tables
        WHERE table_schema = 'public' AND table_type = 'BASE TABLE'
@@ -20,9 +20,28 @@ describe('authentication schema', () => {
     );
     expect(result.rows.map((row) => row.table_name)).toEqual([
       'app_sessions',
+      'igc_files',
       'profiles',
       'user_passwords',
       'users',
+    ]);
+  });
+
+  it('stores IGC ownership and retrieval metadata', async () => {
+    const result = await database.pool.query<{ column_name: string; is_nullable: string }>(
+      `SELECT column_name, is_nullable FROM information_schema.columns
+       WHERE table_schema = 'public' AND table_name = 'igc_files'
+       ORDER BY column_name`,
+    );
+    expect(result.rows).toEqual([
+      { column_name: 'bucket_key', is_nullable: 'NO' },
+      { column_name: 'byte_size', is_nullable: 'NO' },
+      { column_name: 'content_type', is_nullable: 'NO' },
+      { column_name: 'created_at', is_nullable: 'NO' },
+      { column_name: 'igc_file_id', is_nullable: 'NO' },
+      { column_name: 'original_filename', is_nullable: 'NO' },
+      { column_name: 'updated_at', is_nullable: 'NO' },
+      { column_name: 'user_id', is_nullable: 'NO' },
     ]);
   });
 

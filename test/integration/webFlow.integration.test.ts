@@ -32,7 +32,12 @@ describe('GlideHero browser authentication flow', () => {
     const app = createApp({
       webMiddleware: [
         createCurrentUserMiddleware(auth, cookie),
-        createWebRouter({ auth, cookie, renderPage: createPageRenderer() }),
+        createWebRouter({
+          auth,
+          cookie,
+          igcFiles: { upload: async () => ({ id: '00000000-0000-4000-8000-000000000010', bucketKey: 'glidehero/test.igc' }) },
+          renderPage: createPageRenderer(),
+        }),
       ],
     });
 
