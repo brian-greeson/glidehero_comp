@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { IgcParseError } from '../../src/domain/igc/errors.js';
 import { parseIgcFlight } from '../../src/domain/igc/parseIgcFlight.js';
@@ -10,6 +11,15 @@ const validIgc = [
 ].join('\r\n');
 
 describe('parseIgcFlight', () => {
+  it('parses the supplied SeeYou Navigator IGC fixture', () => {
+    const source = readFileSync(new URL('../inputs/2026-05-10-XNA-54F3F9B76F42505D1B592F21726CAF48-01.igc', import.meta.url), 'utf8');
+
+    const flight = parseIgcFlight(source);
+
+    expect(flight.points).toHaveLength(10_835);
+    expect(flight.startedAt.toISOString()).toBe('2026-05-10T18:50:26.000Z');
+  });
+
   it('returns ordered UTC fixes and the derived flight summary across midnight', () => {
     const flight = parseIgcFlight(validIgc);
 

@@ -1,7 +1,7 @@
 import { IgcParseError } from './errors.js';
 
 export function parseIgcDate(line: string): Date {
-  const match = /^HFDTE(\d{2})(\d{2})(\d{2})/.exec(line);
+  const match = /^HFDTE(?:DATE:)?(\d{2})(\d{2})(\d{2})/.exec(line);
   if (!match) throw new IgcParseError('invalid_date');
 
   const [, dayText, monthText, yearText] = match;

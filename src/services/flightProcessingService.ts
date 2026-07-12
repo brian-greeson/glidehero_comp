@@ -5,6 +5,8 @@ import { flights, trackPoints } from '../db/schema.js';
 import { IgcParseError } from '../domain/igc/errors.js';
 import { parseIgcFlight } from '../domain/igc/parseIgcFlight.js';
 
+const TRACK_POINT_INSERT_BATCH_SIZE = 1_000;
+
 export type FlightProcessingOutcome =
   | { status: 'completed'; flightId: string }
   | { status: 'failed'; flightId: string; message: string };
@@ -66,7 +68,11 @@ export function createFlightProcessingService(
       }
 
       await database.transaction(async (tx) => {
-        await tx.insert(trackPoints).values(parsed.points.map((point) => ({ flightId: flight.id, ...point })));
+        for (let start = 0; start < parsed.points.length; start += TRACK_POINT_INSERT_BATCH_SIZE) {
+          await tx
+            .insert(trackPoints)
+            .values(parsed.points.slice(start, start + TRACK_POINT_INSERT_BATCH_SIZE).map((point) => ({ flightId: flight.id, ...point })));
+        }
         await tx
           .update(flights)
           .set({
