@@ -1,0 +1,106 @@
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { createApp } from '../../src/app.js';
+import { createAuthService } from '../../src/services/authService.js';
+import { createPageRenderer } from '../../src/views/renderer.js';
+import { createCurrentUserMiddleware } from '../../src/web/currentUserMiddleware.js';
+import { createSessionCookie } from '../../src/web/sessionCookie.js';
+import { createWebRouter } from '../../src/web/webRouter.js';
+import { withServer } from '../support/http.js';
+import { resetAndPushTestDatabase } from './database.js';
+
+let database: Awaited<ReturnType<typeof resetAndPushTestDatabase>> | undefined;
+
+beforeAll(async () => {
+  database = await resetAndPushTestDatabase();
+});
+
+afterAll(async () => {
+  await database?.pool.end();
+});
+
+describe('GlideHero browser authentication flow', () => {
+  it('signs up, renders the user, logs out, and logs back in', async () => {
+    const testDatabase = database;
+    if (!testDatabase) throw new Error('Test database was not initialized.');
+
+    const auth = createAuthService(testDatabase.db, { sessionTtlSeconds: 604800 });
+    const cookie = createSessionCookie({
+      name: 'glidehero_session',
+      secure: false,
+      maxAgeSeconds: 604800,
+    });
+    const app = createApp({
+      webMiddleware: [
+        createCurrentUserMiddleware(auth, cookie),
+        createWebRouter({ auth, cookie, renderPage: createPageRenderer() }),
+      ],
+    });
+
+    await withServer(app, async (baseUrl) => {
+      const landing = await fetch(`${baseUrl}/`);
+      const landingHtml = await landing.text();
+      expect(landing.status).toBe(200);
+      expect(landingHtml).toContain('<title>GlideHero</title>');
+      expect(landingHtml).toContain('Create account');
+
+      const signup = await fetch(`${baseUrl}/signup`, {
+        method: 'POST',
+        redirect: 'manual',
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+          email: 'pilot@example.com',
+          password: 'correct horse battery staple',
+          displayName: 'Sky Pilot',
+        }),
+      });
+      expect(signup.status).toBe(303);
+      const signupSetCookie = signup.headers.get('set-cookie');
+      expect(signupSetCookie).toContain('Max-Age=604800');
+      expect(signupSetCookie).toContain('Path=/');
+      expect(signupSetCookie).toContain('HttpOnly');
+      expect(signupSetCookie).toContain('SameSite=Lax');
+      const signupCookie = signupSetCookie?.split(';', 1)[0];
+      expect(signupCookie).toMatch(/^glidehero_session=/);
+
+      const signedIn = await fetch(`${baseUrl}/`, { headers: { cookie: signupCookie ?? '' } });
+      expect(await signedIn.text()).toContain('Sky Pilot');
+
+      const logout = await fetch(`${baseUrl}/logout`, {
+        method: 'POST',
+        redirect: 'manual',
+        headers: { cookie: signupCookie ?? '' },
+      });
+      expect(logout.status).toBe(303);
+      expect(logout.headers.get('set-cookie')).toContain('Max-Age=0');
+
+      const signedOut = await fetch(`${baseUrl}/`, {
+        headers: { cookie: signupCookie ?? '' },
+      });
+      const signedOutHtml = await signedOut.text();
+      expect(signedOut.status).toBe(200);
+      expect(signedOutHtml).not.toContain('Sky Pilot');
+      expect(signedOutHtml).not.toContain('pilot@example.com');
+      expect(signedOutHtml).toContain('action="/login"');
+      expect(signedOutHtml).toContain('action="/signup"');
+
+      const login = await fetch(`${baseUrl}/login`, {
+        method: 'POST',
+        redirect: 'manual',
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+          email: 'pilot@example.com',
+          password: 'correct horse battery staple',
+        }),
+      });
+      expect(login.status).toBe(303);
+      const loginSetCookie = login.headers.get('set-cookie');
+      expect(loginSetCookie).toContain('Max-Age=604800');
+      expect(loginSetCookie).toContain('Path=/');
+      expect(loginSetCookie).toContain('HttpOnly');
+      expect(loginSetCookie).toContain('SameSite=Lax');
+      const loginCookie = loginSetCookie?.split(';', 1)[0];
+      const signedInAgain = await fetch(`${baseUrl}/`, { headers: { cookie: loginCookie ?? '' } });
+      expect(await signedInAgain.text()).toContain('pilot@example.com');
+    });
+  });
+});
