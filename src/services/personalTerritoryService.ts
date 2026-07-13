@@ -2,16 +2,16 @@ import { eq, sql } from 'drizzle-orm';
 import type { Database } from '../db/client.js';
 import { personalTerritories } from '../db/schema.js';
 import {
-  emptyPersonalTerritoryGeoJson,
-  type PersonalTerritoryGeoJson,
-} from '../domain/territory/personalTerritoryGeoJson.js';
+  emptyFreePolygonClaimGeoJson,
+  type FreePolygonClaimGeoJson,
+} from '../domain/territory/freePolygonClaimGeoJson.js';
 
 export interface PersonalTerritoryService {
-  refresh(input: { userId: string }): Promise<PersonalTerritoryGeoJson>;
-  get(input: { userId: string }): Promise<PersonalTerritoryGeoJson>;
+  refresh(input: { userId: string }): Promise<FreePolygonClaimGeoJson>;
+  get(input: { userId: string }): Promise<FreePolygonClaimGeoJson>;
 }
 
-type StoredProjection = { geojson: PersonalTerritoryGeoJson };
+type StoredProjection = { geojson: FreePolygonClaimGeoJson };
 
 export function createPersonalTerritoryService(database: Database): PersonalTerritoryService {
   return {
@@ -55,7 +55,7 @@ export function createPersonalTerritoryService(database: Database): PersonalTerr
         if (stored) return stored.geojson;
 
         await tx.delete(personalTerritories).where(eq(personalTerritories.userId, userId));
-        return emptyPersonalTerritoryGeoJson();
+        return emptyFreePolygonClaimGeoJson();
       });
     },
 
@@ -65,7 +65,7 @@ export function createPersonalTerritoryService(database: Database): PersonalTerr
         .from(personalTerritories)
         .where(eq(personalTerritories.userId, userId))
         .limit(1);
-      return territory?.geojson ?? emptyPersonalTerritoryGeoJson();
+      return territory?.geojson ?? emptyFreePolygonClaimGeoJson();
     },
   };
 }

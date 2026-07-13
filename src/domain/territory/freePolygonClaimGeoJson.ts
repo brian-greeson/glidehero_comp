@@ -2,7 +2,7 @@ export type GeoJsonPosition = [longitude: number, latitude: number];
 export type GeoJsonLinearRing = GeoJsonPosition[];
 export type GeoJsonPolygonCoordinates = GeoJsonLinearRing[];
 
-export type PersonalTerritoryGeoJson = {
+export type FreePolygonClaimGeoJson = {
   type: 'FeatureCollection';
   features: Array<{
     type: 'Feature';
@@ -14,6 +14,6 @@ export type PersonalTerritoryGeoJson = {
   }>;
 };
 
-export function emptyPersonalTerritoryGeoJson(): PersonalTerritoryGeoJson {
+export function emptyFreePolygonClaimGeoJson(): FreePolygonClaimGeoJson {
   return { type: 'FeatureCollection', features: [] };
 }

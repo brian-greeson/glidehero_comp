@@ -2,9 +2,9 @@ import { describe, expect, it, vi } from 'vitest';
 import { createApp } from '../../src/app.js';
 import { AuthFailure, type AuthService } from '../../src/services/authService.js';
 import {
-  emptyPersonalTerritoryGeoJson,
-  type PersonalTerritoryGeoJson,
-} from '../../src/domain/territory/personalTerritoryGeoJson.js';
+  emptyFreePolygonClaimGeoJson,
+  type FreePolygonClaimGeoJson,
+} from '../../src/domain/territory/freePolygonClaimGeoJson.js';
 import type { ProfileService } from '../../src/services/profileService.js';
 import type { FlightProcessingOutcome } from '../../src/services/flightProcessingService.js';
 import type { PersonalTerritoryService } from '../../src/services/personalTerritoryService.js';
@@ -48,8 +48,8 @@ function dependencies(
   const igcFiles = { upload: vi.fn(async () => outcome) };
   const profiles: ProfileService = { updateTerritoryColor: vi.fn(async () => undefined) };
   const personalTerritory: PersonalTerritoryService = {
-    refresh: vi.fn(async () => emptyPersonalTerritoryGeoJson()),
-    get: vi.fn(async (): Promise<PersonalTerritoryGeoJson> => ({
+    refresh: vi.fn(async () => emptyFreePolygonClaimGeoJson()),
+    get: vi.fn(async (): Promise<FreePolygonClaimGeoJson> => ({
       type: 'FeatureCollection',
       features: [{
         type: 'Feature',
@@ -249,8 +249,8 @@ describe('webRouter', () => {
       },
       profiles: { updateTerritoryColor: vi.fn(async () => undefined) },
       personalTerritory: {
-        refresh: vi.fn(async () => emptyPersonalTerritoryGeoJson()),
-        get: vi.fn(async () => emptyPersonalTerritoryGeoJson()),
+        refresh: vi.fn(async () => emptyFreePolygonClaimGeoJson()),
+        get: vi.fn(async () => emptyFreePolygonClaimGeoJson()),
       },
       renderPage: createPageRenderer({ mapTilerApiKey: 'maptiler-test-key' }),
     });
@@ -296,8 +296,8 @@ describe('webRouter', () => {
           },
           profiles: { updateTerritoryColor: vi.fn(async () => undefined) },
           personalTerritory: {
-            refresh: vi.fn(async () => emptyPersonalTerritoryGeoJson()),
-            get: vi.fn(async () => emptyPersonalTerritoryGeoJson()),
+            refresh: vi.fn(async () => emptyFreePolygonClaimGeoJson()),
+            get: vi.fn(async () => emptyFreePolygonClaimGeoJson()),
           },
           renderPage: createPageRenderer({ mapTilerApiKey: 'maptiler-test-key' }),
         }),
