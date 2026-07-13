@@ -9,6 +9,7 @@ describe('parseConfig', () => {
       BUCKET_ID: 'id',
       BUCKET_NAME: 'glidehero-files',
       BUCKET_URL: 'https://s3.example.test',
+      MAPTILER_API_KEY: 'maptiler-test-key',
     })).toEqual({
       databaseUrl: 'postgres://localhost/glidehero',
       environment: 'development',
@@ -16,6 +17,7 @@ describe('parseConfig', () => {
       port: 3000,
       sessionCookieName: 'glidehero_session',
       sessionTtlSeconds: 604800,
+      mapTilerApiKey: 'maptiler-test-key',
       bucket: {
         bucketSecret: 'secret',
         bucketId: 'id',
@@ -29,6 +31,16 @@ describe('parseConfig', () => {
     expect(() => parseConfig({})).toThrow();
   });
 
+  it('requires a MapTiler API key', () => {
+    expect(() => parseConfig({
+      DATABASE_URL: 'postgres://localhost/glidehero',
+      BUCKET_SECRET: 'secret',
+      BUCKET_ID: 'id',
+      BUCKET_NAME: 'glidehero-files',
+      BUCKET_URL: 'https://s3.example.test',
+    })).toThrow();
+  });
+
   it('enables secure production behavior', () => {
     expect(
       parseConfig({
@@ -38,6 +50,7 @@ describe('parseConfig', () => {
         BUCKET_ID: 'id',
         BUCKET_NAME: 'glidehero-files',
         BUCKET_URL: 'https://s3.example.test',
+        MAPTILER_API_KEY: 'maptiler-test-key',
       }),
     ).toMatchObject({ environment: 'production', isProduction: true });
   });

@@ -17,6 +17,7 @@ const envSchema = z.object({
   BUCKET_ID: z.string(),
   BUCKET_NAME: z.string(),
   BUCKET_URL: z.string(),
+  MAPTILER_API_KEY: z.string().min(1),
 });
 
 export type AppConfig = {
@@ -26,6 +27,7 @@ export type AppConfig = {
   port: number;
   sessionCookieName: string;
   sessionTtlSeconds: number;
+  mapTilerApiKey: string;
   bucket: {
     bucketSecret: string;
     bucketId: string;
@@ -43,6 +45,7 @@ export function parseConfig(env: NodeJS.ProcessEnv): AppConfig {
     port: parsed.PORT,
     sessionCookieName: parsed.SESSION_COOKIE_NAME,
     sessionTtlSeconds: parsed.SESSION_TTL_SECONDS,
+    mapTilerApiKey: parsed.MAPTILER_API_KEY,
     bucket: {
       bucketSecret: parsed.BUCKET_SECRET,
       bucketId: parsed.BUCKET_ID,

@@ -1,37 +1,88 @@
 {{ layout "layouts/appLayout.vto" }}
-  <header class="hero">
-    <p class="eyebrow">GlideHero</p>
-    <h1>Paint the sky with your friends.</h1>
-  </header>
 
   {{ if currentUser }}
-    <section class="card signed-in">
-      <p>Signed in as <strong>{{ currentUser.displayName }}</strong></p>
-      <p class="muted">{{ currentUser.email }}</p>
-      <form method="post" action="/logout">
-        <button type="submit">Log out</button>
-      </form>
-    </section>
-    <section class="card">
-      <h2>Map color</h2>
-      <p class="muted">Choose the color for your personal territory.</p>
-      {{ if territoryColorSuccess }}<p class="success" role="status">Map color saved.</p>{{ /if }}
-      {{ if territoryColorError }}<p class="error" role="alert">{{ territoryColorError }}</p>{{ /if }}
-      <form method="post" action="/profile/territory-color">
-        <label>Territory color<input name="territoryColor" type="color" value="{{ currentUser.territoryColor }}" required></label>
-        <button type="submit">Save map color</button>
-      </form>
-    </section>
-    <section class="card">
-      <h2>Upload IGC flight</h2>
-      {{ if uploadSuccess }}<p class="success" role="status">IGC flight processed successfully.</p>{{ /if }}
-      {{ if uploadError }}<p class="error" role="alert">{{ uploadError }}</p>{{ /if }}
-      <form method="post" action="/igc-files" enctype="multipart/form-data">
-        <label>IGC file<input name="igcFile" type="file" accept=".igc" required></label>
-        <button type="submit">Upload flight</button>
-      </form>
+    <section class="dashboard" data-dashboard>
+      <header class="dashboard-nav">
+        <a class="brand" href="/" aria-label="Glide Hero dashboard"><span class="brand-wing" aria-hidden="true">⌁</span><span class="brand-name">GLIDE HERO</span></a>
+        <nav class="mode-tabs" aria-label="Map mode">
+          <!-- STUB: Competitive mode will load current-month territory ownership. -->
+          <button type="button" class="mode-tab is-active" data-stub="competitive-mode" aria-disabled="true">Competitive</button>
+          <!-- STUB: Personal mode will load the signed-in pilot's permanent territory. -->
+          <button type="button" class="mode-tab" data-stub="personal-mode" aria-disabled="true">Personal</button>
+        </nav>
+        <div class="nav-actions">
+          <form class="upload-form" data-upload-form method="post" action="/igc-files" enctype="multipart/form-data">
+            <label class="upload-button">Upload<input name="igcFile" type="file" accept=".igc" required></label>
+          </form>
+          {{ if uploadSuccess }}<p class="toast success" role="status">IGC flight processed successfully.</p>{{ /if }}
+          {{ if uploadError }}<p class="toast error" role="alert">{{ uploadError }}</p>{{ /if }}
+          <!-- STUB: Help will open Glide Hero guidance. -->
+          <button type="button" class="icon-button" data-stub="help" aria-label="Help" aria-disabled="true">?</button>
+          <div class="account-menu">
+            <button type="button" class="account-trigger" data-account-trigger aria-expanded="false" aria-controls="account-popover">
+              <span class="avatar" aria-hidden="true">{{ currentUser.displayName.slice(0, 1) }}</span>
+              <span class="account-name">{{ currentUser.displayName }}</span>
+            </button>
+            <section id="account-popover" class="account-popover" data-account-popover hidden>
+              <p class="account-email">{{ currentUser.email }}</p>
+              <form method="post" action="/profile/territory-color">
+                <label>Territory color<input name="territoryColor" type="color" value="{{ currentUser.territoryColor }}" required></label>
+                {{ if territoryColorSuccess }}<p class="success" role="status">Map color saved.</p>{{ /if }}
+                {{ if territoryColorError }}<p class="error" role="alert">{{ territoryColorError }}</p>{{ /if }}
+                <button type="submit" class="secondary-button">Save map color</button>
+              </form>
+              <form method="post" action="/logout"><button type="submit" class="logout-button">Log out</button></form>
+            </section>
+          </div>
+        </div>
+      </header>
+
+      <section class="map-stage" aria-label="Territory map">
+        <div class="map-canvas" data-dashboard-map data-map-style-url="{{ mapTilerStyleUrl }}"></div>
+        <div class="map-search">
+          <!-- STUB: Location search will geocode and move the map viewport. -->
+          <input type="search" data-stub="location-search" aria-label="Search location" placeholder="Search location..." disabled>
+        </div>
+        <div class="map-actions" aria-label="Map actions">
+          <!-- STUB: Recenter will move the map to the signed-in pilot's active flying area. -->
+          <button type="button" data-stub="recenter-map" aria-label="Recenter map" aria-disabled="true">◎</button>
+          <!-- STUB: Layer selector will toggle territory and flight-map layers. -->
+          <button type="button" data-stub="layer-selector" aria-label="Select map layers" aria-disabled="true">▱</button>
+        </div>
+        <p class="map-empty-state" data-map-empty-state hidden>Map unavailable. Check your connection and try again.</p>
+      </section>
+
+      <aside class="dashboard-info" data-mobile-sheet aria-label="Map information">
+        <button type="button" class="sheet-handle" data-sheet-toggle aria-expanded="false" aria-controls="dashboard-information"><span aria-hidden="true"></span><span class="sr-only">Expand map information</span></button>
+        <div id="dashboard-information" class="dashboard-information">
+          <section class="info-card time-period-card">
+            <h2>Time period</h2>
+            <p class="period-title">Current Month</p>
+            <p class="period-range" data-current-month>Loading current month…</p>
+          </section>
+          <section class="info-card viewport-stats">
+            <h2>Viewport statistics</h2>
+            <!-- STUB: Viewport statistics will be calculated from visible territory geometry. -->
+            <div data-stub="viewport-statistics" aria-live="polite">
+              <p class="empty-copy">No territory data is available for this viewport yet.</p>
+              <dl><div><dt>Claimed Area</dt><dd>—</dd></div><div><dt>Flights</dt><dd>—</dd></div><div><dt>Pilots</dt><dd>—</dd></div></dl>
+            </div>
+          </section>
+          <section class="info-card leaderboard-card">
+            <h2>Leaderboard</h2>
+            <!-- STUB: Viewport leaderboard will rank pilots by visible competitive territory. -->
+            <div data-stub="viewport-leaderboard"><p class="empty-copy">No ranked pilots are available for this viewport yet.</p></div>
+            <!-- STUB: Full leaderboard will open the complete competition ranking. -->
+            <button type="button" class="full-leaderboard" data-stub="full-leaderboard" aria-disabled="true">View full leaderboard <span aria-hidden="true">→</span></button>
+          </section>
+        </div>
+      </aside>
     </section>
   {{ else }}
+    <header class="hero">
+      <p class="eyebrow">GlideHero</p>
+      <h1>Paint the sky with your friends.</h1>
+    </header>
     <div class="auth-grid">
       <section class="card">
         <h2>Log in</h2>

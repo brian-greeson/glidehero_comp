@@ -3,13 +3,20 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="color-scheme" content="light dark">
+    <meta name="color-scheme" content="light">
     <link rel="stylesheet" href="/styles/app.css">
+    {{ if currentUser }}
+      <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@5.16.0/dist/maplibre-gl.css">
+    {{ /if }}
     <title>GlideHero</title>
   </head>
-  <body>
-    <main class="shell">
+  <body{{ if currentUser }} class="dashboard-body"{{ /if }}>
+    <main class="shell{{ if currentUser }} dashboard-shell{{ /if }}">
       {{ content }}
     </main>
+    {{ if currentUser }}
+      <script src="https://unpkg.com/maplibre-gl@5.16.0/dist/maplibre-gl.js"></script>
+      <script src="/scripts/dashboard.js"></script>
+    {{ /if }}
   </body>
 </html>

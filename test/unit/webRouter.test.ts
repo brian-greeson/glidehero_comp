@@ -216,7 +216,7 @@ describe('webRouter', () => {
         })),
       },
       profiles: { updateTerritoryColor: vi.fn(async () => undefined) },
-      renderPage: createPageRenderer(),
+      renderPage: createPageRenderer({ mapTilerApiKey: 'maptiler-test-key' }),
     });
     const app = createApp({ webMiddleware: [middleware, router] });
 
@@ -259,7 +259,7 @@ describe('webRouter', () => {
             })),
           },
           profiles: { updateTerritoryColor: vi.fn(async () => undefined) },
-          renderPage: createPageRenderer(),
+          renderPage: createPageRenderer({ mapTilerApiKey: 'maptiler-test-key' }),
         }),
       ],
     });

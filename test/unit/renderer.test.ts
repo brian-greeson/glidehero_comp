@@ -2,8 +2,9 @@ import { describe, expect, it } from 'vitest';
 import { createPageRenderer } from '../../src/views/renderer.js';
 
 describe('Vento page renderer', () => {
+  const render = createPageRenderer({ mapTilerApiKey: 'maptiler-test-key' });
+
   it('compiles and renders the anonymous page state', async () => {
-    const render = createPageRenderer();
     const anonymous = await render({ currentUser: null });
 
     expect(anonymous).toContain('<title>GlideHero</title>');
@@ -13,8 +14,7 @@ describe('Vento page renderer', () => {
     expect(anonymous).not.toContain('action="/logout"');
   });
 
-  it('compiles and renders only the authenticated page state', async () => {
-    const render = createPageRenderer();
+  it('renders the authenticated dashboard scaffold with working account workflows', async () => {
     const authenticated = await render({
       currentUser: {
         userId: '00000000-0000-4000-8000-000000000001',
@@ -30,12 +30,18 @@ describe('Vento page renderer', () => {
     expect(authenticated).toContain('action="/logout"');
     expect(authenticated).toContain('action="/profile/territory-color"');
     expect(authenticated).toContain('value="#1769AA"');
+    expect(authenticated).toContain('data-dashboard-map');
+    expect(authenticated).toContain('data-mobile-sheet');
+    expect(authenticated).toContain('data-account-popover');
+    expect(authenticated).toContain('data-stub="competitive-mode"');
+    expect(authenticated).toContain('data-stub="full-leaderboard"');
+    expect(authenticated).toContain('No territory data is available for this viewport yet.');
+    expect(authenticated).toContain('https://api.maptiler.com/maps/outdoor-v2/style.json?key=maptiler-test-key');
     expect(authenticated).not.toContain('action="/login"');
     expect(authenticated).not.toContain('action="/signup"');
   });
 
   it('autoescapes user-controlled values and never renders passwords', async () => {
-    const render = createPageRenderer();
     const html = await render({
       currentUser: null,
       signupError: 'An account with that email already exists.',

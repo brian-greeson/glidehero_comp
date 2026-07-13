@@ -17,7 +17,7 @@ export type PageModel = {
 
 export type PageRenderer = (model: PageModel) => Promise<string>;
 
-export function createPageRenderer(): PageRenderer {
+export function createPageRenderer(options: { mapTilerApiKey: string }): PageRenderer {
   const environment = vento({
     includes: resolve('src/views'),
     autoescape: true,
@@ -36,6 +36,7 @@ export function createPageRenderer(): PageRenderer {
         uploadSuccess: false,
         territoryColorError: undefined,
         territoryColorSuccess: false,
+        mapTilerStyleUrl: `https://api.maptiler.com/maps/outdoor-v2/style.json?key=${options.mapTilerApiKey}`,
         ...model,
       })
     ).content;
