@@ -8,6 +8,11 @@ describe('Vento page renderer', () => {
     const anonymous = await render({ currentUser: null });
 
     expect(anonymous).toContain('<title>GlideHero</title>');
+    expect(anonymous).toContain('<link rel="icon" href="/favicon.ico" sizes="any">');
+    expect(anonymous).toContain('<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">');
+    expect(anonymous).toContain('<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">');
+    expect(anonymous).toContain('<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">');
+    expect(anonymous).toContain('<link rel="icon" type="image/png" sizes="192x192" href="/android-chrome-192x192.png">');
     expect(anonymous).toContain('Paint the sky with your friends.');
     expect(anonymous).toContain('action="/login"');
     expect(anonymous).toContain('action="/signup"');
@@ -26,6 +31,10 @@ describe('Vento page renderer', () => {
     });
 
     expect(authenticated).toContain('Sky Pilot');
+    expect(authenticated).toContain('<img class="brand-logo" src="/android-chrome-192x192.png" alt="">');
+    expect(authenticated).toContain('aria-label="Glide Hero dashboard"');
+    expect(authenticated).toContain('<span class="brand-name">GLIDE HERO</span>');
+    expect(authenticated).not.toContain('class="brand-wing"');
     expect(authenticated).toContain('pilot@example.com');
     expect(authenticated).toContain('action="/logout"');
     expect(authenticated).toContain('action="/profile/territory-color"');

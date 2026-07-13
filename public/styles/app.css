@@ -21,7 +21,7 @@ button { border-color: #1769aa; color: #fff; background: #1769aa; font-weight: 7
 .dashboard { position: relative; height: 100%; color: #111827; }
 .dashboard-nav { position: relative; z-index: 5; height: 76px; display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 1.5rem; padding: 0 1.75rem; color: #fff; background: linear-gradient(110deg, #030b15, #071521); box-shadow: 0 2px 12px rgb(0 0 0 / .2); }
 .brand { display: inline-flex; width: fit-content; align-items: center; gap: .6rem; color: inherit; font-size: 1.2rem; font-style: italic; font-weight: 900; text-decoration: none; }
-.brand-wing { display: grid; width: 2.1rem; height: 1.7rem; place-items: center; font-size: 2.3rem; transform: rotate(-12deg); }
+.brand-logo { width: 2.1rem; height: 2.1rem; object-fit: contain; }
 .mode-tabs { display: flex; height: 100%; align-items: stretch; gap: .2rem; }
 .mode-tab { width: auto; min-width: 130px; padding: 0 1rem; border: 0; border-radius: 0; color: #f8fafc; background: transparent; font-size: 1rem; }
 .mode-tab[aria-disabled="true"], .map-actions button[aria-disabled="true"], .full-leaderboard[aria-disabled="true"], .icon-button[aria-disabled="true"] { cursor: default; }
@@ -74,7 +74,7 @@ button { border-color: #1769aa; color: #fff; background: #1769aa; font-weight: 7
 @media (max-width: 900px) {
   .dashboard-nav { height: 62px; grid-template-columns: auto 1fr auto; gap: .5rem; padding: 0 .75rem; }
   .brand-name, .account-name { display: none; }
-  .brand-wing { width: 1.6rem; font-size: 1.9rem; }
+  .brand-logo { width: 1.75rem; height: 1.75rem; }
   .mode-tab { min-width: 0; padding: 0 .6rem; font-size: .88rem; }
   .upload-button { padding: .55rem .65rem; font-size: .85rem; }
   .upload-button::before { display: none; }
