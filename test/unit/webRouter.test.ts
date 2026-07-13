@@ -1,8 +1,13 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createApp } from '../../src/app.js';
 import { AuthFailure, type AuthService } from '../../src/services/authService.js';
+import {
+  emptyPersonalTerritoryGeoJson,
+  type PersonalTerritoryGeoJson,
+} from '../../src/domain/territory/personalTerritoryGeoJson.js';
 import type { ProfileService } from '../../src/services/profileService.js';
 import type { FlightProcessingOutcome } from '../../src/services/flightProcessingService.js';
+import type { PersonalTerritoryService } from '../../src/services/personalTerritoryService.js';
 import { createPageRenderer } from '../../src/views/renderer.js';
 import { createCurrentUserMiddleware } from '../../src/web/currentUserMiddleware.js';
 import { createSessionCookie } from '../../src/web/sessionCookie.js';
@@ -42,8 +47,35 @@ function dependencies(
   const middleware = createCurrentUserMiddleware(auth, cookie);
   const igcFiles = { upload: vi.fn(async () => outcome) };
   const profiles: ProfileService = { updateTerritoryColor: vi.fn(async () => undefined) };
-  const router = createWebRouter({ auth, cookie, igcFiles, profiles, renderPage });
-  return { auth, igcFiles, profiles, renderPage, app: createApp({ webMiddleware: [middleware, router] }) };
+  const personalTerritory: PersonalTerritoryService = {
+    refresh: vi.fn(async () => emptyPersonalTerritoryGeoJson()),
+    get: vi.fn(async (): Promise<PersonalTerritoryGeoJson> => ({
+      type: 'FeatureCollection',
+      features: [{
+        type: 'Feature',
+        properties: {},
+        geometry: {
+          type: 'MultiPolygon',
+          coordinates: [[[
+            [-105, 40],
+            [-104.99, 40],
+            [-104.99, 40.01],
+            [-105, 40.01],
+            [-105, 40],
+          ]]],
+        },
+      }],
+    })),
+  };
+  const router = createWebRouter({ auth, cookie, igcFiles, profiles, personalTerritory, renderPage });
+  return {
+    auth,
+    igcFiles,
+    profiles,
+    personalTerritory,
+    renderPage,
+    app: createApp({ webMiddleware: [middleware, router] }),
+  };
 }
 
 describe('webRouter', () => {
@@ -216,6 +248,10 @@ describe('webRouter', () => {
         })),
       },
       profiles: { updateTerritoryColor: vi.fn(async () => undefined) },
+      personalTerritory: {
+        refresh: vi.fn(async () => emptyPersonalTerritoryGeoJson()),
+        get: vi.fn(async () => emptyPersonalTerritoryGeoJson()),
+      },
       renderPage: createPageRenderer({ mapTilerApiKey: 'maptiler-test-key' }),
     });
     const app = createApp({ webMiddleware: [middleware, router] });
@@ -259,6 +295,10 @@ describe('webRouter', () => {
             })),
           },
           profiles: { updateTerritoryColor: vi.fn(async () => undefined) },
+          personalTerritory: {
+            refresh: vi.fn(async () => emptyPersonalTerritoryGeoJson()),
+            get: vi.fn(async () => emptyPersonalTerritoryGeoJson()),
+          },
           renderPage: createPageRenderer({ mapTilerApiKey: 'maptiler-test-key' }),
         }),
       ],
@@ -345,6 +385,36 @@ describe('webRouter', () => {
 
       expect(response.status).toBe(401);
       expect(profiles.updateTerritoryColor).not.toHaveBeenCalled();
+    });
+  });
+
+  it('returns only the authenticated pilot\'s stored personal territory GeoJSON', async () => {
+    const { app, personalTerritory } = dependencies();
+    await withServer(app, async (baseUrl) => {
+      const response = await fetch(`${baseUrl}/v1/personal-territory`, {
+        headers: { cookie: 'glidehero_session=valid-token' },
+      });
+
+      expect(response.status).toBe(200);
+      expect(response.headers.get('content-type')).toContain('application/json');
+      expect(await response.json()).toMatchObject({
+        type: 'FeatureCollection',
+        features: [expect.any(Object)],
+      });
+      expect(personalTerritory.get).toHaveBeenCalledWith({ userId: user.userId });
+    });
+  });
+
+  it('rejects an anonymous personal-territory request without reading a projection', async () => {
+    const { app, personalTerritory } = dependencies();
+    await withServer(app, async (baseUrl) => {
+      const response = await fetch(`${baseUrl}/v1/personal-territory`);
+
+      expect(response.status).toBe(401);
+      expect(await response.json()).toEqual({
+        error: { code: 'unauthorized', message: 'Sign in to view your personal territory.' },
+      });
+      expect(personalTerritory.get).not.toHaveBeenCalled();
     });
   });
 

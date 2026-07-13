@@ -1,8 +1,10 @@
 import { Router, type Request, type Response } from 'express';
 import multer from 'multer';
 import { z } from 'zod';
+import { AppError } from '../domain/errors.js';
 import { AuthFailure, type AuthService } from '../services/authService.js';
 import { normalizeTerritoryColor, type ProfileService } from '../services/profileService.js';
+import type { PersonalTerritoryService } from '../services/personalTerritoryService.js';
 import type { PageModel, PageRenderer } from '../views/renderer.js';
 import type { IgcFileService } from '../services/igcFileService.js';
 import type { SessionCookie } from './sessionCookie.js';
@@ -36,9 +38,24 @@ export function createWebRouter(dependencies: {
   cookie: SessionCookie;
   igcFiles: IgcFileService;
   profiles: ProfileService;
+  personalTerritory: PersonalTerritoryService;
   renderPage: PageRenderer;
 }) {
   const router = Router();
+
+  router.get('/v1/personal-territory', async (_req, res, next) => {
+    const currentUser = res.locals.currentUser;
+    if (!currentUser) {
+      next(new AppError(401, 'unauthorized', 'Sign in to view your personal territory.'));
+      return;
+    }
+
+    try {
+      res.status(200).json(await dependencies.personalTerritory.get({ userId: currentUser.userId }));
+    } catch (error) {
+      next(error);
+    }
+  });
 
   router.get('/', async (req, res) => {
     await render(res, dependencies.renderPage, 200, {
