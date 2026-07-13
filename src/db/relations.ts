@@ -26,8 +26,12 @@ export const relations = defineRelations(schema, (r) => ({
     user: r.one.users({ from: r.flights.userId, to: r.users.id }),
     igcFile: r.one.igcFiles({ from: r.flights.igcFileId, to: r.igcFiles.id }),
     trackPoints: r.many.trackPoints({ from: r.flights.id, to: r.trackPoints.flightId }),
+    areas: r.many.flightAreas({ from: r.flights.id, to: r.flightAreas.flightId }),
   },
   trackPoints: {
     flight: r.one.flights({ from: r.trackPoints.flightId, to: r.flights.id }),
+  },
+  flightAreas: {
+    flight: r.one.flights({ from: r.flightAreas.flightId, to: r.flights.id }),
   },
 }));

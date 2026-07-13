@@ -4,6 +4,7 @@ import type { Database } from '../db/client.js';
 import { flights, trackPoints } from '../db/schema.js';
 import { IgcParseError } from '../domain/igc/errors.js';
 import { parseIgcFlight } from '../domain/igc/parseIgcFlight.js';
+import type { FlightAreaDetectionService } from './flightAreaDetectionService.js';
 
 const TRACK_POINT_INSERT_BATCH_SIZE = 1_000;
 
@@ -25,7 +26,11 @@ function parserMessage(error: IgcParseError): string {
 
 export function createFlightProcessingService(
   database: Database,
-  options: { s3Client: Pick<S3, 'send'>; bucketName: string },
+  options: {
+    areaDetection: FlightAreaDetectionService;
+    s3Client: Pick<S3, 'send'>;
+    bucketName: string;
+  },
 ): FlightProcessingService {
   async function fail(flightId: string, message: string): Promise<FlightProcessingOutcome> {
     await database
@@ -87,6 +92,8 @@ export function createFlightProcessingService(
           })
           .where(eq(flights.id, flight.id));
       });
+
+      await options.areaDetection.detect({ flightId: flight.id });
 
       return { status: 'completed', flightId: flight.id };
     },

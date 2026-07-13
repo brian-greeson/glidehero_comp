@@ -116,13 +116,14 @@ exploring new areas, regardless of experience level or cross-country distance.
 ## Requirements
 
 - Node.js 25.9.0 (`.nvmrc` and `mise.toml` are provided)
-- PostgreSQL with permission to create tables in the target database
+- PostgreSQL with PostGIS enabled and permission to create tables in the target database
 
 ## Local setup
 
 ```bash
 npm install
 createdb glidehero
+psql glidehero -c 'CREATE EXTENSION postgis'
 cp .env.example .env
 npm run db:push -- --force
 npm run dev

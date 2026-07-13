@@ -4,6 +4,7 @@ import { parseConfig } from './config.js';
 import { createDatabase } from './db/client.js';
 import { createBucketClient } from './resources/bucketClient.js';
 import { createAuthService } from './services/authService.js';
+import { createFlightAreaDetectionService } from './services/flightAreaDetectionService.js';
 import { createFlightProcessingService } from './services/flightProcessingService.js';
 import { createIgcFileService } from './services/igcFileService.js';
 import { createProfileService } from './services/profileService.js';
@@ -16,7 +17,9 @@ const config = parseConfig(process.env);
 const { db } = createDatabase(config.databaseUrl);
 const auth = createAuthService(db, { sessionTtlSeconds: config.sessionTtlSeconds });
 const s3Client = createBucketClient(config);
+const flightAreaDetection = createFlightAreaDetectionService(db);
 const flightProcessing = createFlightProcessingService(db, {
+  areaDetection: flightAreaDetection,
   s3Client,
   bucketName: config.bucket.bucketName,
 });

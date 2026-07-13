@@ -1,4 +1,8 @@
-import { doublePrecision, index, integer, pgEnum, pgTable, text, timestamp, unique, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
+import { customType, doublePrecision, index, integer, pgEnum, pgTable, text, timestamp, unique, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
+
+const polygonGeometry = customType<{ data: string }>({
+  dataType: () => 'geometry(polygon,4326)',
+});
 
 const timestamps = {
   createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
@@ -99,5 +103,19 @@ export const trackPoints = pgTable(
   (table) => [
     unique('track_points_flight_id_sequence_number_unique').on(table.flightId, table.sequenceNumber),
     index('track_points_flight_id_sequence_number_idx').on(table.flightId, table.sequenceNumber),
+  ],
+);
+
+export const flightAreas = pgTable(
+  'flight_areas',
+  {
+    id: uuid('flight_area_id').primaryKey().defaultRandom(),
+    flightId: uuid('flight_id').notNull().references(() => flights.id, { onDelete: 'cascade' }),
+    geometry: polygonGeometry('geometry').notNull(),
+    areaSquareMeters: doublePrecision('area_square_meters').notNull(),
+  },
+  (table) => [
+    index('flight_areas_flight_id_idx').on(table.flightId),
+    index('flight_areas_geometry_gist_idx').using('gist', table.geometry),
   ],
 );

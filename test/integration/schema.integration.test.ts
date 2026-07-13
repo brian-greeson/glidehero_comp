@@ -15,11 +15,14 @@ describe('authentication schema', () => {
   it('contains flight and track-point tables with the expected columns', async () => {
     const result = await database.pool.query<{ table_name: string }>(
       `SELECT table_name FROM information_schema.tables
-       WHERE table_schema = 'public' AND table_type = 'BASE TABLE'
+       WHERE table_schema = 'public'
+         AND table_type = 'BASE TABLE'
+         AND table_name <> 'spatial_ref_sys'
        ORDER BY table_name`,
     );
     expect(result.rows.map((row) => row.table_name)).toEqual([
       'app_sessions',
+      'flight_areas',
       'flights',
       'igc_files',
       'profiles',
@@ -46,6 +49,49 @@ describe('authentication schema', () => {
       { column_name: 'started_at', is_nullable: 'YES' },
       { column_name: 'updated_at', is_nullable: 'NO' },
       { column_name: 'user_id', is_nullable: 'NO' },
+    ]);
+  });
+
+  it('stores flight claims as indexed WGS84 polygons', async () => {
+    const columns = await database.pool.query<{
+      column_name: string;
+      data_type: string;
+      is_nullable: string;
+      udt_name: string;
+    }>(
+      `SELECT column_name, data_type, is_nullable, udt_name
+       FROM information_schema.columns
+       WHERE table_schema = 'public' AND table_name = 'flight_areas'
+       ORDER BY column_name`,
+    );
+    expect(columns.rows).toEqual([
+      { column_name: 'area_square_meters', data_type: 'double precision', is_nullable: 'NO', udt_name: 'float8' },
+      { column_name: 'flight_area_id', data_type: 'uuid', is_nullable: 'NO', udt_name: 'uuid' },
+      { column_name: 'flight_id', data_type: 'uuid', is_nullable: 'NO', udt_name: 'uuid' },
+      { column_name: 'geometry', data_type: 'USER-DEFINED', is_nullable: 'NO', udt_name: 'geometry' },
+    ]);
+
+    const geometry = await database.pool.query<{
+      srid: number;
+      type: string;
+    }>(
+      `SELECT srid, type
+       FROM geometry_columns
+       WHERE f_table_schema = 'public'
+         AND f_table_name = 'flight_areas'
+         AND f_geometry_column = 'geometry'`,
+    );
+    expect(geometry.rows).toEqual([{ srid: 4326, type: 'POLYGON' }]);
+
+    const indexes = await database.pool.query<{ indexname: string }>(
+      `SELECT indexname FROM pg_indexes
+       WHERE schemaname = 'public' AND tablename = 'flight_areas'
+       ORDER BY indexname`,
+    );
+    expect(indexes.rows.map((row) => row.indexname)).toEqual([
+      'flight_areas_flight_id_idx',
+      'flight_areas_geometry_gist_idx',
+      'flight_areas_pkey',
     ]);
   });
 

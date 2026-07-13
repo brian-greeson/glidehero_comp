@@ -15,8 +15,10 @@ export async function resetAndPushTestDatabase(): Promise<ReturnType<typeof test
 
   const resetPool = new pg.Pool({ connectionString });
   try {
+    await resetPool.query('DROP EXTENSION IF EXISTS postgis CASCADE');
     await resetPool.query('DROP SCHEMA IF EXISTS public CASCADE');
     await resetPool.query('CREATE SCHEMA public');
+    await resetPool.query('CREATE EXTENSION postgis');
   } finally {
     await resetPool.end();
   }

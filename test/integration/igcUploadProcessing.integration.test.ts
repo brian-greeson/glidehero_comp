@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { DeleteObjectCommand, GetObjectCommand, PutObjectCommand, type S3 } from '@aws-sdk/client-s3';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { createAuthService } from '../../src/services/authService.js';
+import { createFlightAreaDetectionService } from '../../src/services/flightAreaDetectionService.js';
 import { createFlightProcessingService } from '../../src/services/flightProcessingService.js';
 import { createIgcFileService } from '../../src/services/igcFileService.js';
 import { resetAndPushTestDatabase } from './database.js';
@@ -47,12 +48,13 @@ afterAll(async () => {
 });
 
 describe('IGC upload processing', () => {
-  it('stores every fix from the supplied IGC file in PostgreSQL', async () => {
+  it('stores every fix and detects enclosed areas from the supplied IGC file', async () => {
     if (!database) throw new Error('Test database was not initialized.');
     const auth = createAuthService(database.db, { sessionTtlSeconds: 60 });
     const pilot = await auth.signup({ email: 'pilot@example.com', password: 'correct horse battery staple' });
     const objectStore = new InMemoryObjectStore();
     const processor = createFlightProcessingService(database.db, {
+      areaDetection: createFlightAreaDetectionService(database.db),
       s3Client: objectStore as never,
       bucketName: 'test-flights',
     });
@@ -72,11 +74,13 @@ describe('IGC upload processing', () => {
     expect(result.status).toBe('completed');
     const stored = await database.pool.query<{
       processing_status: string;
+      area_count: number;
       point_count: number;
       first_fix: Date;
       last_fix: Date;
     }>(
       `SELECT f.processing_status,
+              (SELECT count(*)::int FROM flight_areas fa WHERE fa.flight_id = f.flight_id) AS area_count,
               count(tp.track_point_id)::int AS point_count,
               min(tp.recorded_at) AS first_fix,
               max(tp.recorded_at) AS last_fix
@@ -88,10 +92,12 @@ describe('IGC upload processing', () => {
     expect(stored.rows).toEqual([
       expect.objectContaining({
         processing_status: 'completed',
+        area_count: expect.any(Number),
         point_count: 10_835,
         first_fix: new Date('2026-05-10T18:50:26.000Z'),
       }),
     ]);
+    expect(stored.rows[0]?.area_count).toBeGreaterThan(0);
     expect(stored.rows[0]?.last_fix.getTime()).toBeGreaterThan(stored.rows[0]?.first_fix.getTime() ?? 0);
   }, 60_000);
 });
