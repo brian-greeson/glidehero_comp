@@ -1,21 +1,69 @@
-(() => {
-  const mapElement = document.querySelector('[data-dashboard-map]');
-  const emptyState = document.querySelector('[data-map-empty-state]');
+export const PERSONAL_TERRITORY_SOURCE_ID = 'personal-territory';
+export const PERSONAL_TERRITORY_FILL_LAYER_ID = 'personal-territory-fill';
+export const PERSONAL_TERRITORY_OUTLINE_LAYER_ID = 'personal-territory-outline';
+
+export async function loadPersonalTerritory(map, territoryColor, fetchImpl = fetch) {
+  const response = await fetchImpl('/v1/personal-territory', {
+    credentials: 'same-origin',
+    headers: { accept: 'application/geo+json' },
+  });
+  if (!response.ok) throw new Error(`Personal territory request failed with ${response.status}.`);
+
+  const geojson = await response.json();
+  map.addSource(PERSONAL_TERRITORY_SOURCE_ID, { type: 'geojson', data: geojson });
+  map.addLayer({
+    id: PERSONAL_TERRITORY_FILL_LAYER_ID,
+    type: 'fill',
+    source: PERSONAL_TERRITORY_SOURCE_ID,
+    paint: { 'fill-color': territoryColor, 'fill-opacity': 0.42 },
+  });
+  map.addLayer({
+    id: PERSONAL_TERRITORY_OUTLINE_LAYER_ID,
+    type: 'line',
+    source: PERSONAL_TERRITORY_SOURCE_ID,
+    paint: { 'line-color': territoryColor, 'line-width': 2 },
+  });
+}
+
+export function initializeDashboard({
+  documentRef = document,
+  maplibre = window.maplibregl,
+  fetchImpl = window.fetch.bind(window),
+} = {}) {
+  const mapElement = documentRef.querySelector('[data-dashboard-map]');
+  const emptyState = documentRef.querySelector('[data-map-empty-state]');
 
   function showMapUnavailable() {
-    if (emptyState) emptyState.hidden = false;
+    if (emptyState) {
+      emptyState.textContent = 'Map unavailable. Check your connection and try again.';
+      emptyState.hidden = false;
+    }
   }
 
-  if (mapElement && window.maplibregl) {
+  function showTerritoryUnavailable() {
+    if (emptyState) {
+      emptyState.textContent = 'Unable to load your territory. Refresh the page.';
+      emptyState.hidden = false;
+    }
+  }
+
+  if (mapElement && maplibre) {
     try {
-      const map = new window.maplibregl.Map({
+      const map = new maplibre.Map({
         container: mapElement,
         style: mapElement.dataset.mapStyleUrl,
         center: [-106.2, 39.2],
         zoom: 7,
       });
-      map.addControl(new window.maplibregl.NavigationControl(), 'top-right');
+      map.addControl(new maplibre.NavigationControl(), 'top-right');
       map.once('error', showMapUnavailable);
+      map.once('load', async () => {
+        try {
+          await loadPersonalTerritory(map, mapElement.dataset.territoryColor, fetchImpl);
+        } catch {
+          showTerritoryUnavailable();
+        }
+      });
     } catch {
       showMapUnavailable();
     }
@@ -23,7 +71,7 @@
     showMapUnavailable();
   }
 
-  const currentMonth = document.querySelector('[data-current-month]');
+  const currentMonth = documentRef.querySelector('[data-current-month]');
   if (currentMonth) {
     const now = new Date();
     const start = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -32,8 +80,8 @@
     currentMonth.textContent = `${formatter.format(start)} – ${formatter.format(end)} (Local)`;
   }
 
-  const accountTrigger = document.querySelector('[data-account-trigger]');
-  const accountPopover = document.querySelector('[data-account-popover]');
+  const accountTrigger = documentRef.querySelector('[data-account-trigger]');
+  const accountPopover = documentRef.querySelector('[data-account-popover]');
   if (accountTrigger && accountPopover) {
     accountTrigger.addEventListener('click', () => {
       const open = accountPopover.hidden;
@@ -42,8 +90,8 @@
     });
   }
 
-  const sheetToggle = document.querySelector('[data-sheet-toggle]');
-  const sheet = document.querySelector('[data-mobile-sheet]');
+  const sheetToggle = documentRef.querySelector('[data-sheet-toggle]');
+  const sheet = documentRef.querySelector('[data-mobile-sheet]');
   if (sheetToggle && sheet) {
     sheetToggle.addEventListener('click', () => {
       const expanded = sheet.classList.toggle('is-expanded');
@@ -51,9 +99,15 @@
     });
   }
 
-  const uploadForm = document.querySelector('[data-upload-form]');
+  const uploadForm = documentRef.querySelector('[data-upload-form]');
   const uploadInput = uploadForm?.querySelector('input[type="file"]');
-  if (uploadForm && uploadInput) uploadInput.addEventListener('change', () => {
-    if (uploadInput.files?.length) uploadForm.requestSubmit();
-  });
-})();
+  if (uploadForm && uploadInput) {
+    uploadInput.addEventListener('change', () => {
+      if (uploadInput.files?.length) uploadForm.requestSubmit();
+    });
+  }
+}
+
+if (typeof window !== 'undefined' && typeof document !== 'undefined') {
+  window.addEventListener('DOMContentLoaded', () => initializeDashboard(), { once: true });
+}

@@ -6,9 +6,8 @@
         <a class="brand" href="/" aria-label="Glide Hero dashboard"><span class="brand-wing" aria-hidden="true">⌁</span><span class="brand-name">GLIDE HERO</span></a>
         <nav class="mode-tabs" aria-label="Map mode">
           <!-- STUB: Competitive mode will load current-month territory ownership. -->
-          <button type="button" class="mode-tab is-active" data-stub="competitive-mode" aria-disabled="true">Competitive</button>
-          <!-- STUB: Personal mode will load the signed-in pilot's permanent territory. -->
-          <button type="button" class="mode-tab" data-stub="personal-mode" aria-disabled="true">Personal</button>
+          <button type="button" class="mode-tab" data-stub="competitive-mode" aria-disabled="true">Competitive</button>
+          <button type="button" class="mode-tab is-active" data-personal-mode aria-current="page">Personal</button>
         </nav>
         <div class="nav-actions">
           <form class="upload-form" data-upload-form method="post" action="/igc-files" enctype="multipart/form-data">
@@ -38,7 +37,7 @@
       </header>
 
       <section class="map-stage" aria-label="Territory map">
-        <div class="map-canvas" data-dashboard-map data-map-style-url="{{ mapTilerStyleUrl }}"></div>
+        <div class="map-canvas" data-dashboard-map data-map-style-url="{{ mapTilerStyleUrl }}" data-territory-color="{{ currentUser.territoryColor }}"></div>
         <div class="map-search">
           <!-- STUB: Location search will geocode and move the map viewport. -->
           <input type="search" data-stub="location-search" aria-label="Search location" placeholder="Search location..." disabled>
