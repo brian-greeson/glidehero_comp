@@ -4,8 +4,7 @@ import type { Database } from '../db/client.js';
 import { flights, trackPoints } from '../db/schema.js';
 import { IgcParseError } from '../domain/igc/errors.js';
 import { parseIgcFlight } from '../domain/igc/parseIgcFlight.js';
-import type { FlightAreaDetectionService } from './flightAreaDetectionService.js';
-import type { PersonalTerritoryService } from './personalTerritoryService.js';
+import { createFreePolygonClaimService } from './freePolygonClaimService.js';
 
 const TRACK_POINT_INSERT_BATCH_SIZE = 1_000;
 
@@ -28,12 +27,12 @@ function parserMessage(error: IgcParseError): string {
 export function createFlightProcessingService(
   database: Database,
   options: {
-    areaDetection: FlightAreaDetectionService;
-    personalTerritory: PersonalTerritoryService;
     s3Client: Pick<S3, 'send'>;
     bucketName: string;
   },
 ): FlightProcessingService {
+  const freePolygonClaim = createFreePolygonClaimService(database);
+
   async function fail(flightId: string, message: string): Promise<FlightProcessingOutcome> {
     await database
       .update(flights)
@@ -95,8 +94,8 @@ export function createFlightProcessingService(
           .where(eq(flights.id, flight.id));
       });
 
-      await options.areaDetection.detect({ flightId: flight.id });
-      await options.personalTerritory.refresh({ userId: input.ownerUserId });
+      // Claim variations — comment or uncomment individual lines to select them.
+      await freePolygonClaim.process({ flightId: flight.id, userId: input.ownerUserId });
 
       return { status: 'completed', flightId: flight.id };
     },

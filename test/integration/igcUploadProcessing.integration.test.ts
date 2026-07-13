@@ -2,10 +2,9 @@ import { readFileSync } from 'node:fs';
 import { DeleteObjectCommand, GetObjectCommand, PutObjectCommand, type S3 } from '@aws-sdk/client-s3';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { createAuthService } from '../../src/services/authService.js';
-import { createFlightAreaDetectionService } from '../../src/services/flightAreaDetectionService.js';
 import { createFlightProcessingService } from '../../src/services/flightProcessingService.js';
+import { createFreePolygonClaimService } from '../../src/services/freePolygonClaimService.js';
 import { createIgcFileService } from '../../src/services/igcFileService.js';
-import { createPersonalTerritoryService } from '../../src/services/personalTerritoryService.js';
 import { resetAndPushTestDatabase } from './database.js';
 
 const fixturePath = new URL('../inputs/2026-05-10-XNA-54F3F9B76F42505D1B592F21726CAF48-01.igc', import.meta.url);
@@ -54,10 +53,7 @@ describe('IGC upload processing', () => {
     const auth = createAuthService(database.db, { sessionTtlSeconds: 60 });
     const pilot = await auth.signup({ email: 'pilot@example.com', password: 'correct horse battery staple' });
     const objectStore = new InMemoryObjectStore();
-    const personalTerritory = createPersonalTerritoryService(database.db);
     const processor = createFlightProcessingService(database.db, {
-      areaDetection: createFlightAreaDetectionService(database.db),
-      personalTerritory,
       s3Client: objectStore as never,
       bucketName: 'test-flights',
     });
@@ -102,7 +98,7 @@ describe('IGC upload processing', () => {
     ]);
     expect(stored.rows[0]?.area_count).toBeGreaterThan(0);
     expect(stored.rows[0]?.last_fix.getTime()).toBeGreaterThan(stored.rows[0]?.first_fix.getTime() ?? 0);
-    const territory = await personalTerritory.get({ userId: pilot.user.userId });
+    const territory = await createFreePolygonClaimService(database.db).get({ userId: pilot.user.userId });
     expect(territory.features).toHaveLength(1);
     expect(territory.features[0]?.geometry.type).toBe('MultiPolygon');
   }, 60_000);
