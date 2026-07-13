@@ -39,7 +39,7 @@ describe('GlideHero browser authentication flow', () => {
           cookie,
           igcFiles: { upload: async () => ({ status: 'completed', flightId: '00000000-0000-4000-8000-000000000020' }) },
           profiles,
-          renderPage: createPageRenderer(),
+          renderPage: createPageRenderer({ mapTilerApiKey: 'maptiler-test-key' }),
         }),
       ],
     });

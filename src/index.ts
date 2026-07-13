@@ -32,7 +32,7 @@ const cookie = createSessionCookie({
 });
 const webMiddleware = [
   createCurrentUserMiddleware(auth, cookie),
-  createWebRouter({ auth, cookie, igcFiles, profiles, renderPage: createPageRenderer() }),
+  createWebRouter({ auth, cookie, igcFiles, profiles, renderPage: createPageRenderer({ mapTilerApiKey: config.mapTilerApiKey }) }),
 ];
 const server = createServer(createApp({ webMiddleware }));
 
