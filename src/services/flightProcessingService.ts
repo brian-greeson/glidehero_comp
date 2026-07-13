@@ -5,6 +5,7 @@ import { flights, trackPoints } from '../db/schema.js';
 import { IgcParseError } from '../domain/igc/errors.js';
 import { parseIgcFlight } from '../domain/igc/parseIgcFlight.js';
 import type { FlightAreaDetectionService } from './flightAreaDetectionService.js';
+import type { PersonalTerritoryService } from './personalTerritoryService.js';
 
 const TRACK_POINT_INSERT_BATCH_SIZE = 1_000;
 
@@ -28,6 +29,7 @@ export function createFlightProcessingService(
   database: Database,
   options: {
     areaDetection: FlightAreaDetectionService;
+    personalTerritory: PersonalTerritoryService;
     s3Client: Pick<S3, 'send'>;
     bucketName: string;
   },
@@ -94,6 +96,7 @@ export function createFlightProcessingService(
       });
 
       await options.areaDetection.detect({ flightId: flight.id });
+      await options.personalTerritory.refresh({ userId: input.ownerUserId });
 
       return { status: 'completed', flightId: flight.id };
     },

@@ -56,6 +56,13 @@ function areaDetectionDouble() {
   return { detect: vi.fn(async () => ({ flightId, detectedAreaCount: 0 })) };
 }
 
+function personalTerritoryDouble() {
+  return {
+    refresh: vi.fn(async () => ({ type: 'FeatureCollection' as const, features: [] })),
+    get: vi.fn(async () => ({ type: 'FeatureCollection' as const, features: [] })),
+  };
+}
+
 describe('FlightProcessingService', () => {
   it('reads the stored object, inserts ordered points, and completes the flight', async () => {
     const events: string[] = [];
@@ -65,9 +72,14 @@ describe('FlightProcessingService', () => {
       events.push('areas-detected');
       return { flightId, detectedAreaCount: 0 };
     });
+    const refresh = vi.fn(async () => {
+      events.push('territory-refreshed');
+      return { type: 'FeatureCollection' as const, features: [] };
+    });
     const service = createFlightProcessingService(database as never, {
       bucketName: 'glidehero-files',
       areaDetection: { detect },
+      personalTerritory: { refresh, get: vi.fn() },
       s3Client: { send } as never,
     });
 
@@ -79,7 +91,8 @@ describe('FlightProcessingService', () => {
     );
     expect(transaction).toHaveBeenCalledOnce();
     expect(detect).toHaveBeenCalledWith({ flightId });
-    expect(events).toEqual(['ingest-started', 'ingest-committed', 'areas-detected']);
+    expect(refresh).toHaveBeenCalledWith({ userId: ownerUserId });
+    expect(events).toEqual(['ingest-started', 'ingest-committed', 'areas-detected', 'territory-refreshed']);
     expect(insertedPoints).toEqual([
       expect.objectContaining({ flightId, sequenceNumber: 0, latitude: 40, longitude: -105 }),
       expect.objectContaining({ flightId, sequenceNumber: 1 }),
@@ -98,6 +111,7 @@ describe('FlightProcessingService', () => {
     const send = vi.fn(async () => objectBody('AXXXGLIDEHERO\nHFDTE120726'));
     const service = createFlightProcessingService(database as never, {
       areaDetection: areaDetectionDouble(),
+      personalTerritory: personalTerritoryDouble(),
       bucketName: 'glidehero-files',
       s3Client: { send } as never,
     });
@@ -121,6 +135,7 @@ describe('FlightProcessingService', () => {
     const send = vi.fn(async () => { throw new Error('S3 unavailable'); });
     const service = createFlightProcessingService(database as never, {
       areaDetection: areaDetectionDouble(),
+      personalTerritory: personalTerritoryDouble(),
       bucketName: 'glidehero-files',
       s3Client: { send } as never,
     });
@@ -144,6 +159,7 @@ describe('FlightProcessingService', () => {
     const send = vi.fn(async () => objectBody(validIgc));
     const service = createFlightProcessingService(database as never, {
       areaDetection: areaDetectionDouble(),
+      personalTerritory: personalTerritoryDouble(),
       bucketName: 'glidehero-files',
       s3Client: { send } as never,
     });
@@ -158,6 +174,7 @@ describe('FlightProcessingService', () => {
     const send = vi.fn(async () => objectBody(validIgc));
     const service = createFlightProcessingService(database as never, {
       areaDetection: { detect: vi.fn(async () => { throw detectionError; }) },
+      personalTerritory: personalTerritoryDouble(),
       bucketName: 'glidehero-files',
       s3Client: { send } as never,
     });
@@ -165,6 +182,34 @@ describe('FlightProcessingService', () => {
     await expect(service.process({ ownerUserId, igcFileId, bucketKey })).rejects.toBe(detectionError);
 
     expect(transaction).toHaveBeenCalledOnce();
+    expect(flightUpdates).toContainEqual(expect.objectContaining({ processingStatus: 'completed' }));
+    expect(flightUpdates).not.toContainEqual(expect.objectContaining({ processingStatus: 'failed' }));
+  });
+
+  it('keeps the committed flight and detected areas when territory refresh fails for a later retry', async () => {
+    const projectionError = new Error('projection unavailable');
+    const events: string[] = [];
+    const { database, flightUpdates, transaction } = databaseDouble({ events });
+    const send = vi.fn(async () => objectBody(validIgc));
+    const detect = vi.fn(async () => {
+      events.push('areas-detected');
+      return { flightId, detectedAreaCount: 0 };
+    });
+    const service = createFlightProcessingService(database as never, {
+      areaDetection: { detect },
+      personalTerritory: {
+        refresh: vi.fn(async () => { throw projectionError; }),
+        get: vi.fn(),
+      },
+      bucketName: 'glidehero-files',
+      s3Client: { send } as never,
+    });
+
+    await expect(service.process({ ownerUserId, igcFileId, bucketKey })).rejects.toBe(projectionError);
+
+    expect(transaction).toHaveBeenCalledOnce();
+    expect(detect).toHaveBeenCalledWith({ flightId });
+    expect(events).toEqual(['ingest-started', 'ingest-committed', 'areas-detected']);
     expect(flightUpdates).toContainEqual(expect.objectContaining({ processingStatus: 'completed' }));
     expect(flightUpdates).not.toContainEqual(expect.objectContaining({ processingStatus: 'failed' }));
   });
