@@ -25,6 +25,7 @@ describe('authentication schema', () => {
       'flight_areas',
       'flights',
       'igc_files',
+      'personal_territories',
       'profiles',
       'track_points',
       'user_passwords',
@@ -50,6 +51,32 @@ describe('authentication schema', () => {
       { column_name: 'updated_at', is_nullable: 'NO' },
       { column_name: 'user_id', is_nullable: 'NO' },
     ]);
+  });
+
+  it('stores one cascading JSONB personal-territory projection per pilot', async () => {
+    const columns = await database.pool.query<{
+      column_name: string;
+      data_type: string;
+      is_nullable: string;
+      udt_name: string;
+    }>(
+      `SELECT column_name, data_type, is_nullable, udt_name
+       FROM information_schema.columns
+       WHERE table_schema = 'public' AND table_name = 'personal_territories'
+       ORDER BY column_name`,
+    );
+    const foreignKeys = await database.pool.query<{ confdeltype: string }>(
+      `SELECT confdeltype
+       FROM pg_constraint
+       WHERE conrelid = 'personal_territories'::regclass AND contype = 'f'`,
+    );
+
+    expect(columns.rows).toEqual([
+      { column_name: 'geojson', data_type: 'jsonb', is_nullable: 'NO', udt_name: 'jsonb' },
+      { column_name: 'updated_at', data_type: 'timestamp with time zone', is_nullable: 'NO', udt_name: 'timestamptz' },
+      { column_name: 'user_id', data_type: 'uuid', is_nullable: 'NO', udt_name: 'uuid' },
+    ]);
+    expect(foreignKeys.rows).toEqual([{ confdeltype: 'c' }]);
   });
 
   it('stores flight claims as indexed WGS84 polygons', async () => {

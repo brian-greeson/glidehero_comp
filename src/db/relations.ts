@@ -8,6 +8,7 @@ export const relations = defineRelations(schema, (r) => ({
     sessions: r.many.appSessions({ from: r.users.id, to: r.appSessions.userId }),
     igcFiles: r.many.igcFiles({ from: r.users.id, to: r.igcFiles.userId }),
     flights: r.many.flights({ from: r.users.id, to: r.flights.userId }),
+    personalTerritory: r.one.personalTerritories({ from: r.users.id, to: r.personalTerritories.userId }),
   },
   userPasswords: {
     user: r.one.users({ from: r.userPasswords.userId, to: r.users.id }),
@@ -33,5 +34,8 @@ export const relations = defineRelations(schema, (r) => ({
   },
   flightAreas: {
     flight: r.one.flights({ from: r.flightAreas.flightId, to: r.flights.id }),
+  },
+  personalTerritories: {
+    user: r.one.users({ from: r.personalTerritories.userId, to: r.users.id }),
   },
 }));

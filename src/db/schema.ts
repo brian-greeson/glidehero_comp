@@ -1,4 +1,5 @@
-import { customType, doublePrecision, index, integer, pgEnum, pgTable, text, timestamp, unique, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
+import { customType, doublePrecision, index, integer, jsonb, pgEnum, pgTable, text, timestamp, unique, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
+import type { PersonalTerritoryGeoJson } from '../domain/territory/personalTerritoryGeoJson.js';
 
 const polygonGeometry = customType<{ data: string }>({
   dataType: () => 'geometry(polygon,4326)',
@@ -119,3 +120,9 @@ export const flightAreas = pgTable(
     index('flight_areas_geometry_gist_idx').using('gist', table.geometry),
   ],
 );
+
+export const personalTerritories = pgTable('personal_territories', {
+  userId: uuid('user_id').primaryKey().references(() => users.id, { onDelete: 'cascade' }),
+  geojson: jsonb('geojson').$type<PersonalTerritoryGeoJson>().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
+});
