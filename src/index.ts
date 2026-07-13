@@ -4,10 +4,9 @@ import { parseConfig } from './config.js';
 import { createDatabase } from './db/client.js';
 import { createBucketClient } from './resources/bucketClient.js';
 import { createAuthService } from './services/authService.js';
-import { createFlightAreaDetectionService } from './services/flightAreaDetectionService.js';
 import { createFlightProcessingService } from './services/flightProcessingService.js';
+import { createFreePolygonClaimService } from './services/freePolygonClaimService.js';
 import { createIgcFileService } from './services/igcFileService.js';
-import { createPersonalTerritoryService } from './services/personalTerritoryService.js';
 import { createProfileService } from './services/profileService.js';
 import { createPageRenderer } from './views/renderer.js';
 import { createCurrentUserMiddleware } from './web/currentUserMiddleware.js';
@@ -18,11 +17,8 @@ const config = parseConfig(process.env);
 const { db } = createDatabase(config.databaseUrl);
 const auth = createAuthService(db, { sessionTtlSeconds: config.sessionTtlSeconds });
 const s3Client = createBucketClient(config);
-const flightAreaDetection = createFlightAreaDetectionService(db);
-const personalTerritory = createPersonalTerritoryService(db);
+const freePolygonClaim = createFreePolygonClaimService(db);
 const flightProcessing = createFlightProcessingService(db, {
-  areaDetection: flightAreaDetection,
-  personalTerritory,
   s3Client,
   bucketName: config.bucket.bucketName,
 });
@@ -43,7 +39,7 @@ const webMiddleware = [
     cookie,
     igcFiles,
     profiles,
-    personalTerritory,
+    freePolygonClaim,
     renderPage: createPageRenderer({ mapTilerApiKey: config.mapTilerApiKey }),
   }),
 ];

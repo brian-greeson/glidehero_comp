@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createApp } from '../../src/app.js';
 import { createAuthService } from '../../src/services/authService.js';
-import { createPersonalTerritoryService } from '../../src/services/personalTerritoryService.js';
+import { createFreePolygonClaimService } from '../../src/services/freePolygonClaimService.js';
 import { createProfileService } from '../../src/services/profileService.js';
 import { createPageRenderer } from '../../src/views/renderer.js';
 import { createCurrentUserMiddleware } from '../../src/web/currentUserMiddleware.js';
@@ -27,7 +27,7 @@ describe('GlideHero browser authentication flow', () => {
 
     const auth = createAuthService(testDatabase.db, { sessionTtlSeconds: 604800 });
     const profiles = createProfileService(testDatabase.db);
-    const personalTerritory = createPersonalTerritoryService(testDatabase.db);
+    const freePolygonClaim = createFreePolygonClaimService(testDatabase.db);
     const cookie = createSessionCookie({
       name: 'glidehero_session',
       secure: false,
@@ -41,7 +41,7 @@ describe('GlideHero browser authentication flow', () => {
           cookie,
           igcFiles: { upload: async () => ({ status: 'completed', flightId: '00000000-0000-4000-8000-000000000020' }) },
           profiles,
-          personalTerritory,
+          freePolygonClaim,
           renderPage: createPageRenderer({ mapTilerApiKey: 'maptiler-test-key' }),
         }),
       ],

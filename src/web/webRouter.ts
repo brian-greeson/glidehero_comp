@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { AppError } from '../domain/errors.js';
 import { AuthFailure, type AuthService } from '../services/authService.js';
 import { normalizeTerritoryColor, type ProfileService } from '../services/profileService.js';
-import type { PersonalTerritoryService } from '../services/personalTerritoryService.js';
+import type { FreePolygonClaimService } from '../services/freePolygonClaimService.js';
 import type { PageModel, PageRenderer } from '../views/renderer.js';
 import type { IgcFileService } from '../services/igcFileService.js';
 import type { SessionCookie } from './sessionCookie.js';
@@ -38,7 +38,7 @@ export function createWebRouter(dependencies: {
   cookie: SessionCookie;
   igcFiles: IgcFileService;
   profiles: ProfileService;
-  personalTerritory: PersonalTerritoryService;
+  freePolygonClaim: FreePolygonClaimService;
   renderPage: PageRenderer;
 }) {
   const router = Router();
@@ -51,7 +51,7 @@ export function createWebRouter(dependencies: {
     }
 
     try {
-      res.status(200).json(await dependencies.personalTerritory.get({ userId: currentUser.userId }));
+      res.status(200).json(await dependencies.freePolygonClaim.get({ userId: currentUser.userId }));
     } catch (error) {
       next(error);
     }

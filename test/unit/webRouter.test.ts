@@ -7,7 +7,7 @@ import {
 } from '../../src/domain/territory/freePolygonClaimGeoJson.js';
 import type { ProfileService } from '../../src/services/profileService.js';
 import type { FlightProcessingOutcome } from '../../src/services/flightProcessingService.js';
-import type { PersonalTerritoryService } from '../../src/services/personalTerritoryService.js';
+import type { FreePolygonClaimService } from '../../src/services/freePolygonClaimService.js';
 import { createPageRenderer } from '../../src/views/renderer.js';
 import { createCurrentUserMiddleware } from '../../src/web/currentUserMiddleware.js';
 import { createSessionCookie } from '../../src/web/sessionCookie.js';
@@ -47,32 +47,42 @@ function dependencies(
   const middleware = createCurrentUserMiddleware(auth, cookie);
   const igcFiles = { upload: vi.fn(async () => outcome) };
   const profiles: ProfileService = { updateTerritoryColor: vi.fn(async () => undefined) };
-  const personalTerritory: PersonalTerritoryService = {
+  const expectedGeoJson: FreePolygonClaimGeoJson = {
+    type: 'FeatureCollection',
+    features: [{
+      type: 'Feature',
+      properties: {},
+      geometry: {
+        type: 'MultiPolygon',
+        coordinates: [[[
+          [-105, 40],
+          [-104.99, 40],
+          [-104.99, 40.01],
+          [-105, 40.01],
+          [-105, 40],
+        ]]],
+      },
+    }],
+  };
+  const freePolygonClaim: FreePolygonClaimService = {
+    detect: vi.fn(async () => ({
+      flightId: '00000000-0000-4000-8000-000000000020',
+      detectedAreaCount: 0,
+    })),
     refresh: vi.fn(async () => emptyFreePolygonClaimGeoJson()),
-    get: vi.fn(async (): Promise<FreePolygonClaimGeoJson> => ({
-      type: 'FeatureCollection',
-      features: [{
-        type: 'Feature',
-        properties: {},
-        geometry: {
-          type: 'MultiPolygon',
-          coordinates: [[[
-            [-105, 40],
-            [-104.99, 40],
-            [-104.99, 40.01],
-            [-105, 40.01],
-            [-105, 40],
-          ]]],
-        },
-      }],
+    get: vi.fn(async (): Promise<FreePolygonClaimGeoJson> => expectedGeoJson),
+    process: vi.fn(async () => ({
+      flightId: '00000000-0000-4000-8000-000000000020',
+      detectedAreaCount: 0,
     })),
   };
-  const router = createWebRouter({ auth, cookie, igcFiles, profiles, personalTerritory, renderPage });
+  const router = createWebRouter({ auth, cookie, igcFiles, profiles, freePolygonClaim, renderPage });
   return {
     auth,
     igcFiles,
     profiles,
-    personalTerritory,
+    freePolygonClaim,
+    expectedGeoJson,
     renderPage,
     app: createApp({ webMiddleware: [middleware, router] }),
   };
@@ -248,9 +258,11 @@ describe('webRouter', () => {
         })),
       },
       profiles: { updateTerritoryColor: vi.fn(async () => undefined) },
-      personalTerritory: {
+      freePolygonClaim: {
+        detect: vi.fn(async () => ({ flightId: 'flight-id', detectedAreaCount: 0 })),
         refresh: vi.fn(async () => emptyFreePolygonClaimGeoJson()),
         get: vi.fn(async () => emptyFreePolygonClaimGeoJson()),
+        process: vi.fn(async () => ({ flightId: 'flight-id', detectedAreaCount: 0 })),
       },
       renderPage: createPageRenderer({ mapTilerApiKey: 'maptiler-test-key' }),
     });
@@ -295,9 +307,11 @@ describe('webRouter', () => {
             })),
           },
           profiles: { updateTerritoryColor: vi.fn(async () => undefined) },
-          personalTerritory: {
+          freePolygonClaim: {
+            detect: vi.fn(async () => ({ flightId: 'flight-id', detectedAreaCount: 0 })),
             refresh: vi.fn(async () => emptyFreePolygonClaimGeoJson()),
             get: vi.fn(async () => emptyFreePolygonClaimGeoJson()),
+            process: vi.fn(async () => ({ flightId: 'flight-id', detectedAreaCount: 0 })),
           },
           renderPage: createPageRenderer({ mapTilerApiKey: 'maptiler-test-key' }),
         }),
@@ -389,7 +403,7 @@ describe('webRouter', () => {
   });
 
   it('returns only the authenticated pilot\'s stored personal territory GeoJSON', async () => {
-    const { app, personalTerritory } = dependencies();
+    const { app, expectedGeoJson, freePolygonClaim } = dependencies();
     await withServer(app, async (baseUrl) => {
       const response = await fetch(`${baseUrl}/v1/personal-territory`, {
         headers: { cookie: 'glidehero_session=valid-token' },
@@ -397,16 +411,13 @@ describe('webRouter', () => {
 
       expect(response.status).toBe(200);
       expect(response.headers.get('content-type')).toContain('application/json');
-      expect(await response.json()).toMatchObject({
-        type: 'FeatureCollection',
-        features: [expect.any(Object)],
-      });
-      expect(personalTerritory.get).toHaveBeenCalledWith({ userId: user.userId });
+      expect(await response.json()).toEqual(expectedGeoJson);
+      expect(freePolygonClaim.get).toHaveBeenCalledWith({ userId: user.userId });
     });
   });
 
   it('rejects an anonymous personal-territory request without reading a projection', async () => {
-    const { app, personalTerritory } = dependencies();
+    const { app, freePolygonClaim } = dependencies();
     await withServer(app, async (baseUrl) => {
       const response = await fetch(`${baseUrl}/v1/personal-territory`);
 
@@ -414,7 +425,7 @@ describe('webRouter', () => {
       expect(await response.json()).toEqual({
         error: { code: 'unauthorized', message: 'Sign in to view your personal territory.' },
       });
-      expect(personalTerritory.get).not.toHaveBeenCalled();
+      expect(freePolygonClaim.get).not.toHaveBeenCalled();
     });
   });
 
