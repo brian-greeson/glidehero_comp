@@ -54,7 +54,96 @@ async function addClaim(userId: string, wkt: string): Promise<void> {
   );
 }
 
+async function waitUntil(
+  predicate: () => Promise<boolean>,
+  message: string,
+  timeoutMilliseconds = 5_000,
+): Promise<void> {
+  const deadline = Date.now() + timeoutMilliseconds;
+  while (Date.now() < deadline) {
+    if (await predicate()) return;
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+  throw new Error(message);
+}
+
 describe('PersonalTerritoryService with PostGIS', () => {
+  it('does not let an older same-pilot refresh overwrite a newer aggregate', async () => {
+    const gateLockId = 812_345_678;
+    const gateClient = await database.pool.connect();
+
+    try {
+      await database.pool.query(`
+        CREATE FUNCTION test_delay_single_polygon_refresh() RETURNS trigger
+        LANGUAGE plpgsql AS $$
+        BEGIN
+          IF ST_NumGeometries(
+            ST_GeomFromGeoJSON((NEW.geojson->'features'->0->'geometry')::text)
+          ) = 1 THEN
+            PERFORM pg_advisory_xact_lock(${gateLockId});
+          END IF;
+          RETURN NEW;
+        END
+        $$;
+        CREATE TRIGGER test_delay_single_polygon_refresh
+          BEFORE INSERT OR UPDATE ON personal_territories
+          FOR EACH ROW EXECUTE FUNCTION test_delay_single_polygon_refresh();
+      `);
+      await gateClient.query('SELECT pg_advisory_lock($1)', [gateLockId]);
+
+      await addClaim(firstPilotId, 'POLYGON((-105 40,-104.99 40,-104.99 40.01,-105 40.01,-105 40))');
+      const service = createPersonalTerritoryService(database.db);
+      const olderRefresh = service.refresh({ userId: firstPilotId });
+
+      await waitUntil(async () => {
+        const result = await database.pool.query<{ count: number }>(
+          `SELECT count(*)::int AS count
+           FROM pg_stat_activity
+           WHERE datname = current_database() AND wait_event = 'advisory'`,
+        );
+        return (result.rows[0]?.count ?? 0) >= 1;
+      }, 'The older refresh did not reach the controlled persistence gate.');
+
+      await addClaim(firstPilotId, 'POLYGON((-104.97 40,-104.96 40,-104.96 40.01,-104.97 40.01,-104.97 40))');
+      const newerRefresh = service.refresh({ userId: firstPilotId });
+
+      await waitUntil(async () => {
+        const state = await database.pool.query<{ advisory_waiters: number; polygon_count: number | null }>(
+          `SELECT
+             (SELECT count(*)::int
+                FROM pg_stat_activity
+               WHERE datname = current_database() AND wait_event = 'advisory') AS advisory_waiters,
+             (SELECT ST_NumGeometries(
+                       ST_GeomFromGeoJSON((geojson->'features'->0->'geometry')::text)
+                     )::int
+                FROM personal_territories
+               WHERE user_id = $1) AS polygon_count`,
+          [firstPilotId],
+        );
+        const row = state.rows[0];
+        return row?.polygon_count === 2 || (row?.advisory_waiters ?? 0) >= 2;
+      }, 'The newer refresh neither persisted nor waited behind the older refresh.');
+
+      await gateClient.query('SELECT pg_advisory_unlock($1)', [gateLockId]);
+      await Promise.all([olderRefresh, newerRefresh]);
+
+      const stored = await database.pool.query<{ polygon_count: number }>(
+        `SELECT ST_NumGeometries(
+                  ST_GeomFromGeoJSON((geojson->'features'->0->'geometry')::text)
+                )::int AS polygon_count
+           FROM personal_territories
+          WHERE user_id = $1`,
+        [firstPilotId],
+      );
+      expect(stored.rows).toEqual([{ polygon_count: 2 }]);
+    } finally {
+      await gateClient.query('SELECT pg_advisory_unlock($1)', [gateLockId]);
+      gateClient.release();
+      await database.pool.query('DROP TRIGGER IF EXISTS test_delay_single_polygon_refresh ON personal_territories');
+      await database.pool.query('DROP FUNCTION IF EXISTS test_delay_single_polygon_refresh()');
+    }
+  });
+
   it('unions overlapping claims, keeps disjoint claims, and stores one JSONB row', async () => {
     await addClaim(firstPilotId, 'POLYGON((-105 40,-104.99 40,-104.99 40.01,-105 40.01,-105 40))');
     await addClaim(firstPilotId, 'POLYGON((-104.995 40,-104.985 40,-104.985 40.01,-104.995 40.01,-104.995 40))');

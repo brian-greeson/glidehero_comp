@@ -17,6 +17,10 @@ export function createPersonalTerritoryService(database: Database): PersonalTerr
   return {
     async refresh({ userId }) {
       return database.transaction(async (tx) => {
+        await tx.execute(sql`
+          SELECT pg_advisory_xact_lock(hashtextextended(${userId}::text, 0))
+        `);
+
         const result = await tx.execute<StoredProjection>(sql`
           WITH aggregate AS (
             SELECT ST_CollectionExtract(ST_UnaryUnion(ST_Collect(fa.geometry)), 3) AS geometry
