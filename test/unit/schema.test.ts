@@ -1,6 +1,6 @@
 import { getTableConfig } from 'drizzle-orm/pg-core';
 import { describe, expect, it } from 'vitest';
-import { flightAreas, personalTerritories } from '../../src/db/schema.js';
+import { flightAreas, personalTerritories, userGridClaims } from '../../src/db/schema.js';
 
 describe('flight area schema', () => {
   it('defines polygon claims and spatial lookup indexes', () => {
@@ -24,5 +24,29 @@ describe('flight area schema', () => {
     expect(userId?.primary).toBe(true);
     expect(geojson?.getSQLType()).toBe('jsonb');
     expect(updatedAt?.getSQLType()).toBe('timestamp with time zone');
+  });
+});
+
+describe('user grid claim schema', () => {
+  it('defines cell ownership with a composite primary key and lookup indexes', () => {
+    const config = getTableConfig(userGridClaims);
+
+    expect(config.name).toBe('user_grid_claims');
+    expect(config.columns.map((column) => column.name)).toEqual([
+      'cell_size',
+      'x',
+      'y',
+      'claim_flight',
+      'claim_user',
+      'claim_timestamp',
+    ]);
+    expect(config.primaryKeys.map((key) => key.columns.map((column) => column.name))).toEqual([
+      ['cell_size', 'x', 'y'],
+    ]);
+    expect(config.foreignKeys.map((key) => key.onDelete)).toEqual(['cascade', 'cascade']);
+    expect(config.indexes.map((index) => index.config.name)).toEqual([
+      'user_grid_claims_claim_user_cell_size_idx',
+      'user_grid_claims_claim_flight_idx',
+    ]);
   });
 });

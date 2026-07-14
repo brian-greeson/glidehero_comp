@@ -129,6 +129,9 @@ npm run db:push -- --force
 npm run dev
 ```
 
+`GRID_CLAIM_CELL_SIZE` is required and specifies the grid-cell size in meters;
+the example environment uses `1000`.
+
 Open <http://localhost:3000>. Create an account, log out, and log back in.
 The process health endpoint is <http://localhost:3000/v1/up>.
 

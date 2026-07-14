@@ -9,6 +9,7 @@ export const relations = defineRelations(schema, (r) => ({
     igcFiles: r.many.igcFiles({ from: r.users.id, to: r.igcFiles.userId }),
     flights: r.many.flights({ from: r.users.id, to: r.flights.userId }),
     personalTerritory: r.one.personalTerritories({ from: r.users.id, to: r.personalTerritories.userId }),
+    gridClaims: r.many.userGridClaims({ from: r.users.id, to: r.userGridClaims.claimUser }),
   },
   userPasswords: {
     user: r.one.users({ from: r.userPasswords.userId, to: r.users.id }),
@@ -28,6 +29,7 @@ export const relations = defineRelations(schema, (r) => ({
     igcFile: r.one.igcFiles({ from: r.flights.igcFileId, to: r.igcFiles.id }),
     trackPoints: r.many.trackPoints({ from: r.flights.id, to: r.trackPoints.flightId }),
     areas: r.many.flightAreas({ from: r.flights.id, to: r.flightAreas.flightId }),
+    gridClaims: r.many.userGridClaims({ from: r.flights.id, to: r.userGridClaims.claimFlight }),
   },
   trackPoints: {
     flight: r.one.flights({ from: r.trackPoints.flightId, to: r.flights.id }),
@@ -37,5 +39,9 @@ export const relations = defineRelations(schema, (r) => ({
   },
   personalTerritories: {
     user: r.one.users({ from: r.personalTerritories.userId, to: r.users.id }),
+  },
+  userGridClaims: {
+    flight: r.one.flights({ from: r.userGridClaims.claimFlight, to: r.flights.id }),
+    user: r.one.users({ from: r.userGridClaims.claimUser, to: r.users.id }),
   },
 }));

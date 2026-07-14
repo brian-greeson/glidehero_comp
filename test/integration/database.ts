@@ -29,7 +29,16 @@ export async function resetAndPushTestDatabase(): Promise<ReturnType<typeof test
       ['run', 'db:push', '--', '--force'],
       {
         cwd: fileURLToPath(new URL('../..', import.meta.url)),
-        env: { ...process.env, DATABASE_URL: connectionString },
+        env: {
+          ...process.env,
+          DATABASE_URL: connectionString,
+          BUCKET_SECRET: 'test-secret',
+          BUCKET_ID: 'test-id',
+          BUCKET_NAME: 'glidehero-test-files',
+          BUCKET_URL: 'https://s3.example.test',
+          MAPTILER_API_KEY: 'maptiler-test-key',
+          GRID_CLAIM_CELL_SIZE: '1000',
+        },
       },
       (error, stdout, stderr) => {
         if (error) {

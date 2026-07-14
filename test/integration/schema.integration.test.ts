@@ -28,6 +28,7 @@ describe('authentication schema', () => {
       'personal_territories',
       'profiles',
       'track_points',
+      'user_grid_claims',
       'user_passwords',
       'users',
     ]);
@@ -119,6 +120,52 @@ describe('authentication schema', () => {
       'flight_areas_flight_id_idx',
       'flight_areas_geometry_gist_idx',
       'flight_areas_pkey',
+    ]);
+  });
+
+  it('stores grid claims with a cascading composite cell identity and lookup indexes', async () => {
+    const columns = await database.pool.query<{
+      column_name: string;
+      data_type: string;
+      is_nullable: string;
+      udt_name: string;
+    }>(
+      `SELECT column_name, data_type, is_nullable, udt_name
+       FROM information_schema.columns
+       WHERE table_schema = 'public' AND table_name = 'user_grid_claims'
+       ORDER BY column_name`,
+    );
+    const primaryKey = await database.pool.query<{ definition: string }>(
+      `SELECT pg_get_constraintdef(oid) AS definition
+       FROM pg_constraint
+       WHERE conrelid = 'user_grid_claims'::regclass AND contype = 'p'`,
+    );
+    const foreignKeys = await database.pool.query<{ confdeltype: string }>(
+      `SELECT confdeltype
+       FROM pg_constraint
+       WHERE conrelid = 'user_grid_claims'::regclass AND contype = 'f'
+       ORDER BY conname`,
+    );
+    const indexes = await database.pool.query<{ indexname: string }>(
+      `SELECT indexname FROM pg_indexes
+       WHERE schemaname = 'public' AND tablename = 'user_grid_claims'
+       ORDER BY indexname`,
+    );
+
+    expect(columns.rows).toEqual([
+      { column_name: 'cell_size', data_type: 'integer', is_nullable: 'NO', udt_name: 'int4' },
+      { column_name: 'claim_flight', data_type: 'uuid', is_nullable: 'NO', udt_name: 'uuid' },
+      { column_name: 'claim_timestamp', data_type: 'timestamp with time zone', is_nullable: 'NO', udt_name: 'timestamptz' },
+      { column_name: 'claim_user', data_type: 'uuid', is_nullable: 'NO', udt_name: 'uuid' },
+      { column_name: 'x', data_type: 'integer', is_nullable: 'NO', udt_name: 'int4' },
+      { column_name: 'y', data_type: 'integer', is_nullable: 'NO', udt_name: 'int4' },
+    ]);
+    expect(primaryKey.rows).toEqual([{ definition: 'PRIMARY KEY (cell_size, x, y)' }]);
+    expect(foreignKeys.rows).toEqual([{ confdeltype: 'c' }, { confdeltype: 'c' }]);
+    expect(indexes.rows.map((row) => row.indexname)).toEqual([
+      'user_grid_claims_claim_flight_idx',
+      'user_grid_claims_claim_user_cell_size_idx',
+      'user_grid_claims_pkey',
     ]);
   });
 

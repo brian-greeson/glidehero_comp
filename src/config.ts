@@ -18,6 +18,7 @@ const envSchema = z.object({
   BUCKET_NAME: z.string(),
   BUCKET_URL: z.string(),
   MAPTILER_API_KEY: z.string().min(1),
+  GRID_CLAIM_CELL_SIZE: z.coerce.number().int().min(1),
 });
 
 export type AppConfig = {
@@ -28,6 +29,7 @@ export type AppConfig = {
   sessionCookieName: string;
   sessionTtlSeconds: number;
   mapTilerApiKey: string;
+  gridClaimCellSize: number;
   bucket: {
     bucketSecret: string;
     bucketId: string;
@@ -46,6 +48,7 @@ export function parseConfig(env: NodeJS.ProcessEnv): AppConfig {
     sessionCookieName: parsed.SESSION_COOKIE_NAME,
     sessionTtlSeconds: parsed.SESSION_TTL_SECONDS,
     mapTilerApiKey: parsed.MAPTILER_API_KEY,
+    gridClaimCellSize: parsed.GRID_CLAIM_CELL_SIZE,
     bucket: {
       bucketSecret: parsed.BUCKET_SECRET,
       bucketId: parsed.BUCKET_ID,
