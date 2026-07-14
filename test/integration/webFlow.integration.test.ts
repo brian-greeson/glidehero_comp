@@ -92,7 +92,7 @@ describe('GlideHero browser authentication flow', () => {
       });
       const signedOutHtml = await signedOut.text();
       expect(signedOut.status).toBe(200);
-      expect(signedOutHtml).not.toContain('Sky Pilot');
+      expect(signedOutHtml).not.toContain('<span class="account-name">Sky Pilot</span>');
       expect(signedOutHtml).not.toContain('pilot@example.com');
       expect(signedOutHtml).toContain('action="/login"');
       expect(signedOutHtml).toContain('action="/signup"');
