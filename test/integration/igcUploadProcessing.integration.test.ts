@@ -48,7 +48,7 @@ afterAll(async () => {
 });
 
 describe('IGC upload processing', () => {
-  it('stores every fix and detects enclosed areas from the supplied IGC file', async () => {
+  it('stores every fix and processes both claim variations from the supplied IGC file', async () => {
     if (!database) throw new Error('Test database was not initialized.');
     const auth = createAuthService(database.db, { sessionTtlSeconds: 60 });
     const pilot = await auth.signup({ email: 'pilot@example.com', password: 'correct horse battery staple' });
@@ -56,6 +56,7 @@ describe('IGC upload processing', () => {
     const processor = createFlightProcessingService(database.db, {
       s3Client: objectStore as never,
       bucketName: 'test-flights',
+      gridClaimCellSize: 1000,
     });
     const uploads = createIgcFileService(
       database.db,
@@ -74,12 +75,14 @@ describe('IGC upload processing', () => {
     const stored = await database.pool.query<{
       processing_status: string;
       area_count: number;
+      grid_claim_count: number;
       point_count: number;
       first_fix: Date;
       last_fix: Date;
     }>(
       `SELECT f.processing_status,
               (SELECT count(*)::int FROM flight_areas fa WHERE fa.flight_id = f.flight_id) AS area_count,
+              (SELECT count(*)::int FROM user_grid_claims ugc WHERE ugc.claim_flight = f.flight_id) AS grid_claim_count,
               count(tp.track_point_id)::int AS point_count,
               min(tp.recorded_at) AS first_fix,
               max(tp.recorded_at) AS last_fix
@@ -92,11 +95,13 @@ describe('IGC upload processing', () => {
       expect.objectContaining({
         processing_status: 'completed',
         area_count: expect.any(Number),
+        grid_claim_count: expect.any(Number),
         point_count: 10_835,
         first_fix: new Date('2026-05-10T18:50:26.000Z'),
       }),
     ]);
     expect(stored.rows[0]?.area_count).toBeGreaterThan(0);
+    expect(stored.rows[0]?.grid_claim_count).toBeGreaterThan(0);
     expect(stored.rows[0]?.last_fix.getTime()).toBeGreaterThan(stored.rows[0]?.first_fix.getTime() ?? 0);
     const territory = await createFreePolygonClaimService(database.db).get({ userId: pilot.user.userId });
     expect(territory.features).toHaveLength(1);

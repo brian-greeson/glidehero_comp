@@ -21,6 +21,7 @@ const freePolygonClaim = createFreePolygonClaimService(db);
 const flightProcessing = createFlightProcessingService(db, {
   s3Client,
   bucketName: config.bucket.bucketName,
+  gridClaimCellSize: config.gridClaimCellSize,
 });
 const profiles = createProfileService(db);
 const igcFiles = createIgcFileService(db, {
