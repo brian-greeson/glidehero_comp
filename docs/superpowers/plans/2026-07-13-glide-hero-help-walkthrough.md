@@ -221,7 +221,7 @@ Do not stage `.superpowers/`.
 
 **Interfaces:**
 - Consumes the exact data hooks produced by Task 1.
-- Produces: `initializeOnboarding({ documentRef = document } = {})` returning `undefined` for missing required markup or `{ open(): void, close(): void, getActiveStep(): number }` after successful initialization.
+- Produces: `initializeOnboarding({ documentRef = document } = {})` returning `undefined` for missing required markup or `{ open(): void, close(): void }` after successful initialization. State remains observable through the production DOM hooks; do not add test-only introspection methods.
 - Mutates each step's `hidden`, `aria-hidden`, and `data-active`; mutates progress `aria-current`; mutates navigation `hidden`.
 - `dashboard.js` continues to export `initializeDashboard(...)` and additionally calls `initializeOnboarding({ documentRef })`.
 
@@ -349,11 +349,10 @@ describe('Glide Hero onboarding controller', () => {
     const opener = new FakeElement();
     opener.ownerDocument = fixture.documentRef;
     fixture.documentRef.activeElement = opener;
-    const controller = initializeOnboarding({ documentRef: fixture.documentRef });
+    initializeOnboarding({ documentRef: fixture.documentRef });
 
     fixture.trigger.dispatch('click');
 
-    expect(controller?.getActiveStep()).toBe(0);
     expect(fixture.dialog.showModal).toHaveBeenCalledOnce();
     expect(fixture.steps.map((step) => step.hidden)).toEqual([false, true, true]);
     expect(fixture.steps.map((step) => step.hasAttribute('data-active'))).toEqual([true, false, false]);
@@ -366,28 +365,27 @@ describe('Glide Hero onboarding controller', () => {
 
   it('moves forward and back and swaps Next for Done on the final step', () => {
     const fixture = createFixture();
-    const controller = initializeOnboarding({ documentRef: fixture.documentRef });
+    initializeOnboarding({ documentRef: fixture.documentRef });
     fixture.trigger.dispatch('click');
 
     fixture.next.dispatch('click');
-    expect(controller?.getActiveStep()).toBe(1);
     expect(fixture.steps.map((step) => step.hasAttribute('data-active'))).toEqual([false, true, false]);
     expect(fixture.back.hidden).toBe(false);
 
     fixture.next.dispatch('click');
-    expect(controller?.getActiveStep()).toBe(2);
+    expect(fixture.steps.map((step) => step.hasAttribute('data-active'))).toEqual([false, false, true]);
     expect(fixture.next.hidden).toBe(true);
     expect(fixture.done.hidden).toBe(false);
 
     fixture.back.dispatch('click');
-    expect(controller?.getActiveStep()).toBe(1);
+    expect(fixture.steps.map((step) => step.hasAttribute('data-active'))).toEqual([false, true, false]);
     expect(fixture.next.hidden).toBe(false);
     expect(fixture.done.hidden).toBe(true);
   });
 
   it('resets to the welcome step every time it reopens', () => {
     const fixture = createFixture();
-    const controller = initializeOnboarding({ documentRef: fixture.documentRef });
+    initializeOnboarding({ documentRef: fixture.documentRef });
     fixture.trigger.dispatch('click');
     fixture.next.dispatch('click');
     fixture.next.dispatch('click');
@@ -395,7 +393,7 @@ describe('Glide Hero onboarding controller', () => {
 
     fixture.trigger.dispatch('click');
 
-    expect(controller?.getActiveStep()).toBe(0);
+    expect(fixture.steps.map((step) => step.hasAttribute('data-active'))).toEqual([true, false, false]);
     expect(fixture.steps.map((step) => step.hidden)).toEqual([false, true, true]);
   });
 ```
@@ -560,7 +558,7 @@ export function initializeOnboarding({ documentRef = document } = {}) {
     restoreFocus = null;
   });
 
-  return { open, close, getActiveStep: () => activeStep };
+  return { open, close };
 }
 ```
 

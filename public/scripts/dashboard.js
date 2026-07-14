@@ -1,3 +1,5 @@
+import { initializeOnboarding } from './onboarding.js';
+
 export const PERSONAL_TERRITORY_SOURCE_ID = 'personal-territory';
 export const PERSONAL_TERRITORY_FILL_LAYER_ID = 'personal-territory-fill';
 export const PERSONAL_TERRITORY_OUTLINE_LAYER_ID = 'personal-territory-outline';
@@ -30,6 +32,8 @@ export function initializeDashboard({
   maplibre = window.maplibregl,
   fetchImpl = window.fetch.bind(window),
 } = {}) {
+  initializeOnboarding({ documentRef });
+
   const mapElement = documentRef.querySelector('[data-dashboard-map]');
   const emptyState = documentRef.querySelector('[data-map-empty-state]');
 
