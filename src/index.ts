@@ -6,6 +6,7 @@ import { createBucketClient } from './resources/bucketClient.js';
 import { createAuthService } from './services/authService.js';
 import { createFlightProcessingService } from './services/flightProcessingService.js';
 import { createFreePolygonClaimService } from './services/freePolygonClaimService.js';
+import { createGridClaimService } from './services/gridClaimService.js';
 import { createIgcFileService } from './services/igcFileService.js';
 import { createProfileService } from './services/profileService.js';
 import { createPageRenderer } from './views/renderer.js';
@@ -18,6 +19,7 @@ const { db } = createDatabase(config.databaseUrl);
 const auth = createAuthService(db, { sessionTtlSeconds: config.sessionTtlSeconds });
 const s3Client = createBucketClient(config);
 const freePolygonClaim = createFreePolygonClaimService(db);
+const gridClaim = createGridClaimService(db, { cellSize: config.gridClaimCellSize });
 const flightProcessing = createFlightProcessingService(db, {
   s3Client,
   bucketName: config.bucket.bucketName,
@@ -41,6 +43,7 @@ const webMiddleware = [
     igcFiles,
     profiles,
     freePolygonClaim,
+    gridClaim,
     renderPage: createPageRenderer({ mapTilerApiKey: config.mapTilerApiKey }),
   }),
 ];

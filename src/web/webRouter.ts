@@ -5,6 +5,7 @@ import { AppError } from '../domain/errors.js';
 import { AuthFailure, type AuthService } from '../services/authService.js';
 import { normalizeTerritoryColor, type ProfileService } from '../services/profileService.js';
 import type { FreePolygonClaimService } from '../services/freePolygonClaimService.js';
+import type { GridClaimService } from '../services/gridClaimService.js';
 import type { PageModel, PageRenderer } from '../views/renderer.js';
 import type { IgcFileService } from '../services/igcFileService.js';
 import type { SessionCookie } from './sessionCookie.js';
@@ -17,6 +18,9 @@ const signupSchema = z.object({
   displayName: z.string().trim().min(1).max(48).optional().or(z.literal('')),
 });
 const loginSchema = z.object({ email, password });
+const territoryTypeSchema = z.object({
+  type: z.enum(['poly', 'grid']).default('poly'),
+});
 
 function formBody(body: unknown): Record<string, unknown> {
   if (typeof body !== 'object' || body === null || Array.isArray(body)) return {};
@@ -39,19 +43,31 @@ export function createWebRouter(dependencies: {
   igcFiles: IgcFileService;
   profiles: ProfileService;
   freePolygonClaim: FreePolygonClaimService;
+  gridClaim: GridClaimService;
   renderPage: PageRenderer;
 }) {
   const router = Router();
 
-  router.get('/v1/personal-territory', async (_req, res, next) => {
+  router.get('/v1/personal-territory', async (req, res, next) => {
     const currentUser = res.locals.currentUser;
     if (!currentUser) {
       next(new AppError(401, 'unauthorized', 'Sign in to view your personal territory.'));
       return;
     }
 
+    const territoryType = territoryTypeSchema.safeParse(req.query);
+    if (!territoryType.success) {
+      res.status(400).json({
+        error: { code: 'invalid_request', message: 'Territory type must be "poly" or "grid".' },
+      });
+      return;
+    }
+
     try {
-      res.status(200).json(await dependencies.freePolygonClaim.get({ userId: currentUser.userId }));
+      const territory = territoryType.data.type === 'grid'
+        ? await dependencies.gridClaim.get({ userId: currentUser.userId })
+        : await dependencies.freePolygonClaim.get({ userId: currentUser.userId });
+      res.status(200).json(territory);
     } catch (error) {
       next(error);
     }
