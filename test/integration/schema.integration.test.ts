@@ -38,6 +38,7 @@ describe('authentication schema', () => {
        WHERE table_schema = 'public' AND table_name = 'flights' ORDER BY column_name`,
     );
     expect(columns.rows).toEqual([
+      { column_name: 'content_hash', is_nullable: 'NO' },
       { column_name: 'created_at', is_nullable: 'NO' },
       { column_name: 'distance_meters', is_nullable: 'YES' },
       { column_name: 'duration_seconds', is_nullable: 'YES' },
@@ -175,7 +176,10 @@ describe('authentication schema', () => {
        WHERE conrelid IN ('flights'::regclass, 'track_points'::regclass)
        ORDER BY conname`,
     );
-    expect(constraints.rows.map((row) => row.conname)).toContain('flights_igc_file_id_unique');
+    expect(constraints.rows.map((row) => row.conname)).toEqual(expect.arrayContaining([
+      'flights_igc_file_id_unique',
+      'flights_content_hash_unique',
+    ]));
     expect(constraints.rows.map((row) => row.conname)).toContain('track_points_flight_id_sequence_number_unique');
   });
 

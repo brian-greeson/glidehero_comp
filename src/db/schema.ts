@@ -72,6 +72,7 @@ export const flights = pgTable(
     id: uuid('flight_id').primaryKey().defaultRandom(),
     userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
     igcFileId: uuid('igc_file_id').notNull().references(() => igcFiles.id, { onDelete: 'cascade' }),
+    contentHash: text('content_hash').notNull(),
     processingStatus: flightProcessingStatus('processing_status').notNull().default('processing'),
     processingError: text('processing_error'),
     startedAt: timestamp('started_at', { withTimezone: true, mode: 'date' }),
@@ -84,6 +85,7 @@ export const flights = pgTable(
   },
   (table) => [
     unique('flights_igc_file_id_unique').on(table.igcFileId),
+    unique('flights_content_hash_unique').on(table.contentHash),
     index('flights_user_id_idx').on(table.userId),
     index('flights_igc_file_id_idx').on(table.igcFileId),
   ],
