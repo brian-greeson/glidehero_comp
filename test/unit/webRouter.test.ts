@@ -580,6 +580,28 @@ describe('webRouter', () => {
     });
   });
 
+  it('renders a duplicate IGC upload as a validation error', async () => {
+    const { app } = dependencies({
+      status: 'duplicate',
+      message: 'This flight has already been uploaded.',
+    });
+    const form = new FormData();
+    form.set('igcFile', new Blob(['AXXX IGC flight']), 'flight.igc');
+
+    await withServer(app, async (baseUrl) => {
+      const response = await fetch(`${baseUrl}/igc-files`, {
+        method: 'POST',
+        redirect: 'manual',
+        headers: { cookie: 'glidehero_session=valid-token' },
+        body: form,
+      });
+
+      expect(response.status).toBe(422);
+      expect(response.headers.get('location')).toBeNull();
+      expect(await response.text()).toContain('This flight has already been uploaded.');
+    });
+  });
+
   it('rejects a non-IGC filename without storing a file', async () => {
     const { app, igcFiles } = dependencies();
     const form = new FormData();
