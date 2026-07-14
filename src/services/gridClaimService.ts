@@ -45,6 +45,7 @@ export function createGridClaimService(
               longitude,
               latitude,
               recorded_at,
+              sequence_number,
               LEAD(longitude) OVER (ORDER BY sequence_number) AS next_longitude,
               LEAD(latitude) OVER (ORDER BY sequence_number) AS next_latitude,
               LEAD(recorded_at) OVER (ORDER BY sequence_number) AS next_recorded_at
@@ -53,6 +54,7 @@ export function createGridClaimService(
           ),
           segments AS (
             SELECT
+              sequence_number AS segment_id,
               ST_Transform(
                 ST_MakeLine(
                   ST_SetSRID(ST_MakePoint(longitude, latitude), 4326),
@@ -66,11 +68,37 @@ export function createGridClaimService(
               AND next_latitude IS NOT NULL
               AND next_recorded_at IS NOT NULL
           ),
+          densified_segments AS (
+            SELECT
+              segment_id,
+              ST_Segmentize(segment, ${cellSize}) AS segment,
+              segment_timestamp
+            FROM segments
+          ),
+          densified_points AS (
+            SELECT
+              segment_id,
+              point_dump.path[1] AS point_index,
+              point_dump.geom AS point,
+              segment_timestamp
+            FROM densified_segments
+            CROSS JOIN LATERAL ST_DumpPoints(segment) AS point_dump
+          ),
+          split_segments AS (
+            SELECT
+              ST_MakeLine(
+                point,
+                LEAD(point) OVER (PARTITION BY segment_id ORDER BY point_index)
+              ) AS segment,
+              segment_timestamp
+            FROM densified_points
+          ),
           direct_hits AS (
             SELECT grid.x::integer AS x, grid.y::integer AS y, segment_timestamp
-            FROM segments
+            FROM split_segments
             CROSS JOIN LATERAL ST_SquareGrid(${cellSize}, ST_Envelope(segment)) AS grid(geom, x, y)
-            WHERE ST_Intersects(segment, grid.geom)
+            WHERE segment IS NOT NULL
+              AND ST_Intersects(segment, grid.geom)
           ),
           direct_cells AS (
             SELECT
@@ -117,7 +145,8 @@ export function createGridClaimService(
             CROSS JOIN LATERAL (
               SELECT MAX(direct_cells.first_claimed_at) AS claim_timestamp
               FROM direct_cells
-              WHERE ST_Length(
+              WHERE direct_cells.geometry && holes.geometry
+                AND ST_Length(
                 ST_Intersection(ST_Boundary(direct_cells.geometry), ST_Boundary(holes.geometry))
               ) > 0
             ) AS boundary_cells

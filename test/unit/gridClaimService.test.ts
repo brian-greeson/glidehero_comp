@@ -6,7 +6,7 @@ const userId = '00000000-0000-4000-8000-000000000030';
 
 function processingDatabaseDouble(counts = { directCellCount: 3, enclosedCellCount: 0 }) {
   const where = vi.fn(async () => undefined);
-  const execute = vi.fn(async () => ({ rows: [counts] }));
+  const execute = vi.fn(async (_query: unknown) => ({ rows: [counts] }));
   const transaction = vi.fn(async (callback: (tx: unknown) => Promise<unknown>) => callback({
     delete: vi.fn(() => ({ where })),
     execute,
@@ -38,6 +38,15 @@ describe('GridClaimService', () => {
     expect(transaction).toHaveBeenCalledOnce();
     expect(where).toHaveBeenCalledOnce();
     expect(execute).toHaveBeenCalledOnce();
+  });
+
+  it('splits projected segments before generating direct-cell grid candidates', async () => {
+    const { database, execute } = processingDatabaseDouble();
+    const service = createGridClaimService(database as never, { cellSize: 1_000 });
+
+    await service.process({ flightId, userId });
+
+    expect(JSON.stringify(execute.mock.calls[0]?.[0])).toContain('ST_Segmentize');
   });
 
   it('returns an empty FeatureCollection when the user owns no cells', async () => {

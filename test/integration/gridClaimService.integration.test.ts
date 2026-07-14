@@ -102,6 +102,24 @@ describe('GridClaimService with PostGIS', () => {
     ]);
   });
 
+  it('claims every crossed cell of a long sparse diagonal without expanding its full envelope', async () => {
+    const flight = await persistFlight([[100, 500], [200_100, 100_500]]);
+    const service = createGridClaimService(database.db, { cellSize: 1_000 });
+
+    await expect(service.process(flight)).resolves.toMatchObject({
+      directCellCount: 301,
+      enclosedCellCount: 0,
+    });
+    const cells = await storedCells(1_000);
+
+    expect(cells).toHaveLength(301);
+    expect(cells).toEqual(expect.arrayContaining([
+      expect.objectContaining({ x: 0, y: 0, claimUser: flight.userId }),
+      expect.objectContaining({ x: 100, y: 50, claimUser: flight.userId }),
+      expect.objectContaining({ x: 200, y: 100, claimUser: flight.userId }),
+    ]));
+  });
+
   it('claims the cells generated along a grid edge', async () => {
     const flight = await persistFlight([[100, 1_000], [2_900, 1_000]]);
     const service = createGridClaimService(database.db, { cellSize: 1_000 });
@@ -143,32 +161,13 @@ describe('GridClaimService with PostGIS', () => {
     });
   });
 
-  it('does not treat corner-only direct-cell contact as an enclosure', async () => {
-    const result = await database.pool.query<{ hole_count: string }>(`
-      WITH direct_cells AS (
-        SELECT ST_MakeEnvelope(x * 1000, y * 1000, (x + 1) * 1000, (y + 1) * 1000, 6933) AS geometry
-        FROM (VALUES (0, 0), (1, 1), (2, 0), (1, -1)) AS cells(x, y)
-      ),
-      flight_cell_union AS (
-        SELECT ST_UnaryUnion(ST_Collect(geometry)) AS geometry
-        FROM direct_cells
-      ),
-      union_polygons AS (
-        SELECT polygon_dump.geom AS geometry
-        FROM flight_cell_union
-        CROSS JOIN LATERAL ST_Dump(flight_cell_union.geometry) AS polygon_dump
-      ),
-      hole_rings AS (
-        SELECT ring_dump.geom AS geometry
-        FROM union_polygons
-        CROSS JOIN LATERAL ST_DumpRings(union_polygons.geometry) AS ring_dump
-        WHERE ring_dump.path[1] > 0
-      )
-      SELECT count(*) AS hole_count
-      FROM hole_rings
-    `);
+  it('does not treat corner-only direct-cell contact from track data as an enclosure', async () => {
+    const flight = await persistFlight([
+      [500, 500], [1_500, 1_500], [2_500, 500], [1_500, -500], [500, 500],
+    ]);
+    const service = createGridClaimService(database.db, { cellSize: 1_000 });
 
-    expect(Number(result.rows[0]?.hole_count)).toBe(0);
+    await expect(service.process(flight)).resolves.toMatchObject({ enclosedCellCount: 0 });
   });
 
   it('fills both cells enclosed by two full-edge rings', async () => {
@@ -250,6 +249,21 @@ describe('GridClaimService with PostGIS', () => {
     await service.process(equal);
 
     expect(await storedCells(1_000)).toMatchObject([{ x: 0, y: 0, claimUser: later.userId, claimFlight: later.flightId }]);
+  });
+
+  it('stores the newest endpoint timestamp when multiple segments directly claim one cell', async () => {
+    const recordedAt = new Date(Date.UTC(2026, 0, 1, 0, 0, 0));
+    const flight = await persistFlight([[100, 100], [900, 100], [100, 100]], recordedAt);
+    const service = createGridClaimService(database.db, { cellSize: 1_000 });
+
+    await expect(service.process(flight)).resolves.toMatchObject({ directCellCount: 1, enclosedCellCount: 0 });
+
+    expect(await storedCells(1_000)).toMatchObject([{
+      x: 0,
+      y: 0,
+      claimFlight: flight.flightId,
+      claimTimestamp: new Date(recordedAt.getTime() + 2_000),
+    }]);
   });
 
   it('stores independent 1000m and 2000m grid variants', async () => {
