@@ -3,19 +3,13 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createFlightProcessingService, duplicateFlightMessage } from '../../src/services/flightProcessingService.js';
 import { createGridClaimService } from '../../src/services/gridClaimService.js';
 
-const freePolygonClaim = vi.hoisted(() => ({ process: vi.fn() }));
 const gridClaim = vi.hoisted(() => ({ process: vi.fn() }));
-
-vi.mock('../../src/services/freePolygonClaimService.js', () => ({
-  createFreePolygonClaimService: vi.fn(() => freePolygonClaim),
-}));
 
 vi.mock('../../src/services/gridClaimService.js', () => ({
   createGridClaimService: vi.fn(() => gridClaim),
 }));
 
 afterEach(() => {
-  freePolygonClaim.process.mockReset();
   gridClaim.process.mockReset();
 });
 
@@ -78,10 +72,6 @@ describe('FlightProcessingService', () => {
     const events: string[] = [];
     const { database, insertedPoints, flightUpdates, insertFlightValues, transaction } = databaseDouble({ events });
     const send = vi.fn(async () => objectBody(validIgc));
-    freePolygonClaim.process.mockImplementation(async () => {
-      events.push('free-polygon-claim-processed');
-      return { flightId, detectedAreaCount: 0 };
-    });
     gridClaim.process.mockImplementation(async () => {
       events.push('grid-claim-processed');
       return { flightId, cellSize: 1000, directCellCount: 0, enclosedCellCount: 0 };
@@ -100,7 +90,6 @@ describe('FlightProcessingService', () => {
       expect.objectContaining({ input: expect.objectContaining({ Bucket: 'glidehero-files', Key: bucketKey }) }),
     );
     expect(transaction).toHaveBeenCalledOnce();
-    expect(freePolygonClaim.process).toHaveBeenCalledWith({ flightId, userId: ownerUserId });
     expect(gridClaim.process).toHaveBeenCalledWith({
       flightId,
       userId: ownerUserId,
@@ -109,7 +98,6 @@ describe('FlightProcessingService', () => {
     expect(events).toEqual([
       'ingest-started',
       'ingest-committed',
-      'free-polygon-claim-processed',
       'grid-claim-processed',
     ]);
     expect(insertedPoints).toEqual([
@@ -185,25 +173,6 @@ describe('FlightProcessingService', () => {
     expect(flightUpdates).not.toContainEqual(expect.objectContaining({ processingStatus: 'failed' }));
   });
 
-  it('keeps the committed flight when FreePolygonClaim fails for a later retry', async () => {
-    const claimError = new Error('PostGIS unavailable');
-    const { database, flightUpdates, transaction } = databaseDouble();
-    const send = vi.fn(async () => objectBody(validIgc));
-    freePolygonClaim.process.mockImplementation(async () => { throw claimError; });
-    const service = createFlightProcessingService(database as never, {
-      bucketName: 'glidehero-files',
-      s3Client: { send } as never,
-      gridClaimCellSize: 1000,
-    });
-
-    await expect(service.process({ ownerUserId, igcFileId, bucketKey, contentHash: 'a'.repeat(64) })).rejects.toBe(claimError);
-
-    expect(transaction).toHaveBeenCalledOnce();
-    expect(freePolygonClaim.process).toHaveBeenCalledWith({ flightId, userId: ownerUserId });
-    expect(flightUpdates).toContainEqual(expect.objectContaining({ processingStatus: 'completed' }));
-    expect(flightUpdates).not.toContainEqual(expect.objectContaining({ processingStatus: 'failed' }));
-  });
-
   it('keeps the committed flight when GridClaim fails for a later retry', async () => {
     const claimError = new Error('PostGIS unavailable');
     const { database, flightUpdates, transaction } = databaseDouble();
@@ -218,7 +187,6 @@ describe('FlightProcessingService', () => {
     await expect(service.process({ ownerUserId, igcFileId, bucketKey, contentHash: 'a'.repeat(64) })).rejects.toBe(claimError);
 
     expect(transaction).toHaveBeenCalledOnce();
-    expect(freePolygonClaim.process).toHaveBeenCalledWith({ flightId, userId: ownerUserId });
     expect(gridClaim.process).toHaveBeenCalledWith({
       flightId,
       userId: ownerUserId,

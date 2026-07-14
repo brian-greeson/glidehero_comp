@@ -8,7 +8,6 @@ export const relations = defineRelations(schema, (r) => ({
     sessions: r.many.appSessions({ from: r.users.id, to: r.appSessions.userId }),
     igcFiles: r.many.igcFiles({ from: r.users.id, to: r.igcFiles.userId }),
     flights: r.many.flights({ from: r.users.id, to: r.flights.userId }),
-    personalTerritory: r.one.personalTerritories({ from: r.users.id, to: r.personalTerritories.userId }),
     gridClaims: r.many.userGridClaims({ from: r.users.id, to: r.userGridClaims.claimUser }),
     competitionGridClaims: r.many.competitionGridClaims({ from: r.users.id, to: r.competitionGridClaims.claimUser }),
   },
@@ -29,18 +28,11 @@ export const relations = defineRelations(schema, (r) => ({
     user: r.one.users({ from: r.flights.userId, to: r.users.id }),
     igcFile: r.one.igcFiles({ from: r.flights.igcFileId, to: r.igcFiles.id }),
     trackPoints: r.many.trackPoints({ from: r.flights.id, to: r.trackPoints.flightId }),
-    areas: r.many.flightAreas({ from: r.flights.id, to: r.flightAreas.flightId }),
     gridClaims: r.many.userGridClaims({ from: r.flights.id, to: r.userGridClaims.claimFlight }),
     competitionGridClaims: r.many.competitionGridClaims({ from: r.flights.id, to: r.competitionGridClaims.claimFlight }),
   },
   trackPoints: {
     flight: r.one.flights({ from: r.trackPoints.flightId, to: r.flights.id }),
-  },
-  flightAreas: {
-    flight: r.one.flights({ from: r.flightAreas.flightId, to: r.flights.id }),
-  },
-  personalTerritories: {
-    user: r.one.users({ from: r.personalTerritories.userId, to: r.users.id }),
   },
   userGridClaims: {
     flight: r.one.flights({ from: r.userGridClaims.claimFlight, to: r.flights.id }),

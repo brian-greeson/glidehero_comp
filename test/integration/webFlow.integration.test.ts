@@ -2,7 +2,6 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createApp } from '../../src/app.js';
 import { createAuthService } from '../../src/services/authService.js';
 import { createCompetitionGridClaimService } from '../../src/services/competitionGridClaimService.js';
-import { createFreePolygonClaimService } from '../../src/services/freePolygonClaimService.js';
 import { createGridClaimService } from '../../src/services/gridClaimService.js';
 import { createProfileService } from '../../src/services/profileService.js';
 import { createPageRenderer } from '../../src/views/renderer.js';
@@ -29,7 +28,6 @@ describe('GlideHero browser authentication flow', () => {
 
     const auth = createAuthService(testDatabase.db, { sessionTtlSeconds: 604800 });
     const profiles = createProfileService(testDatabase.db);
-    const freePolygonClaim = createFreePolygonClaimService(testDatabase.db);
     const gridClaim = createGridClaimService(testDatabase.db, { cellSize: 1_000 });
     const competitionGridClaim = createCompetitionGridClaimService(testDatabase.db, { cellSize: 1_000 });
     const cookie = createSessionCookie({
@@ -45,7 +43,6 @@ describe('GlideHero browser authentication flow', () => {
           cookie,
           igcFiles: { upload: async () => ({ status: 'completed', flightId: '00000000-0000-4000-8000-000000000020' }) },
           profiles,
-          freePolygonClaim,
           gridClaim,
           competitionGridClaim,
           renderPage: createPageRenderer({ mapTilerApiKey: 'maptiler-test-key' }),

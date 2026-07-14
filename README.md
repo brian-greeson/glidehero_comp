@@ -23,28 +23,28 @@ long cross-country flight.
 The experience revolves around a single interactive world map.
 
 Pilots upload IGC flight logs after flying. The app automatically analyzes each
-flight and detects every enclosed area created by the flight track. No manual
-selection or editing is required.
+flight against a fixed grid: every cell crossed by a flight segment is claimed,
+and a closed loop also claims the cells it encloses. No manual selection or
+editing is required.
 
 Every uploaded flight is processed automatically and becomes a permanent part
 of the pilot's history.
 
 ### Personal map
 
-The Personal Map is the pilot's permanent territory.
+The Personal Map shows the grid cells currently claimed by the pilot.
 
-Every enclosed area from every uploaded flight contributes to the pilot's
-claimed territory. Overlapping claims are merged so territory is only counted
-once. The result is a single, continuously growing territory that represents
-everywhere the pilot has successfully enclosed.
+Each uploaded flight adds the cells it crosses, plus cells enclosed by a closed
+loop. The map dissolves adjacent claimed cells into regions for display while
+keeping grid cells as the ownership model.
 
-The Personal Map displays only this accumulated territory using a color selected
+The Personal Map displays only this territory using a color selected
 by the pilot. Individual flight tracks are not displayed.
 
 Each uploaded flight reports statistics including:
 
-- Total enclosed area created by the flight.
-- New territory added to the pilot's permanent map.
+- Grid cells claimed directly by the flight.
+- Grid cells claimed by closing a loop.
 - Flight time.
 - Flight distance.
 
@@ -58,9 +58,10 @@ The Competitive Map provides a lightweight monthly competition.
 Instead of permanently owning territory, pilots compete to control territory
 during the current month.
 
-Ownership is determined by the most recent flight that enclosed a given area,
-based on the timestamp contained in the IGC file rather than the upload time. A
-newer flight can reclaim territory previously controlled by another pilot.
+Ownership is determined per grid cell by the most recent intersecting flight
+segment, based on the timestamp contained in the IGC file rather than the
+upload time. A newer flight can reclaim a cell previously controlled by another
+pilot.
 
 The competition resets at the beginning of each month using the local time zone
 of the flight's launch location.

@@ -6,7 +6,6 @@ import { AppError } from '../domain/errors.js';
 import { AuthFailure, type AuthService } from '../services/authService.js';
 import type { CompetitionGridClaimService } from '../services/competitionGridClaimService.js';
 import { normalizeTerritoryColor, type ProfileService } from '../services/profileService.js';
-import type { FreePolygonClaimService } from '../services/freePolygonClaimService.js';
 import type { GridClaimService } from '../services/gridClaimService.js';
 import type { PageModel, PageRenderer } from '../views/renderer.js';
 import type { IgcFileService } from '../services/igcFileService.js';
@@ -20,9 +19,6 @@ const signupSchema = z.object({
   displayName: z.string().trim().min(1).max(48).optional().or(z.literal('')),
 });
 const loginSchema = z.object({ email, password });
-const territoryTypeSchema = z.object({
-  type: z.enum(['poly', 'grid']).default('poly'),
-});
 const competitionDateSchema = z.object({
   date: z.string().refine((value) => {
     try {
@@ -54,7 +50,6 @@ export function createWebRouter(dependencies: {
   cookie: SessionCookie;
   igcFiles: IgcFileService;
   profiles: ProfileService;
-  freePolygonClaim: FreePolygonClaimService;
   gridClaim: GridClaimService;
   competitionGridClaim: CompetitionGridClaimService;
   renderPage: PageRenderer;
@@ -68,18 +63,8 @@ export function createWebRouter(dependencies: {
       return;
     }
 
-    const territoryType = territoryTypeSchema.safeParse(req.query);
-    if (!territoryType.success) {
-      res.status(400).json({
-        error: { code: 'invalid_request', message: 'Territory type must be "poly" or "grid".' },
-      });
-      return;
-    }
-
     try {
-      const territory = territoryType.data.type === 'grid'
-        ? await dependencies.gridClaim.get({ userId: currentUser.userId })
-        : await dependencies.freePolygonClaim.get({ userId: currentUser.userId });
+      const territory = await dependencies.gridClaim.get({ userId: currentUser.userId });
       res.status(200).json(territory);
     } catch (error) {
       next(error);

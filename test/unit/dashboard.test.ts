@@ -67,7 +67,7 @@ describe('Personal territory dashboard map', () => {
 
     await loadHandler?.();
 
-    expect(fetchPersonalTerritory).toHaveBeenCalledWith('/v1/personal-territory?type=grid', {
+    expect(fetchPersonalTerritory).toHaveBeenCalledWith('/v1/personal-territory', {
       credentials: 'same-origin',
       headers: { accept: 'application/geo+json' },
     });

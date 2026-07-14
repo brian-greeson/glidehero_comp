@@ -5,7 +5,6 @@ import { flights, trackPoints } from '../db/schema.js';
 import { resolveLaunchTimeZone } from '../domain/competition/launchTimeZone.js';
 import { IgcParseError } from '../domain/igc/errors.js';
 import { parseIgcFlight } from '../domain/igc/parseIgcFlight.js';
-import { createFreePolygonClaimService } from './freePolygonClaimService.js';
 import { createGridClaimService } from './gridClaimService.js';
 
 const TRACK_POINT_INSERT_BATCH_SIZE = 1_000;
@@ -46,7 +45,6 @@ export function createFlightProcessingService(
     gridClaimCellSize: number;
   },
 ): FlightProcessingService {
-  const freePolygonClaim = createFreePolygonClaimService(database);
   const gridClaim = createGridClaimService(database, { cellSize: options.gridClaimCellSize });
 
   async function fail(flightId: string, message: string): Promise<FlightProcessingOutcome> {
@@ -122,8 +120,6 @@ export function createFlightProcessingService(
           .where(eq(flights.id, flight.id));
       });
 
-      // Claim variations — comment or uncomment individual lines to select them.
-      await freePolygonClaim.process({ flightId: flight.id, userId: input.ownerUserId });
       await gridClaim.process({ flightId: flight.id, userId: input.ownerUserId, launchTimezone });
 
       return { status: 'completed', flightId: flight.id };

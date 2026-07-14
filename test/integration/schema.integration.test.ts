@@ -23,10 +23,8 @@ describe('authentication schema', () => {
     expect(result.rows.map((row) => row.table_name)).toEqual([
       'app_sessions',
       'competition_grid_claims',
-      'flight_areas',
       'flights',
       'igc_files',
-      'personal_territories',
       'profiles',
       'track_points',
       'user_grid_claims',
@@ -54,75 +52,6 @@ describe('authentication schema', () => {
       { column_name: 'started_at', is_nullable: 'YES' },
       { column_name: 'updated_at', is_nullable: 'NO' },
       { column_name: 'user_id', is_nullable: 'NO' },
-    ]);
-  });
-
-  it('stores one cascading JSONB personal-territory projection per pilot', async () => {
-    const columns = await database.pool.query<{
-      column_name: string;
-      data_type: string;
-      is_nullable: string;
-      udt_name: string;
-    }>(
-      `SELECT column_name, data_type, is_nullable, udt_name
-       FROM information_schema.columns
-       WHERE table_schema = 'public' AND table_name = 'personal_territories'
-       ORDER BY column_name`,
-    );
-    const foreignKeys = await database.pool.query<{ confdeltype: string }>(
-      `SELECT confdeltype
-       FROM pg_constraint
-       WHERE conrelid = 'personal_territories'::regclass AND contype = 'f'`,
-    );
-
-    expect(columns.rows).toEqual([
-      { column_name: 'geojson', data_type: 'jsonb', is_nullable: 'NO', udt_name: 'jsonb' },
-      { column_name: 'updated_at', data_type: 'timestamp with time zone', is_nullable: 'NO', udt_name: 'timestamptz' },
-      { column_name: 'user_id', data_type: 'uuid', is_nullable: 'NO', udt_name: 'uuid' },
-    ]);
-    expect(foreignKeys.rows).toEqual([{ confdeltype: 'c' }]);
-  });
-
-  it('stores flight claims as indexed WGS84 polygons', async () => {
-    const columns = await database.pool.query<{
-      column_name: string;
-      data_type: string;
-      is_nullable: string;
-      udt_name: string;
-    }>(
-      `SELECT column_name, data_type, is_nullable, udt_name
-       FROM information_schema.columns
-       WHERE table_schema = 'public' AND table_name = 'flight_areas'
-       ORDER BY column_name`,
-    );
-    expect(columns.rows).toEqual([
-      { column_name: 'area_square_meters', data_type: 'double precision', is_nullable: 'NO', udt_name: 'float8' },
-      { column_name: 'flight_area_id', data_type: 'uuid', is_nullable: 'NO', udt_name: 'uuid' },
-      { column_name: 'flight_id', data_type: 'uuid', is_nullable: 'NO', udt_name: 'uuid' },
-      { column_name: 'geometry', data_type: 'USER-DEFINED', is_nullable: 'NO', udt_name: 'geometry' },
-    ]);
-
-    const geometry = await database.pool.query<{
-      srid: number;
-      type: string;
-    }>(
-      `SELECT srid, type
-       FROM geometry_columns
-       WHERE f_table_schema = 'public'
-         AND f_table_name = 'flight_areas'
-         AND f_geometry_column = 'geometry'`,
-    );
-    expect(geometry.rows).toEqual([{ srid: 4326, type: 'POLYGON' }]);
-
-    const indexes = await database.pool.query<{ indexname: string }>(
-      `SELECT indexname FROM pg_indexes
-       WHERE schemaname = 'public' AND tablename = 'flight_areas'
-       ORDER BY indexname`,
-    );
-    expect(indexes.rows.map((row) => row.indexname)).toEqual([
-      'flight_areas_flight_id_idx',
-      'flight_areas_geometry_gist_idx',
-      'flight_areas_pkey',
     ]);
   });
 

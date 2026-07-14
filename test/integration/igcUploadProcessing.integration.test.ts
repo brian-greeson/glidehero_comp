@@ -4,7 +4,6 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { createAuthService } from '../../src/services/authService.js';
 import { createCompetitionGridClaimService } from '../../src/services/competitionGridClaimService.js';
 import { createFlightProcessingService } from '../../src/services/flightProcessingService.js';
-import { createFreePolygonClaimService } from '../../src/services/freePolygonClaimService.js';
 import { createIgcFileService } from '../../src/services/igcFileService.js';
 import { resetAndPushTestDatabase } from './database.js';
 
@@ -76,7 +75,7 @@ afterAll(async () => {
 });
 
 describe('IGC upload processing', () => {
-  it('stores every fix and processes both claim variations from the supplied IGC file', async () => {
+  it('stores every fix and processes grid claims from the supplied IGC file', async () => {
     if (!database) throw new Error('Test database was not initialized.');
     const auth = createAuthService(database.db, { sessionTtlSeconds: 60 });
     const pilot = await auth.signup({ email: 'pilot@example.com', password: 'correct horse battery staple' });
@@ -103,7 +102,6 @@ describe('IGC upload processing', () => {
     const stored = await database.pool.query<{
       processing_status: string;
       launch_timezone: string;
-      area_count: number;
       grid_claim_count: number;
       competition_claim_count: number;
       competition_months: string[];
@@ -113,7 +111,6 @@ describe('IGC upload processing', () => {
     }>(
       `SELECT f.processing_status,
               f.launch_timezone,
-              (SELECT count(*)::int FROM flight_areas fa WHERE fa.flight_id = f.flight_id) AS area_count,
               (SELECT count(*)::int FROM user_grid_claims ugc WHERE ugc.claim_flight = f.flight_id) AS grid_claim_count,
               (SELECT count(*)::int
                FROM competition_grid_claims cgc
@@ -136,7 +133,6 @@ describe('IGC upload processing', () => {
       expect.objectContaining({
         processing_status: 'completed',
         launch_timezone: 'America/Denver',
-        area_count: expect.any(Number),
         grid_claim_count: expect.any(Number),
         competition_claim_count: expect.any(Number),
         competition_months: ['2026-05-01'],
@@ -144,13 +140,9 @@ describe('IGC upload processing', () => {
         first_fix: new Date('2026-05-10T18:50:26.000Z'),
       }),
     ]);
-    expect(stored.rows[0]?.area_count).toBeGreaterThan(0);
     expect(stored.rows[0]?.grid_claim_count).toBeGreaterThan(0);
     expect(stored.rows[0]?.competition_claim_count).toBeGreaterThan(0);
     expect(stored.rows[0]?.last_fix.getTime()).toBeGreaterThan(stored.rows[0]?.first_fix.getTime() ?? 0);
-    const territory = await createFreePolygonClaimService(database.db).get({ userId: pilot.user.userId });
-    expect(territory.features).toHaveLength(1);
-    expect(territory.features[0]?.geometry.type).toBe('MultiPolygon');
     const competition = await createCompetitionGridClaimService(database.db, { cellSize: 1_000 })
       .getCurrent({ competitionMonth: '2026-05-10' });
     expect(competition.features.length).toBeGreaterThan(0);

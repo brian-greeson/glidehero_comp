@@ -46,7 +46,7 @@ export function colorCompetitionTerritory(
 }
 
 export async function loadPersonalTerritory(map, territoryColor, fetchImpl = fetch) {
-  const response = await fetchImpl('/v1/personal-territory?type=grid', {
+  const response = await fetchImpl('/v1/personal-territory', {
     credentials: 'same-origin',
     headers: { accept: 'application/geo+json' },
   });
