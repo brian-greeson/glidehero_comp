@@ -16,9 +16,8 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
-    "db:check": "drizzle-kit check"
-
-
+    "db:check": "drizzle-kit check",
+    "db:reset": "dropdb --if-exists \"$DB_NAME\" && createdb \"$DB_NAME\""
   },
   "author": "Mountain Sentry",
   "license": "UNLICENSED",
