@@ -96,3 +96,90 @@ button { border-color: #1769aa; color: #fff; background: #1769aa; font-weight: 7
 }
 
 @media (max-width: 420px) { .nav-actions { gap: .4rem; } .mode-tab { padding-inline: .35rem; } }
+
+.onboarding-dialog { width: min(880px, calc(100vw - 2rem)); max-width: none; max-height: calc(100dvh - 2rem); padding: 0; overflow: hidden; border: 0; border-radius: 1.25rem; color: #14213d; background: #fff; box-shadow: 0 24px 80px rgb(2 8 23 / .38); }
+.onboarding-dialog::backdrop { background: rgb(2 8 23 / .68); backdrop-filter: blur(3px); }
+.onboarding-frame { display: grid; max-height: calc(100dvh - 2rem); grid-template-rows: minmax(0, 1fr) auto; position: relative; }
+.onboarding-pages { overflow-y: auto; }
+.onboarding-step { min-height: 430px; padding: clamp(2rem, 5vw, 4rem); }
+.onboarding-step[hidden] { display: none; }
+.onboarding-visual { display: grid; min-width: 0; place-items: center; padding: 1rem; border-radius: 1rem; background: linear-gradient(145deg, #eef6ff, #e5edf7); }
+.onboarding-welcome-visual { align-content: center; gap: .75rem; color: #071521; font-size: clamp(1.2rem, 3vw, 1.8rem); font-style: italic; font-weight: 900; letter-spacing: .04em; }
+.onboarding-welcome-visual img { width: min(180px, 44vw); height: auto; filter: drop-shadow(0 12px 18px rgb(15 23 42 / .18)); }
+.onboarding-copy { align-self: center; }
+.onboarding-copy h2 { margin: .25rem 0 .85rem; color: #0f172a; font-size: clamp(1.8rem, 4vw, 2.8rem); line-height: 1.05; }
+.onboarding-copy > p:last-child { margin: 0; color: #52657a; font-size: 1.05rem; line-height: 1.6; }
+.onboarding-eyebrow { margin: 0; color: var(--territory-color); font-size: .78rem; font-weight: 900; letter-spacing: .13em; text-transform: uppercase; }
+.onboarding-grid { width: min(100%, 340px); height: auto; overflow: visible; }
+.onboarding-grid-lines { fill: none; stroke: #b8c8d9; stroke-width: 1.5; }
+.onboarding-flight-track, .onboarding-loop-track { fill: none; stroke: #f36b35; stroke-width: 5; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 1; stroke-dashoffset: 1; }
+.onboarding-glider { fill: #f36b35; }
+.onboarding-claim-cell, .onboarding-enclosed-cell { fill: var(--territory-color); opacity: 0; }
+.icon-button[data-onboarding-trigger] { width: 44px; min-height: 44px; }
+.onboarding-close { position: absolute; top: .75rem; right: .75rem; z-index: 2; width: 44px; min-height: 44px; padding: 0; border: 0; border-radius: 999px; color: #334155; background: #eef2f7; font-size: 1.6rem; line-height: 1; }
+.onboarding-footer { display: flex; min-height: 76px; align-items: center; justify-content: space-between; gap: 1rem; padding: .85rem 1.25rem; border-top: 1px solid #e2e8f0; background: #fff; }
+.onboarding-progress { display: flex; gap: .5rem; margin: 0; padding: 0; list-style: none; }
+.onboarding-progress [data-onboarding-progress] { display: block; width: 9px; height: 9px; border-radius: 999px; background: #cbd5e1; transition: width .2s ease, background-color .2s ease; }
+.onboarding-progress [aria-current="step"] { width: 26px; background: var(--territory-color); }
+.onboarding-actions { display: flex; gap: .65rem; margin-left: auto; }
+.onboarding-button { width: auto; min-width: 92px; min-height: 44px; padding: .65rem 1rem; }
+.onboarding-back { color: #334155; border-color: #cbd5e1; background: #fff; }
+.onboarding-next, .onboarding-done { border-radius: 999px; }
+.onboarding-dialog :focus-visible { outline: 3px solid #f59e0b; outline-offset: 3px; }
+
+@media (max-width: 699px) {
+  .onboarding-step { display: flex; min-height: 0; flex-direction: column; gap: 1.5rem; padding: 4rem 1.25rem 1.75rem; }
+  .onboarding-visual { order: 1; min-height: 220px; }
+  .onboarding-copy { order: 2; }
+  .onboarding-footer { position: sticky; bottom: 0; }
+}
+
+@media (min-width: 700px) {
+  .onboarding-step { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(260px, .9fr); gap: clamp(2rem, 5vw, 4rem); }
+}
+
+[data-onboarding-step][data-active] .onboarding-flight-track { animation: onboarding-draw 6s ease-in-out infinite; }
+[data-onboarding-step][data-active] .onboarding-loop-track { animation: onboarding-draw-loop 6s ease-in-out infinite; }
+[data-onboarding-step][data-active] .onboarding-claim-cell { animation: onboarding-claim 6s ease-out infinite; }
+[data-onboarding-step][data-active] .claim-2 { animation-delay: .25s; }
+[data-onboarding-step][data-active] .claim-3 { animation-delay: .5s; }
+[data-onboarding-step][data-active] .claim-4 { animation-delay: .75s; }
+[data-onboarding-step][data-active] .claim-5 { animation-delay: 1s; }
+[data-onboarding-step][data-active] .claim-6 { animation-delay: 1.25s; }
+[data-onboarding-step][data-active] .claim-7 { animation-delay: 1.5s; }
+[data-onboarding-step][data-active] .onboarding-enclosed-cell { animation: onboarding-enclose 6s ease-out infinite; }
+[data-onboarding-step][data-active] .enclosed-2, [data-onboarding-step][data-active] .enclosed-4 { animation-delay: .08s; }
+[data-onboarding-step][data-active] .enclosed-3, [data-onboarding-step][data-active] .enclosed-5, [data-onboarding-step][data-active] .enclosed-7 { animation-delay: .16s; }
+[data-onboarding-step][data-active] .enclosed-6, [data-onboarding-step][data-active] .enclosed-8 { animation-delay: .24s; }
+[data-onboarding-step][data-active] .enclosed-9 { animation-delay: .32s; }
+
+@keyframes onboarding-draw {
+  0%, 8% { stroke-dashoffset: 1; }
+  58%, 82% { stroke-dashoffset: 0; }
+  100% { stroke-dashoffset: -1; }
+}
+@keyframes onboarding-draw-loop {
+  0%, 8% { stroke-dashoffset: 1; }
+  55%, 84% { stroke-dashoffset: 0; }
+  100% { stroke-dashoffset: -1; }
+}
+@keyframes onboarding-claim {
+  0%, 18% { opacity: 0; }
+  30%, 82% { opacity: .58; }
+  100% { opacity: 0; }
+}
+@keyframes onboarding-enclose {
+  0%, 52% { opacity: 0; }
+  64%, 84% { opacity: .62; }
+  100% { opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-onboarding-step][data-active] .onboarding-flight-track,
+  [data-onboarding-step][data-active] .onboarding-loop-track,
+  [data-onboarding-step][data-active] .onboarding-claim-cell,
+  [data-onboarding-step][data-active] .onboarding-enclosed-cell { animation: none; }
+  .onboarding-flight-track, .onboarding-loop-track { stroke-dashoffset: 0; }
+  .onboarding-claim-cell, .onboarding-enclosed-cell { fill: var(--territory-color); opacity: .62; }
+  .onboarding-progress [data-onboarding-progress] { transition: none; }
+}
