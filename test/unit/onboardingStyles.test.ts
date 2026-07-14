@@ -15,6 +15,9 @@ describe('onboarding stylesheet contract', () => {
     expect(css).toContain('@media (min-width: 700px)');
     expect(css).toContain('[data-onboarding-step][data-active] .onboarding-flight-track');
     expect(css).toContain('[data-onboarding-step][data-active] .onboarding-loop-track');
+    expect(css).toContain('[data-onboarding-step][data-active] .onboarding-loop-claim-cell');
+    expect(css).toContain('@keyframes onboarding-loop-claim');
+    expect(css).toContain('0%, 55% { opacity: 0; }');
     expect(css).toContain('@media (prefers-reduced-motion: reduce)');
     expect(css).toContain('stroke-dashoffset: 0');
     expect(css).toContain('fill: var(--territory-color)');
