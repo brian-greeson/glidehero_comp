@@ -1,13 +1,16 @@
 import { defineConfig } from 'drizzle-kit';
-import { parseConfig } from './src/config.js';
 
-const config = parseConfig(process.env);
+const databaseUrl = process.env.DATABASE_URL;
+
+if (!databaseUrl) {
+  throw new Error('DATABASE_URL is required to run Drizzle Kit.');
+}
 
 export default defineConfig({
   out: './drizzle',
   dialect: 'postgresql',
   schema: './src/db/schema.ts',
-  dbCredentials: { url: config.databaseUrl },
+  dbCredentials: { url: databaseUrl },
   extensionsFilters: ['postgis'],
   schemaFilter: ['public'],
 });

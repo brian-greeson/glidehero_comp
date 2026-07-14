@@ -109,3 +109,17 @@ services:
   source_dir: /
 vpc:
   id: c7425901-ed0d-4b21-9683-375cc81cdade
+jobs:
+- name: migrate
+  kind: PRE_DEPLOY
+  environment_slug: node-js
+  github:
+    branch: main
+    deploy_on_push: true
+    repo: brian-greeson/glidehero_comp
+  run_command: npm run db:migrate
+  source_dir: /
+  envs:
+  - key: DATABASE_URL
+    scope: RUN_TIME
+    value: ${production-database.DATABASE_URL}
