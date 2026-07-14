@@ -48,6 +48,7 @@ describe('Vento page renderer', () => {
     expect(authenticated).toContain('<dialog id="glide-hero-onboarding"');
     expect(authenticated).toContain('data-onboarding-dialog');
     expect(authenticated.match(/data-onboarding-step/g)).toHaveLength(3);
+    expect([...authenticated.matchAll(/<h2[^>]*data-onboarding-heading[^>]*tabindex="-1"[^>]*>/g)]).toHaveLength(3);
     expect(authenticated).toContain('Welcome to Glide Hero!');
     expect(authenticated).toContain('Claim cells as you fly');
     expect(authenticated).toContain('Close the loop');

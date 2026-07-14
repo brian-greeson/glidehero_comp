@@ -81,7 +81,7 @@ class FakeDocument {
   }
 }
 
-function createFixture() {
+function createFixture(headingCount = 3) {
   const trigger = new FakeElement();
   const dialog = new FakeDialog();
   const close = new FakeElement();
@@ -89,6 +89,7 @@ function createFixture() {
   const next = new FakeElement();
   const done = new FakeElement();
   const steps = [new FakeElement(), new FakeElement(), new FakeElement()];
+  const headings = Array.from({ length: headingCount }, () => new FakeElement());
   const progress = [new FakeElement(), new FakeElement(), new FakeElement()];
   const documentRef = new FakeDocument({
     '[data-onboarding-trigger]': trigger,
@@ -99,22 +100,24 @@ function createFixture() {
     '[data-onboarding-done]': done,
   }, {
     '[data-onboarding-step]': steps,
+    '[data-onboarding-heading]': headings,
     '[data-onboarding-progress]': progress,
   });
 
-  return { trigger, dialog, close, back, next, done, steps, progress, documentRef };
+  return { trigger, dialog, close, back, next, done, steps, headings, progress, documentRef };
 }
 
 describe('Glide Hero onboarding controller', () => {
-  it('opens on the first step and exposes only its animation state', () => {
+  it('opens on the first step, focuses Close, and exposes only open and close', () => {
     const fixture = createFixture();
     const opener = new FakeElement();
     opener.ownerDocument = fixture.documentRef;
     fixture.documentRef.activeElement = opener;
-    initializeOnboarding({ documentRef: fixture.documentRef });
+    const controller = initializeOnboarding({ documentRef: fixture.documentRef });
 
     fixture.trigger.dispatch('click');
 
+    expect(Object.keys(controller ?? {})).toEqual(['open', 'close']);
     expect(fixture.dialog.showModal).toHaveBeenCalledOnce();
     expect(fixture.steps.map((step) => step.hidden)).toEqual([false, true, true]);
     expect(fixture.steps.map((step) => step.hasAttribute('data-active'))).toEqual([true, false, false]);
@@ -123,6 +126,35 @@ describe('Glide Hero onboarding controller', () => {
     expect(fixture.next.hidden).toBe(false);
     expect(fixture.done.hidden).toBe(true);
     expect(fixture.close.focus).toHaveBeenCalledOnce();
+    expect(fixture.headings.every((heading) => heading.focus.mock.calls.length === 0)).toBe(true);
+  });
+
+  it('focuses the final heading when Next hides itself', () => {
+    const fixture = createFixture();
+    const finalHeading = fixture.headings[2]!;
+    initializeOnboarding({ documentRef: fixture.documentRef });
+    fixture.trigger.dispatch('click');
+    fixture.next.dispatch('click');
+
+    fixture.next.dispatch('click');
+
+    expect(fixture.next.hidden).toBe(true);
+    expect(finalHeading.focus).toHaveBeenCalledOnce();
+    expect(fixture.documentRef.activeElement).toBe(finalHeading);
+  });
+
+  it('focuses the Welcome heading when Back hides itself', () => {
+    const fixture = createFixture();
+    const welcomeHeading = fixture.headings[0]!;
+    initializeOnboarding({ documentRef: fixture.documentRef });
+    fixture.trigger.dispatch('click');
+    fixture.next.dispatch('click');
+
+    fixture.back.dispatch('click');
+
+    expect(fixture.back.hidden).toBe(true);
+    expect(welcomeHeading.focus).toHaveBeenCalledOnce();
+    expect(fixture.documentRef.activeElement).toBe(welcomeHeading);
   });
 
   it('moves forward and back and swaps Next for Done on the final step', () => {
@@ -157,6 +189,8 @@ describe('Glide Hero onboarding controller', () => {
 
     expect(fixture.steps.map((step) => step.hasAttribute('data-active'))).toEqual([true, false, false]);
     expect(fixture.steps.map((step) => step.hidden)).toEqual([false, true, true]);
+    expect(fixture.close.focus).toHaveBeenCalledTimes(2);
+    expect(fixture.headings[0]!.focus).not.toHaveBeenCalled();
   });
 
   it.each([
@@ -213,5 +247,11 @@ describe('Glide Hero onboarding controller', () => {
 
     expect(() => initializeOnboarding({ documentRef })).not.toThrow();
     expect(initializeOnboarding({ documentRef })).toBeUndefined();
+  });
+
+  it('returns a safe no-op when the step heading hooks are incomplete', () => {
+    const fixture = createFixture(2);
+
+    expect(initializeOnboarding({ documentRef: fixture.documentRef })).toBeUndefined();
   });
 });

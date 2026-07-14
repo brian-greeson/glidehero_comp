@@ -4,7 +4,7 @@
 
 **Goal:** Add a reusable, on-demand three-step dashboard dialog that visually teaches crossed-cell and enclosed-cell claims.
 
-**Architecture:** An authenticated-only Vento component renders the semantic native dialog and inline SVG demonstrations, with the pilot's territory color supplied through a CSS custom property. A standalone, dependency-free browser controller manages navigation, dismissal, active animation state, focus trapping, and restoration; `dashboard.js` only initializes it. Shared CSS provides the approved responsive layout, active-only looping sequences, and reduced-motion final states.
+**Architecture:** An authenticated-only Vento component renders the semantic native dialog and inline SVG demonstrations, with the pilot's territory color supplied through a CSS custom property. A standalone, dependency-free browser controller manages navigation, step-heading focus, dismissal, active animation state, focus trapping, and restoration; `dashboard.js` only initializes it. Shared CSS provides the approved responsive layout, active-only looping sequences, and reduced-motion final states.
 
 **Tech Stack:** Vento 2.4, native HTML `<dialog>`, ES modules, inline SVG, CSS animations/media queries, TypeScript 7, Vitest 4.
 
@@ -49,7 +49,7 @@
 
 **Interfaces:**
 - Consumes: Vento include data `{ territoryColor: string }` from `currentUser.territoryColor`.
-- Produces: `[data-onboarding-trigger]`, `[data-onboarding-dialog]`, three `[data-onboarding-step]` elements, `[data-onboarding-progress]`, `[data-onboarding-close]`, `[data-onboarding-back]`, `[data-onboarding-next]`, and `[data-onboarding-done]`.
+- Produces: `[data-onboarding-trigger]`, `[data-onboarding-dialog]`, three `[data-onboarding-step]` elements, three programmatically focusable `[data-onboarding-heading]` elements, `[data-onboarding-progress]`, `[data-onboarding-close]`, `[data-onboarding-back]`, `[data-onboarding-next]`, and `[data-onboarding-done]`.
 - Produces animation hooks: `.onboarding-flight-track`, `.onboarding-loop-track`, `.onboarding-claim-cell`, `.onboarding-enclosed-cell`, and `--territory-color`.
 
 - [ ] **Step 1: Write failing renderer coverage for the component contract**
@@ -70,6 +70,7 @@ expect(authenticated).not.toContain('data-stub="help"');
 expect(authenticated).toContain('<dialog id="glide-hero-onboarding"');
 expect(authenticated).toContain('data-onboarding-dialog');
 expect(authenticated.match(/data-onboarding-step/g)).toHaveLength(3);
+expect([...authenticated.matchAll(/<h2[^>]*data-onboarding-heading[^>]*tabindex="-1"[^>]*>/g)]).toHaveLength(3);
 expect(authenticated).toContain('Welcome to Glide Hero!');
 expect(authenticated).toContain('Claim cells as you fly');
 expect(authenticated).toContain('Close the loop');
@@ -104,7 +105,7 @@ Create `src/views/components/onboarding.vto` with:
         </div>
         <div class="onboarding-copy">
           <p class="onboarding-eyebrow">How to play · 1 of 3</p>
-          <h2 id="onboarding-title">Welcome to Glide Hero!</h2>
+          <h2 id="onboarding-title" data-onboarding-heading tabindex="-1">Welcome to Glide Hero!</h2>
           <p>Every flight is a chance to paint the map. Here’s how your track turns into territory.</p>
         </div>
       </section>
@@ -131,7 +132,7 @@ Create `src/views/components/onboarding.vto` with:
         </div>
         <div class="onboarding-copy">
           <p class="onboarding-eyebrow">How to play · 2 of 3</p>
-          <h2>Claim cells as you fly</h2>
+          <h2 data-onboarding-heading tabindex="-1">Claim cells as you fly</h2>
           <p>Your flight track claims every new cell it crosses. Explore new lines and watch the sky fill with your color.</p>
         </div>
       </section>
@@ -160,7 +161,7 @@ Create `src/views/components/onboarding.vto` with:
         </div>
         <div class="onboarding-copy">
           <p class="onboarding-eyebrow">How to play · 3 of 3</p>
-          <h2>Close the loop</h2>
+          <h2 data-onboarding-heading tabindex="-1">Close the loop</h2>
           <p>When your flight path forms a closed loop, every grid cell inside it becomes yours.</p>
         </div>
       </section>
@@ -223,6 +224,7 @@ Do not stage `.superpowers/`.
 - Consumes the exact data hooks produced by Task 1.
 - Produces: `initializeOnboarding({ documentRef = document } = {})` returning `undefined` for missing required markup or `{ open(): void, close(): void }` after successful initialization. State remains observable through the production DOM hooks; do not add test-only introspection methods.
 - Mutates each step's `hidden`, `aria-hidden`, and `data-active`; mutates progress `aria-current`; mutates navigation `hidden`.
+- Back and Next focus the newly visible programmatically focusable step heading; open/reset continues to focus Close.
 - `dashboard.js` continues to export `initializeDashboard(...)` and additionally calls `initializeOnboarding({ documentRef })`.
 
 - [ ] **Step 1: Create deterministic DOM fakes for controller tests**
@@ -321,6 +323,7 @@ function createFixture() {
   const next = new FakeElement();
   const done = new FakeElement();
   const steps = [new FakeElement(), new FakeElement(), new FakeElement()];
+  const headings = [new FakeElement(), new FakeElement(), new FakeElement()];
   const progress = [new FakeElement(), new FakeElement(), new FakeElement()];
   const documentRef = new FakeDocument({
     '[data-onboarding-trigger]': trigger,
@@ -331,10 +334,11 @@ function createFixture() {
     '[data-onboarding-done]': done,
   }, {
     '[data-onboarding-step]': steps,
+    '[data-onboarding-heading]': headings,
     '[data-onboarding-progress]': progress,
   });
 
-  return { trigger, dialog, close, back, next, done, steps, progress, documentRef };
+  return { trigger, dialog, close, back, next, done, steps, headings, progress, documentRef };
 }
 ```
 
@@ -344,15 +348,16 @@ Append to `test/unit/onboarding.test.ts`:
 
 ```ts
 describe('Glide Hero onboarding controller', () => {
-  it('opens on the first step and exposes only its animation state', () => {
+  it('opens on the first step, focuses Close, and exposes only open and close', () => {
     const fixture = createFixture();
     const opener = new FakeElement();
     opener.ownerDocument = fixture.documentRef;
     fixture.documentRef.activeElement = opener;
-    initializeOnboarding({ documentRef: fixture.documentRef });
+    const controller = initializeOnboarding({ documentRef: fixture.documentRef });
 
     fixture.trigger.dispatch('click');
 
+    expect(Object.keys(controller ?? {})).toEqual(['open', 'close']);
     expect(fixture.dialog.showModal).toHaveBeenCalledOnce();
     expect(fixture.steps.map((step) => step.hidden)).toEqual([false, true, true]);
     expect(fixture.steps.map((step) => step.hasAttribute('data-active'))).toEqual([true, false, false]);
@@ -361,6 +366,35 @@ describe('Glide Hero onboarding controller', () => {
     expect(fixture.next.hidden).toBe(false);
     expect(fixture.done.hidden).toBe(true);
     expect(fixture.close.focus).toHaveBeenCalledOnce();
+    expect(fixture.headings.every((heading) => heading.focus.mock.calls.length === 0)).toBe(true);
+  });
+
+  it('focuses the final heading when Next hides itself', () => {
+    const fixture = createFixture();
+    const finalHeading = fixture.headings[2]!;
+    initializeOnboarding({ documentRef: fixture.documentRef });
+    fixture.trigger.dispatch('click');
+    fixture.next.dispatch('click');
+
+    fixture.next.dispatch('click');
+
+    expect(fixture.next.hidden).toBe(true);
+    expect(finalHeading.focus).toHaveBeenCalledOnce();
+    expect(fixture.documentRef.activeElement).toBe(finalHeading);
+  });
+
+  it('focuses the Welcome heading when Back hides itself', () => {
+    const fixture = createFixture();
+    const welcomeHeading = fixture.headings[0]!;
+    initializeOnboarding({ documentRef: fixture.documentRef });
+    fixture.trigger.dispatch('click');
+    fixture.next.dispatch('click');
+
+    fixture.back.dispatch('click');
+
+    expect(fixture.back.hidden).toBe(true);
+    expect(welcomeHeading.focus).toHaveBeenCalledOnce();
+    expect(fixture.documentRef.activeElement).toBe(welcomeHeading);
   });
 
   it('moves forward and back and swaps Next for Done on the final step', () => {
@@ -395,6 +429,8 @@ describe('Glide Hero onboarding controller', () => {
 
     expect(fixture.steps.map((step) => step.hasAttribute('data-active'))).toEqual([true, false, false]);
     expect(fixture.steps.map((step) => step.hidden)).toEqual([false, true, true]);
+    expect(fixture.close.focus).toHaveBeenCalledTimes(2);
+    expect(fixture.headings[0]!.focus).not.toHaveBeenCalled();
   });
 ```
 
@@ -482,8 +518,9 @@ export function initializeOnboarding({ documentRef = document } = {}) {
   const nextButton = documentRef.querySelector('[data-onboarding-next]');
   const doneButton = documentRef.querySelector('[data-onboarding-done]');
   const steps = Array.from(documentRef.querySelectorAll('[data-onboarding-step]'));
+  const headings = Array.from(documentRef.querySelectorAll('[data-onboarding-heading]'));
   const progress = Array.from(documentRef.querySelectorAll('[data-onboarding-progress]'));
-  if (!closeButton || !backButton || !nextButton || !doneButton || steps.length !== 3) return undefined;
+  if (!closeButton || !backButton || !nextButton || !doneButton || steps.length !== 3 || headings.length !== steps.length) return undefined;
 
   let activeStep = 0;
   let restoreFocus = null;
@@ -528,8 +565,14 @@ export function initializeOnboarding({ documentRef = document } = {}) {
   trigger.addEventListener('click', open);
   closeButton.addEventListener('click', close);
   doneButton.addEventListener('click', close);
-  backButton.addEventListener('click', () => renderStep(activeStep - 1));
-  nextButton.addEventListener('click', () => renderStep(activeStep + 1));
+  backButton.addEventListener('click', () => {
+    renderStep(activeStep - 1);
+    headings[activeStep].focus();
+  });
+  nextButton.addEventListener('click', () => {
+    renderStep(activeStep + 1);
+    headings[activeStep].focus();
+  });
 
   dialog.addEventListener('cancel', (event) => {
     event.preventDefault();

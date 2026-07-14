@@ -8,8 +8,9 @@ export function initializeOnboarding({ documentRef = document } = {}) {
   const nextButton = documentRef.querySelector('[data-onboarding-next]');
   const doneButton = documentRef.querySelector('[data-onboarding-done]');
   const steps = Array.from(documentRef.querySelectorAll('[data-onboarding-step]'));
+  const headings = Array.from(documentRef.querySelectorAll('[data-onboarding-heading]'));
   const progress = Array.from(documentRef.querySelectorAll('[data-onboarding-progress]'));
-  if (!closeButton || !backButton || !nextButton || !doneButton || steps.length !== 3) return undefined;
+  if (!closeButton || !backButton || !nextButton || !doneButton || steps.length !== 3 || headings.length !== steps.length) return undefined;
 
   let activeStep = 0;
   let restoreFocus = null;
@@ -54,8 +55,14 @@ export function initializeOnboarding({ documentRef = document } = {}) {
   trigger.addEventListener('click', open);
   closeButton.addEventListener('click', close);
   doneButton.addEventListener('click', close);
-  backButton.addEventListener('click', () => renderStep(activeStep - 1));
-  nextButton.addEventListener('click', () => renderStep(activeStep + 1));
+  backButton.addEventListener('click', () => {
+    renderStep(activeStep - 1);
+    headings[activeStep].focus();
+  });
+  nextButton.addEventListener('click', () => {
+    renderStep(activeStep + 1);
+    headings[activeStep].focus();
+  });
 
   dialog.addEventListener('cancel', (event) => {
     event.preventDefault();
