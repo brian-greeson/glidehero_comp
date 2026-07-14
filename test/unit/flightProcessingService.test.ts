@@ -1,5 +1,6 @@
+import { DrizzleQueryError } from 'drizzle-orm';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { createFlightProcessingService } from '../../src/services/flightProcessingService.js';
+import { createFlightProcessingService, duplicateFlightMessage } from '../../src/services/flightProcessingService.js';
 import { createGridClaimService } from '../../src/services/gridClaimService.js';
 
 const freePolygonClaim = vi.hoisted(() => ({ process: vi.fn() }));
@@ -231,6 +232,25 @@ describe('FlightProcessingService', () => {
 
     await expect(service.process({ ownerUserId, igcFileId, bucketKey, contentHash: 'a'.repeat(64) }))
       .resolves.toEqual({ status: 'duplicate', message: 'This flight has already been uploaded.' });
+    expect(send).not.toHaveBeenCalled();
+  });
+
+  it('converts a Drizzle-wrapped content-hash unique conflict to a duplicate outcome before reading the source', async () => {
+    const { database } = databaseDouble({
+      flightInsertError: new DrizzleQueryError('insert into flights', [], Object.assign(new Error('duplicate'), {
+        code: '23505',
+        constraint: 'flights_content_hash_unique',
+      })),
+    });
+    const send = vi.fn();
+    const service = createFlightProcessingService(database as never, {
+      bucketName: 'glidehero-files',
+      s3Client: { send } as never,
+      gridClaimCellSize: 1000,
+    });
+
+    await expect(service.process({ ownerUserId, igcFileId, bucketKey, contentHash: 'a'.repeat(64) }))
+      .resolves.toEqual({ status: 'duplicate', message: duplicateFlightMessage });
     expect(send).not.toHaveBeenCalled();
   });
 });

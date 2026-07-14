@@ -12,9 +12,16 @@ const fixture = readFileSync(fixturePath);
 
 class InMemoryObjectStore {
   private readonly objects = new Map<string, Buffer>();
+  private putOperations = 0;
+  private firstTwoPutArrivals = 0;
+  private firstTwoPutsReleased: Promise<void> | undefined;
+  private releaseFirstTwoPuts: (() => void) | undefined;
+
+  constructor(private readonly options: { blockFirstTwoPuts?: boolean } = {}) {}
 
   readonly send: S3['send'] = async (command) => {
     if (command instanceof PutObjectCommand) {
+      await this.waitForFirstTwoPuts();
       const body = command.input.Body;
       if (!Buffer.isBuffer(body)) throw new Error('Expected the upload body to be a buffer.');
       this.objects.set(command.input.Key!, body);
@@ -34,6 +41,22 @@ class InMemoryObjectStore {
 
   objectCount(): number {
     return this.objects.size;
+  }
+
+  putCount(): number {
+    return this.putOperations;
+  }
+
+  private async waitForFirstTwoPuts(): Promise<void> {
+    this.putOperations += 1;
+    if (!this.options.blockFirstTwoPuts || this.putOperations > 2) return;
+
+    this.firstTwoPutsReleased ??= new Promise<void>((resolve) => {
+      this.releaseFirstTwoPuts = resolve;
+    });
+    this.firstTwoPutArrivals += 1;
+    if (this.firstTwoPutArrivals === 2) this.releaseFirstTwoPuts?.();
+    await this.firstTwoPutsReleased;
   }
 }
 
@@ -117,7 +140,7 @@ describe('IGC upload processing', () => {
     const auth = createAuthService(database.db, { sessionTtlSeconds: 60 });
     const firstPilot = await auth.signup({ email: 'first-pilot@example.com', password: 'correct horse battery staple' });
     const secondPilot = await auth.signup({ email: 'second-pilot@example.com', password: 'correct horse battery staple' });
-    const objectStore = new InMemoryObjectStore();
+    const objectStore = new InMemoryObjectStore({ blockFirstTwoPuts: true });
     const processor = createFlightProcessingService(database.db, {
       s3Client: objectStore as never,
       bucketName: 'test-flights',
@@ -145,6 +168,7 @@ describe('IGC upload processing', () => {
     ]);
 
     expect([firstResult.status, secondResult.status].sort()).toEqual(['completed', 'duplicate']);
+    expect(objectStore.putCount()).toBe(2);
     expect(keyCount).toBe(2);
 
     const counts = await database.pool.query<{ flight_count: number; igc_file_count: number }>(

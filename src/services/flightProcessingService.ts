@@ -1,5 +1,5 @@
 import { GetObjectCommand, type S3 } from '@aws-sdk/client-s3';
-import { eq } from 'drizzle-orm';
+import { DrizzleQueryError, eq } from 'drizzle-orm';
 import type { Database } from '../db/client.js';
 import { flights, trackPoints } from '../db/schema.js';
 import { IgcParseError } from '../domain/igc/errors.js';
@@ -20,12 +20,13 @@ export interface FlightProcessingService {
 }
 
 function isContentHashConflict(error: unknown): boolean {
-  return typeof error === 'object'
-    && error !== null
-    && 'code' in error
-    && error.code === '23505'
-    && 'constraint' in error
-    && error.constraint === 'flights_content_hash_unique';
+  const databaseError = error instanceof DrizzleQueryError ? error.cause : error;
+  return typeof databaseError === 'object'
+    && databaseError !== null
+    && 'code' in databaseError
+    && databaseError.code === '23505'
+    && 'constraint' in databaseError
+    && databaseError.constraint === 'flights_content_hash_unique';
 }
 
 function parserMessage(error: IgcParseError): string {
