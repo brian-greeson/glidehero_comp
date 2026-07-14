@@ -2,6 +2,7 @@ import { GetObjectCommand, type S3 } from '@aws-sdk/client-s3';
 import { eq } from 'drizzle-orm';
 import type { Database } from '../db/client.js';
 import { flights, trackPoints } from '../db/schema.js';
+import { resolveLaunchTimeZone } from '../domain/competition/launchTimeZone.js';
 import { IgcParseError } from '../domain/igc/errors.js';
 import { parseIgcFlight } from '../domain/igc/parseIgcFlight.js';
 import { createFreePolygonClaimService } from './freePolygonClaimService.js';
@@ -76,6 +77,11 @@ export function createFlightProcessingService(
         );
       }
 
+      const launchTimezone = resolveLaunchTimeZone({
+        latitude: parsed.launchLatitude,
+        longitude: parsed.launchLongitude,
+      });
+
       await database.transaction(async (tx) => {
         for (let start = 0; start < parsed.points.length; start += TRACK_POINT_INSERT_BATCH_SIZE) {
           await tx
@@ -93,6 +99,7 @@ export function createFlightProcessingService(
             distanceMeters: parsed.distanceMeters,
             launchLatitude: parsed.launchLatitude,
             launchLongitude: parsed.launchLongitude,
+            launchTimezone,
           })
           .where(eq(flights.id, flight.id));
       });

@@ -46,6 +46,7 @@ describe('authentication schema', () => {
       { column_name: 'igc_file_id', is_nullable: 'NO' },
       { column_name: 'launch_latitude', is_nullable: 'YES' },
       { column_name: 'launch_longitude', is_nullable: 'YES' },
+      { column_name: 'launch_timezone', is_nullable: 'YES' },
       { column_name: 'processing_error', is_nullable: 'YES' },
       { column_name: 'processing_status', is_nullable: 'NO' },
       { column_name: 'started_at', is_nullable: 'YES' },

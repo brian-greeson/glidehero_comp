@@ -114,6 +114,7 @@ describe('FlightProcessingService', () => {
       durationSeconds: 4,
       launchLatitude: 40,
       launchLongitude: -105,
+      launchTimezone: 'America/Denver',
     }));
   });
 

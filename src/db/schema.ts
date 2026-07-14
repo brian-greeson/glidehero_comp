@@ -80,6 +80,7 @@ export const flights = pgTable(
     distanceMeters: doublePrecision('distance_meters'),
     launchLatitude: doublePrecision('launch_latitude'),
     launchLongitude: doublePrecision('launch_longitude'),
+    launchTimezone: text('launch_timezone'),
     ...timestamps,
   },
   (table) => [
