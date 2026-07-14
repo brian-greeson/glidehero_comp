@@ -33,7 +33,7 @@ services:
   envs:
   - key: DATABASE_URL
     scope: RUN_AND_BUILD_TIME
-    value: ${production-database.DATABASE_URL}
+    value: ${apps-db-sfo.DATABASE_PRIVATE_URL}
   - key: DATABASE_PORT
     scope: RUN_AND_BUILD_TIME
     type: SECRET
@@ -125,4 +125,4 @@ jobs:
   envs:
   - key: DATABASE_URL
     scope: RUN_TIME
-    value: ${production-database.DATABASE_URL}
+    value: ${apps-db-sfo.DATABASE_PRIVATE_URL}
