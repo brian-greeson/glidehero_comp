@@ -97,6 +97,9 @@ services:
     scope: RUN_AND_BUILD_TIME
     type: SECRET
     value: EV[1:i9/zwAR5NzAx/WuAhDLhpBs3DTe1xmyK:zMEzhxMimxgF5GXGCGTbfvIuUYR7yrsNsNgjRQv/QkEKzQ0i]
+  - key: GRID_CLAIM_CELL_SIZE
+    scope: RUN_AND_BUILD_TIME
+    value: 500
   github:
     branch: main
     deploy_on_push: true
