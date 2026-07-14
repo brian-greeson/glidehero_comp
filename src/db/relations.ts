@@ -10,6 +10,7 @@ export const relations = defineRelations(schema, (r) => ({
     flights: r.many.flights({ from: r.users.id, to: r.flights.userId }),
     personalTerritory: r.one.personalTerritories({ from: r.users.id, to: r.personalTerritories.userId }),
     gridClaims: r.many.userGridClaims({ from: r.users.id, to: r.userGridClaims.claimUser }),
+    competitionGridClaims: r.many.competitionGridClaims({ from: r.users.id, to: r.competitionGridClaims.claimUser }),
   },
   userPasswords: {
     user: r.one.users({ from: r.userPasswords.userId, to: r.users.id }),
@@ -30,6 +31,7 @@ export const relations = defineRelations(schema, (r) => ({
     trackPoints: r.many.trackPoints({ from: r.flights.id, to: r.trackPoints.flightId }),
     areas: r.many.flightAreas({ from: r.flights.id, to: r.flightAreas.flightId }),
     gridClaims: r.many.userGridClaims({ from: r.flights.id, to: r.userGridClaims.claimFlight }),
+    competitionGridClaims: r.many.competitionGridClaims({ from: r.flights.id, to: r.competitionGridClaims.claimFlight }),
   },
   trackPoints: {
     flight: r.one.flights({ from: r.trackPoints.flightId, to: r.flights.id }),
@@ -43,5 +45,9 @@ export const relations = defineRelations(schema, (r) => ({
   userGridClaims: {
     flight: r.one.flights({ from: r.userGridClaims.claimFlight, to: r.flights.id }),
     user: r.one.users({ from: r.userGridClaims.claimUser, to: r.users.id }),
+  },
+  competitionGridClaims: {
+    flight: r.one.flights({ from: r.competitionGridClaims.claimFlight, to: r.flights.id }),
+    user: r.one.users({ from: r.competitionGridClaims.claimUser, to: r.users.id }),
   },
 }));

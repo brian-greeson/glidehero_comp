@@ -1,4 +1,4 @@
-import { customType, doublePrecision, index, integer, jsonb, pgEnum, pgTable, primaryKey, text, timestamp, unique, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
+import { customType, date, doublePrecision, index, integer, jsonb, pgEnum, pgTable, primaryKey, text, timestamp, unique, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
 import type { FreePolygonClaimGeoJson } from '../domain/territory/freePolygonClaimGeoJson.js';
 
 const polygonGeometry = customType<{ data: string }>({
@@ -142,5 +142,36 @@ export const userGridClaims = pgTable(
     primaryKey({ columns: [table.cellSize, table.x, table.y] }),
     index('user_grid_claims_claim_user_cell_size_idx').on(table.claimUser, table.cellSize),
     index('user_grid_claims_claim_flight_idx').on(table.claimFlight),
+  ],
+);
+
+export const competitionGridClaims = pgTable(
+  'competition_grid_claims',
+  {
+    competitionMonth: date('competition_month', { mode: 'string' }).notNull(),
+    cellSize: integer('cell_size').notNull(),
+    x: integer('x').notNull(),
+    y: integer('y').notNull(),
+    claimFlight: uuid('claim_flight').notNull().references(() => flights.id, { onDelete: 'cascade' }),
+    claimUser: uuid('claim_user').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    claimTimestamp: timestamp('claim_timestamp', { withTimezone: true, mode: 'date' }).notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.competitionMonth, table.cellSize, table.x, table.y, table.claimFlight] }),
+    index('competition_grid_claims_month_cell_timestamp_idx').on(
+      table.competitionMonth,
+      table.cellSize,
+      table.x,
+      table.y,
+      table.claimTimestamp,
+    ),
+    index('competition_grid_claims_cell_history_idx').on(
+      table.cellSize,
+      table.x,
+      table.y,
+      table.competitionMonth,
+      table.claimTimestamp,
+    ),
+    index('competition_grid_claims_claim_flight_idx').on(table.claimFlight),
   ],
 );

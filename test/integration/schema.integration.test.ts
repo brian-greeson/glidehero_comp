@@ -22,6 +22,7 @@ describe('authentication schema', () => {
     );
     expect(result.rows.map((row) => row.table_name)).toEqual([
       'app_sessions',
+      'competition_grid_claims',
       'flight_areas',
       'flights',
       'igc_files',
@@ -167,6 +168,56 @@ describe('authentication schema', () => {
       'user_grid_claims_claim_flight_idx',
       'user_grid_claims_claim_user_cell_size_idx',
       'user_grid_claims_pkey',
+    ]);
+  });
+
+  it('stores monthly competition cell history with cascading ownership references', async () => {
+    const columns = await database.pool.query<{
+      column_name: string;
+      data_type: string;
+      is_nullable: string;
+      udt_name: string;
+    }>(
+      `SELECT column_name, data_type, is_nullable, udt_name
+       FROM information_schema.columns
+       WHERE table_schema = 'public' AND table_name = 'competition_grid_claims'
+       ORDER BY column_name`,
+    );
+    const primaryKey = await database.pool.query<{ definition: string }>(
+      `SELECT pg_get_constraintdef(oid) AS definition
+       FROM pg_constraint
+       WHERE conrelid = 'competition_grid_claims'::regclass AND contype = 'p'`,
+    );
+    const foreignKeys = await database.pool.query<{ confdeltype: string }>(
+      `SELECT confdeltype
+       FROM pg_constraint
+       WHERE conrelid = 'competition_grid_claims'::regclass AND contype = 'f'
+       ORDER BY conname`,
+    );
+    const indexes = await database.pool.query<{ indexname: string }>(
+      `SELECT indexname FROM pg_indexes
+       WHERE schemaname = 'public' AND tablename = 'competition_grid_claims'
+       ORDER BY indexname`,
+    );
+
+    expect(columns.rows).toEqual([
+      { column_name: 'cell_size', data_type: 'integer', is_nullable: 'NO', udt_name: 'int4' },
+      { column_name: 'claim_flight', data_type: 'uuid', is_nullable: 'NO', udt_name: 'uuid' },
+      { column_name: 'claim_timestamp', data_type: 'timestamp with time zone', is_nullable: 'NO', udt_name: 'timestamptz' },
+      { column_name: 'claim_user', data_type: 'uuid', is_nullable: 'NO', udt_name: 'uuid' },
+      { column_name: 'competition_month', data_type: 'date', is_nullable: 'NO', udt_name: 'date' },
+      { column_name: 'x', data_type: 'integer', is_nullable: 'NO', udt_name: 'int4' },
+      { column_name: 'y', data_type: 'integer', is_nullable: 'NO', udt_name: 'int4' },
+    ]);
+    expect(primaryKey.rows).toEqual([{
+      definition: 'PRIMARY KEY (competition_month, cell_size, x, y, claim_flight)',
+    }]);
+    expect(foreignKeys.rows).toEqual([{ confdeltype: 'c' }, { confdeltype: 'c' }]);
+    expect(indexes.rows.map((row) => row.indexname)).toEqual([
+      'competition_grid_claims_cell_history_idx',
+      'competition_grid_claims_claim_flight_idx',
+      'competition_grid_claims_month_cell_timestamp_idx',
+      'competition_grid_claims_pkey',
     ]);
   });
 

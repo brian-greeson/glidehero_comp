@@ -1,4 +1,4 @@
-import { appSessions, flightAreas, flights, igcFiles, personalTerritories, profiles, trackPoints, userGridClaims, userPasswords, users } from './schema.js';
+import { appSessions, competitionGridClaims, flightAreas, flights, igcFiles, personalTerritories, profiles, trackPoints, userGridClaims, userPasswords, users } from './schema.js';
 
 export type UserRow = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;
@@ -11,4 +11,5 @@ export type TrackPointRow = typeof trackPoints.$inferSelect;
 export type FlightAreaRow = typeof flightAreas.$inferSelect;
 export type PersonalTerritoryRow = typeof personalTerritories.$inferSelect;
 export type GridClaimRow = typeof userGridClaims.$inferSelect;
+export type CompetitionGridClaimRow = typeof competitionGridClaims.$inferSelect;
 export type FlightProcessingStatus = FlightRow['processingStatus'];
