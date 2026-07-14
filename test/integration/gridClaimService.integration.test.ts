@@ -96,6 +96,21 @@ async function storedCompetitionCells(cellSize: number) {
     );
 }
 
+async function persistClaimCells(
+  claim: { flightId: string; userId: string },
+  cells: ReadonlyArray<{ x: number; y: number }>,
+  cellSize = 1_000,
+) {
+  await database.db.insert(userGridClaims).values(cells.map(({ x, y }) => ({
+    cellSize,
+    x,
+    y,
+    claimFlight: claim.flightId,
+    claimUser: claim.userId,
+    claimTimestamp: new Date(Date.UTC(2026, 0, 1)),
+  })));
+}
+
 describe('GridClaimService with PostGIS', () => {
   it('claims each sparse crossed cell, including cells whose endpoints are both outside', async () => {
     const flight = await persistFlight([[-500, 500], [2_500, 500]]);
@@ -350,12 +365,12 @@ describe('GridClaimService with PostGIS', () => {
     ]);
   });
 
-  it('returns only the requested user’s WGS84 Polygon cells', async () => {
+  it('returns only the requested user’s dissolved WGS84 Polygon regions', async () => {
     const first = await persistFlight([[100, 100], [900, 100]]);
     const second = await persistFlight([[2_100, 100], [2_900, 100]]);
     const service = createGridClaimService(database.db, { cellSize: 1_000 });
-    await service.process(first);
-    await service.process(second);
+    await persistClaimCells(first, [{ x: 0, y: 0 }, { x: 1, y: 0 }]);
+    await persistClaimCells(second, [{ x: 2, y: 0 }]);
 
     const geojson = await service.get({ userId: first.userId });
 
@@ -365,10 +380,37 @@ describe('GridClaimService with PostGIS', () => {
       geometry: { type: 'Polygon' },
     }] });
     expect(geojson.features).toHaveLength(1);
-    expect(geojson.features[0]?.geometry.coordinates[0]).toHaveLength(5);
+    expect(geojson.features[0]?.geometry.coordinates[0]?.length).toBeGreaterThanOrEqual(5);
+    expect(geojson.features[0]?.geometry.coordinates).toHaveLength(1);
     expect(geojson.features[0]?.geometry.coordinates[0]?.flat()).toEqual(expect.arrayContaining([
       expect.any(Number),
     ]));
     expect(geojson.features[0]?.geometry.coordinates[0]?.flat().every((coordinate) => Math.abs(coordinate) <= 180)).toBe(true);
+  });
+
+  it('keeps cells that touch only at a corner as separate regions', async () => {
+    const claim = await persistFlight([[100, 100], [900, 100]]);
+    const service = createGridClaimService(database.db, { cellSize: 1_000 });
+    await persistClaimCells(claim, [{ x: 0, y: 0 }, { x: 1, y: 1 }]);
+
+    const geojson = await service.get({ userId: claim.userId });
+
+    expect(geojson.features).toHaveLength(2);
+    expect(geojson.features.every(({ geometry }) => geometry.coordinates.length === 1)).toBe(true);
+  });
+
+  it('preserves an unclaimed interior cell as a hole in its connected region', async () => {
+    const claim = await persistFlight([[100, 100], [900, 100]]);
+    const service = createGridClaimService(database.db, { cellSize: 1_000 });
+    await persistClaimCells(claim, [
+      { x: 0, y: 0 }, { x: 1, y: 0 }, { x: 2, y: 0 },
+      { x: 0, y: 1 },                 { x: 2, y: 1 },
+      { x: 0, y: 2 }, { x: 1, y: 2 }, { x: 2, y: 2 },
+    ]);
+
+    const geojson = await service.get({ userId: claim.userId });
+
+    expect(geojson.features).toHaveLength(1);
+    expect(geojson.features[0]?.geometry.coordinates).toHaveLength(2);
   });
 });

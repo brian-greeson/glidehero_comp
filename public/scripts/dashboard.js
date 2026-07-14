@@ -1,4 +1,5 @@
 import { initializeOnboarding } from './onboarding.js';
+import { createTerritoryBoundaryLayer, createTerritoryFillLayer } from './mapStyles.js';
 
 export const PERSONAL_TERRITORY_SOURCE_ID = 'personal-territory';
 export const PERSONAL_TERRITORY_FILL_LAYER_ID = 'personal-territory-fill';
@@ -13,18 +14,16 @@ export async function loadPersonalTerritory(map, territoryColor, fetchImpl = fet
 
   const geojson = await response.json();
   map.addSource(PERSONAL_TERRITORY_SOURCE_ID, { type: 'geojson', data: geojson });
-  map.addLayer({
+  map.addLayer(createTerritoryFillLayer({
     id: PERSONAL_TERRITORY_FILL_LAYER_ID,
-    type: 'fill',
     source: PERSONAL_TERRITORY_SOURCE_ID,
-    paint: { 'fill-color': territoryColor, 'fill-opacity': 0.42 },
-  });
-  map.addLayer({
+    color: territoryColor,
+  }));
+  map.addLayer(createTerritoryBoundaryLayer({
     id: PERSONAL_TERRITORY_OUTLINE_LAYER_ID,
-    type: 'line',
     source: PERSONAL_TERRITORY_SOURCE_ID,
-    paint: { 'line-color': territoryColor, 'line-width': 2 },
-  });
+    color: territoryColor,
+  }));
 }
 
 export function initializeDashboard({

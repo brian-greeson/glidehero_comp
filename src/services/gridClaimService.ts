@@ -250,6 +250,27 @@ export function createGridClaimService(
 
     async get({ userId }) {
       const result = await database.execute<StoredProjection>(sql`
+        WITH claimed_cells AS (
+          SELECT ST_MakeEnvelope(
+            x * ${cellSize}, y * ${cellSize},
+            (x + 1) * ${cellSize}, (y + 1) * ${cellSize},
+            6933
+          ) AS geometry
+          FROM user_grid_claims
+          WHERE claim_user = ${userId}
+            AND cell_size = ${cellSize}
+        ),
+        dissolved AS (
+          SELECT ST_UnaryUnion(ST_Collect(geometry)) AS geometry
+          FROM claimed_cells
+        ),
+        connected_regions AS (
+          SELECT region.geom AS geometry
+          FROM dissolved
+          CROSS JOIN LATERAL ST_Dump(ST_CollectionExtract(dissolved.geometry, 3)) AS region
+          WHERE dissolved.geometry IS NOT NULL
+            AND NOT ST_IsEmpty(dissolved.geometry)
+        )
         SELECT jsonb_build_object(
           'type', 'FeatureCollection',
           'features', COALESCE(
@@ -258,24 +279,15 @@ export function createGridClaimService(
                 'type', 'Feature',
                 'properties', '{}'::jsonb,
                 'geometry', ST_AsGeoJSON(
-                  ST_Transform(
-                    ST_MakeEnvelope(
-                      x * ${cellSize}, y * ${cellSize},
-                      (x + 1) * ${cellSize}, (y + 1) * ${cellSize},
-                      6933
-                    ),
-                    4326
-                  )
+                  ST_Transform(geometry, 4326)
                 )::jsonb
               )
-              ORDER BY x, y
+              ORDER BY ST_XMin(geometry), ST_YMin(geometry)
             ),
             '[]'::jsonb
           )
         ) AS geojson
-        FROM user_grid_claims
-        WHERE claim_user = ${userId}
-          AND cell_size = ${cellSize}
+        FROM connected_regions
       `);
 
       return result.rows[0]?.geojson ?? emptyGridClaimGeoJson();
