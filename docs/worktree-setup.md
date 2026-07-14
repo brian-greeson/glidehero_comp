@@ -16,6 +16,7 @@ DB_NAME="gh_${SAFE_NAME}"
 createdb "$DB_NAME" 2>/dev/null || true
 
 cp .env.worktree .env
+echo
 echo "DATABASE_URL=postgresql://localhost:5432/${DB_NAME}" >> .env
 
 npm run db:push
