@@ -77,7 +77,11 @@ export function createIgcFileService(
       });
       if (outcome.status !== 'duplicate') return outcome;
 
-      await database.delete(igcFiles).where(eq(igcFiles.id, stored.id));
+      try {
+        await database.delete(igcFiles).where(eq(igcFiles.id, stored.id));
+      } catch (cleanupError) {
+        console.error('Unable to delete duplicate IGC file metadata', cleanupError);
+      }
       try {
         await options.s3Client.send(new DeleteObjectCommand({ Bucket: options.bucketName, Key: stored.bucketKey }));
       } catch (cleanupError) {

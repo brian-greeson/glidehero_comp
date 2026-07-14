@@ -4,14 +4,20 @@ import { duplicateFlightMessage } from '../../src/services/flightProcessingServi
 
 const ownerUserId = '00000000-0000-4000-8000-000000000001';
 
-function databaseReturning(row: { id: string; bucketKey: string }, existingFlight?: { id: string }) {
+function databaseReturning(
+  row: { id: string; bucketKey: string },
+  existingFlight?: { id: string },
+  metadataDeleteError?: Error,
+) {
   const returning = vi.fn(async () => [row]);
   const values = vi.fn(() => ({ returning }));
   const limit = vi.fn(async () => existingFlight ? [existingFlight] : []);
   const where = vi.fn(() => ({ limit }));
   const from = vi.fn(() => ({ where }));
   const select = vi.fn(() => ({ from }));
-  const deleteWhere = vi.fn(async () => undefined);
+  const deleteWhere = vi.fn(async () => {
+    if (metadataDeleteError) throw metadataDeleteError;
+  });
   const remove = vi.fn(() => ({ where: deleteWhere }));
   return {
     database: { select, insert: vi.fn(() => ({ values })), delete: remove },
@@ -139,6 +145,31 @@ describe('IgcFileService', () => {
   it('removes the stored metadata and object when processing detects a concurrent duplicate', async () => {
     const stored = { id: '00000000-0000-4000-8000-000000000010', bucketKey: 'glidehero/object-id.igc' };
     const { database, remove, deleteWhere } = databaseReturning(stored);
+    const send = vi.fn(async () => ({}));
+    const outcome = { status: 'duplicate' as const, message: duplicateFlightMessage as typeof duplicateFlightMessage };
+    const processor = { process: vi.fn(async () => outcome) };
+    const service = createIgcFileService(database as never, {
+      bucketName: 'glidehero-files',
+      s3Client: { send } as never,
+      keyFactory: () => 'glidehero/object-id.igc',
+    }, processor);
+
+    await expect(
+      service.upload({ ownerUserId, originalFilename: 'flight.igc', contentType: 'text/plain', bytes: Buffer.from('A') }),
+    ).resolves.toEqual(outcome);
+
+    expect(remove).toHaveBeenCalledOnce();
+    expect(deleteWhere).toHaveBeenCalledOnce();
+    expect(send).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({ input: expect.objectContaining({ Bucket: 'glidehero-files', Key: stored.bucketKey }) }),
+    );
+  });
+
+  it('removes the stored object and returns duplicate when duplicate metadata cleanup fails', async () => {
+    const stored = { id: '00000000-0000-4000-8000-000000000010', bucketKey: 'glidehero/object-id.igc' };
+    const metadataDeleteError = new Error('metadata cleanup unavailable');
+    const { database, remove, deleteWhere } = databaseReturning(stored, undefined, metadataDeleteError);
     const send = vi.fn(async () => ({}));
     const outcome = { status: 'duplicate' as const, message: duplicateFlightMessage as typeof duplicateFlightMessage };
     const processor = { process: vi.fn(async () => outcome) };
