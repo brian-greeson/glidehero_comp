@@ -1,0 +1,88 @@
+<dialog id="glide-hero-onboarding" class="onboarding-dialog" data-onboarding-dialog aria-labelledby="onboarding-title" style="--territory-color: {{ territoryColor }}">
+  <div class="onboarding-frame">
+    <button type="button" class="onboarding-close" data-onboarding-close aria-label="Close walkthrough">×</button>
+
+    <div class="onboarding-pages">
+      <section class="onboarding-step onboarding-step-welcome" data-onboarding-step>
+        <div class="onboarding-visual onboarding-welcome-visual" aria-hidden="true">
+          <img src="/android-chrome-192x192.png" alt="">
+          <span>GLIDE HERO</span>
+        </div>
+        <div class="onboarding-copy">
+          <p class="onboarding-eyebrow">How to play · 1 of 3</p>
+          <h2 id="onboarding-title">Welcome to Glide Hero!</h2>
+          <p>Every flight is a chance to paint the map. Here’s how your track turns into territory.</p>
+        </div>
+      </section>
+
+      <section class="onboarding-step" data-onboarding-step hidden aria-hidden="true">
+        <div class="onboarding-visual" aria-hidden="true">
+          <svg class="onboarding-grid" viewBox="0 0 300 220" focusable="false">
+            <g class="onboarding-grid-lines">
+              <path d="M10 10H290M10 50H290M10 90H290M10 130H290M10 170H290M10 210H290" />
+              <path d="M10 10V210M50 10V210M90 10V210M130 10V210M170 10V210M210 10V210M250 10V210M290 10V210" />
+            </g>
+            <g class="onboarding-crossed-cells">
+              <rect class="onboarding-claim-cell claim-1" x="11" y="171" width="38" height="38" />
+              <rect class="onboarding-claim-cell claim-2" x="51" y="131" width="38" height="38" />
+              <rect class="onboarding-claim-cell claim-3" x="91" y="131" width="38" height="38" />
+              <rect class="onboarding-claim-cell claim-4" x="131" y="91" width="38" height="38" />
+              <rect class="onboarding-claim-cell claim-5" x="171" y="51" width="38" height="38" />
+              <rect class="onboarding-claim-cell claim-6" x="211" y="51" width="38" height="38" />
+              <rect class="onboarding-claim-cell claim-7" x="251" y="11" width="38" height="38" />
+            </g>
+            <path class="onboarding-flight-track" pathLength="1" d="M25 194 C52 189 57 153 82 151 S116 158 144 113 S189 75 226 73 S255 44 279 27" />
+            <path class="onboarding-glider" d="M271 22l16 5-16 5 4-5z" />
+          </svg>
+        </div>
+        <div class="onboarding-copy">
+          <p class="onboarding-eyebrow">How to play · 2 of 3</p>
+          <h2>Claim cells as you fly</h2>
+          <p>Your flight track claims every new cell it crosses. Explore new lines and watch the sky fill with your color.</p>
+        </div>
+      </section>
+
+      <section class="onboarding-step" data-onboarding-step hidden aria-hidden="true">
+        <div class="onboarding-visual" aria-hidden="true">
+          <svg class="onboarding-grid" viewBox="0 0 300 220" focusable="false">
+            <g class="onboarding-grid-lines">
+              <path d="M10 10H290M10 50H290M10 90H290M10 130H290M10 170H290M10 210H290" />
+              <path d="M10 10V210M50 10V210M90 10V210M130 10V210M170 10V210M210 10V210M250 10V210M290 10V210" />
+            </g>
+            <g class="onboarding-loop-fill">
+              <rect class="onboarding-enclosed-cell enclosed-1" x="91" y="51" width="38" height="38" />
+              <rect class="onboarding-enclosed-cell enclosed-2" x="131" y="51" width="38" height="38" />
+              <rect class="onboarding-enclosed-cell enclosed-3" x="171" y="51" width="38" height="38" />
+              <rect class="onboarding-enclosed-cell enclosed-4" x="91" y="91" width="38" height="38" />
+              <rect class="onboarding-enclosed-cell enclosed-5" x="131" y="91" width="38" height="38" />
+              <rect class="onboarding-enclosed-cell enclosed-6" x="171" y="91" width="38" height="38" />
+              <rect class="onboarding-enclosed-cell enclosed-7" x="91" y="131" width="38" height="38" />
+              <rect class="onboarding-enclosed-cell enclosed-8" x="131" y="131" width="38" height="38" />
+              <rect class="onboarding-enclosed-cell enclosed-9" x="171" y="131" width="38" height="38" />
+            </g>
+            <path class="onboarding-loop-track" pathLength="1" d="M70 34 H224 C246 34 250 52 250 72 V172 C250 193 230 194 210 194 H72 C51 194 50 174 50 154 V71 C50 48 54 34 70 34 Z" />
+            <path class="onboarding-glider onboarding-loop-glider" d="M61 28l16 5-16 5 4-5z" />
+          </svg>
+        </div>
+        <div class="onboarding-copy">
+          <p class="onboarding-eyebrow">How to play · 3 of 3</p>
+          <h2>Close the loop</h2>
+          <p>When your flight path forms a closed loop, every grid cell inside it becomes yours.</p>
+        </div>
+      </section>
+    </div>
+
+    <footer class="onboarding-footer">
+      <ol class="onboarding-progress" aria-label="Walkthrough progress">
+        <li><span data-onboarding-progress aria-current="step"><span class="sr-only">Welcome</span></span></li>
+        <li><span data-onboarding-progress><span class="sr-only">Claim cells</span></span></li>
+        <li><span data-onboarding-progress><span class="sr-only">Close the loop</span></span></li>
+      </ol>
+      <div class="onboarding-actions">
+        <button type="button" class="onboarding-button onboarding-back" data-onboarding-back hidden>Back</button>
+        <button type="button" class="onboarding-button onboarding-next" data-onboarding-next>Next</button>
+        <button type="button" class="onboarding-button onboarding-done" data-onboarding-done hidden>Done</button>
+      </div>
+    </footer>
+  </div>
+</dialog>

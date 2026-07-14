@@ -15,8 +15,7 @@
           </form>
           {{ if uploadSuccess }}<p class="toast success" role="status">IGC flight processed successfully.</p>{{ /if }}
           {{ if uploadError }}<p class="toast error" role="alert">{{ uploadError }}</p>{{ /if }}
-          <!-- STUB: Help will open Glide Hero guidance. -->
-          <button type="button" class="icon-button" data-stub="help" aria-label="Help" aria-disabled="true">?</button>
+          <button type="button" class="icon-button" data-onboarding-trigger aria-label="Open Glide Hero walkthrough" aria-controls="glide-hero-onboarding">?</button>
           <div class="account-menu">
             <button type="button" class="account-trigger" data-account-trigger aria-expanded="false" aria-controls="account-popover">
               <span class="avatar" aria-hidden="true">{{ currentUser.displayName.slice(0, 1) }}</span>
@@ -76,6 +75,7 @@
           </section>
         </div>
       </aside>
+      {{ include "components/onboarding.vto" { territoryColor: currentUser.territoryColor } }}
     </section>
   {{ else }}
     <header class="hero">

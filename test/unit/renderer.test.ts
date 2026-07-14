@@ -16,6 +16,8 @@ describe('Vento page renderer', () => {
     expect(anonymous).toContain('Paint the sky with your friends.');
     expect(anonymous).toContain('action="/login"');
     expect(anonymous).toContain('action="/signup"');
+    expect(anonymous).not.toContain('data-onboarding-trigger');
+    expect(anonymous).not.toContain('data-onboarding-dialog');
     expect(anonymous).not.toContain('action="/logout"');
   });
 
@@ -40,6 +42,21 @@ describe('Vento page renderer', () => {
     expect(authenticated).toContain('action="/profile/territory-color"');
     expect(authenticated).toContain('value="#1769AA"');
     expect(authenticated).toContain('data-dashboard-map');
+    expect(authenticated).toContain('data-onboarding-trigger');
+    expect(authenticated).toContain('aria-controls="glide-hero-onboarding"');
+    expect(authenticated).not.toContain('data-stub="help"');
+    expect(authenticated).toContain('<dialog id="glide-hero-onboarding"');
+    expect(authenticated).toContain('data-onboarding-dialog');
+    expect(authenticated.match(/data-onboarding-step/g)).toHaveLength(3);
+    expect(authenticated).toContain('Welcome to Glide Hero!');
+    expect(authenticated).toContain('Claim cells as you fly');
+    expect(authenticated).toContain('Close the loop');
+    expect(authenticated).toContain('data-onboarding-back');
+    expect(authenticated).toContain('data-onboarding-next');
+    expect(authenticated).toContain('data-onboarding-done');
+    expect(authenticated).toContain('data-onboarding-close');
+    expect(authenticated.match(/data-onboarding-progress/g)).toHaveLength(3);
+    expect(authenticated).toContain('style="--territory-color: #1769AA"');
     expect(authenticated).toContain('data-mobile-sheet');
     expect(authenticated).toContain('data-account-popover');
     expect(authenticated).toContain('data-stub="competitive-mode"');
