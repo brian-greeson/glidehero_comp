@@ -7,12 +7,13 @@ const userId = '00000000-0000-4000-8000-000000000030';
 function processingDatabaseDouble(counts = { directCellCount: 3, enclosedCellCount: 0 }) {
   const where = vi.fn(async () => undefined);
   const execute = vi.fn(async (_query: unknown) => ({ rows: [counts] }));
+  const deleteFrom = vi.fn(() => ({ where }));
   const transaction = vi.fn(async (callback: (tx: unknown) => Promise<unknown>) => callback({
-    delete: vi.fn(() => ({ where })),
+    delete: deleteFrom,
     execute,
   }));
 
-  return { database: { transaction }, where, execute, transaction };
+  return { database: { transaction }, where, execute, deleteFrom, transaction };
 }
 
 function projectionDatabaseDouble(rows: unknown[] = []) {
@@ -22,13 +23,13 @@ function projectionDatabaseDouble(rows: unknown[] = []) {
 
 describe('GridClaimService', () => {
   it('replaces a flight’s existing cells and reports direct and enclosed claims', async () => {
-    const { database, where, execute, transaction } = processingDatabaseDouble({
+    const { database, where, execute, deleteFrom, transaction } = processingDatabaseDouble({
       directCellCount: 3,
       enclosedCellCount: 2,
     });
     const service = createGridClaimService(database as never, { cellSize: 1_000 });
 
-    await expect(service.process({ flightId, userId })).resolves.toEqual({
+    await expect(service.process({ flightId, userId, launchTimezone: 'America/Denver' })).resolves.toEqual({
       flightId,
       cellSize: 1_000,
       directCellCount: 3,
@@ -36,7 +37,8 @@ describe('GridClaimService', () => {
     });
 
     expect(transaction).toHaveBeenCalledOnce();
-    expect(where).toHaveBeenCalledOnce();
+    expect(deleteFrom).toHaveBeenCalledTimes(2);
+    expect(where).toHaveBeenCalledTimes(2);
     expect(execute).toHaveBeenCalledOnce();
   });
 
@@ -44,9 +46,22 @@ describe('GridClaimService', () => {
     const { database, execute } = processingDatabaseDouble();
     const service = createGridClaimService(database as never, { cellSize: 1_000 });
 
-    await service.process({ flightId, userId });
+    await service.process({ flightId, userId, launchTimezone: 'America/Denver' });
 
     expect(JSON.stringify(execute.mock.calls[0]?.[0])).toContain('ST_Segmentize');
+  });
+
+  it('groups competition events by launch-local month and keeps Personal winners global', async () => {
+    const { database, execute } = processingDatabaseDouble();
+    const service = createGridClaimService(database as never, { cellSize: 1_000 });
+
+    await service.process({ flightId, userId, launchTimezone: 'America/Denver' });
+
+    const query = JSON.stringify(execute.mock.calls[0]?.[0]);
+    expect(query).toContain('AT TIME ZONE');
+    expect(query).toContain('competition_grid_claims');
+    expect(query).toContain('competition_month');
+    expect(query).toContain('personal_winning_candidates');
   });
 
   it('returns an empty FeatureCollection when the user owns no cells', async () => {

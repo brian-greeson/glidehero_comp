@@ -1,6 +1,6 @@
 import { and, eq, sql } from 'drizzle-orm';
 import type { Database } from '../db/client.js';
-import { userGridClaims } from '../db/schema.js';
+import { competitionGridClaims, userGridClaims } from '../db/schema.js';
 import {
   emptyGridClaimGeoJson,
   type GridClaimGeoJson,
@@ -14,7 +14,7 @@ export type GridClaimProcessResult = {
 };
 
 export interface GridClaimService {
-  process(input: { flightId: string; userId: string }): Promise<GridClaimProcessResult>;
+  process(input: { flightId: string; userId: string; launchTimezone: string }): Promise<GridClaimProcessResult>;
   get(input: { userId: string }): Promise<GridClaimGeoJson>;
 }
 
@@ -32,11 +32,15 @@ export function createGridClaimService(
   const { cellSize } = options;
 
   return {
-    async process({ flightId, userId }) {
+    async process({ flightId, userId, launchTimezone }) {
       return database.transaction(async (tx) => {
         await tx.delete(userGridClaims).where(and(
           eq(userGridClaims.claimFlight, flightId),
           eq(userGridClaims.cellSize, cellSize),
+        ));
+        await tx.delete(competitionGridClaims).where(and(
+          eq(competitionGridClaims.claimFlight, flightId),
+          eq(competitionGridClaims.cellSize, cellSize),
         ));
 
         const result = await tx.execute<ProcessCounts>(sql`
@@ -116,10 +120,6 @@ export function createGridClaimService(
             FROM direct_hits
             GROUP BY x, y
           ),
-          direct_candidates AS (
-            SELECT x, y, latest_claimed_at AS claim_timestamp
-            FROM direct_cells
-          ),
           flight_cell_union AS (
             SELECT ST_UnaryUnion(ST_Collect(geometry)) AS geometry
             FROM direct_cells
@@ -162,18 +162,59 @@ export function createGridClaimService(
             WHERE ST_Covers(hole_boundaries.geometry, grid.geom)
           ),
           candidate_events AS (
-            SELECT x, y, claim_timestamp
-            FROM direct_candidates
+            SELECT x, y, segment_timestamp AS claim_timestamp
+            FROM direct_hits
             UNION ALL
             SELECT x, y, claim_timestamp
             FROM enclosed_candidates
           ),
-          winning_candidates AS (
+          personal_winning_candidates AS (
             SELECT x, y, MAX(claim_timestamp) AS claim_timestamp
             FROM candidate_events
             GROUP BY x, y
           ),
-          upserted AS (
+          competition_events AS (
+            SELECT
+              date_trunc(
+                'month',
+                claim_timestamp AT TIME ZONE ${launchTimezone}
+              )::date AS competition_month,
+              x,
+              y,
+              claim_timestamp
+            FROM candidate_events
+          ),
+          competition_winning_candidates AS (
+            SELECT competition_month, x, y, MAX(claim_timestamp) AS claim_timestamp
+            FROM competition_events
+            GROUP BY competition_month, x, y
+          ),
+          competition_inserted AS (
+            INSERT INTO competition_grid_claims (
+              competition_month,
+              cell_size,
+              x,
+              y,
+              claim_flight,
+              claim_user,
+              claim_timestamp
+            )
+            SELECT
+              competition_month,
+              ${cellSize},
+              x,
+              y,
+              ${flightId},
+              ${userId},
+              claim_timestamp
+            FROM competition_winning_candidates
+            ON CONFLICT (competition_month, cell_size, x, y, claim_flight) DO UPDATE
+            SET
+              claim_user = EXCLUDED.claim_user,
+              claim_timestamp = EXCLUDED.claim_timestamp
+            RETURNING competition_month, x, y
+          ),
+          personal_upserted AS (
             INSERT INTO user_grid_claims (
               cell_size,
               x,
@@ -183,7 +224,7 @@ export function createGridClaimService(
               claim_timestamp
             )
             SELECT ${cellSize}, x, y, ${flightId}, ${userId}, claim_timestamp
-            FROM winning_candidates
+            FROM personal_winning_candidates
             ON CONFLICT (cell_size, x, y) DO UPDATE
             SET
               claim_flight = EXCLUDED.claim_flight,

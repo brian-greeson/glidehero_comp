@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { DeleteObjectCommand, GetObjectCommand, PutObjectCommand, type S3 } from '@aws-sdk/client-s3';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { createAuthService } from '../../src/services/authService.js';
+import { createCompetitionGridClaimService } from '../../src/services/competitionGridClaimService.js';
 import { createFlightProcessingService } from '../../src/services/flightProcessingService.js';
 import { createFreePolygonClaimService } from '../../src/services/freePolygonClaimService.js';
 import { createIgcFileService } from '../../src/services/igcFileService.js';
@@ -101,15 +102,28 @@ describe('IGC upload processing', () => {
     expect(result.status).toBe('completed');
     const stored = await database.pool.query<{
       processing_status: string;
+      launch_timezone: string;
       area_count: number;
       grid_claim_count: number;
+      competition_claim_count: number;
+      competition_months: string[];
       point_count: number;
       first_fix: Date;
       last_fix: Date;
     }>(
       `SELECT f.processing_status,
+              f.launch_timezone,
               (SELECT count(*)::int FROM flight_areas fa WHERE fa.flight_id = f.flight_id) AS area_count,
               (SELECT count(*)::int FROM user_grid_claims ugc WHERE ugc.claim_flight = f.flight_id) AS grid_claim_count,
+              (SELECT count(*)::int
+               FROM competition_grid_claims cgc
+               WHERE cgc.claim_flight = f.flight_id) AS competition_claim_count,
+              ARRAY(
+                SELECT DISTINCT cgc.competition_month::text
+                FROM competition_grid_claims cgc
+                WHERE cgc.claim_flight = f.flight_id
+                ORDER BY cgc.competition_month::text
+              ) AS competition_months,
               count(tp.track_point_id)::int AS point_count,
               min(tp.recorded_at) AS first_fix,
               max(tp.recorded_at) AS last_fix
@@ -121,18 +135,26 @@ describe('IGC upload processing', () => {
     expect(stored.rows).toEqual([
       expect.objectContaining({
         processing_status: 'completed',
+        launch_timezone: 'America/Denver',
         area_count: expect.any(Number),
         grid_claim_count: expect.any(Number),
+        competition_claim_count: expect.any(Number),
+        competition_months: ['2026-05-01'],
         point_count: 10_835,
         first_fix: new Date('2026-05-10T18:50:26.000Z'),
       }),
     ]);
     expect(stored.rows[0]?.area_count).toBeGreaterThan(0);
     expect(stored.rows[0]?.grid_claim_count).toBeGreaterThan(0);
+    expect(stored.rows[0]?.competition_claim_count).toBeGreaterThan(0);
     expect(stored.rows[0]?.last_fix.getTime()).toBeGreaterThan(stored.rows[0]?.first_fix.getTime() ?? 0);
     const territory = await createFreePolygonClaimService(database.db).get({ userId: pilot.user.userId });
     expect(territory.features).toHaveLength(1);
     expect(territory.features[0]?.geometry.type).toBe('MultiPolygon');
+    const competition = await createCompetitionGridClaimService(database.db, { cellSize: 1_000 })
+      .getCurrent({ competitionMonth: '2026-05-10' });
+    expect(competition.features.length).toBeGreaterThan(0);
+    expect(competition.features.every((feature) => feature.properties.ownerUserId === pilot.user.userId)).toBe(true);
   }, 60_000);
 
   it('rejects an identical upload from another pilot without retaining extra metadata or objects', async () => {
