@@ -14,6 +14,9 @@ describe('Vento page renderer', () => {
     expect(anonymous).toContain('<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">');
     expect(anonymous).toContain('<link rel="icon" type="image/png" sizes="192x192" href="/android-chrome-192x192.png">');
     expect(anonymous).toContain('Paint the sky with your friends.');
+    expect(anonymous).toContain('class="landing" data-auth-landing data-auth-initial="login"');
+    expect(anonymous).toContain('<script type="module" src="/scripts/landing.js"></script>');
+    expect(anonymous).toContain('aria-selected="true" tabindex="0">Log in</button>');
     expect(anonymous).toContain('action="/login"');
     expect(anonymous).toContain('action="/signup"');
     expect(anonymous).not.toContain('data-onboarding-trigger');
@@ -81,6 +84,8 @@ describe('Vento page renderer', () => {
     });
 
     expect(html).toContain('An account with that email already exists.');
+    expect(html).toContain('data-auth-initial="signup"');
+    expect(html).toContain('aria-selected="true" tabindex="0">Create account</button>');
     expect(html).toContain('&lt;script&gt;alert(1)&lt;/script&gt;');
     expect(html).not.toContain('<script>alert(1)</script>');
     expect(html).not.toContain('value="never-render-this-password"');

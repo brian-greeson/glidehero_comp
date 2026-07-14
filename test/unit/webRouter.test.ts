@@ -160,7 +160,7 @@ describe('webRouter', () => {
 
       expect(response.status).toBe(200);
       expect(response.headers.get('content-type')).toContain('text/css');
-      expect(await response.text()).toContain('.auth-grid');
+      expect(await response.text()).toContain('.landing-hero');
       expect(auth.authenticate).not.toHaveBeenCalled();
     });
   });

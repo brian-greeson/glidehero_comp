@@ -15,13 +15,15 @@
     {{ /if }}
     <title>GlideHero</title>
   </head>
-  <body{{ if currentUser }} class="dashboard-body"{{ /if }}>
-    <main class="shell{{ if currentUser }} dashboard-shell{{ /if }}">
+  <body class="{{ if currentUser }}dashboard-body{{ else }}landing-body{{ /if }}">
+    <main class="shell {{ if currentUser }}dashboard-shell{{ else }}landing-shell{{ /if }}">
       {{ content }}
     </main>
     {{ if currentUser }}
       <script src="https://unpkg.com/maplibre-gl@5.16.0/dist/maplibre-gl.js"></script>
       <script type="module" src="/scripts/dashboard.js"></script>
+    {{ else }}
+      <script type="module" src="/scripts/landing.js"></script>
     {{ /if }}
   </body>
 </html>
