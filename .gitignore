@@ -8,3 +8,4 @@ docs/**
 .TEMP_app.yaml
 .pet-runs
 .superpowers
+.codex
