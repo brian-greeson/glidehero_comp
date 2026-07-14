@@ -145,6 +145,7 @@ describe('IGC upload processing', () => {
     ]);
 
     expect([firstResult.status, secondResult.status].sort()).toEqual(['completed', 'duplicate']);
+    expect(keyCount).toBe(2);
 
     const counts = await database.pool.query<{ flight_count: number; igc_file_count: number }>(
       `SELECT (SELECT count(*)::int FROM flights) AS flight_count,
