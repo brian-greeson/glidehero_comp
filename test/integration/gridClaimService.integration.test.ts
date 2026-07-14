@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { eq } from 'drizzle-orm';
-import { flights, igcFiles, trackPoints, userGridClaims, users } from '../../src/db/schema.js';
+import { competitionGridClaims, flights, igcFiles, trackPoints, userGridClaims, users } from '../../src/db/schema.js';
 import { createGridClaimService } from '../../src/services/gridClaimService.js';
 import { resetAndPushTestDatabase } from './database.js';
 
@@ -35,7 +35,8 @@ async function toWgs84(coordinates: readonly ProjectedCoordinate[]) {
 async function persistFlight(
   coordinates: readonly ProjectedCoordinate[],
   recordedAt = new Date(Date.UTC(2026, 0, 1)),
-): Promise<{ flightId: string; userId: string }> {
+  launchTimezone = 'UTC',
+): Promise<{ flightId: string; userId: string; launchTimezone: string }> {
   const [user] = await database.db.insert(users).values({
     email: `pilot-${crypto.randomUUID()}@example.com`,
   }).returning({ id: users.id });
@@ -55,6 +56,7 @@ async function persistFlight(
     igcFileId: igcFile.id,
     contentHash: igcFile.id.replaceAll('-', '').padEnd(64, '0'),
     processingStatus: 'completed',
+    launchTimezone,
   }).returning({ id: flights.id });
   if (!flight) throw new Error('Flight insert returned no row.');
 
@@ -69,7 +71,7 @@ async function persistFlight(
     pressureAltitudeMeters: 1_000,
   })));
 
-  return { flightId: flight.id, userId: user.id };
+  return { flightId: flight.id, userId: user.id, launchTimezone };
 }
 
 async function storedCells(cellSize: number) {
@@ -81,6 +83,17 @@ async function storedCells(cellSize: number) {
     claimFlight: userGridClaims.claimFlight,
     claimTimestamp: userGridClaims.claimTimestamp,
   }).from(userGridClaims).where(eq(userGridClaims.cellSize, cellSize)).orderBy(userGridClaims.x, userGridClaims.y);
+}
+
+async function storedCompetitionCells(cellSize: number) {
+  return database.db.select().from(competitionGridClaims)
+    .where(eq(competitionGridClaims.cellSize, cellSize))
+    .orderBy(
+      competitionGridClaims.competitionMonth,
+      competitionGridClaims.x,
+      competitionGridClaims.y,
+      competitionGridClaims.claimTimestamp,
+    );
 }
 
 describe('GridClaimService with PostGIS', () => {
@@ -222,6 +235,9 @@ describe('GridClaimService with PostGIS', () => {
     expect((await storedCells(1_000)).find(({ x, y }) => x === 1 && y === 1)).toMatchObject({
       claimTimestamp: new Date(recordedAt.getTime() + 7_000),
     });
+    expect((await storedCompetitionCells(1_000)).find(({ x, y }) => x === 1 && y === 1)).toMatchObject({
+      claimTimestamp: new Date(recordedAt.getTime() + 7_000),
+    });
   });
 
   it('reprocessing an enclosing flight produces identical rows', async () => {
@@ -265,6 +281,60 @@ describe('GridClaimService with PostGIS', () => {
       claimFlight: flight.flightId,
       claimTimestamp: new Date(recordedAt.getTime() + 2_000),
     }]);
+  });
+
+  it('stores separate monthly history rows when one flight reclaims a cell across local midnight', async () => {
+    const flight = await persistFlight(
+      [[100, 100], [900, 100], [100, 100]],
+      new Date('2026-02-01T06:59:58.000Z'),
+      'America/Denver',
+    );
+    const service = createGridClaimService(database.db, { cellSize: 1_000 });
+
+    await service.process(flight);
+
+    expect(await storedCompetitionCells(1_000)).toMatchObject([
+      { competitionMonth: '2026-01-01', x: 0, y: 0, claimFlight: flight.flightId },
+      { competitionMonth: '2026-02-01', x: 0, y: 0, claimFlight: flight.flightId },
+    ]);
+  });
+
+  it('retains a row for each flight that claims the same competition cell', async () => {
+    const earlier = await persistFlight([[100, 100], [900, 100]], new Date('2026-01-01T00:00:00Z'));
+    const later = await persistFlight([[100, 100], [900, 100]], new Date('2026-01-01T00:01:00Z'));
+    const service = createGridClaimService(database.db, { cellSize: 1_000 });
+
+    await service.process(earlier);
+    await service.process(later);
+
+    expect(await storedCompetitionCells(1_000)).toMatchObject([
+      { competitionMonth: '2026-01-01', claimFlight: earlier.flightId, claimUser: earlier.userId },
+      { competitionMonth: '2026-01-01', claimFlight: later.flightId, claimUser: later.userId },
+    ]);
+  });
+
+  it('reprocessing replaces only that flight’s competition history', async () => {
+    const first = await persistFlight([[100, 100], [900, 100]]);
+    const second = await persistFlight([[2_100, 100], [2_900, 100]]);
+    const service = createGridClaimService(database.db, { cellSize: 1_000 });
+
+    await service.process(first);
+    await service.process(second);
+    const before = await storedCompetitionCells(1_000);
+    await service.process(first);
+
+    expect(await storedCompetitionCells(1_000)).toEqual(before);
+  });
+
+  it('keeps competition history consistent during concurrent same-flight reprocessing', async () => {
+    const flight = await persistFlight([[100, 100], [900, 100]]);
+    const service = createGridClaimService(database.db, { cellSize: 1_000 });
+
+    await Promise.all([service.process(flight), service.process(flight)]);
+
+    expect(await storedCompetitionCells(1_000)).toMatchObject([
+      { competitionMonth: '2026-01-01', x: 0, y: 0, claimFlight: flight.flightId },
+    ]);
   });
 
   it('stores independent 1000m and 2000m grid variants', async () => {

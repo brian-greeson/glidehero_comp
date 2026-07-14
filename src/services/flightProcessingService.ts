@@ -124,7 +124,7 @@ export function createFlightProcessingService(
 
       // Claim variations — comment or uncomment individual lines to select them.
       await freePolygonClaim.process({ flightId: flight.id, userId: input.ownerUserId });
-      await gridClaim.process({ flightId: flight.id, userId: input.ownerUserId });
+      await gridClaim.process({ flightId: flight.id, userId: input.ownerUserId, launchTimezone });
 
       return { status: 'completed', flightId: flight.id };
     },

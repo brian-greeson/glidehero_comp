@@ -101,7 +101,11 @@ describe('FlightProcessingService', () => {
     );
     expect(transaction).toHaveBeenCalledOnce();
     expect(freePolygonClaim.process).toHaveBeenCalledWith({ flightId, userId: ownerUserId });
-    expect(gridClaim.process).toHaveBeenCalledWith({ flightId, userId: ownerUserId });
+    expect(gridClaim.process).toHaveBeenCalledWith({
+      flightId,
+      userId: ownerUserId,
+      launchTimezone: 'America/Denver',
+    });
     expect(events).toEqual([
       'ingest-started',
       'ingest-committed',
@@ -215,7 +219,11 @@ describe('FlightProcessingService', () => {
 
     expect(transaction).toHaveBeenCalledOnce();
     expect(freePolygonClaim.process).toHaveBeenCalledWith({ flightId, userId: ownerUserId });
-    expect(gridClaim.process).toHaveBeenCalledWith({ flightId, userId: ownerUserId });
+    expect(gridClaim.process).toHaveBeenCalledWith({
+      flightId,
+      userId: ownerUserId,
+      launchTimezone: 'America/Denver',
+    });
     expect(flightUpdates).toContainEqual(expect.objectContaining({ processingStatus: 'completed' }));
     expect(flightUpdates).not.toContainEqual(expect.objectContaining({ processingStatus: 'failed' }));
   });
