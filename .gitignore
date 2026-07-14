@@ -4,7 +4,6 @@ dist/
 !.env.example
 certs/
 .worktrees/
-docs/**
 .TEMP_app.yaml
 .pet-runs
 .superpowers
