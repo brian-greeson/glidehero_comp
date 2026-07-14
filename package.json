@@ -13,7 +13,12 @@
     "start": "node dist/src/index.js",
     "test": "vitest run test/unit",
     "test:integration": "vitest run test/integration",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate",
+    "db:check": "drizzle-kit check"
+
+
   },
   "author": "Mountain Sentry",
   "license": "UNLICENSED",
