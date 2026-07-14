@@ -1,5 +1,6 @@
+import { DrizzleQueryError } from 'drizzle-orm';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { createFlightProcessingService } from '../../src/services/flightProcessingService.js';
+import { createFlightProcessingService, duplicateFlightMessage } from '../../src/services/flightProcessingService.js';
 import { createGridClaimService } from '../../src/services/gridClaimService.js';
 
 const freePolygonClaim = vi.hoisted(() => ({ process: vi.fn() }));
@@ -29,10 +30,13 @@ const validIgc = [
   'B1200044000060N10500060WA0123501235',
 ].join('\n');
 
-function databaseDouble(options: { events?: string[]; transactionError?: Error } = {}) {
+function databaseDouble(options: { events?: string[]; transactionError?: Error; flightInsertError?: unknown } = {}) {
   const insertedPoints: unknown[] = [];
   const flightUpdates: Record<string, unknown>[] = [];
-  const returning = vi.fn(async () => [{ id: flightId }]);
+  const returning = vi.fn(async () => {
+    if (options.flightInsertError) throw options.flightInsertError;
+    return [{ id: flightId }];
+  });
   const insertFlightValues = vi.fn(() => ({ returning }));
   const updateWhere = vi.fn(async () => undefined);
   const updateSet = vi.fn((update: Record<string, unknown>) => {
@@ -89,9 +93,9 @@ describe('FlightProcessingService', () => {
     });
 
     expect(createGridClaimService).toHaveBeenCalledWith(database, { cellSize: 1000 });
-    await expect(service.process({ ownerUserId, igcFileId, bucketKey })).resolves.toEqual({ status: 'completed', flightId });
+    await expect(service.process({ ownerUserId, igcFileId, bucketKey, contentHash: 'a'.repeat(64) })).resolves.toEqual({ status: 'completed', flightId });
 
-    expect(insertFlightValues).toHaveBeenCalledWith({ userId: ownerUserId, igcFileId });
+    expect(insertFlightValues).toHaveBeenCalledWith({ userId: ownerUserId, igcFileId, contentHash: 'a'.repeat(64) });
     expect(send).toHaveBeenCalledWith(
       expect.objectContaining({ input: expect.objectContaining({ Bucket: 'glidehero-files', Key: bucketKey }) }),
     );
@@ -127,7 +131,7 @@ describe('FlightProcessingService', () => {
       gridClaimCellSize: 1000,
     });
 
-    await expect(service.process({ ownerUserId, igcFileId, bucketKey })).resolves.toEqual({
+    await expect(service.process({ ownerUserId, igcFileId, bucketKey, contentHash: 'a'.repeat(64) })).resolves.toEqual({
       status: 'failed',
       flightId,
       message: 'This IGC file has no valid GPS fixes to process.',
@@ -150,7 +154,7 @@ describe('FlightProcessingService', () => {
       gridClaimCellSize: 1000,
     });
 
-    await expect(service.process({ ownerUserId, igcFileId, bucketKey })).resolves.toEqual({
+    await expect(service.process({ ownerUserId, igcFileId, bucketKey, contentHash: 'a'.repeat(64) })).resolves.toEqual({
       status: 'failed',
       flightId,
       message: 'We could not read your uploaded IGC file. Please upload it again.',
@@ -173,7 +177,7 @@ describe('FlightProcessingService', () => {
       gridClaimCellSize: 1000,
     });
 
-    await expect(service.process({ ownerUserId, igcFileId, bucketKey })).rejects.toBe(persistenceError);
+    await expect(service.process({ ownerUserId, igcFileId, bucketKey, contentHash: 'a'.repeat(64) })).rejects.toBe(persistenceError);
     expect(flightUpdates).not.toContainEqual(expect.objectContaining({ processingStatus: 'failed' }));
   });
 
@@ -188,7 +192,7 @@ describe('FlightProcessingService', () => {
       gridClaimCellSize: 1000,
     });
 
-    await expect(service.process({ ownerUserId, igcFileId, bucketKey })).rejects.toBe(claimError);
+    await expect(service.process({ ownerUserId, igcFileId, bucketKey, contentHash: 'a'.repeat(64) })).rejects.toBe(claimError);
 
     expect(transaction).toHaveBeenCalledOnce();
     expect(freePolygonClaim.process).toHaveBeenCalledWith({ flightId, userId: ownerUserId });
@@ -207,12 +211,47 @@ describe('FlightProcessingService', () => {
       gridClaimCellSize: 1000,
     });
 
-    await expect(service.process({ ownerUserId, igcFileId, bucketKey })).rejects.toBe(claimError);
+    await expect(service.process({ ownerUserId, igcFileId, bucketKey, contentHash: 'a'.repeat(64) })).rejects.toBe(claimError);
 
     expect(transaction).toHaveBeenCalledOnce();
     expect(freePolygonClaim.process).toHaveBeenCalledWith({ flightId, userId: ownerUserId });
     expect(gridClaim.process).toHaveBeenCalledWith({ flightId, userId: ownerUserId });
     expect(flightUpdates).toContainEqual(expect.objectContaining({ processingStatus: 'completed' }));
     expect(flightUpdates).not.toContainEqual(expect.objectContaining({ processingStatus: 'failed' }));
+  });
+
+  it('converts the content-hash unique conflict to a duplicate outcome before reading the source', async () => {
+    const { database } = databaseDouble({
+      flightInsertError: { code: '23505', constraint: 'flights_content_hash_unique' },
+    });
+    const send = vi.fn();
+    const service = createFlightProcessingService(database as never, {
+      bucketName: 'glidehero-files',
+      s3Client: { send } as never,
+      gridClaimCellSize: 1000,
+    });
+
+    await expect(service.process({ ownerUserId, igcFileId, bucketKey, contentHash: 'a'.repeat(64) }))
+      .resolves.toEqual({ status: 'duplicate', message: 'This flight has already been uploaded.' });
+    expect(send).not.toHaveBeenCalled();
+  });
+
+  it('converts a Drizzle-wrapped content-hash unique conflict to a duplicate outcome before reading the source', async () => {
+    const { database } = databaseDouble({
+      flightInsertError: new DrizzleQueryError('insert into flights', [], Object.assign(new Error('duplicate'), {
+        code: '23505',
+        constraint: 'flights_content_hash_unique',
+      })),
+    });
+    const send = vi.fn();
+    const service = createFlightProcessingService(database as never, {
+      bucketName: 'glidehero-files',
+      s3Client: { send } as never,
+      gridClaimCellSize: 1000,
+    });
+
+    await expect(service.process({ ownerUserId, igcFileId, bucketKey, contentHash: 'a'.repeat(64) }))
+      .resolves.toEqual({ status: 'duplicate', message: duplicateFlightMessage });
+    expect(send).not.toHaveBeenCalled();
   });
 });

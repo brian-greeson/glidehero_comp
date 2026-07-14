@@ -1,5 +1,5 @@
 import { GetObjectCommand, type S3 } from '@aws-sdk/client-s3';
-import { eq } from 'drizzle-orm';
+import { DrizzleQueryError, eq } from 'drizzle-orm';
 import type { Database } from '../db/client.js';
 import { flights, trackPoints } from '../db/schema.js';
 import { resolveLaunchTimeZone } from '../domain/competition/launchTimeZone.js';
@@ -9,13 +9,25 @@ import { createFreePolygonClaimService } from './freePolygonClaimService.js';
 import { createGridClaimService } from './gridClaimService.js';
 
 const TRACK_POINT_INSERT_BATCH_SIZE = 1_000;
+export const duplicateFlightMessage = 'This flight has already been uploaded.';
 
 export type FlightProcessingOutcome =
   | { status: 'completed'; flightId: string }
-  | { status: 'failed'; flightId: string; message: string };
+  | { status: 'failed'; flightId: string; message: string }
+  | { status: 'duplicate'; message: typeof duplicateFlightMessage };
 
 export interface FlightProcessingService {
-  process(input: { ownerUserId: string; igcFileId: string; bucketKey: string }): Promise<FlightProcessingOutcome>;
+  process(input: { ownerUserId: string; igcFileId: string; bucketKey: string; contentHash: string }): Promise<FlightProcessingOutcome>;
+}
+
+function isContentHashConflict(error: unknown): boolean {
+  const databaseError = error instanceof DrizzleQueryError ? error.cause : error;
+  return typeof databaseError === 'object'
+    && databaseError !== null
+    && 'code' in databaseError
+    && databaseError.code === '23505'
+    && 'constraint' in databaseError
+    && databaseError.constraint === 'flights_content_hash_unique';
 }
 
 function parserMessage(error: IgcParseError): string {
@@ -47,10 +59,16 @@ export function createFlightProcessingService(
 
   return {
     async process(input) {
-      const [flight] = await database
-        .insert(flights)
-        .values({ userId: input.ownerUserId, igcFileId: input.igcFileId })
-        .returning({ id: flights.id });
+      let flight: { id: string } | undefined;
+      try {
+        [flight] = await database
+          .insert(flights)
+          .values({ userId: input.ownerUserId, igcFileId: input.igcFileId, contentHash: input.contentHash })
+          .returning({ id: flights.id });
+      } catch (error) {
+        if (isContentHashConflict(error)) return { status: 'duplicate', message: duplicateFlightMessage };
+        throw error;
+      }
       if (!flight) throw new Error('Flight insert returned no row.');
 
       let source: string;

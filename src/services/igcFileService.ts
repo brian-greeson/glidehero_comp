@@ -1,8 +1,13 @@
 import { DeleteObjectCommand, PutObjectCommand, type S3 } from '@aws-sdk/client-s3';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
+import { eq } from 'drizzle-orm';
 import type { Database } from '../db/client.js';
-import { igcFiles } from '../db/schema.js';
-import type { FlightProcessingOutcome, FlightProcessingService } from './flightProcessingService.js';
+import { flights, igcFiles } from '../db/schema.js';
+import {
+  duplicateFlightMessage,
+  type FlightProcessingOutcome,
+  type FlightProcessingService,
+} from './flightProcessingService.js';
 
 export type IgcFileUpload = {
   ownerUserId: string;
@@ -24,6 +29,14 @@ export function createIgcFileService(
 
   return {
     async upload(input) {
+      const contentHash = createHash('sha256').update(input.bytes).digest('hex');
+      const [existingFlight] = await database
+        .select({ id: flights.id })
+        .from(flights)
+        .where(eq(flights.contentHash, contentHash))
+        .limit(1);
+      if (existingFlight) return { status: 'duplicate', message: duplicateFlightMessage };
+
       const bucketKey = keyFactory();
       await options.s3Client.send(
         new PutObjectCommand({
@@ -56,11 +69,25 @@ export function createIgcFileService(
         throw error;
       }
 
-      return processor.process({
+      const outcome = await processor.process({
         ownerUserId: input.ownerUserId,
         igcFileId: stored.id,
         bucketKey: stored.bucketKey,
+        contentHash,
       });
+      if (outcome.status !== 'duplicate') return outcome;
+
+      try {
+        await database.delete(igcFiles).where(eq(igcFiles.id, stored.id));
+      } catch (cleanupError) {
+        console.error('Unable to delete duplicate IGC file metadata', cleanupError);
+      }
+      try {
+        await options.s3Client.send(new DeleteObjectCommand({ Bucket: options.bucketName, Key: stored.bucketKey }));
+      } catch (cleanupError) {
+        console.error('Unable to delete duplicate IGC file', cleanupError);
+      }
+      return outcome;
     },
   };
 }

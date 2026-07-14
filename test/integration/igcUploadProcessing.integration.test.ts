@@ -12,9 +12,16 @@ const fixture = readFileSync(fixturePath);
 
 class InMemoryObjectStore {
   private readonly objects = new Map<string, Buffer>();
+  private putOperations = 0;
+  private firstTwoPutArrivals = 0;
+  private firstTwoPutsReleased: Promise<void> | undefined;
+  private releaseFirstTwoPuts: (() => void) | undefined;
+
+  constructor(private readonly options: { blockFirstTwoPuts?: boolean } = {}) {}
 
   readonly send: S3['send'] = async (command) => {
     if (command instanceof PutObjectCommand) {
+      await this.waitForFirstTwoPuts();
       const body = command.input.Body;
       if (!Buffer.isBuffer(body)) throw new Error('Expected the upload body to be a buffer.');
       this.objects.set(command.input.Key!, body);
@@ -31,6 +38,26 @@ class InMemoryObjectStore {
     }
     throw new Error(`Unexpected S3 command: ${command.constructor.name}`);
   };
+
+  objectCount(): number {
+    return this.objects.size;
+  }
+
+  putCount(): number {
+    return this.putOperations;
+  }
+
+  private async waitForFirstTwoPuts(): Promise<void> {
+    this.putOperations += 1;
+    if (!this.options.blockFirstTwoPuts || this.putOperations > 2) return;
+
+    this.firstTwoPutsReleased ??= new Promise<void>((resolve) => {
+      this.releaseFirstTwoPuts = resolve;
+    });
+    this.firstTwoPutArrivals += 1;
+    if (this.firstTwoPutArrivals === 2) this.releaseFirstTwoPuts?.();
+    await this.firstTwoPutsReleased;
+  }
 }
 
 let database: Awaited<ReturnType<typeof resetAndPushTestDatabase>> | undefined;
@@ -106,5 +133,49 @@ describe('IGC upload processing', () => {
     const territory = await createFreePolygonClaimService(database.db).get({ userId: pilot.user.userId });
     expect(territory.features).toHaveLength(1);
     expect(territory.features[0]?.geometry.type).toBe('MultiPolygon');
+  }, 60_000);
+
+  it('rejects an identical upload from another pilot without retaining extra metadata or objects', async () => {
+    if (!database) throw new Error('Test database was not initialized.');
+    const auth = createAuthService(database.db, { sessionTtlSeconds: 60 });
+    const firstPilot = await auth.signup({ email: 'first-pilot@example.com', password: 'correct horse battery staple' });
+    const secondPilot = await auth.signup({ email: 'second-pilot@example.com', password: 'correct horse battery staple' });
+    const objectStore = new InMemoryObjectStore({ blockFirstTwoPuts: true });
+    const processor = createFlightProcessingService(database.db, {
+      s3Client: objectStore as never,
+      bucketName: 'test-flights',
+      gridClaimCellSize: 1000,
+    });
+    let keyCount = 0;
+    const uploads = createIgcFileService(
+      database.db,
+      { s3Client: objectStore as never, bucketName: 'test-flights', keyFactory: () => `flights/${++keyCount}.igc` },
+      processor,
+    );
+    const [firstResult, secondResult] = await Promise.all([
+      uploads.upload({
+        ownerUserId: firstPilot.user.userId,
+        originalFilename: 'first.igc',
+        contentType: 'application/vnd.fai.igc',
+        bytes: fixture,
+      }),
+      uploads.upload({
+        ownerUserId: secondPilot.user.userId,
+        originalFilename: 'second.igc',
+        contentType: 'application/vnd.fai.igc',
+        bytes: fixture,
+      }),
+    ]);
+
+    expect([firstResult.status, secondResult.status].sort()).toEqual(['completed', 'duplicate']);
+    expect(objectStore.putCount()).toBe(2);
+    expect(keyCount).toBe(2);
+
+    const counts = await database.pool.query<{ flight_count: number; igc_file_count: number }>(
+      `SELECT (SELECT count(*)::int FROM flights) AS flight_count,
+              (SELECT count(*)::int FROM igc_files) AS igc_file_count`,
+    );
+    expect(counts.rows).toEqual([{ flight_count: 1, igc_file_count: 1 }]);
+    expect(objectStore.objectCount()).toBe(1);
   }, 60_000);
 });

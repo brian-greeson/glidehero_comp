@@ -1,6 +1,6 @@
 import { getTableConfig } from 'drizzle-orm/pg-core';
 import { describe, expect, it } from 'vitest';
-import { competitionGridClaims, flightAreas, personalTerritories, userGridClaims } from '../../src/db/schema.js';
+import { competitionGridClaims, flightAreas, flights, personalTerritories, userGridClaims } from '../../src/db/schema.js';
 
 describe('flight area schema', () => {
   it('defines polygon claims and spatial lookup indexes', () => {
@@ -24,6 +24,17 @@ describe('flight area schema', () => {
     expect(userId?.primary).toBe(true);
     expect(geojson?.getSQLType()).toBe('jsonb');
     expect(updatedAt?.getSQLType()).toBe('timestamp with time zone');
+  });
+});
+
+describe('flight schema', () => {
+  it('requires one globally unique content hash per flight', () => {
+    const config = getTableConfig(flights);
+    const contentHash = config.columns.find((column) => column.name === 'content_hash');
+
+    expect(contentHash?.getSQLType()).toBe('text');
+    expect(contentHash?.notNull).toBe(true);
+    expect(config.uniqueConstraints.map((constraint) => constraint.name)).toContain('flights_content_hash_unique');
   });
 });
 

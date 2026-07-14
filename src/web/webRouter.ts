@@ -215,7 +215,7 @@ export function createWebRouter(dependencies: {
           contentType: file.mimetype || 'application/octet-stream',
           bytes: file.buffer,
         });
-        if (outcome.status === 'failed') {
+        if (outcome.status !== 'completed') {
           await render(res, dependencies.renderPage, 422, { currentUser, uploadError: outcome.message });
           return;
         }
