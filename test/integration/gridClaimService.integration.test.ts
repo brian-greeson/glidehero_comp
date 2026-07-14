@@ -53,6 +53,7 @@ async function persistFlight(
   const [flight] = await database.db.insert(flights).values({
     userId: user.id,
     igcFileId: igcFile.id,
+    contentHash: igcFile.id.replaceAll('-', '').padEnd(64, '0'),
     processingStatus: 'completed',
   }).returning({ id: flights.id });
   if (!flight) throw new Error('Flight insert returned no row.');
