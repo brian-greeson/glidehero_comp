@@ -1,0 +1,111 @@
+alerts:
+- rule: DEPLOYMENT_FAILED
+- rule: DOMAIN_FAILED
+databases:
+- cluster_name: apps-db-sfo
+  db_name: glidehero
+  engine: PG
+  name: apps-db-sfo
+  production: true
+- cluster_name: app-valkey-sfo
+  engine: VALKEY
+  name: app-valkey-sfo
+  production: true
+  version: "8"
+domains:
+- domain: glidehero.com
+  type: PRIMARY
+features:
+- buildpack-stack=ubuntu-22
+ingress:
+  rules:
+  - component:
+      name: glidehero-comp
+    match:
+      authority:
+        exact: ""
+      path:
+        prefix: /
+name: glidehero-comp
+region: sfo
+services:
+- environment_slug: node-js
+  envs:
+  - key: DATABASE_URL
+    scope: RUN_AND_BUILD_TIME
+    value: ${production-database.DATABASE_URL}
+  - key: DATABASE_PORT
+    scope: RUN_AND_BUILD_TIME
+    type: SECRET
+    value: EV[1:l9xI6plrNCxV/xFdKcFb4cER0jvhewbq:CXieie4u4A24VbRM4nNv4PXoE48=]
+  - key: DATABASE_NAME
+    scope: RUN_AND_BUILD_TIME
+    type: SECRET
+    value: EV[1:5sL4MIW7e+sRTGiAsF6K1RgPTvQwupA3:85KPmrfoVD1Mv/vg09mi1C2NbIPDDBPxfA==]
+  - key: JWT_SECRET
+    scope: RUN_AND_BUILD_TIME
+    type: SECRET
+    value: EV[1:rfRXPp4ZCsOZFZE1AXXihMwd8OPPsRDD:8YG+MNEEj0HonBvocfZjj1JTcYVal6L6lV9BtbAxvk4wwXa39j4xVa0Mjondu8gwB0U=]
+  - key: JWT_REFRESH_SECRET
+    scope: RUN_AND_BUILD_TIME
+    type: SECRET
+    value: EV[1:WmMHa1geEWxKlWwfc5TNul5lKgU/YK3U:Lo1l/hLUxrKYjTjGsVmIrDoO0QYod8jOS8xnyrtCLd4J9r7snh/6zEen6gWSbrcQoqo=]
+  - key: JWT_ISSUER
+    scope: RUN_AND_BUILD_TIME
+    type: SECRET
+    value: EV[1:x9ijI0pBnRHBbXL052PY5/dWeGfjxckJ:JpEhoL0Yn8Iq/1Ff/QoMQ6j/O7QKj1kFGM+AOcM=]
+  - key: JWT_AUDIENCE
+    scope: RUN_AND_BUILD_TIME
+    type: SECRET
+    value: EV[1:tIdkMUUF/nfsZTsp5VqXHOHk8utoU6GG:n0XFMuBTfkeZoawfVPXZSr1SNsaK6Z0y+r++0yvOC3I=]
+  - key: APPLE_CLIENT_IDS
+    scope: RUN_AND_BUILD_TIME
+    type: SECRET
+    value: EV[1:r4C29MpbLDOXRLwc1LkVpnoH3Wbtqj37:Qi9i9jwgxit+1PzCWKDRrBw9FYDKQZ6rpg9DVXsmr9mNydpxoxO48bCfRPbguuHv]
+  - key: INVITE_BASE_URL
+    scope: RUN_AND_BUILD_TIME
+    type: SECRET
+    value: EV[1:slVNwCZXqYtcs69qoAvJK1chSlLYkAPM:SV/2G6GnFEwJrIlcMz0L2slWEnll3otKyc5KPq3Bv6c+IBrTa/bRWl7E]
+  - key: PORT
+    scope: RUN_AND_BUILD_TIME
+    value: "3000"
+  - key: BUCKET_SECRET
+    scope: RUN_AND_BUILD_TIME
+    type: SECRET
+    value: EV[1:YsZLdS/N3i2P/tZ9BiOfc4NYyV0Xrl7G:MObDGbgH1PI3FGTGRQhCIN5EUKeJqjzscTfxJNEk2R7NECnepCtyaSKlxe5uDpQBUtskcWvP2XPYuUM=]
+  - key: BUCKET_ID
+    scope: RUN_AND_BUILD_TIME
+    type: SECRET
+    value: EV[1:FFUjbYHfGFWD22UWiXC9sq9O+t/PEWp8:BTmdY9JySMB0OXXmx48mEFJ/aIjQJsE8y8tb2q9AZjnAnkXd]
+  - key: BUCKET_NAME
+    scope: RUN_AND_BUILD_TIME
+    type: SECRET
+    value: EV[1:vK9ABFyHGTwtaKudUojRvV2MCunsDbmw:omI/dwe4QqSu9mMUpdZZuq8EG+YEsrTQ9AY=]
+  - key: BUCKET_URL
+    scope: RUN_AND_BUILD_TIME
+    type: SECRET
+    value: EV[1:Wl+evdt6N9kt64O9gW680p9o3xGqomOk:P2wUD3D+mwRJp9ZxJUEIGz5L6hDXBZjrlIQg+N+hIlUDSIdkycpLExNtd/DA5M3VUiCg]
+  - key: BUCKET_ENDPOINT
+    scope: RUN_AND_BUILD_TIME
+    type: SECRET
+    value: EV[1:5FvfxRQg0+tIHNjsrr5fFNhd9bhkVWIw:SR3dtgt3emdbqLXb/Fnjtd2Whn3wZZsBaj5f7m8ognGUKqOsFgC09sqmTfmaKCHZqVz3HXuXv0EPZAwNlmg=]
+  - key: BUCKET_IGC_FOLDER
+    scope: RUN_AND_BUILD_TIME
+    type: SECRET
+    value: EV[1:ooZGRLZ/ZHxFtc7vYr430TjqZlaKnUGE:JGznAOS7XP1fnSVNv0rRIkGqj2GiqW/FCw==]
+  - key: MAPTILER_API_KEY
+    scope: RUN_AND_BUILD_TIME
+    type: SECRET
+    value: EV[1:i9/zwAR5NzAx/WuAhDLhpBs3DTe1xmyK:zMEzhxMimxgF5GXGCGTbfvIuUYR7yrsNsNgjRQv/QkEKzQ0i]
+  github:
+    branch: main
+    deploy_on_push: true
+    repo: brian-greeson/glidehero_comp
+  http_port: 8080
+  instance_count: 1
+  instance_size_slug: apps-s-1vcpu-1gb-fixed
+  name: glidehero-comp
+  run_command: npm start
+  source_dir: /
+vpc:
+  id: c7425901-ed0d-4b21-9683-375cc81cdade

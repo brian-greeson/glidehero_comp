@@ -5,7 +5,6 @@ dist/
 certs/
 .worktrees/
 docs/**
-app.yaml
 .TEMP_app.yaml
 .pet-runs
 .superpowers

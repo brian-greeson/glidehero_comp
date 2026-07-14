@@ -5,7 +5,7 @@ export const PERSONAL_TERRITORY_FILL_LAYER_ID = 'personal-territory-fill';
 export const PERSONAL_TERRITORY_OUTLINE_LAYER_ID = 'personal-territory-outline';
 
 export async function loadPersonalTerritory(map, territoryColor, fetchImpl = fetch) {
-  const response = await fetchImpl('/v1/personal-territory', {
+  const response = await fetchImpl('/v1/personal-territory?type=grid', {
     credentials: 'same-origin',
     headers: { accept: 'application/geo+json' },
   });
