@@ -112,6 +112,132 @@ describe('GridClaimService with PostGIS', () => {
     ]);
   });
 
+  it('does not fill cells from an open path', async () => {
+    const flight = await persistFlight([
+      [500, 500], [1_500, 500], [2_500, 500], [2_500, 1_500],
+      [2_500, 2_500], [1_500, 2_500], [500, 2_500],
+    ]);
+    const service = createGridClaimService(database.db, { cellSize: 1_000 });
+
+    await expect(service.process(flight)).resolves.toMatchObject({
+      directCellCount: 7,
+      enclosedCellCount: 0,
+    });
+    expect((await storedCells(1_000)).map(({ x, y }) => [x, y])).not.toContainEqual([1, 1]);
+  });
+
+  it('fills the center of an eight-cell full-edge ring', async () => {
+    const flight = await persistFlight([
+      [500, 500], [1_500, 500], [2_500, 500], [2_500, 1_500], [2_500, 2_500],
+      [1_500, 2_500], [500, 2_500], [500, 1_500], [500, 500],
+    ]);
+    const service = createGridClaimService(database.db, { cellSize: 1_000 });
+
+    await expect(service.process(flight)).resolves.toMatchObject({
+      directCellCount: 8,
+      enclosedCellCount: 1,
+    });
+    expect((await storedCells(1_000)).find(({ x, y }) => x === 1 && y === 1)).toMatchObject({
+      claimUser: flight.userId,
+      claimFlight: flight.flightId,
+    });
+  });
+
+  it('does not treat corner-only direct-cell contact as an enclosure', async () => {
+    const result = await database.pool.query<{ hole_count: string }>(`
+      WITH direct_cells AS (
+        SELECT ST_MakeEnvelope(x * 1000, y * 1000, (x + 1) * 1000, (y + 1) * 1000, 6933) AS geometry
+        FROM (VALUES (0, 0), (1, 1), (2, 0), (1, -1)) AS cells(x, y)
+      ),
+      flight_cell_union AS (
+        SELECT ST_UnaryUnion(ST_Collect(geometry)) AS geometry
+        FROM direct_cells
+      ),
+      union_polygons AS (
+        SELECT polygon_dump.geom AS geometry
+        FROM flight_cell_union
+        CROSS JOIN LATERAL ST_Dump(flight_cell_union.geometry) AS polygon_dump
+      ),
+      hole_rings AS (
+        SELECT ring_dump.geom AS geometry
+        FROM union_polygons
+        CROSS JOIN LATERAL ST_DumpRings(union_polygons.geometry) AS ring_dump
+        WHERE ring_dump.path[1] > 0
+      )
+      SELECT count(*) AS hole_count
+      FROM hole_rings
+    `);
+
+    expect(Number(result.rows[0]?.hole_count)).toBe(0);
+  });
+
+  it('fills both cells enclosed by two full-edge rings', async () => {
+    const flight = await persistFlight([
+      [500, 500], [1_500, 500], [2_500, 500], [2_500, 1_500], [2_500, 2_500],
+      [1_500, 2_500], [500, 2_500], [500, 1_500], [500, 500], [3_500, 500],
+      [4_500, 500], [5_500, 500], [5_500, 1_500], [5_500, 2_500], [4_500, 2_500],
+      [3_500, 2_500], [3_500, 1_500], [3_500, 500],
+    ]);
+    const service = createGridClaimService(database.db, { cellSize: 1_000 });
+
+    await expect(service.process(flight)).resolves.toMatchObject({
+      directCellCount: 16,
+      enclosedCellCount: 2,
+    });
+    const cells = await storedCells(1_000);
+    expect(cells.find(({ x, y }) => x === 1 && y === 1)).toMatchObject({ claimUser: flight.userId });
+    expect(cells.find(({ x, y }) => x === 4 && y === 1)).toMatchObject({ claimUser: flight.userId });
+  });
+
+  it('transfers an enclosed cell from another user when the enclosing flight is newer', async () => {
+    const service = createGridClaimService(database.db, { cellSize: 1_000 });
+    const previousOwner = await persistFlight(
+      [[1_100, 1_100], [1_900, 1_100]],
+      new Date(Date.UTC(2026, 0, 1, 0, 0, 0)),
+    );
+    const enclosingFlight = await persistFlight([
+      [500, 500], [1_500, 500], [2_500, 500], [2_500, 1_500], [2_500, 2_500],
+      [1_500, 2_500], [500, 2_500], [500, 1_500], [500, 500],
+    ], new Date(Date.UTC(2026, 0, 1, 0, 1, 0)));
+
+    await service.process(previousOwner);
+    await service.process(enclosingFlight);
+
+    expect((await storedCells(1_000)).find(({ x, y }) => x === 1 && y === 1)).toMatchObject({
+      claimUser: enclosingFlight.userId,
+      claimFlight: enclosingFlight.flightId,
+    });
+  });
+
+  it('keeps an enclosure timestamp at the latest boundary first-hit when a boundary is revisited', async () => {
+    const recordedAt = new Date(Date.UTC(2026, 0, 1, 0, 0, 0));
+    const flight = await persistFlight([
+      [500, 500], [1_500, 500], [2_500, 500], [2_500, 1_500], [2_500, 2_500],
+      [1_500, 2_500], [500, 2_500], [500, 1_500], [500, 500], [500, 1_500], [500, 500],
+    ], recordedAt);
+    const service = createGridClaimService(database.db, { cellSize: 1_000 });
+
+    await service.process(flight);
+
+    expect((await storedCells(1_000)).find(({ x, y }) => x === 1 && y === 1)).toMatchObject({
+      claimTimestamp: new Date(recordedAt.getTime() + 7_000),
+    });
+  });
+
+  it('reprocessing an enclosing flight produces identical rows', async () => {
+    const flight = await persistFlight([
+      [500, 500], [1_500, 500], [2_500, 500], [2_500, 1_500], [2_500, 2_500],
+      [1_500, 2_500], [500, 2_500], [500, 1_500], [500, 500],
+    ]);
+    const service = createGridClaimService(database.db, { cellSize: 1_000 });
+
+    await service.process(flight);
+    const firstRows = await storedCells(1_000);
+    await service.process(flight);
+
+    await expect(storedCells(1_000)).resolves.toEqual(firstRows);
+  });
+
   it('keeps the latest owner, retaining the existing owner on equal timestamps', async () => {
     const service = createGridClaimService(database.db, { cellSize: 1_000 });
     const earlier = await persistFlight([[100, 100], [900, 100]], new Date(Date.UTC(2026, 0, 1, 0, 0, 0)));

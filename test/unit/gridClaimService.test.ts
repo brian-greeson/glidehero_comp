@@ -4,9 +4,9 @@ import { createGridClaimService } from '../../src/services/gridClaimService.js';
 const flightId = '00000000-0000-4000-8000-000000000020';
 const userId = '00000000-0000-4000-8000-000000000030';
 
-function processingDatabaseDouble() {
+function processingDatabaseDouble(counts = { directCellCount: 3, enclosedCellCount: 0 }) {
   const where = vi.fn(async () => undefined);
-  const execute = vi.fn(async () => ({ rows: [{ directCellCount: 3, enclosedCellCount: 0 }] }));
+  const execute = vi.fn(async () => ({ rows: [counts] }));
   const transaction = vi.fn(async (callback: (tx: unknown) => Promise<unknown>) => callback({
     delete: vi.fn(() => ({ where })),
     execute,
@@ -21,15 +21,18 @@ function projectionDatabaseDouble(rows: unknown[] = []) {
 }
 
 describe('GridClaimService', () => {
-  it('replaces a flight’s existing cells and reports direct claims only', async () => {
-    const { database, where, execute, transaction } = processingDatabaseDouble();
+  it('replaces a flight’s existing cells and reports direct and enclosed claims', async () => {
+    const { database, where, execute, transaction } = processingDatabaseDouble({
+      directCellCount: 3,
+      enclosedCellCount: 2,
+    });
     const service = createGridClaimService(database as never, { cellSize: 1_000 });
 
     await expect(service.process({ flightId, userId })).resolves.toEqual({
       flightId,
       cellSize: 1_000,
       directCellCount: 3,
-      enclosedCellCount: 0,
+      enclosedCellCount: 2,
     });
 
     expect(transaction).toHaveBeenCalledOnce();

@@ -77,7 +77,14 @@ export function createGridClaimService(
               x,
               y,
               MIN(segment_timestamp) AS first_claimed_at,
-              MAX(segment_timestamp) AS latest_claimed_at
+              MAX(segment_timestamp) AS latest_claimed_at,
+              ST_MakeEnvelope(
+                x * ${cellSize},
+                y * ${cellSize},
+                (x + 1) * ${cellSize},
+                (y + 1) * ${cellSize},
+                6933
+              ) AS geometry
             FROM direct_hits
             GROUP BY x, y
           ),
@@ -85,13 +92,56 @@ export function createGridClaimService(
             SELECT x, y, latest_claimed_at AS claim_timestamp
             FROM direct_cells
           ),
-          combined_candidates AS (
+          flight_cell_union AS (
+            SELECT ST_UnaryUnion(ST_Collect(geometry)) AS geometry
+            FROM direct_cells
+          ),
+          union_polygons AS (
+            SELECT polygon_dump.geom AS geometry
+            FROM flight_cell_union
+            CROSS JOIN LATERAL ST_Dump(flight_cell_union.geometry) AS polygon_dump
+          ),
+          hole_rings AS (
+            SELECT ST_ExteriorRing(ring_dump.geom) AS geometry
+            FROM union_polygons
+            CROSS JOIN LATERAL ST_DumpRings(union_polygons.geometry) AS ring_dump
+            WHERE ring_dump.path[1] > 0
+          ),
+          holes AS (
+            SELECT ST_MakePolygon(geometry) AS geometry
+            FROM hole_rings
+          ),
+          hole_boundaries AS (
+            SELECT holes.geometry, boundary_cells.claim_timestamp
+            FROM holes
+            CROSS JOIN LATERAL (
+              SELECT MAX(direct_cells.first_claimed_at) AS claim_timestamp
+              FROM direct_cells
+              WHERE ST_Length(
+                ST_Intersection(ST_Boundary(direct_cells.geometry), ST_Boundary(holes.geometry))
+              ) > 0
+            ) AS boundary_cells
+            WHERE boundary_cells.claim_timestamp IS NOT NULL
+          ),
+          enclosed_candidates AS (
+            SELECT grid.x::integer AS x, grid.y::integer AS y, hole_boundaries.claim_timestamp
+            FROM hole_boundaries
+            CROSS JOIN LATERAL ST_SquareGrid(
+              ${cellSize},
+              ST_Envelope(hole_boundaries.geometry)
+            ) AS grid(geom, x, y)
+            WHERE ST_Covers(hole_boundaries.geometry, grid.geom)
+          ),
+          candidate_events AS (
             SELECT x, y, claim_timestamp
             FROM direct_candidates
+            UNION ALL
+            SELECT x, y, claim_timestamp
+            FROM enclosed_candidates
           ),
           winning_candidates AS (
             SELECT x, y, MAX(claim_timestamp) AS claim_timestamp
-            FROM combined_candidates
+            FROM candidate_events
             GROUP BY x, y
           ),
           upserted AS (
@@ -115,7 +165,7 @@ export function createGridClaimService(
           )
           SELECT
             (SELECT count(*)::integer FROM direct_cells) AS "directCellCount",
-            0::integer AS "enclosedCellCount"
+            (SELECT count(*)::integer FROM enclosed_candidates) AS "enclosedCellCount"
         `);
         const counts = result.rows[0] ?? { directCellCount: 0, enclosedCellCount: 0 };
 
