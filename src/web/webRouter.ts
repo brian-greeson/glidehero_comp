@@ -1,8 +1,10 @@
 import { Router, type Request, type Response } from 'express';
 import multer from 'multer';
 import { z } from 'zod';
+import { normalizeCompetitionMonth } from '../domain/competition/competitionMonth.js';
 import { AppError } from '../domain/errors.js';
 import { AuthFailure, type AuthService } from '../services/authService.js';
+import type { CompetitionGridClaimService } from '../services/competitionGridClaimService.js';
 import { normalizeTerritoryColor, type ProfileService } from '../services/profileService.js';
 import type { FreePolygonClaimService } from '../services/freePolygonClaimService.js';
 import type { GridClaimService } from '../services/gridClaimService.js';
@@ -20,6 +22,16 @@ const signupSchema = z.object({
 const loginSchema = z.object({ email, password });
 const territoryTypeSchema = z.object({
   type: z.enum(['poly', 'grid']).default('poly'),
+});
+const competitionDateSchema = z.object({
+  date: z.string().refine((value) => {
+    try {
+      normalizeCompetitionMonth(value);
+      return true;
+    } catch {
+      return false;
+    }
+  }),
 });
 
 function formBody(body: unknown): Record<string, unknown> {
@@ -44,6 +56,7 @@ export function createWebRouter(dependencies: {
   profiles: ProfileService;
   freePolygonClaim: FreePolygonClaimService;
   gridClaim: GridClaimService;
+  competitionGridClaim: CompetitionGridClaimService;
   renderPage: PageRenderer;
 }) {
   const router = Router();
@@ -67,6 +80,30 @@ export function createWebRouter(dependencies: {
       const territory = territoryType.data.type === 'grid'
         ? await dependencies.gridClaim.get({ userId: currentUser.userId })
         : await dependencies.freePolygonClaim.get({ userId: currentUser.userId });
+      res.status(200).json(territory);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.get('/v1/competition-territory', async (req, res, next) => {
+    if (!res.locals.currentUser) {
+      next(new AppError(401, 'unauthorized', 'Sign in to view competition territory.'));
+      return;
+    }
+
+    const competitionDate = competitionDateSchema.safeParse(req.query);
+    if (!competitionDate.success) {
+      res.status(400).json({
+        error: { code: 'invalid_request', message: 'Competition date must be a valid ISO calendar date.' },
+      });
+      return;
+    }
+
+    try {
+      const territory = await dependencies.competitionGridClaim.getCurrent({
+        competitionMonth: competitionDate.data.date,
+      });
       res.status(200).json(territory);
     } catch (error) {
       next(error);

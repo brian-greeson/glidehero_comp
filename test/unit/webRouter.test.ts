@@ -9,10 +9,15 @@ import {
   emptyGridClaimGeoJson,
   type GridClaimGeoJson,
 } from '../../src/domain/territory/gridClaimGeoJson.js';
+import {
+  emptyCompetitionGridClaimGeoJson,
+  type CompetitionGridClaimGeoJson,
+} from '../../src/domain/territory/competitionGridClaimGeoJson.js';
 import type { ProfileService } from '../../src/services/profileService.js';
 import type { FlightProcessingOutcome } from '../../src/services/flightProcessingService.js';
 import type { FreePolygonClaimService } from '../../src/services/freePolygonClaimService.js';
 import type { GridClaimService } from '../../src/services/gridClaimService.js';
+import type { CompetitionGridClaimService } from '../../src/services/competitionGridClaimService.js';
 import { createPageRenderer } from '../../src/views/renderer.js';
 import { createCurrentUserMiddleware } from '../../src/web/currentUserMiddleware.js';
 import { createSessionCookie } from '../../src/web/sessionCookie.js';
@@ -107,15 +112,46 @@ function dependencies(
       enclosedCellCount: 0,
     })),
   };
-  const router = createWebRouter({ auth, cookie, igcFiles, profiles, freePolygonClaim, gridClaim, renderPage });
+  const expectedCompetitionGeoJson: CompetitionGridClaimGeoJson = {
+    type: 'FeatureCollection',
+    features: [{
+      type: 'Feature',
+      properties: { ownerUserId: user.userId },
+      geometry: {
+        type: 'Polygon',
+        coordinates: [[
+          [-105, 40],
+          [-104.99, 40],
+          [-104.99, 40.01],
+          [-105, 40.01],
+          [-105, 40],
+        ]],
+      },
+    }],
+  };
+  const competitionGridClaim: CompetitionGridClaimService = {
+    getCurrent: vi.fn(async () => expectedCompetitionGeoJson),
+  };
+  const router = createWebRouter({
+    auth,
+    cookie,
+    igcFiles,
+    profiles,
+    freePolygonClaim,
+    gridClaim,
+    competitionGridClaim,
+    renderPage,
+  });
   return {
     auth,
     igcFiles,
     profiles,
     freePolygonClaim,
     gridClaim,
+    competitionGridClaim,
     expectedGeoJson,
     expectedGridGeoJson,
+    expectedCompetitionGeoJson,
     renderPage,
     app: createApp({ webMiddleware: [middleware, router] }),
   };
@@ -303,6 +339,9 @@ describe('webRouter', () => {
           flightId: 'flight-id', cellSize: 1_000, directCellCount: 0, enclosedCellCount: 0,
         })),
       },
+      competitionGridClaim: {
+        getCurrent: vi.fn(async () => emptyCompetitionGridClaimGeoJson()),
+      },
       renderPage: createPageRenderer({ mapTilerApiKey: 'maptiler-test-key' }),
     });
     const app = createApp({ webMiddleware: [middleware, router] });
@@ -357,6 +396,9 @@ describe('webRouter', () => {
             process: vi.fn(async () => ({
               flightId: 'flight-id', cellSize: 1_000, directCellCount: 0, enclosedCellCount: 0,
             })),
+          },
+          competitionGridClaim: {
+            getCurrent: vi.fn(async () => emptyCompetitionGridClaimGeoJson()),
           },
           renderPage: createPageRenderer({ mapTilerApiKey: 'maptiler-test-key' }),
         }),
@@ -517,6 +559,48 @@ describe('webRouter', () => {
       });
       expect(freePolygonClaim.get).not.toHaveBeenCalled();
       expect(gridClaim.get).not.toHaveBeenCalled();
+    });
+  });
+
+  it('returns current competition ownership for the browser date', async () => {
+    const { app, competitionGridClaim, expectedCompetitionGeoJson } = dependencies();
+    await withServer(app, async (baseUrl) => {
+      const response = await fetch(`${baseUrl}/v1/competition-territory?date=2026-07-14`, {
+        headers: { cookie: 'glidehero_session=valid-token' },
+      });
+
+      expect(response.status).toBe(200);
+      expect(response.headers.get('content-type')).toContain('application/json');
+      expect(await response.json()).toEqual(expectedCompetitionGeoJson);
+      expect(competitionGridClaim.getCurrent).toHaveBeenCalledWith({ competitionMonth: '2026-07-14' });
+    });
+  });
+
+  it.each(['', '2026-02-29', '07-14-2026'])('rejects invalid competition date %j', async (date) => {
+    const { app, competitionGridClaim } = dependencies();
+    await withServer(app, async (baseUrl) => {
+      const response = await fetch(`${baseUrl}/v1/competition-territory?date=${encodeURIComponent(date)}`, {
+        headers: { cookie: 'glidehero_session=valid-token' },
+      });
+
+      expect(response.status).toBe(400);
+      expect(await response.json()).toEqual({
+        error: { code: 'invalid_request', message: 'Competition date must be a valid ISO calendar date.' },
+      });
+      expect(competitionGridClaim.getCurrent).not.toHaveBeenCalled();
+    });
+  });
+
+  it('rejects an anonymous competition-territory request without reading claims', async () => {
+    const { app, competitionGridClaim } = dependencies();
+    await withServer(app, async (baseUrl) => {
+      const response = await fetch(`${baseUrl}/v1/competition-territory?date=2026-07-14`);
+
+      expect(response.status).toBe(401);
+      expect(await response.json()).toEqual({
+        error: { code: 'unauthorized', message: 'Sign in to view competition territory.' },
+      });
+      expect(competitionGridClaim.getCurrent).not.toHaveBeenCalled();
     });
   });
 
