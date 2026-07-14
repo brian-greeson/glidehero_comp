@@ -31,6 +31,10 @@ class InMemoryObjectStore {
     }
     throw new Error(`Unexpected S3 command: ${command.constructor.name}`);
   };
+
+  objectCount(): number {
+    return this.objects.size;
+  }
 }
 
 let database: Awaited<ReturnType<typeof resetAndPushTestDatabase>> | undefined;
@@ -106,5 +110,41 @@ describe('IGC upload processing', () => {
     const territory = await createFreePolygonClaimService(database.db).get({ userId: pilot.user.userId });
     expect(territory.features).toHaveLength(1);
     expect(territory.features[0]?.geometry.type).toBe('MultiPolygon');
+  }, 60_000);
+
+  it('rejects an identical upload from another pilot without retaining extra metadata or objects', async () => {
+    if (!database) throw new Error('Test database was not initialized.');
+    const auth = createAuthService(database.db, { sessionTtlSeconds: 60 });
+    const firstPilot = await auth.signup({ email: 'first-pilot@example.com', password: 'correct horse battery staple' });
+    const secondPilot = await auth.signup({ email: 'second-pilot@example.com', password: 'correct horse battery staple' });
+    const objectStore = new InMemoryObjectStore();
+    const processor = createFlightProcessingService(database.db, {
+      s3Client: objectStore as never,
+      bucketName: 'test-flights',
+      gridClaimCellSize: 1000,
+    });
+    let keyCount = 0;
+    const uploads = createIgcFileService(
+      database.db,
+      { s3Client: objectStore as never, bucketName: 'test-flights', keyFactory: () => `flights/${++keyCount}.igc` },
+      processor,
+    );
+    const input = {
+      originalFilename: 'known-good.igc',
+      contentType: 'application/vnd.fai.igc',
+      bytes: fixture,
+    };
+
+    await expect(uploads.upload({ ownerUserId: firstPilot.user.userId, ...input }))
+      .resolves.toMatchObject({ status: 'completed' });
+    await expect(uploads.upload({ ownerUserId: secondPilot.user.userId, ...input }))
+      .resolves.toEqual({ status: 'duplicate', message: 'This flight has already been uploaded.' });
+
+    const counts = await database.pool.query<{ flight_count: number; igc_file_count: number }>(
+      `SELECT (SELECT count(*)::int FROM flights) AS flight_count,
+              (SELECT count(*)::int FROM igc_files) AS igc_file_count`,
+    );
+    expect(counts.rows).toEqual([{ flight_count: 1, igc_file_count: 1 }]);
+    expect(objectStore.objectCount()).toBe(1);
   }, 60_000);
 });
