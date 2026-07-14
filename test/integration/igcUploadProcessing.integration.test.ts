@@ -129,16 +129,22 @@ describe('IGC upload processing', () => {
       { s3Client: objectStore as never, bucketName: 'test-flights', keyFactory: () => `flights/${++keyCount}.igc` },
       processor,
     );
-    const input = {
-      originalFilename: 'known-good.igc',
-      contentType: 'application/vnd.fai.igc',
-      bytes: fixture,
-    };
+    const [firstResult, secondResult] = await Promise.all([
+      uploads.upload({
+        ownerUserId: firstPilot.user.userId,
+        originalFilename: 'first.igc',
+        contentType: 'application/vnd.fai.igc',
+        bytes: fixture,
+      }),
+      uploads.upload({
+        ownerUserId: secondPilot.user.userId,
+        originalFilename: 'second.igc',
+        contentType: 'application/vnd.fai.igc',
+        bytes: fixture,
+      }),
+    ]);
 
-    await expect(uploads.upload({ ownerUserId: firstPilot.user.userId, ...input }))
-      .resolves.toMatchObject({ status: 'completed' });
-    await expect(uploads.upload({ ownerUserId: secondPilot.user.userId, ...input }))
-      .resolves.toEqual({ status: 'duplicate', message: 'This flight has already been uploaded.' });
+    expect([firstResult.status, secondResult.status].sort()).toEqual(['completed', 'duplicate']);
 
     const counts = await database.pool.query<{ flight_count: number; igc_file_count: number }>(
       `SELECT (SELECT count(*)::int FROM flights) AS flight_count,
