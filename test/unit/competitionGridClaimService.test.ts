@@ -68,6 +68,13 @@ describe('CompetitionGridClaimService', () => {
       rank: 1,
       isCurrentPilotOnly: false,
       displayPosition: 1,
+      claimedCellCountTotal: 2,
+      claimedAreaSquareMetersTotal: 2_000_000,
+      flightCount: 1,
+      pilotCount: 1,
+      currentPilotFlightCount: 1,
+      visibleCellCount: 20,
+      claimedPercentage: 10,
     }] }));
     const service = createCompetitionGridClaimService({ execute } as never, { cellSize: 1_000 });
 
@@ -87,6 +94,15 @@ describe('CompetitionGridClaimService', () => {
         rank: 1,
       }],
       currentPilot: null,
+      stats: {
+        claimedCellCount: 2,
+        claimedAreaSquareMeters: 2_000_000,
+        flightCount: 1,
+        pilotCount: 1,
+        currentPilotFlightCount: 1,
+        visibleCellCount: 20,
+        claimedPercentage: 10,
+      },
     });
 
     const query = JSON.stringify(execute.mock.calls[0]?.[0]);

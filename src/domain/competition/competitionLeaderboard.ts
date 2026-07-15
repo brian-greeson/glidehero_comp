@@ -1,3 +1,5 @@
+import type { CompetitionViewportStats } from '../territory/viewportStats.js';
+
 export type CompetitionLeaderboardPilot = {
   userId: string;
   displayName: string;
@@ -9,4 +11,5 @@ export type CompetitionLeaderboardPilot = {
 export type CompetitionLeaderboard = {
   leaders: CompetitionLeaderboardPilot[];
   currentPilot: CompetitionLeaderboardPilot | null;
+  stats: CompetitionViewportStats;
 };

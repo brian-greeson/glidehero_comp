@@ -146,6 +146,7 @@ button { border-color: #1769aa; color: #fff; background: #1769aa; font-weight: 7
 .info-card { pointer-events: auto; padding: 1rem; border: 1px solid #dbe2ea; border-radius: .7rem; background: rgb(255 255 255 / .96); box-shadow: 0 8px 22px rgb(15 23 42 / .1); }
 .info-card h2 { margin: 0 0 .95rem; font-size: .8rem; letter-spacing: .02em; text-transform: uppercase; }
 .viewport-stats { grid-column: 1; }
+.viewport-stats[hidden] { display: none; }
 .leaderboard-card { grid-column: 3; grid-row: 1 / span 2; }
 .leaderboard-card[hidden] { display: none; }
 .empty-copy { margin: .4rem 0 0; color: #52657a; font-size: .9rem; line-height: 1.45; }
@@ -163,7 +164,7 @@ button { border-color: #1769aa; color: #fff; background: #1769aa; font-weight: 7
 .current-pilot-result { margin-top: .75rem; padding-top: .45rem; border-top: 2px solid #cad5e2; }
 .current-pilot-result[hidden] { display: none; }
 .current-pilot-label { margin: 0 0 .15rem; color: #52657a; font-size: .72rem; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; }
-.viewport-stats dl { display: grid; gap: .65rem; margin: 1rem 0 0; }
+.viewport-stats dl { display: grid; gap: .65rem; margin: 0; }
 .viewport-stats dl div { display: flex; justify-content: space-between; padding-top: .6rem; border-top: 1px solid #e2e8f0; }
 .viewport-stats dt { color: #64748b; }
 .viewport-stats dd { margin: 0; font-weight: 800; }

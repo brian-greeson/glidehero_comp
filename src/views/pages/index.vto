@@ -60,14 +60,8 @@
             <div class="leaderboard-list" data-leaderboard-list role="list" aria-label="Viewport leaders"></div>
             <div class="current-pilot-result" data-current-pilot-result hidden></div>
           </section>
-          <section class="info-card viewport-stats">
-            <h2>Stats</h2>
-            <!-- STUB: Viewport statistics will be calculated from visible territory geometry. -->
-            <div data-stub="viewport-statistics" aria-live="polite">
-              <p class="empty-copy">No territory data is available for this viewport yet.</p>
-              <dl><div><dt>Claimed Area</dt><dd>—</dd></div><div><dt>Flights</dt><dd>—</dd></div><div><dt>Pilots</dt><dd>—</dd></div></dl>
-            </div>
-          </section>
+          {{ include "components/personalStatsCard.vto" }}
+          {{ include "components/competitionStatsCard.vto" }}
         </div>
       </aside>
       {{ include "components/onboarding.vto" { territoryColor: currentUser.territoryColor } }}

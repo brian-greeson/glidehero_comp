@@ -35,6 +35,15 @@ const competitionDateSchema = z.object({
 const finiteCoordinate = z.string().refine(
   (value) => value.length > 0 && value.trim() === value && Number.isFinite(Number(value)),
 ).transform(Number);
+const viewportBoundsShape = {
+  west: finiteCoordinate.refine((value) => value >= -180 && value <= 180),
+  south: finiteCoordinate.refine((value) => value >= -90 && value <= 90),
+  east: finiteCoordinate.refine((value) => value >= -180 && value <= 180),
+  north: finiteCoordinate.refine((value) => value >= -90 && value <= 90),
+};
+const viewportBoundsSchema = z.object(viewportBoundsShape)
+  .strict()
+  .refine((bounds) => bounds.south < bounds.north && bounds.west !== bounds.east);
 const competitionLeaderboardSchema = z.object({
   month: z.string().refine((value) => {
     try {
@@ -44,10 +53,7 @@ const competitionLeaderboardSchema = z.object({
       return false;
     }
   }),
-  west: finiteCoordinate.refine((value) => value >= -180 && value <= 180),
-  south: finiteCoordinate.refine((value) => value >= -90 && value <= 90),
-  east: finiteCoordinate.refine((value) => value >= -180 && value <= 180),
-  north: finiteCoordinate.refine((value) => value >= -90 && value <= 90),
+  ...viewportBoundsShape,
 }).strict().refine((bounds) => bounds.south < bounds.north && bounds.west !== bounds.east);
 
 function formBody(body: unknown): Record<string, unknown> {
@@ -95,6 +101,32 @@ export function createWebRouter(dependencies: {
     try {
       const territory = await dependencies.gridClaim.get({ userId: currentUser.userId });
       res.status(200).json(territory);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.get('/v1/personal-stats', async (req, res, next) => {
+    const currentUser = res.locals.currentUser;
+    if (!currentUser) {
+      next(new AppError(401, 'unauthorized', 'Sign in to view your personal stats.'));
+      return;
+    }
+
+    const viewport = viewportBoundsSchema.safeParse(req.query);
+    if (!viewport.success) {
+      res.status(400).json({
+        error: { code: 'invalid_request', message: 'Personal stats require valid viewport bounds.' },
+      });
+      return;
+    }
+
+    try {
+      const stats = await dependencies.gridClaim.getViewportStats({
+        userId: currentUser.userId,
+        ...viewport.data,
+      });
+      res.status(200).json(stats);
     } catch (error) {
       next(error);
     }

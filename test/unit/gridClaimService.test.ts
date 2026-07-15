@@ -17,7 +17,7 @@ function processingDatabaseDouble(counts = { directCellCount: 3, enclosedCellCou
 }
 
 function projectionDatabaseDouble(rows: unknown[] = []) {
-  const execute = vi.fn(async () => ({ rows }));
+  const execute = vi.fn(async (_query: unknown) => ({ rows }));
   return { database: { execute }, execute };
 }
 
@@ -84,5 +84,30 @@ describe('PersonalGridClaimService', () => {
     const service = createPersonalGridClaimService(database as never, { cellSize: 1_000 });
 
     await expect(service.get({ userId })).resolves.toEqual(geojson);
+  });
+
+  it('returns full-cell viewport stats with distinct contributing flights', async () => {
+    const stats = {
+      claimedCellCount: 2,
+      claimedAreaSquareMeters: 2_000_000,
+      flightCount: 2,
+      visibleCellCount: 8,
+      claimedPercentage: 25,
+    };
+    const { database, execute } = projectionDatabaseDouble([stats]);
+    const service = createPersonalGridClaimService(database as never, { cellSize: 1_000 });
+
+    await expect(service.getViewportStats({
+      userId,
+      west: -1,
+      south: -1,
+      east: 1,
+      north: 1,
+    })).resolves.toEqual(stats);
+
+    const query = JSON.stringify(execute.mock.calls[0]?.[0]);
+    expect(query).toContain('ST_Intersects');
+    expect(query).toContain('COUNT(DISTINCT claim_flight)');
+    expect(query).toContain('viewport_grid_total');
   });
 });
