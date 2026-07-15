@@ -72,6 +72,13 @@ describe('Vento page renderer', () => {
     expect(authenticated).not.toContain('data-stub="full-leaderboard"');
     expect(authenticated).toContain('data-competition-leaderboard');
     expect(authenticated).toContain('data-leaderboard-list');
+    expect(authenticated).toContain('data-competition-month');
+    expect(authenticated).not.toContain('Time period');
+    expect(authenticated).not.toContain('data-current-month');
+    expect(authenticated).toContain('<h2>Stats</h2>');
+    expect(authenticated.indexOf('data-competition-leaderboard')).toBeLessThan(
+      authenticated.indexOf('class="info-card viewport-stats"'),
+    );
     expect(authenticated).toContain('No territory data is available for this viewport yet.');
     expect(authenticated).toContain('https://api.maptiler.com/maps/outdoor-v2/style.json?key=maptiler-test-key');
     expect(authenticated).not.toContain('action="/login"');

@@ -2,7 +2,86 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 // The browser asset intentionally remains JavaScript; this test exercises its public module API.
 // @ts-expect-error TypeScript does not emit or typecheck files under public/.
-import { colorCompetitionTerritory, competitionLeaderboardUrl, COMPETITION_TERRITORY_FILL_LAYER_ID, COMPETITION_TERRITORY_OUTLINE_LAYER_ID, COMPETITION_TERRITORY_SOURCE_ID, createCompetitionColorRegistry, formatBrowserLocalDate, formatBrowserLocalMonth, formatClaimedArea, initializeDashboard, loadCompetitionTerritory } from '../../public/scripts/dashboard.js';
+import { colorCompetitionTerritory, competitionLeaderboardUrl, COMPETITION_TERRITORY_FILL_LAYER_ID, COMPETITION_TERRITORY_OUTLINE_LAYER_ID, COMPETITION_TERRITORY_SOURCE_ID, createCompetitionColorRegistry, formatBrowserLocalDate, formatBrowserLocalMonth, formatBrowserLocalMonthLabel, formatClaimedArea, initializeDashboard, initializeMobileSheet, loadCompetitionTerritory } from '../../public/scripts/dashboard.js';
+
+describe('Mobile dashboard sheet', () => {
+  function interactiveElement() {
+    const classes = new Set<string>();
+    const attributes = new Map<string, string>();
+    const listeners = new Map<string, (event: any) => void>();
+    return {
+      textContent: '',
+      classList: {
+        contains: (name: string) => classes.has(name),
+        toggle(name: string, enabled: boolean) {
+          if (enabled) classes.add(name);
+          else classes.delete(name);
+        },
+      },
+      addEventListener(name: string, listener: (event: any) => void) { listeners.set(name, listener); },
+      setAttribute(name: string, value: string) { attributes.set(name, value); },
+      setPointerCapture: vi.fn(),
+      dispatch(name: string, event: any = {}) { listeners.get(name)?.(event); },
+      attribute: (name: string) => attributes.get(name),
+      hasClass: (name: string) => classes.has(name),
+    };
+  }
+
+  function setup() {
+    const toggle = interactiveElement();
+    const label = interactiveElement();
+    const sheet = interactiveElement();
+    const documentRef = {
+      querySelector(selector: string) {
+        if (selector === '[data-sheet-toggle]') return toggle;
+        if (selector === '[data-sheet-toggle-label]') return label;
+        if (selector === '[data-mobile-sheet]') return sheet;
+        return null;
+      },
+    };
+    initializeMobileSheet({ documentRef });
+    return { label, sheet, toggle };
+  }
+
+  it('toggles the compact sheet by tap and updates its accessible state', () => {
+    const { label, sheet, toggle } = setup();
+
+    toggle.dispatch('click');
+    expect(sheet.hasClass('is-expanded')).toBe(true);
+    expect(toggle.attribute('aria-expanded')).toBe('true');
+    expect(label.textContent).toBe('Collapse map information');
+
+    toggle.dispatch('click');
+    expect(sheet.hasClass('is-expanded')).toBe(false);
+    expect(toggle.attribute('aria-expanded')).toBe('false');
+    expect(label.textContent).toBe('Expand map information');
+  });
+
+  it('expands on an upward swipe and collapses on a downward swipe', () => {
+    const { sheet, toggle } = setup();
+
+    toggle.dispatch('pointerdown', { button: 0, clientY: 160, isPrimary: true, pointerId: 1 });
+    toggle.dispatch('pointermove', { clientY: 100 });
+    toggle.dispatch('pointerup', { clientY: 100 });
+    expect(sheet.hasClass('is-expanded')).toBe(true);
+
+    toggle.dispatch('pointerdown', { button: 0, clientY: 100, isPrimary: true, pointerId: 1 });
+    toggle.dispatch('pointermove', { clientY: 160 });
+    toggle.dispatch('pointerup', { clientY: 160 });
+    expect(sheet.hasClass('is-expanded')).toBe(false);
+  });
+
+  it('does not change state for a short drag or its follow-up click', () => {
+    const { sheet, toggle } = setup();
+
+    toggle.dispatch('pointerdown', { button: 0, clientY: 100, isPrimary: true, pointerId: 1 });
+    toggle.dispatch('pointermove', { clientY: 120 });
+    toggle.dispatch('pointerup', { clientY: 120 });
+    toggle.dispatch('click');
+
+    expect(sheet.hasClass('is-expanded')).toBe(false);
+  });
+});
 
 describe('Personal territory dashboard map', () => {
   const geojson = {
@@ -138,6 +217,10 @@ describe('Competition territory dashboard map', () => {
 
     expect(url).toBe('/v1/competition-leaderboard?month=2026-07&west=-107&south=39&east=-105&north=41');
     expect(formatClaimedArea(2_500_000, 'en-US')).toBe('2.5 km²');
+  });
+
+  it('formats the competition month as month and year only', () => {
+    expect(formatBrowserLocalMonthLabel(new Date(2026, 6, 14), 'en-US')).toBe('July 2026');
   });
 
   it('keeps the current pilot color and assigns one temporary color per other owner', () => {

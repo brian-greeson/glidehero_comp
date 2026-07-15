@@ -22,6 +22,67 @@ export function formatBrowserLocalMonth(date = new Date()) {
   return formatBrowserLocalDate(date).slice(0, 7);
 }
 
+export function formatBrowserLocalMonthLabel(date = new Date(), locale) {
+  return new Intl.DateTimeFormat(locale, { month: 'long', year: 'numeric' }).format(date);
+}
+
+export function initializeMobileSheet({ documentRef = document, swipeThreshold = 40 } = {}) {
+  const sheetToggle = documentRef.querySelector('[data-sheet-toggle]');
+  const sheetToggleLabel = documentRef.querySelector('[data-sheet-toggle-label]');
+  const sheet = documentRef.querySelector('[data-mobile-sheet]');
+  if (!sheetToggle || !sheet) return;
+
+  let expanded = sheet.classList.contains('is-expanded');
+  let pointerStartY = null;
+  let pointerMoved = false;
+  let suppressClick = false;
+
+  function setExpanded(nextExpanded) {
+    expanded = nextExpanded;
+    sheet.classList.toggle('is-expanded', expanded);
+    sheetToggle.setAttribute('aria-expanded', String(expanded));
+    if (sheetToggleLabel) {
+      sheetToggleLabel.textContent = `${expanded ? 'Collapse' : 'Expand'} map information`;
+    }
+  }
+
+  sheetToggle.addEventListener('click', () => {
+    if (suppressClick) {
+      suppressClick = false;
+      return;
+    }
+    setExpanded(!expanded);
+  });
+
+  sheetToggle.addEventListener('pointerdown', (event) => {
+    if (event.isPrimary === false || (event.button !== undefined && event.button !== 0)) return;
+    pointerStartY = event.clientY;
+    pointerMoved = false;
+    sheetToggle.setPointerCapture?.(event.pointerId);
+  });
+
+  sheetToggle.addEventListener('pointermove', (event) => {
+    if (pointerStartY === null) return;
+    if (Math.abs(event.clientY - pointerStartY) > 8) pointerMoved = true;
+  });
+
+  function finishSwipe(event) {
+    if (pointerStartY === null) return;
+    const distance = pointerStartY - event.clientY;
+    pointerStartY = null;
+    suppressClick = pointerMoved;
+    pointerMoved = false;
+    if (Math.abs(distance) < swipeThreshold) return;
+    setExpanded(distance > 0);
+  }
+
+  sheetToggle.addEventListener('pointerup', finishSwipe);
+  sheetToggle.addEventListener('pointercancel', () => {
+    pointerStartY = null;
+    pointerMoved = false;
+  });
+}
+
 export function createCompetitionColorRegistry(
   currentUserId,
   currentUserColor,
@@ -225,6 +286,9 @@ export function initializeDashboard({
   fetchImpl = window.fetch.bind(window),
 } = {}) {
   initializeOnboarding({ documentRef });
+  initializeMobileSheet({ documentRef });
+
+  const competitionDate = new Date();
 
   const mapElement = documentRef.querySelector('[data-dashboard-map]');
   const emptyState = documentRef.querySelector('[data-map-empty-state]');
@@ -295,7 +359,7 @@ export function initializeDashboard({
     leaderboardCard.setAttribute('aria-busy', 'true');
     leaderboardStatus.textContent = 'Updating leaderboard…';
     try {
-      const response = await fetchImpl(competitionLeaderboardUrl(map.getBounds()), {
+      const response = await fetchImpl(competitionLeaderboardUrl(map.getBounds(), competitionDate), {
         credentials: 'same-origin',
         headers: { accept: 'application/json' },
         signal: leaderboardAbortController?.signal,
@@ -368,6 +432,7 @@ export function initializeDashboard({
       const geojson = await loadCompetitionTerritory(map, {
         currentUserId: mapElement.dataset.currentUserId,
         territoryColor: mapElement.dataset.territoryColor,
+        date: competitionDate,
         fetchImpl,
         colorRegistry,
       });
@@ -418,14 +483,8 @@ export function initializeDashboard({
     showMapUnavailable();
   }
 
-  const currentMonth = documentRef.querySelector('[data-current-month]');
-  if (currentMonth) {
-    const now = new Date();
-    const start = new Date(now.getFullYear(), now.getMonth(), 1);
-    const end = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-    const formatter = new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
-    currentMonth.textContent = `${formatter.format(start)} – ${formatter.format(end)} (Local)`;
-  }
+  const competitionMonth = documentRef.querySelector('[data-competition-month]');
+  if (competitionMonth) competitionMonth.textContent = formatBrowserLocalMonthLabel(competitionDate);
 
   const accountTrigger = documentRef.querySelector('[data-account-trigger]');
   const accountPopover = documentRef.querySelector('[data-account-popover]');
@@ -434,15 +493,6 @@ export function initializeDashboard({
       const open = accountPopover.hidden;
       accountPopover.hidden = !open;
       accountTrigger.setAttribute('aria-expanded', String(open));
-    });
-  }
-
-  const sheetToggle = documentRef.querySelector('[data-sheet-toggle]');
-  const sheet = documentRef.querySelector('[data-mobile-sheet]');
-  if (sheetToggle && sheet) {
-    sheetToggle.addEventListener('click', () => {
-      const expanded = sheet.classList.toggle('is-expanded');
-      sheetToggle.setAttribute('aria-expanded', String(expanded));
     });
   }
 

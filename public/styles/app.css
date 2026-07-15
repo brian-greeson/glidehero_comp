@@ -153,12 +153,11 @@ button { border-color: #1769aa; color: #fff; background: #1769aa; font-weight: 7
 .dashboard-information { display: grid; grid-template-columns: 286px minmax(0, 1fr) 286px; align-items: start; gap: 16px; }
 .info-card { pointer-events: auto; padding: 1rem; border: 1px solid #dbe2ea; border-radius: .7rem; background: rgb(255 255 255 / .96); box-shadow: 0 8px 22px rgb(15 23 42 / .1); }
 .info-card h2 { margin: 0 0 .95rem; font-size: .8rem; letter-spacing: .02em; text-transform: uppercase; }
-.time-period-card, .viewport-stats { grid-column: 1; }
-.viewport-stats { margin-top: -94px; transform: translateY(110px); }
+.viewport-stats { grid-column: 1; }
 .leaderboard-card { grid-column: 3; grid-row: 1 / span 2; }
 .leaderboard-card[hidden] { display: none; }
-.period-title { margin: 0; font-weight: 800; }
-.period-range, .empty-copy { margin: .4rem 0 0; color: #52657a; font-size: .9rem; line-height: 1.45; }
+.empty-copy { margin: .4rem 0 0; color: #52657a; font-size: .9rem; line-height: 1.45; }
+.leaderboard-period { margin: -.55rem 0 .8rem; color: #52657a; font-size: .82rem; }
 .leaderboard-status { margin: 0; color: #52657a; font-size: .88rem; line-height: 1.4; }
 .leaderboard-status:empty { display: none; }
 .leaderboard-list { display: grid; margin-top: .25rem; }
@@ -190,13 +189,15 @@ button { border-color: #1769aa; color: #fff; background: #1769aa; font-weight: 7
   .account-trigger { min-height: 34px; padding: 0; background: transparent; }
   .avatar { width: 32px; height: 32px; }
   .map-stage { inset: 62px 0 0; }
-  .dashboard-info { position: absolute; inset: auto 0 0; height: 42vh; min-height: 300px; max-height: calc(100vh - 105px); padding: .5rem 1rem 1rem; border-radius: 1.25rem 1.25rem 0 0; background: rgb(255 255 255 / .97); box-shadow: 0 -8px 30px rgb(15 23 42 / .16); transition: height .25s ease; pointer-events: auto; }
-  .dashboard-info.is-expanded { height: calc(100vh - 70px); }
-  .sheet-handle { display: grid; width: 100%; padding: .25rem 0 .55rem; border: 0; background: transparent; }
+  .dashboard-info { position: absolute; inset: auto 0 0; height: 76px; min-height: 0; max-height: calc(100dvh - 70px); padding: .5rem 1rem max(1rem, env(safe-area-inset-bottom)); overflow: hidden; border-radius: 1.25rem 1.25rem 0 0; background: rgb(255 255 255 / .97); box-shadow: 0 -8px 30px rgb(15 23 42 / .16); transition: height .25s ease; pointer-events: auto; }
+  .dashboard-info.is-expanded { height: calc(100dvh - 70px); }
+  .sheet-handle { display: grid; width: 100%; padding: .25rem 0 .55rem; touch-action: none; border: 0; background: transparent; cursor: ns-resize; }
   .sheet-handle span:first-child { width: 42px; height: 4px; margin: 0 auto; border-radius: 99px; background: #a8b3c2; }
-  .dashboard-information { display: block; height: calc(100% - 34px); overflow-y: auto; }
+  .dashboard-information { display: block; height: calc(100% - 25px); overflow: hidden; }
+  .dashboard-info:not(.is-expanded) .info-card > :not(h2) { display: none; }
+  .dashboard-info.is-expanded .dashboard-information { overflow-y: auto; overscroll-behavior: contain; }
   .info-card { margin-bottom: .75rem; box-shadow: none; }
-  .time-period-card, .viewport-stats, .leaderboard-card { transform: none; }
+  .viewport-stats, .leaderboard-card { transform: none; }
   .map-search { top: 14px; }
   .maplibregl-ctrl-top-right { top: 14px; right: 12px; }
   .map-actions { top: 110px; right: 12px; }
