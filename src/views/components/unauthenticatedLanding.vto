@@ -23,7 +23,7 @@
         <button id="signup-tab" type="button" role="tab" data-auth-tab="signup" aria-controls="signup-panel" aria-selected="{{ if signupError }}true{{ else }}false{{ /if }}" tabindex="{{ if signupError }}0{{ else }}-1{{ /if }}">Create account</button>
       </div>
 
-      <section id="login-panel" class="auth-form-panel" role="tabpanel" data-auth-panel="login" aria-labelledby="login-tab">
+      <section id="login-panel" class="auth-form-panel" role="tabpanel" data-auth-panel="login" aria-labelledby="login-tab"{{ if signupError }} hidden{{ /if }}>
         <div class="auth-heading">
           <h2>Welcome back</h2>
           <p>Sign in to continue your next flight.</p>
@@ -41,7 +41,7 @@
         <p class="auth-switch-copy">New to Glide Hero? <button type="button" class="auth-text-button" data-auth-switch="signup">Create an account</button></p>
       </section>
 
-      <section id="signup-panel" class="auth-form-panel" role="tabpanel" data-auth-panel="signup" aria-labelledby="signup-tab">
+      <section id="signup-panel" class="auth-form-panel" role="tabpanel" data-auth-panel="signup" aria-labelledby="signup-tab"{{ if !signupError }} hidden{{ /if }}>
         <div class="auth-heading">
           <h2>Create your account</h2>
           <p>Join local pilots and start claiming the sky.</p>

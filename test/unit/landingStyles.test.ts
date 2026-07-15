@@ -7,6 +7,7 @@ describe('landing page stylesheet contract', () => {
 
     expect(css).toContain("background: #0a3149 url('/landing-territories.webp') center / cover no-repeat");
     expect(css).toContain('.landing { display: grid;');
+    expect(css).toContain('.auth-form-panel[hidden] { display: none; }');
     expect(css).toContain('grid-template-columns: minmax(0, 1.68fr) minmax(360px, 1fr)');
     expect(css).toContain('background: linear-gradient(110deg, var(--brand-blue)');
     expect(css).toContain('@media (max-width: 720px)');

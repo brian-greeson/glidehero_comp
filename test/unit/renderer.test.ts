@@ -17,6 +17,8 @@ describe('Vento page renderer', () => {
     expect(anonymous).toContain('class="landing" data-auth-landing data-auth-initial="login"');
     expect(anonymous).toContain('<script type="module" src="/scripts/landing.js"></script>');
     expect(anonymous).toContain('aria-selected="true" tabindex="0">Log in</button>');
+    expect(anonymous).toContain('data-auth-panel="login" aria-labelledby="login-tab">');
+    expect(anonymous).toContain('data-auth-panel="signup" aria-labelledby="signup-tab" hidden>');
     expect(anonymous).toContain('action="/login"');
     expect(anonymous).toContain('action="/signup"');
     expect(anonymous).not.toContain('data-onboarding-trigger');
@@ -146,6 +148,8 @@ describe('Vento page renderer', () => {
     expect(html).toContain('An account with that email already exists.');
     expect(html).toContain('data-auth-initial="signup"');
     expect(html).toContain('aria-selected="true" tabindex="0">Create account</button>');
+    expect(html).toContain('data-auth-panel="login" aria-labelledby="login-tab" hidden>');
+    expect(html).toContain('data-auth-panel="signup" aria-labelledby="signup-tab">');
     expect(html).toContain('&lt;script&gt;alert(1)&lt;/script&gt;');
     expect(html).not.toContain('<script>alert(1)</script>');
     expect(html).not.toContain('value="never-render-this-password"');

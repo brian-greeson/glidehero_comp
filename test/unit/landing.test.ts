@@ -84,6 +84,19 @@ describe('landing authentication panel controller', () => {
     expect(fixture.signupTab.focus).toHaveBeenCalledOnce();
   });
 
+  it('shows only the panel selected by the account tabs', () => {
+    const fixture = createFixture();
+    initializeLandingAuth({ documentRef: fixture.documentRef });
+
+    fixture.signupTab.dispatch('click');
+    expect(fixture.loginPanel.hidden).toBe(true);
+    expect(fixture.signupPanel.hidden).toBe(false);
+
+    fixture.loginTab.dispatch('click');
+    expect(fixture.loginPanel.hidden).toBe(false);
+    expect(fixture.signupPanel.hidden).toBe(true);
+  });
+
   it('supports arrow-key tab navigation', () => {
     const fixture = createFixture();
     initializeLandingAuth({ documentRef: fixture.documentRef });
