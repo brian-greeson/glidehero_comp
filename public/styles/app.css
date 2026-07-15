@@ -147,7 +147,7 @@ button { border-color: #1769aa; color: #fff; background: #1769aa; font-weight: 7
 .info-card h2 { margin: 0 0 .95rem; font-size: .8rem; letter-spacing: .02em; text-transform: uppercase; }
 .viewport-stats { grid-column: 1; }
 .viewport-stats[hidden] { display: none; }
-.leaderboard-card { grid-column: 3; grid-row: 1 / span 2; }
+.leaderboard-card { grid-column: 1; }
 .leaderboard-card[hidden] { display: none; }
 .empty-copy { margin: .4rem 0 0; color: #52657a; font-size: .9rem; line-height: 1.45; }
 .leaderboard-period { margin: -.55rem 0 .8rem; color: #52657a; font-size: .82rem; }

@@ -23,20 +23,31 @@ long cross-country flight.
 The experience revolves around a single interactive world map.
 
 Pilots upload IGC flight logs after flying. The app automatically analyzes each
-flight against a fixed grid: every cell crossed by a flight segment is claimed,
-and a closed loop also claims the cells it encloses. No manual selection or
-editing is required.
+flight against a shared square grid and records the cells claimed by its track.
+No manual selection or editing is required.
 
 Every uploaded flight is processed automatically and becomes a permanent part
 of the pilot's history.
 
+### Grid and cell claiming
+
+Glide Hero uses one global, meter-based grid. Its cell size is configured with
+`GRID_CLAIM_CELL_SIZE`, so personal territory and competition ownership always
+refer to the same cells.
+
+A flight directly claims every cell its track intersects. When those cells form
+a closed, edge-connected ring, the fully enclosed cells are claimed as well;
+corner contact alone does not close a ring. The same direct and enclosed claims
+feed both the personal and competition systems.
+
 ### Personal map
 
-The Personal Map shows the grid cells currently claimed by the pilot.
+The Personal Map is each pilot's permanent, cumulative territory.
 
-Each uploaded flight adds the cells it crosses, plus cells enclosed by a closed
-loop. The map dissolves adjacent claimed cells into regions for display while
-keeping grid cells as the ownership model.
+Every flight adds its direct and enclosed cells. Claims never remove another
+pilot's personal claim, so multiple pilots can independently include the same
+cell on their own maps. Adjacent cells are dissolved into regions for display,
+while individual grid cells remain the ownership model.
 
 The Personal Map displays only this territory using a color selected
 by the pilot. Individual flight tracks are not displayed.
@@ -58,13 +69,13 @@ The Competitive Map provides a lightweight monthly competition.
 Instead of permanently owning territory, pilots compete to control territory
 during the current month.
 
-Ownership is determined per grid cell by the most recent intersecting flight
-segment, based on the timestamp contained in the IGC file rather than the
-upload time. A newer flight can reclaim a cell previously controlled by another
-pilot.
+Each cell has one current owner per month. Ownership goes to the latest direct
+or enclosed claim according to the flight timestamps in the IGC file, not the
+upload time, so a later flight can take a cell from its current owner.
 
-The competition resets at the beginning of each month using the local time zone
-of the flight's launch location.
+Claims are assigned to calendar months using the local time zone of each
+flight's launch location. Only that month's latest claims determine the map, so
+ownership starts fresh each month while prior claim history remains recorded.
 
 Every pilot is displayed using a distinct map color to make ownership easy to
 understand.
