@@ -1,11 +1,11 @@
-<section class="landing" data-auth-landing data-auth-initial="{{ if signupError }}signup{{ else }}login{{ /if }}"{{ if loginError }} data-auth-reveal{{ /if }}{{ if signupError }} data-auth-reveal{{ /if }}>
+<section class="landing" data-auth-landing data-auth-initial="{{ if signupError }}signup{{ else }}login{{ /if }}"
+  {{ if loginError }} data-auth-reveal{{ /if }}{{ if signupError }} data-auth-reveal{{ /if }}>
   <section class="landing-hero" aria-labelledby="landing-heading">
     <div class="landing-hero-brand" aria-hidden="true">
       <img src="/android-chrome-192x192.png" alt="">
       <span>GLIDE HERO</span>
     </div>
     <div class="landing-copy">
-      <p class="landing-eyebrow">Fly. Claim. Connect.</p>
       <h1 id="landing-heading">Paint the sky with your friends.</h1>
       <p>Upload flights. Claim territory.<br> Compete locally. See who owns the sky.</p>
     </div>
@@ -18,43 +18,54 @@
         <p>GLIDE HERO</p>
       </header>
 
-      <section id="login-panel" class="auth-form-panel" data-auth-panel="login" aria-labelledby="login-heading"{{ if signupError }} hidden{{ /if }}>
+      <section id="login-panel" class="auth-form-panel" data-auth-panel="login" aria-labelledby="login-heading"
+        {{ if signupError }} hidden{{ /if }}>
         <div class="auth-heading">
           <h2 id="login-heading">Welcome back</h2>
-          <p>Sign in to continue your next flight.</p>
+          <p class="auth-switch-copy">New to Glide Hero? <button type="button" class="auth-text-button"
+              data-auth-switch="signup">Create an account</button></p>
         </div>
-        {{ if loginError }}<p class="error" role="alert">{{ loginError }}</p>{{ /if }}
+        {{ if loginError }}
+        <p class="error" role="alert">{{ loginError }}</p>{{ /if }}
         <form method="post" action="/login">
           <label>Email
-            <input name="email" type="email" autocomplete="email" inputmode="email" placeholder="you@example.com" required value="{{ loginEmail ?? '' }}">
+            <input name="email" type="email" autocomplete="email" inputmode="email" placeholder="you@example.com"
+              required value="{{ loginEmail ?? '' }}">
           </label>
           <label>Password
-            <input name="password" type="password" autocomplete="current-password" minlength="3" maxlength="128" placeholder="Enter your password" required>
+            <input name="password" type="password" autocomplete="current-password" minlength="3" maxlength="128"
+              placeholder="Enter your password" required>
           </label>
           <button type="submit" class="auth-submit">Log in</button>
         </form>
-        <p class="auth-switch-copy">New to Glide Hero? <button type="button" class="auth-text-button" data-auth-switch="signup">Create an account</button></p>
       </section>
 
-      <section id="signup-panel" class="auth-form-panel" data-auth-panel="signup" aria-labelledby="signup-heading"{{ if !signupError }} hidden{{ /if }}>
+      <section id="signup-panel" class="auth-form-panel" data-auth-panel="signup" aria-labelledby="signup-heading"
+        {{ if !signupError }} hidden{{ /if }}>
         <div class="auth-heading">
           <h2 id="signup-heading">Create your account</h2>
-          <p>Join local pilots and start claiming the sky.</p>
+          <p>Join your friends and start claiming the sky.</p>
+          <p class="auth-switch-copy">Already have an account? <button type="button" class="auth-text-button"
+              data-auth-switch="login">Log in</button></p>
+
         </div>
-        {{ if signupError }}<p class="error" role="alert">{{ signupError }}</p>{{ /if }}
+        {{ if signupError }}
+        <p class="error" role="alert">{{ signupError }}</p>{{ /if }}
         <form method="post" action="/signup">
           <label>Display name <span class="optional">Optional</span>
-            <input name="displayName" maxlength="48" autocomplete="nickname" placeholder="Sky Pilot" value="{{ signupDisplayName ?? '' }}">
+            <input name="displayName" maxlength="48" autocomplete="nickname" placeholder="Sky Pilot"
+              value="{{ signupDisplayName ?? '' }}">
           </label>
           <label>Email
-            <input name="email" type="email" autocomplete="email" inputmode="email" placeholder="you@example.com" required value="{{ signupEmail ?? '' }}">
+            <input name="email" type="email" autocomplete="email" inputmode="email" placeholder="you@example.com"
+              required value="{{ signupEmail ?? '' }}">
           </label>
           <label>Password
-            <input name="password" type="password" autocomplete="new-password" minlength="3" maxlength="128" placeholder="Create a password" required>
+            <input name="password" type="password" autocomplete="new-password" minlength="3" maxlength="128"
+              placeholder="Create a password" required>
           </label>
           <button type="submit" class="auth-submit">Create account</button>
         </form>
-        <p class="auth-switch-copy">Already have an account? <button type="button" class="auth-text-button" data-auth-switch="login">Log in</button></p>
       </section>
     </div>
   </section>
