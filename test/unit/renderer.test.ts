@@ -17,8 +17,8 @@ describe('Vento page renderer', () => {
     expect(anonymous).toContain('class="landing" data-auth-landing data-auth-initial="login"');
     expect(anonymous).toContain('<script type="module" src="/scripts/landing.js"></script>');
     expect(anonymous).not.toContain('data-auth-tab');
-    expect(anonymous).toContain('data-auth-panel="login" aria-labelledby="login-heading">');
-    expect(anonymous).toContain('data-auth-panel="signup" aria-labelledby="signup-heading" hidden>');
+    expect(anonymous).toMatch(/data-auth-panel="login" aria-labelledby="login-heading"\s*>/);
+    expect(anonymous).toMatch(/data-auth-panel="signup" aria-labelledby="signup-heading"\s+hidden>/);
     expect(anonymous).toContain('action="/login"');
     expect(anonymous).toContain('action="/signup"');
     expect(anonymous).not.toContain('data-onboarding-trigger');
@@ -154,8 +154,8 @@ describe('Vento page renderer', () => {
     expect(html).toContain('An account with that email already exists.');
     expect(html).toContain('data-auth-initial="signup"');
     expect(html).not.toContain('data-auth-tab');
-    expect(html).toContain('data-auth-panel="login" aria-labelledby="login-heading" hidden>');
-    expect(html).toContain('data-auth-panel="signup" aria-labelledby="signup-heading">');
+    expect(html).toMatch(/data-auth-panel="login" aria-labelledby="login-heading"\s+hidden>/);
+    expect(html).toMatch(/data-auth-panel="signup" aria-labelledby="signup-heading"\s*>/);
     expect(html).toContain('&lt;script&gt;alert(1)&lt;/script&gt;');
     expect(html).not.toContain('<script>alert(1)</script>');
     expect(html).not.toContain('value="never-render-this-password"');
