@@ -18,14 +18,9 @@
         <p>GLIDE HERO</p>
       </header>
 
-      <div class="auth-tabs" role="tablist" aria-label="Account access">
-        <button id="login-tab" type="button" role="tab" data-auth-tab="login" aria-controls="login-panel" aria-selected="{{ if signupError }}false{{ else }}true{{ /if }}" tabindex="{{ if signupError }}-1{{ else }}0{{ /if }}">Log in</button>
-        <button id="signup-tab" type="button" role="tab" data-auth-tab="signup" aria-controls="signup-panel" aria-selected="{{ if signupError }}true{{ else }}false{{ /if }}" tabindex="{{ if signupError }}0{{ else }}-1{{ /if }}">Create account</button>
-      </div>
-
-      <section id="login-panel" class="auth-form-panel" role="tabpanel" data-auth-panel="login" aria-labelledby="login-tab"{{ if signupError }} hidden{{ /if }}>
+      <section id="login-panel" class="auth-form-panel" data-auth-panel="login" aria-labelledby="login-heading"{{ if signupError }} hidden{{ /if }}>
         <div class="auth-heading">
-          <h2>Welcome back</h2>
+          <h2 id="login-heading">Welcome back</h2>
           <p>Sign in to continue your next flight.</p>
         </div>
         {{ if loginError }}<p class="error" role="alert">{{ loginError }}</p>{{ /if }}
@@ -41,9 +36,9 @@
         <p class="auth-switch-copy">New to Glide Hero? <button type="button" class="auth-text-button" data-auth-switch="signup">Create an account</button></p>
       </section>
 
-      <section id="signup-panel" class="auth-form-panel" role="tabpanel" data-auth-panel="signup" aria-labelledby="signup-tab"{{ if !signupError }} hidden{{ /if }}>
+      <section id="signup-panel" class="auth-form-panel" data-auth-panel="signup" aria-labelledby="signup-heading"{{ if !signupError }} hidden{{ /if }}>
         <div class="auth-heading">
-          <h2>Create your account</h2>
+          <h2 id="signup-heading">Create your account</h2>
           <p>Join local pilots and start claiming the sky.</p>
         </div>
         {{ if signupError }}<p class="error" role="alert">{{ signupError }}</p>{{ /if }}

@@ -35,10 +35,6 @@ class FakeElement {
 }
 
 function createFixture(initial = 'login', reveal = false) {
-  const loginTab = new FakeElement();
-  loginTab.dataset.authTab = 'login';
-  const signupTab = new FakeElement();
-  signupTab.dataset.authTab = 'signup';
   const loginPanel = new FakeElement();
   loginPanel.dataset.authPanel = 'login';
   const signupPanel = new FakeElement();
@@ -51,13 +47,12 @@ function createFixture(initial = 'login', reveal = false) {
   landing.dataset.authInitial = initial;
   if (reveal) landing.attributes.set('data-auth-reveal', '');
   landing.querySelectorAll = (selector) => ({
-    '[data-auth-tab]': [loginTab, signupTab],
     '[data-auth-panel]': [loginPanel, signupPanel],
     '[data-auth-switch]': [loginSwitch, signupSwitch],
   })[selector] ?? [];
   const documentRef = { querySelector: () => landing };
 
-  return { documentRef, landing, loginTab, signupTab, loginPanel, signupPanel, loginSwitch, signupSwitch };
+  return { documentRef, landing, loginPanel, signupPanel, loginSwitch, signupSwitch };
 }
 
 describe('landing authentication panel controller', () => {
@@ -69,11 +64,9 @@ describe('landing authentication panel controller', () => {
     expect(fixture.landing.classList.add).toHaveBeenCalledWith('auth-enhanced');
     expect(fixture.loginPanel.hidden).toBe(true);
     expect(fixture.signupPanel.hidden).toBe(false);
-    expect(fixture.signupTab.attributes.get('aria-selected')).toBe('true');
-    expect(fixture.loginTab.tabIndex).toBe(-1);
   });
 
-  it('switches modes from the inline account prompt and focuses the selected tab', () => {
+  it('switches modes from the inline account prompt', () => {
     const fixture = createFixture();
     initializeLandingAuth({ documentRef: fixture.documentRef });
 
@@ -81,43 +74,15 @@ describe('landing authentication panel controller', () => {
 
     expect(fixture.signupPanel.hidden).toBe(false);
     expect(fixture.loginPanel.hidden).toBe(true);
-    expect(fixture.signupTab.focus).toHaveBeenCalledOnce();
   });
 
-  it('shows only the panel selected by the account tabs', () => {
-    const fixture = createFixture();
-    initializeLandingAuth({ documentRef: fixture.documentRef });
-
-    fixture.signupTab.dispatch('click');
-    expect(fixture.loginPanel.hidden).toBe(true);
-    expect(fixture.signupPanel.hidden).toBe(false);
-
-    fixture.loginTab.dispatch('click');
-    expect(fixture.loginPanel.hidden).toBe(false);
-    expect(fixture.signupPanel.hidden).toBe(true);
-  });
-
-  it('supports arrow-key tab navigation', () => {
-    const fixture = createFixture();
-    initializeLandingAuth({ documentRef: fixture.documentRef });
-
-    const event = fixture.loginTab.dispatch('keydown', 'ArrowRight');
-
-    expect(event.preventDefault).toHaveBeenCalledOnce();
-    expect(fixture.signupTab.focus).toHaveBeenCalledOnce();
-    expect(fixture.signupPanel.hidden).toBe(false);
-  });
-
-  it('shows login by default on mobile and keeps both account buttons available', () => {
+  it('shows login by default on mobile and keeps the inline account switch available', () => {
     const fixture = createFixture();
     initializeLandingAuth({ documentRef: fixture.documentRef, mobileQuery: { matches: true } });
 
     expect(fixture.loginPanel.hidden).toBe(false);
     expect(fixture.signupPanel.hidden).toBe(true);
-    expect(fixture.loginTab.attributes.get('aria-selected')).toBe('true');
-    expect(fixture.signupTab.attributes.get('aria-selected')).toBe('false');
-
-    fixture.signupTab.dispatch('click');
+    fixture.signupSwitch.dispatch('click');
 
     expect(fixture.loginPanel.hidden).toBe(true);
     expect(fixture.signupPanel.hidden).toBe(false);
@@ -129,6 +94,5 @@ describe('landing authentication panel controller', () => {
 
     expect(fixture.signupPanel.hidden).toBe(false);
     expect(fixture.loginPanel.hidden).toBe(true);
-    expect(fixture.signupTab.attributes.get('aria-selected')).toBe('true');
   });
 });
