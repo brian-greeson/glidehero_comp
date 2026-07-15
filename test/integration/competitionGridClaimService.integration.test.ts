@@ -76,6 +76,63 @@ async function persistClaim(input: PersistClaimInput): Promise<{ userId: string;
 }
 
 describe('CompetitionGridClaimService with PostGIS', () => {
+  it('returns aggregate stats from current viewport owners and excludes replaced flights', async () => {
+    const alphaOld = await persistClaim({
+      competitionMonth: '2026-07-01',
+      claimTimestamp: new Date('2026-07-10T12:00:00Z'),
+      flightCreatedAt: new Date('2026-07-10T13:00:00Z'),
+      x: 0,
+      y: 0,
+      displayName: 'Alpha',
+    });
+    const bravo = await persistClaim({
+      competitionMonth: '2026-07-01',
+      claimTimestamp: new Date('2026-07-10T12:05:00Z'),
+      flightCreatedAt: new Date('2026-07-10T13:05:00Z'),
+      x: 0,
+      y: 0,
+      displayName: 'Bravo',
+    });
+    await persistClaim({
+      competitionMonth: '2026-07-01',
+      claimTimestamp: new Date('2026-07-10T12:10:00Z'),
+      flightCreatedAt: new Date('2026-07-10T13:10:00Z'),
+      x: 1,
+      y: 0,
+      pilot: alphaOld,
+    });
+    const bounds = await database.pool.query<{ west: number; south: number; east: number; north: number }>(`
+      SELECT
+        ST_X(ST_Transform(ST_SetSRID(ST_Point(1, 1), 6933), 4326)) AS west,
+        ST_Y(ST_Transform(ST_SetSRID(ST_Point(1, 1), 6933), 4326)) AS south,
+        ST_X(ST_Transform(ST_SetSRID(ST_Point(1999, 999), 6933), 4326)) AS east,
+        ST_Y(ST_Transform(ST_SetSRID(ST_Point(1999, 999), 6933), 4326)) AS north
+    `);
+    const viewport = bounds.rows[0];
+    if (!viewport) throw new Error('Expected viewport bounds.');
+
+    const result = await createCompetitionGridClaimService(database.db, { cellSize: 1_000 })
+      .getViewportLeaderboard({
+        competitionMonth: '2026-07',
+        ...viewport,
+        currentUserId: alphaOld.userId,
+      });
+
+    expect(result.stats).toEqual({
+      claimedCellCount: 2,
+      claimedAreaSquareMeters: 2_000_000,
+      flightCount: 2,
+      pilotCount: 2,
+      currentPilotFlightCount: 1,
+      visibleCellCount: 2,
+      claimedPercentage: 100,
+    });
+    expect(result.leaders.map((pilot) => pilot.userId)).toEqual(expect.arrayContaining([
+      alphaOld.userId,
+      bravo.userId,
+    ]));
+  });
+
   it('normalizes an in-month date and returns the newest IGC claimant', async () => {
     const older = await persistClaim({
       competitionMonth: '2026-07-01',

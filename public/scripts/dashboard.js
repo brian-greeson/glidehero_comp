@@ -225,8 +225,71 @@ export function competitionLeaderboardUrl(bounds, date = new Date()) {
   return `/v1/competition-leaderboard?${query}`;
 }
 
+export function personalStatsUrl(bounds) {
+  const normalized = normalizeLeaderboardBounds(bounds);
+  const query = new URLSearchParams({
+    west: String(normalized.west),
+    south: String(normalized.south),
+    east: String(normalized.east),
+    north: String(normalized.north),
+  });
+  return `/v1/personal-stats?${query}`;
+}
+
 export function formatClaimedArea(squareMeters, locale) {
   return `${new Intl.NumberFormat(locale, { maximumFractionDigits: 2 }).format(squareMeters / 1_000_000)} km²`;
+}
+
+export function formatClaimedPercentage(percentage, locale) {
+  return `${new Intl.NumberFormat(locale, {
+    minimumFractionDigits: 1,
+    maximumFractionDigits: 1,
+  }).format(percentage)}%`;
+}
+
+function formatCount(count, locale) {
+  return new Intl.NumberFormat(locale).format(count);
+}
+
+function renderStatsValues(stats, values, locale) {
+  const hasClaims = stats.claimedCellCount > 0;
+  for (const value of Object.values(values)) value.textContent = '-';
+  if (!hasClaims) return;
+
+  values.claimedArea.textContent = formatClaimedArea(stats.claimedAreaSquareMeters, locale);
+  values.flights.textContent = formatCount(stats.flightCount, locale);
+  values.claimedPercentage.textContent = formatClaimedPercentage(stats.claimedPercentage, locale);
+}
+
+export function renderPersonalStats({ documentRef, stats, locale }) {
+  const card = documentRef.querySelector('[data-personal-stats]');
+  const claimedArea = documentRef.querySelector('[data-personal-claimed-area]');
+  const flights = documentRef.querySelector('[data-personal-flights]');
+  const claimedPercentage = documentRef.querySelector('[data-personal-claimed-percentage]');
+  if (!card || !claimedArea || !flights || !claimedPercentage) return;
+
+  renderStatsValues(stats, { claimedArea, flights, claimedPercentage }, locale);
+  card.removeAttribute('aria-busy');
+}
+
+export function renderCompetitionStats({ documentRef, stats, locale }) {
+  const card = documentRef.querySelector('[data-competition-stats]');
+  const claimedArea = documentRef.querySelector('[data-competition-claimed-area]');
+  const flights = documentRef.querySelector('[data-competition-flights]');
+  const pilots = documentRef.querySelector('[data-competition-pilots]');
+  const myFlights = documentRef.querySelector('[data-competition-my-flights]');
+  const claimedPercentage = documentRef.querySelector('[data-competition-claimed-percentage]');
+  if (!card || !claimedArea || !flights || !pilots || !myFlights || !claimedPercentage) return;
+
+  renderStatsValues(stats, { claimedArea, flights, claimedPercentage }, locale);
+  if (stats.claimedCellCount > 0) {
+    pilots.textContent = formatCount(stats.pilotCount, locale);
+    myFlights.textContent = formatCount(stats.currentPilotFlightCount, locale);
+  } else {
+    pilots.textContent = '-';
+    myFlights.textContent = '-';
+  }
+  card.removeAttribute('aria-busy');
 }
 
 function createLeaderboardRow(documentRef, pilot, { currentUserId, colorRegistry }) {
@@ -298,6 +361,8 @@ export function initializeDashboard({
   const leaderboardStatus = documentRef.querySelector('[data-leaderboard-status]');
   const leaderboardList = documentRef.querySelector('[data-leaderboard-list]');
   const currentPilotResult = documentRef.querySelector('[data-current-pilot-result]');
+  const personalStatsCard = documentRef.querySelector('[data-personal-stats]');
+  const competitionStatsCard = documentRef.querySelector('[data-competition-stats]');
   let map;
   let mapReady = false;
   let activeMode = 'personal';
@@ -306,6 +371,8 @@ export function initializeDashboard({
   let competitionIsEmpty = false;
   let leaderboardRequestSequence = 0;
   let leaderboardAbortController;
+  let personalStatsRequestSequence = 0;
+  let personalStatsAbortController;
   const colorRegistry = mapElement
     ? createCompetitionColorRegistry(mapElement.dataset.currentUserId, mapElement.dataset.territoryColor)
     : null;
@@ -338,6 +405,32 @@ export function initializeDashboard({
       else tab.removeAttribute('aria-current');
     }
     if (leaderboardCard) leaderboardCard.hidden = mode !== 'competitive';
+    if (personalStatsCard) personalStatsCard.hidden = mode !== 'personal';
+    if (competitionStatsCard) competitionStatsCard.hidden = mode !== 'competitive';
+  }
+
+  async function refreshPersonalStats() {
+    if (activeMode !== 'personal' || !mapReady || !map?.getBounds || !personalStatsCard) return;
+
+    personalStatsAbortController?.abort();
+    personalStatsAbortController = typeof AbortController === 'undefined' ? undefined : new AbortController();
+    const requestSequence = ++personalStatsRequestSequence;
+    personalStatsCard.setAttribute('aria-busy', 'true');
+    try {
+      const response = await fetchImpl(personalStatsUrl(map.getBounds()), {
+        credentials: 'same-origin',
+        headers: { accept: 'application/json' },
+        signal: personalStatsAbortController?.signal,
+      });
+      if (!response.ok) throw new Error(`Personal stats request failed with ${response.status}.`);
+      const stats = await response.json();
+      if (requestSequence !== personalStatsRequestSequence || activeMode !== 'personal') return;
+      renderPersonalStats({ documentRef, stats });
+    } catch (error) {
+      if (error?.name !== 'AbortError' && requestSequence === personalStatsRequestSequence) {
+        personalStatsCard.removeAttribute('aria-busy');
+      }
+    }
   }
 
   async function refreshLeaderboard() {
@@ -357,6 +450,7 @@ export function initializeDashboard({
     leaderboardAbortController = typeof AbortController === 'undefined' ? undefined : new AbortController();
     const requestSequence = ++leaderboardRequestSequence;
     leaderboardCard.setAttribute('aria-busy', 'true');
+    competitionStatsCard?.setAttribute('aria-busy', 'true');
     leaderboardStatus.textContent = 'Updating leaderboard…';
     try {
       const response = await fetchImpl(competitionLeaderboardUrl(map.getBounds(), competitionDate), {
@@ -376,12 +470,16 @@ export function initializeDashboard({
         listElement: leaderboardList,
         currentPilotElement: currentPilotResult,
       });
+      renderCompetitionStats({ documentRef, stats: leaderboard.stats });
     } catch (error) {
       if (error?.name !== 'AbortError' && requestSequence === leaderboardRequestSequence) {
         leaderboardStatus.textContent = 'Unable to update the leaderboard. Try moving the map again.';
       }
     } finally {
-      if (requestSequence === leaderboardRequestSequence) leaderboardCard.removeAttribute('aria-busy');
+      if (requestSequence === leaderboardRequestSequence) {
+        leaderboardCard.removeAttribute('aria-busy');
+        competitionStatsCard?.removeAttribute('aria-busy');
+      }
     }
   }
 
@@ -411,13 +509,17 @@ export function initializeDashboard({
     activeMode = 'personal';
     leaderboardRequestSequence += 1;
     leaderboardAbortController?.abort();
+    if (competitionStatsCard) competitionStatsCard.removeAttribute('aria-busy');
     setTabState(activeMode);
     clearStatus();
     applyModeLayers();
+    void refreshPersonalStats();
   }
 
   async function selectCompetitiveMode() {
     activeMode = 'competitive';
+    personalStatsRequestSequence += 1;
+    personalStatsAbortController?.abort();
     setTabState(activeMode);
     clearStatus();
     applyModeLayers();
@@ -472,9 +574,11 @@ export function initializeDashboard({
         }
         mapReady = true;
         if (activeMode === 'competitive') await selectCompetitiveMode();
+        else await refreshPersonalStats();
       });
       map.on?.('moveend', () => {
-        void refreshLeaderboard();
+        if (activeMode === 'competitive') void refreshLeaderboard();
+        else void refreshPersonalStats();
       });
     } catch {
       showMapUnavailable();

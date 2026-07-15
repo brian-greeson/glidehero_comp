@@ -113,6 +113,50 @@ async function persistClaimCells(
 }
 
 describe('GridClaimService with PostGIS', () => {
+  it('aggregates personal viewport stats by distinct cells and contributing flights', async () => {
+    const first = await persistFlight([[100, 100], [1_100, 100]]);
+    const [secondFile] = await database.db.insert(igcFiles).values({
+      userId: first.userId,
+      originalFilename: 'second-flight.igc',
+      contentType: 'application/vnd.fai.igc',
+      byteSize: 1,
+      bucketKey: `flights/${crypto.randomUUID()}.igc`,
+    }).returning({ id: igcFiles.id });
+    if (!secondFile) throw new Error('IGC file insert returned no row.');
+    const [secondFlight] = await database.db.insert(flights).values({
+      userId: first.userId,
+      igcFileId: secondFile.id,
+      contentHash: secondFile.id.replaceAll('-', '').padEnd(64, '0'),
+      processingStatus: 'completed',
+      launchTimezone: 'UTC',
+    }).returning({ id: flights.id });
+    if (!secondFlight) throw new Error('Flight insert returned no row.');
+
+    await persistClaimCells(first, [{ x: 0, y: 0 }, { x: 1, y: 0 }]);
+    await persistClaimCells(
+      { flightId: secondFlight.id, userId: first.userId },
+      [{ x: 1, y: 0 }],
+    );
+    const [southwest, northeast] = await toWgs84([[1, 1], [1_999, 999]]);
+    if (!southwest || !northeast) throw new Error('Expected viewport coordinates.');
+
+    const stats = await createGridClaimService(database.db, { cellSize: 1_000 }).getViewportStats({
+      userId: first.userId,
+      west: southwest.longitude,
+      south: southwest.latitude,
+      east: northeast.longitude,
+      north: northeast.latitude,
+    });
+
+    expect(stats).toEqual({
+      claimedCellCount: 2,
+      claimedAreaSquareMeters: 2_000_000,
+      flightCount: 2,
+      visibleCellCount: 2,
+      claimedPercentage: 100,
+    });
+  });
+
   it('claims each sparse crossed cell, including cells whose endpoints are both outside', async () => {
     const flight = await persistFlight([[-500, 500], [2_500, 500]]);
     const service = createGridClaimService(database.db, { cellSize: 1_000 });

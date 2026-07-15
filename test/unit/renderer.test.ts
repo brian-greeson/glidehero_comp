@@ -78,10 +78,16 @@ describe('Vento page renderer', () => {
     expect(authenticated).not.toContain('Time period');
     expect(authenticated).not.toContain('data-current-month');
     expect(authenticated).toContain('<h2>Stats</h2>');
+    expect(authenticated).toContain('data-personal-stats');
+    expect(authenticated).toContain('data-competition-stats');
+    expect(authenticated).toContain('data-personal-claimed-percentage');
+    expect(authenticated).toContain('data-competition-my-flights');
+    expect(authenticated.match(/<dt>Pilots<\/dt>/g)).toHaveLength(1);
+    expect(authenticated).not.toContain('data-stub="viewport-statistics"');
     expect(authenticated.indexOf('data-competition-leaderboard')).toBeLessThan(
       authenticated.indexOf('class="info-card viewport-stats"'),
     );
-    expect(authenticated).toContain('No territory data is available for this viewport yet.');
+    expect(authenticated).not.toContain('No territory data is available for this viewport yet.');
     expect(authenticated).toContain('https://api.maptiler.com/maps/outdoor-v2/style.json?key=maptiler-test-key');
     expect(authenticated).not.toContain('action="/login"');
     expect(authenticated).not.toContain('action="/signup"');

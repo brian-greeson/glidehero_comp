@@ -5,8 +5,10 @@ import {
   emptyGridClaimGeoJson,
   type GridClaimGeoJson,
 } from '../domain/territory/gridClaimGeoJson.js';
+import { emptyViewportStats, type ViewportStats } from '../domain/territory/viewportStats.js';
 import { createCompetitionGridClaimService, rebuildCompetitionGridClaims } from './competitionGridClaimService.js';
 import { gridClaimCandidateCtes } from './gridClaimCandidates.js';
+import { viewportGridCtes, type ViewportBounds } from './viewportGrid.js';
 
 export type GridClaimProcessResult = {
   flightId: string;
@@ -18,6 +20,7 @@ export type GridClaimProcessResult = {
 export interface PersonalGridClaimService {
   process(input: { flightId: string; userId: string }): Promise<GridClaimProcessResult>;
   get(input: { userId: string }): Promise<GridClaimGeoJson>;
+  getViewportStats(input: ViewportBounds & { userId: string }): Promise<ViewportStats>;
 }
 
 export interface GridClaimService {
@@ -28,6 +31,7 @@ export interface GridClaimService {
     | { status: 'not_completed' }
   >;
   get(input: { userId: string }): Promise<GridClaimGeoJson>;
+  getViewportStats(input: ViewportBounds & { userId: string }): Promise<ViewportStats>;
 }
 
 type ProcessCounts = {
@@ -36,6 +40,7 @@ type ProcessCounts = {
 };
 
 type StoredProjection = { geojson: GridClaimGeoJson };
+type StoredViewportStats = ViewportStats;
 type ClaimDatabase = Pick<Database, 'delete' | 'execute'>;
 
 async function rebuildPersonalClaims(
@@ -142,6 +147,45 @@ export function createPersonalGridClaimService(
 
       return result.rows[0]?.geojson ?? emptyGridClaimGeoJson();
     },
+
+    async getViewportStats({ userId, west, south, east, north }) {
+      const result = await database.execute<StoredViewportStats>(sql`
+        WITH ${viewportGridCtes({ west, south, east, north, cellSize })},
+        visible_claims AS (
+          SELECT DISTINCT claims.x, claims.y, claims.claim_flight
+          FROM user_grid_claims claims
+          INNER JOIN viewport_parts viewport ON ST_Intersects(
+            ST_MakeEnvelope(
+              claims.x * ${cellSize},
+              claims.y * ${cellSize},
+              (claims.x + 1) * ${cellSize},
+              (claims.y + 1) * ${cellSize},
+              6933
+            ),
+            viewport.geometry
+          )
+          WHERE claims.claim_user = ${userId}
+            AND claims.cell_size = ${cellSize}
+        ),
+        claimed_cells AS (
+          SELECT DISTINCT x, y FROM visible_claims
+        )
+        SELECT
+          COUNT(*)::integer AS "claimedCellCount",
+          (COUNT(*) * ${cellSize}::bigint * ${cellSize}::bigint)::double precision AS "claimedAreaSquareMeters",
+          (SELECT COUNT(DISTINCT claim_flight)::integer FROM visible_claims) AS "flightCount",
+          viewport.visible_cell_count AS "visibleCellCount",
+          CASE
+            WHEN viewport.visible_cell_count = 0 THEN 0::double precision
+            ELSE (COUNT(*)::double precision / viewport.visible_cell_count * 100)::double precision
+          END AS "claimedPercentage"
+        FROM claimed_cells
+        CROSS JOIN viewport_grid_total viewport
+        GROUP BY viewport.visible_cell_count
+      `);
+
+      return result.rows[0] ?? emptyViewportStats();
+    },
   };
 }
 
@@ -154,6 +198,7 @@ export function createGridClaimService(
 
   return {
     get: personalGridClaim.get,
+    getViewportStats: personalGridClaim.getViewportStats,
     async process(input) {
       const result = await personalGridClaim.process({
         flightId: input.flightId,

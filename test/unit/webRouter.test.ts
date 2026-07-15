@@ -20,6 +20,20 @@ import { createSessionCookie } from '../../src/web/sessionCookie.js';
 import { createWebRouter } from '../../src/web/webRouter.js';
 import { withServer } from '../support/http.js';
 
+const viewportStats = {
+  claimedCellCount: 2,
+  claimedAreaSquareMeters: 2_000_000,
+  flightCount: 1,
+  visibleCellCount: 20,
+  claimedPercentage: 10,
+};
+
+const competitionStats = {
+  ...viewportStats,
+  pilotCount: 1,
+  currentPilotFlightCount: 1,
+};
+
 const user = {
   userId: '00000000-0000-4000-8000-000000000001',
   sessionId: '00000000-0000-4000-8000-000000000002',
@@ -72,6 +86,7 @@ function dependencies(
   };
   const gridClaim: GridClaimService = {
     get: vi.fn(async (): Promise<GridClaimGeoJson> => expectedGridGeoJson),
+    getViewportStats: vi.fn(async () => viewportStats),
     process: vi.fn(async () => ({
       flightId: '00000000-0000-4000-8000-000000000020',
       cellSize: 1_000,
@@ -116,6 +131,7 @@ function dependencies(
         rank: 1,
       }],
       currentPilot: null,
+      stats: competitionStats,
     })),
   };
   const router = createWebRouter({
@@ -363,6 +379,7 @@ describe('webRouter', () => {
       profiles: { updateTerritoryColor: vi.fn(async () => undefined) },
       gridClaim: {
         get: vi.fn(async () => emptyGridClaimGeoJson()),
+        getViewportStats: vi.fn(async () => viewportStats),
         process: vi.fn(async () => ({
           flightId: 'flight-id', cellSize: 1_000, directCellCount: 0, enclosedCellCount: 0,
         })),
@@ -370,7 +387,7 @@ describe('webRouter', () => {
       },
       competitionGridClaim: {
         getCurrent: vi.fn(async () => emptyCompetitionGridClaimGeoJson()),
-        getViewportLeaderboard: vi.fn(async () => ({ leaders: [], currentPilot: null })),
+        getViewportLeaderboard: vi.fn(async () => ({ leaders: [], currentPilot: null, stats: competitionStats })),
       },
       renderPage: createPageRenderer({ mapTilerApiKey: 'maptiler-test-key' }),
     });
@@ -417,6 +434,7 @@ describe('webRouter', () => {
           profiles: { updateTerritoryColor: vi.fn(async () => undefined) },
           gridClaim: {
             get: vi.fn(async () => emptyGridClaimGeoJson()),
+            getViewportStats: vi.fn(async () => viewportStats),
             process: vi.fn(async () => ({
               flightId: 'flight-id', cellSize: 1_000, directCellCount: 0, enclosedCellCount: 0,
             })),
@@ -424,7 +442,7 @@ describe('webRouter', () => {
           },
           competitionGridClaim: {
             getCurrent: vi.fn(async () => emptyCompetitionGridClaimGeoJson()),
-            getViewportLeaderboard: vi.fn(async () => ({ leaders: [], currentPilot: null })),
+            getViewportLeaderboard: vi.fn(async () => ({ leaders: [], currentPilot: null, stats: competitionStats })),
           },
           renderPage: createPageRenderer({ mapTilerApiKey: 'maptiler-test-key' }),
         }),
@@ -542,6 +560,58 @@ describe('webRouter', () => {
     });
   });
 
+  it('returns personal stats for an authenticated viewport request', async () => {
+    const { app, gridClaim } = dependencies();
+    await withServer(app, async (baseUrl) => {
+      const response = await fetch(
+        `${baseUrl}/v1/personal-stats?west=-107&south=39&east=-105&north=41`,
+        { headers: { cookie: 'glidehero_session=valid-token' } },
+      );
+
+      expect(response.status).toBe(200);
+      expect(await response.json()).toEqual(viewportStats);
+      expect(gridClaim.getViewportStats).toHaveBeenCalledWith({
+        userId: user.userId,
+        west: -107,
+        south: 39,
+        east: -105,
+        north: 41,
+      });
+    });
+  });
+
+  it.each([
+    'west=nope&south=39&east=-105&north=41',
+    'west=-181&south=39&east=-105&north=41',
+    'west=-107&south=41&east=-105&north=39',
+    'west=-107&south=39&east=-107&north=41',
+    'west=-107&south=39&east=-105',
+    'west=-107&south=39&east=-105&north=41&extra=value',
+  ])('rejects invalid personal stats query %s', async (query) => {
+    const { app, gridClaim } = dependencies();
+    await withServer(app, async (baseUrl) => {
+      const response = await fetch(`${baseUrl}/v1/personal-stats?${query}`, {
+        headers: { cookie: 'glidehero_session=valid-token' },
+      });
+
+      expect(response.status).toBe(400);
+      expect(await response.json()).toEqual({
+        error: { code: 'invalid_request', message: 'Personal stats require valid viewport bounds.' },
+      });
+      expect(gridClaim.getViewportStats).not.toHaveBeenCalled();
+    });
+  });
+
+  it('rejects anonymous personal stats without querying claims', async () => {
+    const { app, gridClaim } = dependencies();
+    await withServer(app, async (baseUrl) => {
+      const response = await fetch(`${baseUrl}/v1/personal-stats?west=-107&south=39&east=-105&north=41`);
+
+      expect(response.status).toBe(401);
+      expect(gridClaim.getViewportStats).not.toHaveBeenCalled();
+    });
+  });
+
   it('returns current competition ownership for the browser date', async () => {
     const { app, competitionGridClaim, expectedCompetitionGeoJson } = dependencies();
     await withServer(app, async (baseUrl) => {
@@ -602,6 +672,7 @@ describe('webRouter', () => {
           rank: 1,
         }],
         currentPilot: null,
+        stats: competitionStats,
       });
       expect(competitionGridClaim.getViewportLeaderboard).toHaveBeenCalledWith({
         competitionMonth: '2026-07',

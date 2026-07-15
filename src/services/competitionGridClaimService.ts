@@ -5,11 +5,15 @@ import { normalizeCompetitionMonth } from '../domain/competition/competitionMont
 import { normalizeCompetitionLeaderboardMonth } from '../domain/competition/competitionLeaderboardMonth.js';
 import type { CompetitionLeaderboard } from '../domain/competition/competitionLeaderboard.js';
 import {
+  emptyCompetitionViewportStats,
+} from '../domain/territory/viewportStats.js';
+import {
   emptyCompetitionGridClaimGeoJson,
   type CompetitionGridClaimGeoJson,
 } from '../domain/territory/competitionGridClaimGeoJson.js';
 import { gridClaimCandidateCtes } from './gridClaimCandidates.js';
 import { currentCompetitionOwnershipCtes } from './currentCompetitionOwnership.js';
+import { viewportGridCtes } from './viewportGrid.js';
 
 export interface CompetitionGridClaimService {
   process(input: { flightId: string; userId: string; launchTimezone: string }): Promise<void>;
@@ -33,6 +37,13 @@ type StoredLeaderboardPilot = {
   rank: number | null;
   isCurrentPilotOnly: boolean;
   displayPosition: number;
+  claimedCellCountTotal: number;
+  claimedAreaSquareMetersTotal: number;
+  flightCount: number;
+  pilotCount: number;
+  currentPilotFlightCount: number;
+  visibleCellCount: number;
+  claimedPercentage: number;
 };
 type ClaimDatabase = Pick<Database, 'delete' | 'execute'>;
 
@@ -148,18 +159,9 @@ export function createCompetitionGridClaimService(
       const normalizedMonth = normalizeCompetitionLeaderboardMonth(competitionMonth);
       const result = await database.execute<StoredLeaderboardPilot>(sql`
         WITH ${currentCompetitionOwnershipCtes({ competitionMonth: normalizedMonth, cellSize })},
-        viewport_parts AS (
-          SELECT ST_Transform(ST_MakeEnvelope(${west}, ${south}, ${east}, ${north}, 4326), 6933) AS geometry
-          WHERE ${west} <= ${east}
-          UNION ALL
-          SELECT ST_Transform(ST_MakeEnvelope(${west}, ${south}, 180, ${north}, 4326), 6933) AS geometry
-          WHERE ${west} > ${east}
-          UNION ALL
-          SELECT ST_Transform(ST_MakeEnvelope(-180, ${south}, ${east}, ${north}, 4326), 6933) AS geometry
-          WHERE ${west} > ${east}
-        ),
+        ${viewportGridCtes({ west, south, east, north, cellSize })},
         visible_claims AS (
-          SELECT DISTINCT c.x, c.y, c.claim_user
+          SELECT DISTINCT c.x, c.y, c.claim_user, c.claim_flight
           FROM current_claims c
           INNER JOIN viewport_parts viewport ON ST_Intersects(
             ST_MakeEnvelope(
@@ -217,36 +219,92 @@ export function createCompetitionGridClaimService(
             AND NOT EXISTS (
               SELECT 1 FROM displayed_pilots displayed WHERE displayed.claim_user = profile.user_id
             )
+        ),
+        viewport_stats AS (
+          SELECT
+            COUNT(*)::integer AS claimed_cell_count,
+            (COUNT(*) * ${cellSize}::bigint * ${cellSize}::bigint)::double precision AS claimed_area_square_meters,
+            COUNT(DISTINCT claim_flight)::integer AS flight_count,
+            COUNT(DISTINCT claim_user)::integer AS pilot_count,
+            COUNT(DISTINCT claim_flight) FILTER (WHERE claim_user = ${currentUserId})::integer AS current_pilot_flight_count,
+            viewport.visible_cell_count,
+            CASE
+              WHEN viewport.visible_cell_count = 0 THEN 0::double precision
+              ELSE (COUNT(*)::double precision / viewport.visible_cell_count * 100)::double precision
+            END AS claimed_percentage
+          FROM visible_claims
+          CROSS JOIN viewport_grid_total viewport
+          GROUP BY viewport.visible_cell_count
         )
         SELECT
-          claim_user AS "userId",
-          display_name AS "displayName",
-          claimed_cell_count AS "claimedCellCount",
-          claimed_area_square_meters AS "claimedAreaSquareMeters",
-          rank,
+          displayed_pilots.claim_user AS "userId",
+          displayed_pilots.display_name AS "displayName",
+          displayed_pilots.claimed_cell_count AS "claimedCellCount",
+          displayed_pilots.claimed_area_square_meters AS "claimedAreaSquareMeters",
+          displayed_pilots.rank,
           false AS "isCurrentPilotOnly",
-          display_position::integer AS "displayPosition"
+          display_position::integer AS "displayPosition",
+          stats.claimed_cell_count AS "claimedCellCountTotal",
+          stats.claimed_area_square_meters AS "claimedAreaSquareMetersTotal",
+          stats.flight_count AS "flightCount",
+          stats.pilot_count AS "pilotCount",
+          stats.current_pilot_flight_count AS "currentPilotFlightCount",
+          stats.visible_cell_count AS "visibleCellCount",
+          stats.claimed_percentage AS "claimedPercentage"
         FROM displayed_pilots
+        CROSS JOIN viewport_stats stats
         UNION ALL
         SELECT
-          claim_user AS "userId",
-          display_name AS "displayName",
-          claimed_cell_count AS "claimedCellCount",
-          claimed_area_square_meters AS "claimedAreaSquareMeters",
-          rank,
+          current_pilot.claim_user AS "userId",
+          current_pilot.display_name AS "displayName",
+          current_pilot.claimed_cell_count AS "claimedCellCount",
+          current_pilot.claimed_area_square_meters AS "claimedAreaSquareMeters",
+          current_pilot.rank,
           true AS "isCurrentPilotOnly",
-          11 AS "displayPosition"
+          11 AS "displayPosition",
+          stats.claimed_cell_count AS "claimedCellCountTotal",
+          stats.claimed_area_square_meters AS "claimedAreaSquareMetersTotal",
+          stats.flight_count AS "flightCount",
+          stats.pilot_count AS "pilotCount",
+          stats.current_pilot_flight_count AS "currentPilotFlightCount",
+          stats.visible_cell_count AS "visibleCellCount",
+          stats.claimed_percentage AS "claimedPercentage"
         FROM current_pilot
+        CROSS JOIN viewport_stats stats
         ORDER BY "displayPosition"
       `);
+
+      const firstRow = result.rows[0];
+      const stats = firstRow ? {
+        claimedCellCount: firstRow.claimedCellCountTotal,
+        claimedAreaSquareMeters: firstRow.claimedAreaSquareMetersTotal,
+        flightCount: firstRow.flightCount,
+        pilotCount: firstRow.pilotCount,
+        currentPilotFlightCount: firstRow.currentPilotFlightCount,
+        visibleCellCount: firstRow.visibleCellCount,
+        claimedPercentage: firstRow.claimedPercentage,
+      } : emptyCompetitionViewportStats();
 
       return {
         leaders: result.rows
           .filter((pilot) => !pilot.isCurrentPilotOnly)
-          .map(({ isCurrentPilotOnly: _, displayPosition: __, ...pilot }) => pilot),
+          .map((pilot) => ({
+            userId: pilot.userId,
+            displayName: pilot.displayName,
+            claimedCellCount: pilot.claimedCellCount,
+            claimedAreaSquareMeters: pilot.claimedAreaSquareMeters,
+            rank: pilot.rank,
+          })),
         currentPilot: result.rows
           .filter((pilot) => pilot.isCurrentPilotOnly)
-          .map(({ isCurrentPilotOnly: _, displayPosition: __, ...pilot }) => pilot)[0] ?? null,
+          .map((pilot) => ({
+            userId: pilot.userId,
+            displayName: pilot.displayName,
+            claimedCellCount: pilot.claimedCellCount,
+            claimedAreaSquareMeters: pilot.claimedAreaSquareMeters,
+            rank: pilot.rank,
+          }))[0] ?? null,
+        stats,
       };
     },
   };
