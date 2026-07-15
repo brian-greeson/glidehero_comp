@@ -43,8 +43,7 @@ button { border-color: #1769aa; color: #fff; background: #1769aa; font-weight: 7
 .auth-heading { margin-bottom: 1.75rem; text-align: center; }
 .auth-heading h2 { margin: 0; color: #0b1730; font-size: clamp(1.75rem, 3vw, 2.15rem); letter-spacing: -.025em; }
 .auth-heading p { margin: .55rem 0 0; color: #718096; line-height: 1.5; }
-.auth-form-panel + .auth-form-panel { margin-top: 3rem; padding-top: 3rem; border-top: 1px solid #d9e4ef; }
-.auth-enhanced .auth-form-panel + .auth-form-panel { margin-top: 0; padding-top: 0; border-top: 0; }
+.auth-form-panel[hidden] { display: none; }
 .auth-form-panel form { gap: 1.15rem; }
 .auth-form-panel label { position: relative; color: #263650; font-size: .9rem; font-weight: 750; }
 .auth-form-panel input { min-height: 50px; border-color: #c5d2df; color: var(--brand-navy); background: rgb(255 255 255 / .92); box-shadow: 0 1px 2px rgb(20 33 61 / .03); transition: border-color .15s ease, box-shadow .15s ease; }
