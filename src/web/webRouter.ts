@@ -2,6 +2,7 @@ import { Router, type Request, type Response } from 'express';
 import multer from 'multer';
 import { z } from 'zod';
 import { normalizeCompetitionMonth } from '../domain/competition/competitionMonth.js';
+import { normalizeCompetitionLeaderboardMonth } from '../domain/competition/competitionLeaderboardMonth.js';
 import { AppError } from '../domain/errors.js';
 import { AuthFailure, type AuthenticatedUser, type AuthService } from '../services/authService.js';
 import type { CompetitionGridClaimService } from '../services/competitionGridClaimService.js';
@@ -31,6 +32,23 @@ const competitionDateSchema = z.object({
     }
   }),
 });
+const finiteCoordinate = z.string().refine(
+  (value) => value.length > 0 && value.trim() === value && Number.isFinite(Number(value)),
+).transform(Number);
+const competitionLeaderboardSchema = z.object({
+  month: z.string().refine((value) => {
+    try {
+      normalizeCompetitionLeaderboardMonth(value);
+      return true;
+    } catch {
+      return false;
+    }
+  }),
+  west: finiteCoordinate.refine((value) => value >= -180 && value <= 180),
+  south: finiteCoordinate.refine((value) => value >= -90 && value <= 90),
+  east: finiteCoordinate.refine((value) => value >= -180 && value <= 180),
+  north: finiteCoordinate.refine((value) => value >= -90 && value <= 90),
+}).strict().refine((bounds) => bounds.south < bounds.north && bounds.west !== bounds.east);
 
 function formBody(body: unknown): Record<string, unknown> {
   if (typeof body !== 'object' || body === null || Array.isArray(body)) return {};
@@ -53,7 +71,7 @@ export function createWebRouter(dependencies: {
   igcFiles: IgcFileService;
   profiles: ProfileService;
   gridClaim: GridClaimService;
-  competitionGridClaim: Pick<CompetitionGridClaimService, 'getCurrent'>;
+  competitionGridClaim: Pick<CompetitionGridClaimService, 'getCurrent' | 'getViewportLeaderboard'>;
   renderPage: PageRenderer;
   adminEmails?: readonly string[];
   adminFlights?: AdminFlightService;
@@ -101,6 +119,36 @@ export function createWebRouter(dependencies: {
         competitionMonth: competitionDate.data.date,
       });
       res.status(200).json(territory);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.get('/v1/competition-leaderboard', async (req, res, next) => {
+    const currentUser = res.locals.currentUser;
+    if (!currentUser) {
+      next(new AppError(401, 'unauthorized', 'Sign in to view the competition leaderboard.'));
+      return;
+    }
+
+    const viewport = competitionLeaderboardSchema.safeParse(req.query);
+    if (!viewport.success) {
+      res.status(400).json({
+        error: { code: 'invalid_request', message: 'Competition leaderboard requires a valid YYYY-MM month and viewport bounds.' },
+      });
+      return;
+    }
+
+    try {
+      const leaderboard = await dependencies.competitionGridClaim.getViewportLeaderboard({
+        competitionMonth: viewport.data.month,
+        west: viewport.data.west,
+        south: viewport.data.south,
+        east: viewport.data.east,
+        north: viewport.data.north,
+        currentUserId: currentUser.userId,
+      });
+      res.status(200).json(leaderboard);
     } catch (error) {
       next(error);
     }

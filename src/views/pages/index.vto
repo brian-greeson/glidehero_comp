@@ -66,12 +66,11 @@
               <dl><div><dt>Claimed Area</dt><dd>—</dd></div><div><dt>Flights</dt><dd>—</dd></div><div><dt>Pilots</dt><dd>—</dd></div></dl>
             </div>
           </section>
-          <section class="info-card leaderboard-card">
+          <section class="info-card leaderboard-card" data-competition-leaderboard hidden>
             <h2>Leaderboard</h2>
-            <!-- STUB: Viewport leaderboard will rank pilots by visible competitive territory. -->
-            <div data-stub="viewport-leaderboard"><p class="empty-copy">No ranked pilots are available for this viewport yet.</p></div>
-            <!-- STUB: Full leaderboard will open the complete competition ranking. -->
-            <button type="button" class="full-leaderboard" data-stub="full-leaderboard" aria-disabled="true">View full leaderboard <span aria-hidden="true">→</span></button>
+            <p class="leaderboard-status" data-leaderboard-status aria-live="polite">Open the Competitive map to view local rankings.</p>
+            <div class="leaderboard-list" data-leaderboard-list role="list" aria-label="Viewport leaders"></div>
+            <div class="current-pilot-result" data-current-pilot-result hidden></div>
           </section>
         </div>
       </aside>

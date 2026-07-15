@@ -50,7 +50,7 @@ export function createPageRenderer(options: { mapTilerApiKey: string }): PageRen
         territoryColorError: undefined,
         territoryColorSuccess: false,
         isAdmin: false,
-        isDashboard: true,
+        isDashboard: model.currentUser !== null,
         mapTilerStyleUrl: `https://api.maptiler.com/maps/outdoor-v2/style.json?key=${options.mapTilerApiKey}`,
         ...model,
       })

@@ -84,7 +84,14 @@ function dependencies(
     type: 'FeatureCollection',
     features: [{
       type: 'Feature',
-      properties: { ownerUserId: user.userId },
+      properties: {
+        ownerUserId: user.userId,
+        cellId: '2026-07-01:1000:0:0',
+        competitionMonth: '2026-07-01',
+        cellSize: 1_000,
+        x: 0,
+        y: 0,
+      },
       geometry: {
         type: 'Polygon',
         coordinates: [[
@@ -100,6 +107,16 @@ function dependencies(
   const competitionGridClaim: CompetitionGridClaimService = {
     process: vi.fn(async () => undefined),
     getCurrent: vi.fn(async () => expectedCompetitionGeoJson),
+    getViewportLeaderboard: vi.fn(async () => ({
+      leaders: [{
+        userId: user.userId,
+        displayName: user.displayName,
+        claimedCellCount: 2,
+        claimedAreaSquareMeters: 2_000_000,
+        rank: 1,
+      }],
+      currentPilot: null,
+    })),
   };
   const router = createWebRouter({
     auth,
@@ -353,6 +370,7 @@ describe('webRouter', () => {
       },
       competitionGridClaim: {
         getCurrent: vi.fn(async () => emptyCompetitionGridClaimGeoJson()),
+        getViewportLeaderboard: vi.fn(async () => ({ leaders: [], currentPilot: null })),
       },
       renderPage: createPageRenderer({ mapTilerApiKey: 'maptiler-test-key' }),
     });
@@ -406,6 +424,7 @@ describe('webRouter', () => {
           },
           competitionGridClaim: {
             getCurrent: vi.fn(async () => emptyCompetitionGridClaimGeoJson()),
+            getViewportLeaderboard: vi.fn(async () => ({ leaders: [], currentPilot: null })),
           },
           renderPage: createPageRenderer({ mapTilerApiKey: 'maptiler-test-key' }),
         }),
@@ -562,6 +581,95 @@ describe('webRouter', () => {
         error: { code: 'unauthorized', message: 'Sign in to view competition territory.' },
       });
       expect(competitionGridClaim.getCurrent).not.toHaveBeenCalled();
+    });
+  });
+
+  it('returns the leaderboard for an authenticated YYYY-MM viewport request', async () => {
+    const { app, competitionGridClaim } = dependencies();
+    await withServer(app, async (baseUrl) => {
+      const response = await fetch(
+        `${baseUrl}/v1/competition-leaderboard?month=2026-07&west=-107&south=39&east=-105&north=41`,
+        { headers: { cookie: 'glidehero_session=valid-token' } },
+      );
+
+      expect(response.status).toBe(200);
+      expect(await response.json()).toEqual({
+        leaders: [{
+          userId: user.userId,
+          displayName: user.displayName,
+          claimedCellCount: 2,
+          claimedAreaSquareMeters: 2_000_000,
+          rank: 1,
+        }],
+        currentPilot: null,
+      });
+      expect(competitionGridClaim.getViewportLeaderboard).toHaveBeenCalledWith({
+        competitionMonth: '2026-07',
+        west: -107,
+        south: 39,
+        east: -105,
+        north: 41,
+        currentUserId: user.userId,
+      });
+    });
+  });
+
+  it.each([
+    'month=2026-07-14&west=-107&south=39&east=-105&north=41',
+    'month=2026-13&west=-107&south=39&east=-105&north=41',
+    'month=2026-07&west=nope&south=39&east=-105&north=41',
+    'month=2026-07&west=-181&south=39&east=-105&north=41',
+    'month=2026-07&west=-107&south=91&east=-105&north=41',
+    'month=2026-07&west=-107&south=41&east=-105&north=39',
+    'month=2026-07&west=-107&south=39&east=-107&north=41',
+    'month=2026-07&west=-107&south=39&east=-105',
+    'month=2026-07&west=-107&south=39&east=-105&north=41&extra=value',
+  ])('rejects invalid leaderboard query %s', async (query) => {
+    const { app, competitionGridClaim } = dependencies();
+    await withServer(app, async (baseUrl) => {
+      const response = await fetch(`${baseUrl}/v1/competition-leaderboard?${query}`, {
+        headers: { cookie: 'glidehero_session=valid-token' },
+      });
+
+      expect(response.status).toBe(400);
+      expect(await response.json()).toEqual({
+        error: {
+          code: 'invalid_request',
+          message: 'Competition leaderboard requires a valid YYYY-MM month and viewport bounds.',
+        },
+      });
+      expect(competitionGridClaim.getViewportLeaderboard).not.toHaveBeenCalled();
+    });
+  });
+
+  it('accepts a date-line-crossing viewport', async () => {
+    const { app, competitionGridClaim } = dependencies();
+    await withServer(app, async (baseUrl) => {
+      const response = await fetch(
+        `${baseUrl}/v1/competition-leaderboard?month=2026-07&west=179.9&south=-1&east=-179.9&north=1`,
+        { headers: { cookie: 'glidehero_session=valid-token' } },
+      );
+
+      expect(response.status).toBe(200);
+      expect(competitionGridClaim.getViewportLeaderboard).toHaveBeenCalledWith(expect.objectContaining({
+        west: 179.9,
+        east: -179.9,
+      }));
+    });
+  });
+
+  it('rejects an anonymous leaderboard request without querying claims', async () => {
+    const { app, competitionGridClaim } = dependencies();
+    await withServer(app, async (baseUrl) => {
+      const response = await fetch(
+        `${baseUrl}/v1/competition-leaderboard?month=2026-07&west=-107&south=39&east=-105&north=41`,
+      );
+
+      expect(response.status).toBe(401);
+      expect(await response.json()).toEqual({
+        error: { code: 'unauthorized', message: 'Sign in to view the competition leaderboard.' },
+      });
+      expect(competitionGridClaim.getViewportLeaderboard).not.toHaveBeenCalled();
     });
   });
 

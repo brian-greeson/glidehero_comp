@@ -69,7 +69,9 @@ describe('Vento page renderer', () => {
     expect(authenticated).toContain('data-territory-color="#1769AA"');
     expect(authenticated).toContain('data-current-user-id="00000000-0000-4000-8000-000000000001"');
     expect(authenticated).toContain('<script type="module" src="/scripts/dashboard.js"></script>');
-    expect(authenticated).toContain('data-stub="full-leaderboard"');
+    expect(authenticated).not.toContain('data-stub="full-leaderboard"');
+    expect(authenticated).toContain('data-competition-leaderboard');
+    expect(authenticated).toContain('data-leaderboard-list');
     expect(authenticated).toContain('No territory data is available for this viewport yet.');
     expect(authenticated).toContain('https://api.maptiler.com/maps/outdoor-v2/style.json?key=maptiler-test-key');
     expect(authenticated).not.toContain('action="/login"');

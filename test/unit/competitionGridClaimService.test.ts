@@ -58,4 +58,55 @@ describe('CompetitionGridClaimService', () => {
     await expect(service.getCurrent({ competitionMonth: '2026-02-29' })).rejects.toThrow(RangeError);
     expect(execute).not.toHaveBeenCalled();
   });
+
+  it('builds a full-cell viewport leaderboard from a YYYY-MM value', async () => {
+    const execute = vi.fn(async (_query: unknown) => ({ rows: [{
+      userId: '00000000-0000-4000-8000-000000000001',
+      displayName: 'Alpha Pilot',
+      claimedCellCount: 2,
+      claimedAreaSquareMeters: 2_000_000,
+      rank: 1,
+      isCurrentPilotOnly: false,
+      displayPosition: 1,
+    }] }));
+    const service = createCompetitionGridClaimService({ execute } as never, { cellSize: 1_000 });
+
+    await expect(service.getViewportLeaderboard({
+      competitionMonth: '2026-07',
+      west: -107,
+      south: 39,
+      east: -105,
+      north: 41,
+      currentUserId: '00000000-0000-4000-8000-000000000001',
+    })).resolves.toEqual({
+      leaders: [{
+        userId: '00000000-0000-4000-8000-000000000001',
+        displayName: 'Alpha Pilot',
+        claimedCellCount: 2,
+        claimedAreaSquareMeters: 2_000_000,
+        rank: 1,
+      }],
+      currentPilot: null,
+    });
+
+    const query = JSON.stringify(execute.mock.calls[0]?.[0]);
+    expect(query).toContain('2026-07-01');
+    expect(query).toContain('ST_Intersects');
+    expect(query).toContain('display_position <= 10');
+  });
+
+  it('rejects a full date before executing a leaderboard query', async () => {
+    const execute = vi.fn();
+    const service = createCompetitionGridClaimService({ execute } as never, { cellSize: 1_000 });
+
+    await expect(service.getViewportLeaderboard({
+      competitionMonth: '2026-07-14',
+      west: -107,
+      south: 39,
+      east: -105,
+      north: 41,
+      currentUserId: '00000000-0000-4000-8000-000000000001',
+    })).rejects.toThrow(RangeError);
+    expect(execute).not.toHaveBeenCalled();
+  });
 });
