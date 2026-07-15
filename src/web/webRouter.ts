@@ -51,7 +51,7 @@ export function createWebRouter(dependencies: {
   igcFiles: IgcFileService;
   profiles: ProfileService;
   gridClaim: GridClaimService;
-  competitionGridClaim: CompetitionGridClaimService;
+  competitionGridClaim: Pick<CompetitionGridClaimService, 'getCurrent'>;
   renderPage: PageRenderer;
 }) {
   const router = Router();

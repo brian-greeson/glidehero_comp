@@ -55,7 +55,7 @@ describe('authentication schema', () => {
     ]);
   });
 
-  it('stores grid claims with a cascading composite cell identity and lookup indexes', async () => {
+  it('stores permanent personal grid contributions with a cascading pilot and flight identity', async () => {
     const columns = await database.pool.query<{
       column_name: string;
       data_type: string;
@@ -92,7 +92,7 @@ describe('authentication schema', () => {
       { column_name: 'x', data_type: 'integer', is_nullable: 'NO', udt_name: 'int4' },
       { column_name: 'y', data_type: 'integer', is_nullable: 'NO', udt_name: 'int4' },
     ]);
-    expect(primaryKey.rows).toEqual([{ definition: 'PRIMARY KEY (cell_size, x, y)' }]);
+    expect(primaryKey.rows).toEqual([{ definition: 'PRIMARY KEY (claim_user, cell_size, x, y, claim_flight)' }]);
     expect(foreignKeys.rows).toEqual([{ confdeltype: 'c' }, { confdeltype: 'c' }]);
     expect(indexes.rows.map((row) => row.indexname)).toEqual([
       'user_grid_claims_claim_flight_idx',

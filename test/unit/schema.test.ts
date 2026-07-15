@@ -1,6 +1,6 @@
 import { getTableConfig } from 'drizzle-orm/pg-core';
 import { describe, expect, it } from 'vitest';
-import { competitionGridClaims, flights, userGridClaims } from '../../src/db/schema.js';
+import { competitionGridClaims, flights, personalGridClaims } from '../../src/db/schema.js';
 
 describe('flight schema', () => {
   it('requires one globally unique content hash per flight', () => {
@@ -13,9 +13,9 @@ describe('flight schema', () => {
   });
 });
 
-describe('user grid claim schema', () => {
-  it('defines cell ownership with a composite primary key and lookup indexes', () => {
-    const config = getTableConfig(userGridClaims);
+describe('personal grid claim schema', () => {
+  it('retains each pilot and flight contribution with a composite primary key and lookup indexes', () => {
+    const config = getTableConfig(personalGridClaims);
 
     expect(config.name).toBe('user_grid_claims');
     expect(config.columns.map((column) => column.name)).toEqual([
@@ -27,7 +27,7 @@ describe('user grid claim schema', () => {
       'claim_timestamp',
     ]);
     expect(config.primaryKeys.map((key) => key.columns.map((column) => column.name))).toEqual([
-      ['cell_size', 'x', 'y'],
+      ['claim_user', 'cell_size', 'x', 'y', 'claim_flight'],
     ]);
     expect(config.foreignKeys.map((key) => key.onDelete)).toEqual(['cascade', 'cascade']);
     expect(config.indexes.map((index) => index.config.name)).toEqual([

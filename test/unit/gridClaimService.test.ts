@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { createGridClaimService } from '../../src/services/gridClaimService.js';
+import { createPersonalGridClaimService } from '../../src/services/gridClaimService.js';
 
 const flightId = '00000000-0000-4000-8000-000000000020';
 const userId = '00000000-0000-4000-8000-000000000030';
@@ -21,15 +21,15 @@ function projectionDatabaseDouble(rows: unknown[] = []) {
   return { database: { execute }, execute };
 }
 
-describe('GridClaimService', () => {
+describe('PersonalGridClaimService', () => {
   it('replaces a flight’s existing cells and reports direct and enclosed claims', async () => {
     const { database, where, execute, deleteFrom, transaction } = processingDatabaseDouble({
       directCellCount: 3,
       enclosedCellCount: 2,
     });
-    const service = createGridClaimService(database as never, { cellSize: 1_000 });
+    const service = createPersonalGridClaimService(database as never, { cellSize: 1_000 });
 
-    await expect(service.process({ flightId, userId, launchTimezone: 'America/Denver' })).resolves.toEqual({
+    await expect(service.process({ flightId, userId })).resolves.toEqual({
       flightId,
       cellSize: 1_000,
       directCellCount: 3,
@@ -37,36 +37,35 @@ describe('GridClaimService', () => {
     });
 
     expect(transaction).toHaveBeenCalledOnce();
-    expect(deleteFrom).toHaveBeenCalledTimes(2);
-    expect(where).toHaveBeenCalledTimes(2);
+    expect(deleteFrom).toHaveBeenCalledOnce();
+    expect(where).toHaveBeenCalledOnce();
     expect(execute).toHaveBeenCalledOnce();
   });
 
   it('splits projected segments before generating direct-cell grid candidates', async () => {
     const { database, execute } = processingDatabaseDouble();
-    const service = createGridClaimService(database as never, { cellSize: 1_000 });
+    const service = createPersonalGridClaimService(database as never, { cellSize: 1_000 });
 
-    await service.process({ flightId, userId, launchTimezone: 'America/Denver' });
+    await service.process({ flightId, userId });
 
     expect(JSON.stringify(execute.mock.calls[0]?.[0])).toContain('ST_Segmentize');
   });
 
-  it('groups competition events by launch-local month and keeps Personal winners global', async () => {
+  it('writes only pilot-scoped personal contributions', async () => {
     const { database, execute } = processingDatabaseDouble();
-    const service = createGridClaimService(database as never, { cellSize: 1_000 });
+    const service = createPersonalGridClaimService(database as never, { cellSize: 1_000 });
 
-    await service.process({ flightId, userId, launchTimezone: 'America/Denver' });
+    await service.process({ flightId, userId });
 
     const query = JSON.stringify(execute.mock.calls[0]?.[0]);
-    expect(query).toContain('AT TIME ZONE');
-    expect(query).toContain('competition_grid_claims');
-    expect(query).toContain('competition_month');
-    expect(query).toContain('personal_winning_candidates');
+    expect(query).toContain('user_grid_claims');
+    expect(query).toContain('candidate_events');
+    expect(query).not.toContain('competition_grid_claims');
   });
 
   it('returns an empty FeatureCollection when the user owns no cells', async () => {
     const { database, execute } = projectionDatabaseDouble();
-    const service = createGridClaimService(database as never, { cellSize: 1_000 });
+    const service = createPersonalGridClaimService(database as never, { cellSize: 1_000 });
 
     await expect(service.get({ userId })).resolves.toEqual({ type: 'FeatureCollection', features: [] });
     expect(execute).toHaveBeenCalledOnce();
@@ -82,7 +81,7 @@ describe('GridClaimService', () => {
       }],
     };
     const { database } = projectionDatabaseDouble([{ geojson }]);
-    const service = createGridClaimService(database as never, { cellSize: 1_000 });
+    const service = createPersonalGridClaimService(database as never, { cellSize: 1_000 });
 
     await expect(service.get({ userId })).resolves.toEqual(geojson);
   });

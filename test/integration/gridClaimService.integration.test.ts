@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { eq } from 'drizzle-orm';
-import { competitionGridClaims, flights, igcFiles, trackPoints, userGridClaims, users } from '../../src/db/schema.js';
+import { competitionGridClaims, flights, igcFiles, personalGridClaims as userGridClaims, trackPoints, users } from '../../src/db/schema.js';
 import { createGridClaimService } from '../../src/services/gridClaimService.js';
 import { resetAndPushTestDatabase } from './database.js';
 
@@ -217,7 +217,7 @@ describe('GridClaimService with PostGIS', () => {
     expect(cells.find(({ x, y }) => x === 4 && y === 1)).toMatchObject({ claimUser: flight.userId });
   });
 
-  it('transfers an enclosed cell from another user when the enclosing flight is newer', async () => {
+  it('keeps an enclosed cell for both pilots while competition records the newer claim', async () => {
     const service = createGridClaimService(database.db, { cellSize: 1_000 });
     const previousOwner = await persistFlight(
       [[1_100, 1_100], [1_900, 1_100]],
@@ -231,9 +231,21 @@ describe('GridClaimService with PostGIS', () => {
     await service.process(previousOwner);
     await service.process(enclosingFlight);
 
-    expect((await storedCells(1_000)).find(({ x, y }) => x === 1 && y === 1)).toMatchObject({
-      claimUser: enclosingFlight.userId,
-      claimFlight: enclosingFlight.flightId,
+    expect((await storedCells(1_000)).filter(({ x, y }) => x === 1 && y === 1)).toEqual(expect.arrayContaining([
+      expect.objectContaining({ claimUser: previousOwner.userId, claimFlight: previousOwner.flightId }),
+      expect.objectContaining({ claimUser: enclosingFlight.userId, claimFlight: enclosingFlight.flightId }),
+    ]));
+    expect((await storedCompetitionCells(1_000)).filter(({ x, y }) => x === 1 && y === 1)).toEqual(expect.arrayContaining([
+      expect.objectContaining({ claimUser: previousOwner.userId, claimFlight: previousOwner.flightId }),
+      expect.objectContaining({ claimUser: enclosingFlight.userId, claimFlight: enclosingFlight.flightId }),
+    ]));
+    await expect(service.get({ userId: previousOwner.userId })).resolves.toMatchObject({
+      type: 'FeatureCollection',
+      features: [expect.any(Object)],
+    });
+    await expect(service.get({ userId: enclosingFlight.userId })).resolves.toMatchObject({
+      type: 'FeatureCollection',
+      features: [expect.any(Object)],
     });
   });
 
@@ -269,7 +281,7 @@ describe('GridClaimService with PostGIS', () => {
     await expect(storedCells(1_000)).resolves.toEqual(firstRows);
   });
 
-  it('keeps the latest owner, retaining the existing owner on equal timestamps', async () => {
+  it('keeps personal contributions for every pilot while competition retains claim history', async () => {
     const service = createGridClaimService(database.db, { cellSize: 1_000 });
     const earlier = await persistFlight([[100, 100], [900, 100]], new Date(Date.UTC(2026, 0, 1, 0, 0, 0)));
     const later = await persistFlight([[100, 100], [900, 100]], new Date(Date.UTC(2026, 0, 1, 0, 1, 0)));
@@ -280,7 +292,16 @@ describe('GridClaimService with PostGIS', () => {
     await service.process(earlier);
     await service.process(equal);
 
-    expect(await storedCells(1_000)).toMatchObject([{ x: 0, y: 0, claimUser: later.userId, claimFlight: later.flightId }]);
+    expect(await storedCells(1_000)).toEqual(expect.arrayContaining([
+      expect.objectContaining({ x: 0, y: 0, claimUser: earlier.userId, claimFlight: earlier.flightId }),
+      expect.objectContaining({ x: 0, y: 0, claimUser: later.userId, claimFlight: later.flightId }),
+      expect.objectContaining({ x: 0, y: 0, claimUser: equal.userId, claimFlight: equal.flightId }),
+    ]));
+    expect(await storedCompetitionCells(1_000)).toEqual(expect.arrayContaining([
+      expect.objectContaining({ x: 0, y: 0, claimUser: earlier.userId, claimFlight: earlier.flightId }),
+      expect.objectContaining({ x: 0, y: 0, claimUser: later.userId, claimFlight: later.flightId }),
+      expect.objectContaining({ x: 0, y: 0, claimUser: equal.userId, claimFlight: equal.flightId }),
+    ]));
   });
 
   it('stores the newest endpoint timestamp when multiple segments directly claim one cell', async () => {

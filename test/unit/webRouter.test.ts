@@ -96,6 +96,7 @@ function dependencies(
     }],
   };
   const competitionGridClaim: CompetitionGridClaimService = {
+    process: vi.fn(async () => undefined),
     getCurrent: vi.fn(async () => expectedCompetitionGeoJson),
   };
   const router = createWebRouter({

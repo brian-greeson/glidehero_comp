@@ -105,7 +105,7 @@ export const trackPoints = pgTable(
   ],
 );
 
-export const userGridClaims = pgTable(
+export const personalGridClaims = pgTable(
   'user_grid_claims',
   {
     cellSize: integer('cell_size').notNull(),
@@ -116,7 +116,7 @@ export const userGridClaims = pgTable(
     claimTimestamp: timestamp('claim_timestamp', { withTimezone: true, mode: 'date' }).notNull(),
   },
   (table) => [
-    primaryKey({ columns: [table.cellSize, table.x, table.y] }),
+    primaryKey({ columns: [table.claimUser, table.cellSize, table.x, table.y, table.claimFlight] }),
     index('user_grid_claims_claim_user_cell_size_idx').on(table.claimUser, table.cellSize),
     index('user_grid_claims_claim_flight_idx').on(table.claimFlight),
   ],
