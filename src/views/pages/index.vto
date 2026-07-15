@@ -22,6 +22,7 @@
             </button>
             <section id="account-popover" class="account-popover" data-account-popover hidden>
               <p class="account-email">{{ currentUser.email }}</p>
+              {{ if isAdmin }}<a class="admin-link" href="/admin">Admin</a>{{ /if }}
               <form method="post" action="/profile/territory-color">
                 <label>Territory color<input name="territoryColor" type="color" value="{{ currentUser.territoryColor }}" required></label>
                 {{ if territoryColorSuccess }}<p class="success" role="status">Map color saved.</p>{{ /if }}

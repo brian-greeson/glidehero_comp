@@ -2,6 +2,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { eq } from 'drizzle-orm';
 import { competitionGridClaims, flights, igcFiles, personalGridClaims as userGridClaims, trackPoints, users } from '../../src/db/schema.js';
 import { createGridClaimService } from '../../src/services/gridClaimService.js';
+import { createAdminFlightService } from '../../src/services/adminFlightService.js';
 import { resetAndPushTestDatabase } from './database.js';
 
 type ProjectedCoordinate = readonly [x: number, y: number];
@@ -383,6 +384,79 @@ describe('GridClaimService with PostGIS', () => {
     expect(await storedCells(2_000)).toMatchObject([
       { cellSize: 2_000, x: 0, y: 0, claimUser: flight.userId },
       { cellSize: 2_000, x: 1, y: 0, claimUser: flight.userId },
+    ]);
+  });
+
+  it('rebuilds a completed flight’s claims without changing its flight data or track points', async () => {
+    const flight = await persistFlight([[100, 100], [2_100, 100]]);
+    const service = createGridClaimService(database.db, { cellSize: 1_000 });
+    const originalStartedAt = new Date(Date.UTC(2026, 0, 1, 12));
+    await database.db.update(flights).set({
+      startedAt: originalStartedAt,
+      distanceMeters: 2_000,
+      durationSeconds: 60,
+    }).where(eq(flights.id, flight.flightId));
+    await service.process(flight);
+    await createGridClaimService(database.db, { cellSize: 2_000 }).process(flight);
+    const pointsBefore = await database.db.select().from(trackPoints).where(eq(trackPoints.flightId, flight.flightId));
+
+    const adminFlights = createAdminFlightService(database.db, service);
+    await expect(adminFlights.reprocessFlight({ flightId: flight.flightId })).resolves.toMatchObject({
+      status: 'completed',
+      result: { directCellCount: 3, enclosedCellCount: 0 },
+    });
+
+    expect(await storedCells(2_000)).toEqual([]);
+    expect(await storedCompetitionCells(2_000)).toEqual([]);
+    expect(await storedCells(1_000)).toMatchObject([
+      { x: 0, y: 0, claimFlight: flight.flightId },
+      { x: 1, y: 0, claimFlight: flight.flightId },
+      { x: 2, y: 0, claimFlight: flight.flightId },
+    ]);
+    expect(await database.db.select().from(trackPoints).where(eq(trackPoints.flightId, flight.flightId))).toEqual(pointsBefore);
+    const [storedFlight] = await database.db.select({
+      startedAt: flights.startedAt,
+      distanceMeters: flights.distanceMeters,
+      durationSeconds: flights.durationSeconds,
+      processingStatus: flights.processingStatus,
+    }).from(flights).where(eq(flights.id, flight.flightId));
+    expect(storedFlight).toEqual({
+      startedAt: originalStartedAt,
+      distanceMeters: 2_000,
+      durationSeconds: 60,
+      processingStatus: 'completed',
+    });
+  });
+
+  it('rolls back both claim sets when competition rebuilding fails', async () => {
+    const flight = await persistFlight([[100, 100], [900, 100]], new Date(Date.UTC(2026, 0, 1)), 'Invalid/Timezone');
+    const claimTimestamp = new Date(Date.UTC(2026, 0, 1));
+    await database.db.insert(userGridClaims).values({
+      cellSize: 1_000,
+      x: 99,
+      y: 99,
+      claimFlight: flight.flightId,
+      claimUser: flight.userId,
+      claimTimestamp,
+    });
+    await database.db.insert(competitionGridClaims).values({
+      competitionMonth: '2026-01-01',
+      cellSize: 1_000,
+      x: 99,
+      y: 99,
+      claimFlight: flight.flightId,
+      claimUser: flight.userId,
+      claimTimestamp,
+    });
+    const service = createGridClaimService(database.db, { cellSize: 1_000 });
+
+    await expect(service.reprocess({ flightId: flight.flightId })).rejects.toThrow();
+
+    expect(await database.db.select().from(userGridClaims).where(eq(userGridClaims.claimFlight, flight.flightId))).toMatchObject([
+      { cellSize: 1_000, x: 99, y: 99, claimUser: flight.userId },
+    ]);
+    expect(await database.db.select().from(competitionGridClaims).where(eq(competitionGridClaims.claimFlight, flight.flightId))).toMatchObject([
+      { competitionMonth: '2026-01-01', cellSize: 1_000, x: 99, y: 99, claimUser: flight.userId },
     ]);
   });
 

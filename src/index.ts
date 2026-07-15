@@ -4,12 +4,13 @@ import { parseConfig } from './config.js';
 import { createDatabase } from './db/client.js';
 import { createBucketClient } from './resources/bucketClient.js';
 import { createAuthService } from './services/authService.js';
+import { createAdminFlightService } from './services/adminFlightService.js';
 import { createCompetitionGridClaimService } from './services/competitionGridClaimService.js';
 import { createFlightProcessingService } from './services/flightProcessingService.js';
 import { createGridClaimService } from './services/gridClaimService.js';
 import { createIgcFileService } from './services/igcFileService.js';
 import { createProfileService } from './services/profileService.js';
-import { createPageRenderer } from './views/renderer.js';
+import { createAdminPageRenderer, createPageRenderer } from './views/renderer.js';
 import { createCurrentUserMiddleware } from './web/currentUserMiddleware.js';
 import { createSessionCookie } from './web/sessionCookie.js';
 import { createWebRouter } from './web/webRouter.js';
@@ -19,6 +20,7 @@ const { db } = createDatabase(config.databaseUrl);
 const auth = createAuthService(db, { sessionTtlSeconds: config.sessionTtlSeconds });
 const s3Client = createBucketClient(config);
 const gridClaim = createGridClaimService(db, { cellSize: config.gridClaimCellSize });
+const adminFlights = createAdminFlightService(db, gridClaim);
 const competitionGridClaim = createCompetitionGridClaimService(db, { cellSize: config.gridClaimCellSize });
 const flightProcessing = createFlightProcessingService(db, {
   s3Client,
@@ -45,6 +47,9 @@ const webMiddleware = [
     gridClaim,
     competitionGridClaim,
     renderPage: createPageRenderer({ mapTilerApiKey: config.mapTilerApiKey }),
+    adminEmails: config.adminEmails,
+    adminFlights,
+    renderAdminPage: createAdminPageRenderer(),
   }),
 ];
 const server = createServer(createApp({ webMiddleware }));

@@ -3,11 +3,13 @@ import multer from 'multer';
 import { z } from 'zod';
 import { normalizeCompetitionMonth } from '../domain/competition/competitionMonth.js';
 import { AppError } from '../domain/errors.js';
-import { AuthFailure, type AuthService } from '../services/authService.js';
+import { AuthFailure, type AuthenticatedUser, type AuthService } from '../services/authService.js';
 import type { CompetitionGridClaimService } from '../services/competitionGridClaimService.js';
 import { normalizeTerritoryColor, type ProfileService } from '../services/profileService.js';
 import type { GridClaimService } from '../services/gridClaimService.js';
+import type { AdminFlightService } from '../services/adminFlightService.js';
 import type { PageModel, PageRenderer } from '../views/renderer.js';
+import type { AdminPageRenderer } from '../views/renderer.js';
 import type { IgcFileService } from '../services/igcFileService.js';
 import type { SessionCookie } from './sessionCookie.js';
 
@@ -53,8 +55,17 @@ export function createWebRouter(dependencies: {
   gridClaim: GridClaimService;
   competitionGridClaim: Pick<CompetitionGridClaimService, 'getCurrent'>;
   renderPage: PageRenderer;
+  adminEmails?: readonly string[];
+  adminFlights?: AdminFlightService;
+  renderAdminPage?: AdminPageRenderer;
 }) {
   const router = Router();
+  const adminEmails = new Set((dependencies.adminEmails ?? []).map((email) => email.trim().toLowerCase()));
+  const isAdmin = (email: string) => adminEmails.has(email.trim().toLowerCase());
+
+  function hasAdminAccess(currentUser: AuthenticatedUser | null): boolean {
+    return Boolean(currentUser && isAdmin(currentUser.email));
+  }
 
   router.get('/v1/personal-territory', async (req, res, next) => {
     const currentUser = res.locals.currentUser;
@@ -98,9 +109,53 @@ export function createWebRouter(dependencies: {
   router.get('/', async (req, res) => {
     await render(res, dependencies.renderPage, 200, {
       currentUser: res.locals.currentUser,
+      isAdmin: res.locals.currentUser ? isAdmin(res.locals.currentUser.email) : false,
       uploadSuccess: req.query.igcUpload === 'success',
       territoryColorSuccess: req.query.territoryColor === 'success',
     });
+  });
+
+  router.get('/admin', async (req, res, next) => {
+    const currentUser = res.locals.currentUser;
+    if (!currentUser || !hasAdminAccess(currentUser)) {
+      next(new AppError(403, 'unauthorized', 'Admin access is required.'));
+      return;
+    }
+    if (!dependencies.adminFlights || !dependencies.renderAdminPage) {
+      throw new Error('Admin dependencies are not configured.');
+    }
+
+    try {
+      res.status(200).type('html').send(await dependencies.renderAdminPage({
+        currentUser,
+        flights: await dependencies.adminFlights.listRecentFlights(),
+        reprocessSuccess: req.query.reprocess === 'success',
+        reprocessError: req.query.reprocess === 'error',
+      }));
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.post('/admin/flights/:flightId/reprocess', async (req, res, next) => {
+    const currentUser = res.locals.currentUser;
+    if (!currentUser || !hasAdminAccess(currentUser)) {
+      next(new AppError(403, 'unauthorized', 'Admin access is required.'));
+      return;
+    }
+    if (!dependencies.adminFlights) throw new Error('Admin dependencies are not configured.');
+    if (!z.string().uuid().safeParse(req.params.flightId).success) {
+      res.redirect(303, '/admin?reprocess=error');
+      return;
+    }
+
+    try {
+      const outcome = await dependencies.adminFlights.reprocessFlight({ flightId: req.params.flightId });
+      res.redirect(303, outcome.status === 'completed' ? '/admin?reprocess=success' : '/admin?reprocess=error');
+    } catch (error) {
+      console.error('Unable to reprocess flight claims', error);
+      res.redirect(303, '/admin?reprocess=error');
+    }
   });
 
   router.post('/signup', async (req, res) => {

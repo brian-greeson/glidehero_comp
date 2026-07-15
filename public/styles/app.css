@@ -118,9 +118,26 @@ button { border-color: #1769aa; color: #fff; background: #1769aa; font-weight: 7
 .account-popover form { margin-top: .8rem; }
 .account-popover input { padding: .25rem; }
 .account-email { margin: 0; color: #64748b; font-size: .85rem; }
+.admin-link { display: inline-block; width: fit-content; color: #1769aa; font-size: .9rem; font-weight: 800; }
 .secondary-button, .logout-button { padding: .6rem .75rem; }
 .logout-button { color: #991b1b; border-color: #fecaca; background: #fff1f2; }
 .toast { position: absolute; top: 86px; right: 1.75rem; z-index: 10; width: min(300px, calc(100vw - 2rem)); margin: 0; box-shadow: 0 8px 24px rgb(0 0 0 / .15); }
+
+.admin-body { background: #eef6ff; }
+.admin-shell { width: 100%; min-height: 100vh; margin: 0; padding: 0; }
+.admin-page { min-height: 100vh; }
+.admin-header { display: flex; min-height: 76px; align-items: center; justify-content: space-between; gap: 1rem; padding: 0 1.75rem; color: #fff; background: linear-gradient(110deg, #030b15, #071521); }
+.admin-back-link { color: #fff; font-weight: 700; }
+.admin-content { width: min(1120px, calc(100% - 2rem)); margin: 0 auto; padding: 3rem 0; }
+.admin-content h1 { margin: 0; color: #0b1730; font-size: clamp(2rem, 4vw, 3rem); }
+.admin-eyebrow { margin: 0 0 .4rem; color: #1769aa; font-size: .8rem; font-weight: 900; letter-spacing: .12em; text-transform: uppercase; }
+.admin-table-wrap { margin-top: 1.5rem; overflow-x: auto; border: 1px solid #d7e2ed; border-radius: .8rem; background: #fff; box-shadow: 0 8px 24px rgb(20 33 61 / .08); }
+.admin-flight-table { width: 100%; min-width: 720px; border-collapse: collapse; text-align: left; }
+.admin-flight-table th, .admin-flight-table td { padding: .9rem 1rem; border-bottom: 1px solid #e6edf4; vertical-align: middle; }
+.admin-flight-table th { color: #52657a; background: #f7fafd; font-size: .78rem; letter-spacing: .06em; text-transform: uppercase; }
+.admin-flight-table tbody tr:last-child td { border-bottom: 0; }
+.admin-flight-table form { display: block; }
+.admin-reprocess-button { width: auto; padding: .5rem .7rem; font-size: .85rem; }
 
 .map-stage { position: absolute; inset: 76px 0 0; overflow: hidden; background: #dae8cf; }
 .map-canvas { width: 100%; height: 100%; }

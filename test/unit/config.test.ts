@@ -20,6 +20,7 @@ describe('parseConfig', () => {
       sessionTtlSeconds: 604800,
       mapTilerApiKey: 'maptiler-test-key',
       gridClaimCellSize: 1000,
+      adminEmails: [],
       bucket: {
         bucketSecret: 'secret',
         bucketId: 'id',
@@ -73,5 +74,20 @@ describe('parseConfig', () => {
         GRID_CLAIM_CELL_SIZE: '1000',
       }),
     ).toMatchObject({ environment: 'production', isProduction: true });
+  });
+
+  it('accepts optional comma-separated admin emails', () => {
+    const config = parseConfig({
+      DATABASE_URL: 'postgres://localhost/glidehero',
+      BUCKET_SECRET: 'secret',
+      BUCKET_ID: 'id',
+      BUCKET_NAME: 'glidehero-files',
+      BUCKET_URL: 'https://s3.example.test',
+      MAPTILER_API_KEY: 'maptiler-test-key',
+      GRID_CLAIM_CELL_SIZE: '1000',
+      ADMIN_EMAILS: ' Admin@example.com, ,second@example.com,ADMIN@example.com ',
+    });
+
+    expect(config.adminEmails).toEqual(['admin@example.com', 'second@example.com']);
   });
 });

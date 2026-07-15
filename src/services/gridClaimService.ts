@@ -1,11 +1,11 @@
 import { and, eq, sql } from 'drizzle-orm';
 import type { Database } from '../db/client.js';
-import { personalGridClaims } from '../db/schema.js';
+import { competitionGridClaims, flights, personalGridClaims } from '../db/schema.js';
 import {
   emptyGridClaimGeoJson,
   type GridClaimGeoJson,
 } from '../domain/territory/gridClaimGeoJson.js';
-import { createCompetitionGridClaimService } from './competitionGridClaimService.js';
+import { createCompetitionGridClaimService, rebuildCompetitionGridClaims } from './competitionGridClaimService.js';
 import { gridClaimCandidateCtes } from './gridClaimCandidates.js';
 
 export type GridClaimProcessResult = {
@@ -22,6 +22,11 @@ export interface PersonalGridClaimService {
 
 export interface GridClaimService {
   process(input: { flightId: string; userId: string; launchTimezone: string }): Promise<GridClaimProcessResult>;
+  reprocess(input: { flightId: string }): Promise<
+    | { status: 'completed'; result: GridClaimProcessResult }
+    | { status: 'not_found' }
+    | { status: 'not_completed' }
+  >;
   get(input: { userId: string }): Promise<GridClaimGeoJson>;
 }
 
@@ -31,6 +36,49 @@ type ProcessCounts = {
 };
 
 type StoredProjection = { geojson: GridClaimGeoJson };
+type ClaimDatabase = Pick<Database, 'delete' | 'execute'>;
+
+async function rebuildPersonalClaims(
+  database: ClaimDatabase,
+  input: { flightId: string; userId: string },
+  cellSize: number,
+): Promise<GridClaimProcessResult> {
+  const result = await database.execute<ProcessCounts>(sql`
+    ${gridClaimCandidateCtes({ flightId: input.flightId, cellSize })},
+    personal_cells AS (
+      SELECT x, y, MAX(claim_timestamp) AS claim_timestamp
+      FROM candidate_events
+      GROUP BY x, y
+    ),
+    personal_inserted AS (
+      INSERT INTO user_grid_claims (
+        cell_size,
+        x,
+        y,
+        claim_flight,
+        claim_user,
+        claim_timestamp
+      )
+      SELECT ${cellSize}, x, y, ${input.flightId}, ${input.userId}, claim_timestamp
+      FROM personal_cells
+      ON CONFLICT (claim_user, cell_size, x, y, claim_flight) DO UPDATE
+      SET
+        claim_timestamp = EXCLUDED.claim_timestamp
+      RETURNING x, y
+    )
+    SELECT
+      (SELECT count(*)::integer FROM direct_cells) AS "directCellCount",
+      (SELECT count(*)::integer FROM enclosed_candidates) AS "enclosedCellCount"
+  `);
+  const counts = result.rows[0] ?? { directCellCount: 0, enclosedCellCount: 0 };
+
+  return {
+    flightId: input.flightId,
+    cellSize,
+    directCellCount: counts.directCellCount,
+    enclosedCellCount: counts.enclosedCellCount,
+  };
+}
 
 export function createPersonalGridClaimService(
   database: Database,
@@ -46,41 +94,7 @@ export function createPersonalGridClaimService(
           eq(personalGridClaims.cellSize, cellSize),
         ));
 
-        const result = await tx.execute<ProcessCounts>(sql`
-          ${gridClaimCandidateCtes({ flightId, cellSize })},
-          personal_cells AS (
-            SELECT x, y, MAX(claim_timestamp) AS claim_timestamp
-            FROM candidate_events
-            GROUP BY x, y
-          ),
-          personal_inserted AS (
-            INSERT INTO user_grid_claims (
-              cell_size,
-              x,
-              y,
-              claim_flight,
-              claim_user,
-              claim_timestamp
-            )
-            SELECT ${cellSize}, x, y, ${flightId}, ${userId}, claim_timestamp
-            FROM personal_cells
-            ON CONFLICT (claim_user, cell_size, x, y, claim_flight) DO UPDATE
-            SET
-              claim_timestamp = EXCLUDED.claim_timestamp
-            RETURNING x, y
-          )
-          SELECT
-            (SELECT count(*)::integer FROM direct_cells) AS "directCellCount",
-            (SELECT count(*)::integer FROM enclosed_candidates) AS "enclosedCellCount"
-        `);
-        const counts = result.rows[0] ?? { directCellCount: 0, enclosedCellCount: 0 };
-
-        return {
-          flightId,
-          cellSize,
-          directCellCount: counts.directCellCount,
-          enclosedCellCount: counts.enclosedCellCount,
-        };
+        return rebuildPersonalClaims(tx, { flightId, userId }, cellSize);
       });
     },
 
@@ -147,6 +161,28 @@ export function createGridClaimService(
       });
       await competitionGridClaim.process(input);
       return result;
+    },
+    async reprocess({ flightId }) {
+      return database.transaction(async (tx) => {
+        const [flight] = await tx
+          .select({ userId: flights.userId, processingStatus: flights.processingStatus, launchTimezone: flights.launchTimezone })
+          .from(flights)
+          .where(eq(flights.id, flightId));
+        if (!flight) return { status: 'not_found' as const };
+        if (flight.processingStatus !== 'completed' || !flight.launchTimezone) {
+          return { status: 'not_completed' as const };
+        }
+
+        await tx.delete(personalGridClaims).where(eq(personalGridClaims.claimFlight, flightId));
+        await tx.delete(competitionGridClaims).where(eq(competitionGridClaims.claimFlight, flightId));
+        const result = await rebuildPersonalClaims(tx, { flightId, userId: flight.userId }, options.cellSize);
+        await rebuildCompetitionGridClaims(tx, {
+          flightId,
+          userId: flight.userId,
+          launchTimezone: flight.launchTimezone,
+        }, options.cellSize);
+        return { status: 'completed' as const, result };
+      });
     },
   };
 }

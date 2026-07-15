@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createPageRenderer } from '../../src/views/renderer.js';
+import { createAdminPageRenderer, createPageRenderer } from '../../src/views/renderer.js';
 
 describe('Vento page renderer', () => {
   const render = createPageRenderer({ mapTilerApiKey: 'maptiler-test-key' });
@@ -74,6 +74,56 @@ describe('Vento page renderer', () => {
     expect(authenticated).toContain('https://api.maptiler.com/maps/outdoor-v2/style.json?key=maptiler-test-key');
     expect(authenticated).not.toContain('action="/login"');
     expect(authenticated).not.toContain('action="/signup"');
+    expect(authenticated).not.toContain('href="/admin"');
+  });
+
+  it('shows the admin link only when the renderer is told the user is an admin', async () => {
+    const html = await render({
+      currentUser: {
+        userId: '00000000-0000-4000-8000-000000000001',
+        sessionId: '00000000-0000-4000-8000-000000000002',
+        email: 'admin@example.com',
+        displayName: 'Admin',
+        territoryColor: '#1769AA',
+      },
+      isAdmin: true,
+    });
+
+    expect(html).toContain('<a class="admin-link" href="/admin">Admin</a>');
+  });
+
+  it('renders the admin flight table without dashboard map assets', async () => {
+    const renderAdmin = createAdminPageRenderer();
+    const html = await renderAdmin({
+      currentUser: {
+        userId: '00000000-0000-4000-8000-000000000001',
+        sessionId: '00000000-0000-4000-8000-000000000002',
+        email: 'admin@example.com',
+        displayName: 'Admin',
+        territoryColor: '#1769AA',
+      },
+      flights: [{
+        id: '00000000-0000-4000-8000-000000000020',
+        flightDate: '2026-07-14',
+        pilotEmail: 'pilot@example.com',
+        originalFilename: 'flight.igc',
+        processingStatus: 'completed',
+      }, {
+        id: '00000000-0000-4000-8000-000000000021',
+        flightDate: null,
+        pilotEmail: 'failed@example.com',
+        originalFilename: 'failed.igc',
+        processingStatus: 'failed',
+      }],
+      reprocessSuccess: true,
+    });
+
+    expect(html).toContain('The 100 most recently uploaded flights.');
+    expect(html).toContain('action="/admin/flights/00000000-0000-4000-8000-000000000020/reprocess"');
+    expect(html).not.toContain('action="/admin/flights/00000000-0000-4000-8000-000000000021/reprocess"');
+    expect(html).toContain('Flight cells were reprocessed.');
+    expect(html).not.toContain('dashboard.js');
+    expect(html).not.toContain('maplibre-gl');
   });
 
   it('autoescapes user-controlled values and never renders passwords', async () => {

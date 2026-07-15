@@ -13,6 +13,7 @@ import type { ProfileService } from '../../src/services/profileService.js';
 import type { FlightProcessingOutcome } from '../../src/services/flightProcessingService.js';
 import type { GridClaimService } from '../../src/services/gridClaimService.js';
 import type { CompetitionGridClaimService } from '../../src/services/competitionGridClaimService.js';
+import type { AdminFlightService } from '../../src/services/adminFlightService.js';
 import { createPageRenderer } from '../../src/views/renderer.js';
 import { createCurrentUserMiddleware } from '../../src/web/currentUserMiddleware.js';
 import { createSessionCookie } from '../../src/web/sessionCookie.js';
@@ -77,6 +78,7 @@ function dependencies(
       directCellCount: 0,
       enclosedCellCount: 0,
     })),
+    reprocess: vi.fn(async () => ({ status: 'not_found' as const })),
   };
   const expectedCompetitionGeoJson: CompetitionGridClaimGeoJson = {
     type: 'FeatureCollection',
@@ -117,11 +119,62 @@ function dependencies(
     expectedGridGeoJson,
     expectedCompetitionGeoJson,
     renderPage,
+    cookie,
     app: createApp({ webMiddleware: [middleware, router] }),
   };
 }
 
 describe('webRouter', () => {
+  it('limits admin routes to configured admin emails and redirects completed reprocessing', async () => {
+    const { auth, cookie, igcFiles, profiles, gridClaim, competitionGridClaim, renderPage } = dependencies();
+    const adminFlights: AdminFlightService = {
+      listRecentFlights: vi.fn(async () => [{
+        id: '00000000-0000-4000-8000-000000000020',
+        flightDate: '2026-07-14',
+        pilotEmail: 'pilot@example.com',
+        originalFilename: 'flight.igc',
+        processingStatus: 'completed' as const,
+      }]),
+      reprocessFlight: vi.fn(async () => ({
+        status: 'completed' as const,
+        result: { flightId: '00000000-0000-4000-8000-000000000020', cellSize: 1000, directCellCount: 1, enclosedCellCount: 0 },
+      })),
+    };
+    const renderAdminPage = vi.fn(async () => '<html><body>Admin flights</body></html>');
+    const router = createWebRouter({
+      auth,
+      cookie,
+      igcFiles,
+      profiles,
+      gridClaim,
+      competitionGridClaim,
+      renderPage,
+      adminEmails: ['PILOT@example.com'],
+      adminFlights,
+      renderAdminPage,
+    });
+    const app = createApp({ webMiddleware: [createCurrentUserMiddleware(auth, cookie), router] });
+
+    await withServer(app, async (baseUrl) => {
+      const anonymous = await fetch(`${baseUrl}/admin`);
+      expect(anonymous.status).toBe(403);
+
+      const admin = await fetch(`${baseUrl}/admin`, { headers: { cookie: 'glidehero_session=valid-token' } });
+      expect(admin.status).toBe(200);
+      expect(await admin.text()).toContain('Admin flights');
+      expect(adminFlights.listRecentFlights).toHaveBeenCalledOnce();
+
+      const reprocess = await fetch(`${baseUrl}/admin/flights/00000000-0000-4000-8000-000000000020/reprocess`, {
+        method: 'POST',
+        redirect: 'manual',
+        headers: { cookie: 'glidehero_session=valid-token' },
+      });
+      expect(reprocess.status).toBe(303);
+      expect(reprocess.headers.get('location')).toBe('/admin?reprocess=success');
+      expect(adminFlights.reprocessFlight).toHaveBeenCalledWith({ flightId: '00000000-0000-4000-8000-000000000020' });
+    });
+  });
+
   it('renders anonymous and authenticated page states over HTTP', async () => {
     const { app } = dependencies();
     await withServer(app, async (baseUrl) => {
@@ -296,6 +349,7 @@ describe('webRouter', () => {
         process: vi.fn(async () => ({
           flightId: 'flight-id', cellSize: 1_000, directCellCount: 0, enclosedCellCount: 0,
         })),
+        reprocess: vi.fn(async () => ({ status: 'not_found' as const })),
       },
       competitionGridClaim: {
         getCurrent: vi.fn(async () => emptyCompetitionGridClaimGeoJson()),
@@ -348,6 +402,7 @@ describe('webRouter', () => {
             process: vi.fn(async () => ({
               flightId: 'flight-id', cellSize: 1_000, directCellCount: 0, enclosedCellCount: 0,
             })),
+            reprocess: vi.fn(async () => ({ status: 'not_found' as const })),
           },
           competitionGridClaim: {
             getCurrent: vi.fn(async () => emptyCompetitionGridClaimGeoJson()),

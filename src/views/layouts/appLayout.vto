@@ -10,19 +10,19 @@
     <link rel="icon" type="image/png" sizes="192x192" href="/android-chrome-192x192.png">
     <meta name="color-scheme" content="light">
     <link rel="stylesheet" href="/styles/app.css">
-    {{ if currentUser }}
+    {{ if isDashboard }}
       <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@5.16.0/dist/maplibre-gl.css">
     {{ /if }}
     <title>GlideHero</title>
   </head>
-  <body class="{{ if currentUser }}dashboard-body{{ else }}landing-body{{ /if }}">
-    <main class="shell {{ if currentUser }}dashboard-shell{{ else }}landing-shell{{ /if }}">
+  <body class="{{ if isDashboard }}dashboard-body{{ else if currentUser }}admin-body{{ else }}landing-body{{ /if }}">
+    <main class="shell {{ if isDashboard }}dashboard-shell{{ else if currentUser }}admin-shell{{ else }}landing-shell{{ /if }}">
       {{ content }}
     </main>
-    {{ if currentUser }}
+    {{ if isDashboard }}
       <script src="https://unpkg.com/maplibre-gl@5.16.0/dist/maplibre-gl.js"></script>
       <script type="module" src="/scripts/dashboard.js"></script>
-    {{ else }}
+    {{ else if !currentUser }}
       <script type="module" src="/scripts/landing.js"></script>
     {{ /if }}
   </body>
