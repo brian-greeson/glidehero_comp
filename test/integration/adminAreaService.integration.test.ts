@@ -101,6 +101,9 @@ describe('admin area service with PostGIS', () => {
       properties: { x: expect.any(Number), y: expect.any(Number) },
       geometry: { type: 'Polygon' },
     });
+    const westernGrid = await service.grid({ west: -106.21, south: 38.99, east: -106.19, north: 39 });
+    expect(westernGrid.features.length).toBeGreaterThan(0);
+    expect(westernGrid.features.length).toBeLessThan(100);
     await expect(service.grid({ west: -120, south: 30, east: -100, north: 50 }))
       .rejects.toThrow('Zoom in');
   });
