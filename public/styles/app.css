@@ -831,6 +831,110 @@ button {
 .leaderboard-card {
   grid-column: 1;
 }
+
+.coverage-playtest-nav .secondary-button {
+  text-decoration: none;
+}
+
+.coverage-card-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.coverage-eyebrow {
+  margin: 0 0 0.2rem;
+  color: var(--color-text-muted);
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.coverage-overview-button[aria-pressed="true"] {
+  border-color: var(--color-primary-strong);
+  background: color-mix(in srgb, var(--color-primary-strong) 14%, white);
+}
+
+.coverage-table {
+  min-width: 39rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.coverage-leaderboard {
+  overflow-x: auto;
+}
+
+.coverage-table-header,
+.coverage-pilot-row {
+  display: grid;
+  grid-template-columns: minmax(12rem, 1.8fr) repeat(3, minmax(5rem, 0.7fr)) minmax(7rem, 0.9fr);
+  align-items: center;
+  gap: 0.55rem;
+  width: 100%;
+  padding: 0.65rem 0.45rem;
+  text-align: right;
+}
+
+.coverage-table-header {
+  border-bottom: 1px solid var(--color-border);
+  color: var(--color-text-muted);
+  font-size: 0.72rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.coverage-table-header > :first-child,
+.coverage-pilot-row > :first-child {
+  text-align: left;
+}
+
+.coverage-pilot-row {
+  border: 0;
+  border-bottom: 1px solid var(--color-border);
+  border-radius: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+}
+
+.coverage-pilot-row:hover,
+.coverage-pilot-row:focus-visible {
+  background: color-mix(in srgb, var(--color-primary-strong) 8%, white);
+}
+
+.coverage-pilot-row.is-selected {
+  background: color-mix(in srgb, var(--color-primary-strong) 14%, white);
+  box-shadow: inset 3px 0 var(--color-primary-strong);
+}
+
+.coverage-pilot-name {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  gap: 0.45rem;
+  font-weight: 700;
+}
+
+.coverage-cell-popup {
+  position: absolute;
+  z-index: 5;
+  right: 1rem;
+  bottom: 1rem;
+  max-width: min(18rem, calc(100% - 2rem));
+  padding: 0.75rem 0.9rem;
+  border: 1px solid var(--color-border);
+  border-radius: 0.75rem;
+  background: rgb(255 255 255 / 94%);
+  box-shadow: 0 0.5rem 1.5rem rgb(15 23 42 / 18%);
+}
+
+.coverage-cell-popup ul {
+  margin: 0.35rem 0 0;
+  padding-left: 1.15rem;
+}
 .leaderboard-card[hidden] {
   display: none;
 }

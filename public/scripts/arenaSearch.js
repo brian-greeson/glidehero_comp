@@ -10,6 +10,7 @@ export function initializeArenaSearch({
   fetchImpl = window.fetch.bind(window),
   navigate = (path) => window.location.assign(path),
   locationRef = typeof window === 'undefined' ? { search: '' } : window.location,
+  pathPrefix = '',
   debounceMs = 200,
 } = {}) {
   const root = documentRef.querySelector('[data-arena-search]');
@@ -24,7 +25,7 @@ export function initializeArenaSearch({
   let activeIndex = -1;
 
   function navigateToArena(path) {
-    navigate(competitionPageUrl(path, competitionMonthFromSearch(locationRef.search)));
+    navigate(competitionPageUrl(`${pathPrefix}${path}`, competitionMonthFromSearch(locationRef.search)));
   }
 
   function cancelPendingSearch() {

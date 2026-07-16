@@ -13,8 +13,10 @@ import { createGridClaimService } from './services/gridClaimService.js';
 import { createIgcFileService } from './services/igcFileService.js';
 import { createProfileService } from './services/profileService.js';
 import { createLocationLookupService } from './services/locationLookupService.js';
-import { createAdminAreaPageRenderer, createAdminPageRenderer, createPageRenderer } from './views/renderer.js';
+import { createMonthlyCoverageService } from './services/monthlyCoverageService.js';
+import { createAdminAreaPageRenderer, createAdminPageRenderer, createCoveragePlaytestPageRenderer, createPageRenderer } from './views/renderer.js';
 import { createAdminAreaRouter } from './web/adminAreaRouter.js';
+import { createCoveragePlaytestRouter } from './web/coveragePlaytestRouter.js';
 import { createCurrentUserMiddleware } from './web/currentUserMiddleware.js';
 import { createSessionCookie } from './web/sessionCookie.js';
 import { createWebRouter } from './web/webRouter.js';
@@ -29,6 +31,7 @@ const adminAreas = createAdminAreaService(db, { cellSize: config.gridClaimCellSi
 const locationLookup = createLocationLookupService();
 const competitionGridClaim = createCompetitionGridClaimService(db, { cellSize: config.gridClaimCellSize });
 const arenas = createArenaService(db, { cellSize: config.gridClaimCellSize });
+const monthlyCoverage = createMonthlyCoverageService(db, { cellSize: config.gridClaimCellSize });
 const flightProcessing = createFlightProcessingService(db, {
   s3Client,
   bucketName: config.bucket.bucketName,
@@ -46,6 +49,11 @@ const cookie = createSessionCookie({
 });
 const webMiddleware = [
   createCurrentUserMiddleware(auth, cookie),
+  createCoveragePlaytestRouter({
+    coverage: monthlyCoverage,
+    arenas,
+    renderPage: createCoveragePlaytestPageRenderer({ mapTilerApiKey: config.mapTilerApiKey }),
+  }),
   createAdminAreaRouter({
     adminEmails: config.adminEmails,
     areas: adminAreas,

@@ -35,6 +35,11 @@ export type AdminPageRenderer = (model: {
 export type AdminAreaPageRenderer = (model: {
   currentUser: AuthenticatedUser;
 }) => Promise<string>;
+export type CoveragePlaytestPageRenderer = (model: {
+  currentUser: AuthenticatedUser;
+  page: 'coverage-global' | 'coverage-arena';
+  arena?: ArenaDetail;
+}) => Promise<string>;
 
 function createEnvironment() {
   return vento({
@@ -125,5 +130,28 @@ export function createAdminAreaPageRenderer(options: { mapTilerApiKey: string })
       mapTilerStyleUrl: `https://api.maptiler.com/maps/outdoor-v2/style.json?key=${options.mapTilerApiKey}`,
       ...model,
     })
+  ).content;
+}
+
+export function createCoveragePlaytestPageRenderer(
+  options: { mapTilerApiKey: string },
+): CoveragePlaytestPageRenderer {
+  const environment = createEnvironment();
+  return async (model) => (
+    await environment.run(
+      model.page === 'coverage-arena'
+        ? 'pages/coveragePlaytestArena.vto'
+        : 'pages/coveragePlaytestGlobal.vto',
+      {
+        arena: undefined,
+        isDashboard: true,
+        isErrorPage: false,
+        dashboardScript: model.page === 'coverage-arena'
+          ? '/scripts/coveragePlaytestArena.js'
+          : '/scripts/coveragePlaytestGlobal.js',
+        mapTilerStyleUrl: `https://api.maptiler.com/maps/outdoor-v2/style.json?key=${options.mapTilerApiKey}`,
+        ...model,
+      },
+    )
   ).content;
 }
