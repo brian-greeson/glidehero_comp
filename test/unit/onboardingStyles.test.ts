@@ -9,7 +9,7 @@ describe('onboarding stylesheet contract', () => {
     expect(css).toContain('max-height: calc(100dvh - 2rem)');
     expect(css).toContain('.onboarding-pages { overflow-y: auto; }');
     expect(css).toContain('min-height: 44px');
-    expect(css).toContain('.icon-button[data-onboarding-trigger] { width: 44px; min-height: 44px; }');
+    expect(css).toContain('.account-help-button');
     expect(css).toContain('.onboarding-dialog :focus-visible');
     expect(css).toContain('@media (max-width: 699px)');
     expect(css).toContain('@media (min-width: 700px)');

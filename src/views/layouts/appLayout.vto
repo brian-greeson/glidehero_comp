@@ -9,20 +9,21 @@
     <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
     <link rel="icon" type="image/png" sizes="192x192" href="/android-chrome-192x192.png">
     <meta name="color-scheme" content="light">
+    <link rel="stylesheet" href="/styles/color-palette.css">
     <link rel="stylesheet" href="/styles/app.css">
     {{ if isDashboard }}
       <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@5.16.0/dist/maplibre-gl.css">
     {{ /if }}
     <title>GlideHero</title>
   </head>
-  <body class="{{ if isNotFound }}not-found-body{{ else if isDashboard }}dashboard-body{{ else if currentUser }}admin-body{{ else }}landing-body{{ /if }}">
-    <main class="shell {{ if isNotFound }}not-found-shell{{ else if isDashboard }}dashboard-shell{{ else if currentUser }}admin-shell{{ else }}landing-shell{{ /if }}">
+  <body class="{{ if isErrorPage }}error-page-body{{ else if isDashboard }}dashboard-body{{ else if currentUser }}admin-body{{ else }}landing-body{{ /if }}">
+    <main class="shell {{ if isErrorPage }}error-page-shell{{ else if isDashboard }}dashboard-shell{{ else if currentUser }}admin-shell{{ else }}landing-shell{{ /if }}">
       {{ content }}
     </main>
     {{ if isDashboard }}
       <script src="https://unpkg.com/maplibre-gl@5.16.0/dist/maplibre-gl.js"></script>
       <script type="module" src="{{ dashboardScript }}"></script>
-    {{ else if !currentUser && !isNotFound }}
+    {{ else if !currentUser && !isErrorPage }}
       <script type="module" src="/scripts/landing.js"></script>
     {{ /if }}
   </body>

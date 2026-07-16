@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createAdminPageRenderer, createPageRenderer } from '../../src/views/renderer.js';
+import { createAdminPageRenderer, createErrorPageRenderer, createPageRenderer } from '../../src/views/renderer.js';
 
 describe('Vento page renderer', () => {
   const render = createPageRenderer({ mapTilerApiKey: 'maptiler-test-key' });
@@ -65,6 +65,10 @@ describe('Vento page renderer', () => {
     expect(authenticated).toContain('style="--territory-color: #1769AA"');
     expect(authenticated).toContain('data-mobile-sheet');
     expect(authenticated).toContain('data-account-popover');
+    expect(authenticated).toContain('Help &amp; walkthrough');
+    expect(authenticated.indexOf('data-account-popover')).toBeLessThan(
+      authenticated.indexOf('data-onboarding-trigger'),
+    );
     expect(authenticated).toContain('href="/global" class="mode-tab is-active" aria-current="page">Competitive</a>');
     expect(authenticated).toContain('href="/personal" class="mode-tab">Personal</a>');
     expect(authenticated).toContain('data-territory-color="#1769AA"');
@@ -154,14 +158,24 @@ describe('Vento page renderer', () => {
   });
 
   it('renders the generic landing-out 404 without dashboard or landing scripts', async () => {
-    const html = await render({ currentUser: null, page: 'notFound' });
+    const html = await createErrorPageRenderer()({ currentUser: null, status: 404 });
 
-    expect(html).toContain('Looks like you landed out.');
-    expect(html).toContain('/404-flying-squirrel.webp');
+    expect(html).toContain('Well… that landing could have gone better.');
+    expect(html).toContain('This route seems to be tangled in a tree.');
+    expect(html).toContain('/error-mascot.webp');
     expect(html).toContain('href="/">Head home</a>');
-    expect(html).toContain('class="not-found-body"');
+    expect(html).toContain('class="error-page-body"');
     expect(html).not.toContain('/scripts/dashboard.js');
     expect(html).not.toContain('/scripts/landing.js');
+  });
+
+  it('renders a safe generic server error without exposing internal details', async () => {
+    const html = await createErrorPageRenderer()({ currentUser: null, status: 500 });
+
+    expect(html).toContain('We hit a little turbulence.');
+    expect(html).toContain('Glide Hero hit an unexpected snag.');
+    expect(html).not.toContain('stack');
+    expect(html).not.toContain('Internal server error');
   });
 
   it('renders the admin flight table without dashboard map assets', async () => {

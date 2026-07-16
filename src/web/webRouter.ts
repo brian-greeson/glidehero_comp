@@ -349,7 +349,7 @@ export function createWebRouter(dependencies: {
     try {
       const arena = await dependencies.arenas.getByRoute(req.params.countryCode, req.params.arenaSlug);
       if (!arena) {
-        await render(res, dependencies.renderPage, 404, { currentUser, page: 'notFound' });
+        next();
         return;
       }
       await render(res, dependencies.renderPage, 200, {
@@ -551,17 +551,6 @@ export function createWebRouter(dependencies: {
         next(uploadError);
       }
     });
-  });
-
-  router.use(async (_req, res, next) => {
-    try {
-      await render(res, dependencies.renderPage, 404, {
-        currentUser: res.locals.currentUser,
-        page: 'notFound',
-      });
-    } catch (error) {
-      next(error);
-    }
   });
 
   return router;

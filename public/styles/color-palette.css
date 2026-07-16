@@ -1,0 +1,39 @@
+:root {
+  /* Core colors sampled from the GlideHero logo. */
+  --color-logo-ink: #17182f;
+  --color-logo-navy: #14213d;
+  --color-logo-cyan: #12b9cf;
+  --color-logo-aqua: #6ee7e7;
+  --color-logo-orange: #ff5a24;
+  --color-logo-gold: #ffad62;
+  --color-logo-snow: #f7fffe;
+
+  /* App-wide semantic palette. */
+  --color-primary: var(--color-logo-cyan);
+  --color-primary-strong: #06758a;
+  --color-accent: var(--color-logo-orange);
+  --color-accent-soft: var(--color-logo-gold);
+  --color-text: var(--color-logo-navy);
+  --color-text-strong: var(--color-logo-ink);
+  --color-text-muted: #52657a;
+  --color-surface: #ffffff;
+  --color-surface-subtle: #eef9fb;
+  --color-surface-highlight: #ddf8f8;
+  --color-border: #bfd5dc;
+  --color-focus-ring: rgb(18 185 207 / 0.3);
+  --color-nav-start: #080d1e;
+  --color-nav-end: var(--color-logo-ink);
+  --color-on-primary: #ffffff;
+
+  --color-danger: #8a1c1c;
+  --color-danger-surface: #ffe9e9;
+  --color-success: #166534;
+  --color-success-surface: #dcfce7;
+
+  /* Compatibility aliases for existing components. */
+  --brand-navy: var(--color-logo-navy);
+  --brand-blue: var(--color-primary-strong);
+  --brand-cyan: var(--color-logo-cyan);
+  --brand-orange: var(--color-logo-orange);
+  --brand-pale: var(--color-surface-subtle);
+}

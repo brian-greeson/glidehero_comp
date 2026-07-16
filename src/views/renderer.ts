@@ -6,7 +6,7 @@ import type { ArenaDetail } from '../services/arenaService.js';
 
 export type PageModel = {
   currentUser: AuthenticatedUser | null;
-  page?: 'landing' | 'global' | 'personal' | 'arena' | 'notFound';
+  page?: 'landing' | 'global' | 'personal' | 'arena';
   arena?: ArenaDetail;
   loginError?: string;
   signupError?: string;
@@ -22,6 +22,10 @@ export type PageModel = {
 };
 
 export type PageRenderer = (model: PageModel) => Promise<string>;
+export type ErrorPageRenderer = (model: {
+  currentUser: AuthenticatedUser | null;
+  status: number;
+}) => Promise<string>;
 export type AdminPageRenderer = (model: {
   currentUser: AuthenticatedUser;
   flights: AdminFlight[];
@@ -47,7 +51,6 @@ export function createPageRenderer(options: { mapTilerApiKey: string }): PageRen
       global: 'pages/global.vto',
       personal: 'pages/personal.vto',
       arena: 'pages/arena.vto',
-      notFound: 'pages/notFound.vto',
     }[page];
     const dashboardScript = page === 'arena' ? '/scripts/arena.js' : '/scripts/dashboard.js';
 
@@ -65,10 +68,33 @@ export function createPageRenderer(options: { mapTilerApiKey: string }): PageRen
         isAdmin: false,
         arena: undefined,
         isDashboard: page === 'global' || page === 'personal' || page === 'arena',
-        isNotFound: page === 'notFound',
+        isErrorPage: false,
         dashboardScript,
         mapTilerStyleUrl: `https://api.maptiler.com/maps/outdoor-v2/style.json?key=${options.mapTilerApiKey}`,
         ...model,
+      })
+    ).content;
+  };
+}
+
+export function createErrorPageRenderer(): ErrorPageRenderer {
+  const environment = createEnvironment();
+
+  return async ({ currentUser, status }) => {
+    const isNotFound = status === 404;
+    return (
+      await environment.run('pages/error.vto', {
+        currentUser,
+        isDashboard: false,
+        isErrorPage: true,
+        errorStatus: status,
+        errorEyebrow: isNotFound ? 'A little off course' : 'A rough landing',
+        errorHeading: isNotFound
+          ? 'Well\u2026 that landing could have gone better.'
+          : 'We hit a little turbulence.',
+        errorMessage: isNotFound
+          ? 'This route seems to be tangled in a tree. Let\u2019s pack up and head home.'
+          : 'Glide Hero hit an unexpected snag. Pack up, head home, and try launching again.',
       })
     ).content;
   };
@@ -82,7 +108,7 @@ export function createAdminPageRenderer(): AdminPageRenderer {
       reprocessSuccess: false,
       reprocessError: false,
       isDashboard: false,
-      isNotFound: false,
+      isErrorPage: false,
       dashboardScript: '',
       ...model,
     })

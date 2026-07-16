@@ -1,0 +1,11 @@
+{{ layout "layouts/appLayout.vto" }}
+  <section class="error-page">
+    <img class="error-page-illustration" src="/error-mascot.webp" alt="The Glide Hero mascot standing beneath a paraglider caught in a tree">
+    <div class="error-page-copy">
+      <p class="error-page-eyebrow">{{ errorStatus }} · {{ errorEyebrow }}</p>
+      <h1>{{ errorHeading }}</h1>
+      <p>{{ errorMessage }}</p>
+      <a class="primary-button" href="/">Head home</a>
+    </div>
+  </section>
+{{ /layout }}

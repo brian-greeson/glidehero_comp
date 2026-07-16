@@ -270,11 +270,14 @@ describe('webRouter', () => {
       expect(found.status).toBe(200);
       expect(renderPage).toHaveBeenCalledWith(expect.objectContaining({ page: 'arena', arena }));
 
+      vi.mocked(renderPage).mockClear();
       const missing = await fetch(`${baseUrl}/arena/us/missing-999`, {
         headers: { cookie: 'glidehero_session=valid-token' },
       });
       expect(missing.status).toBe(404);
-      expect(renderPage).toHaveBeenCalledWith(expect.objectContaining({ page: 'notFound' }));
+      expect(missing.headers.get('content-type')).toContain('text/html');
+      expect(await missing.text()).toContain('/error-mascot.webp');
+      expect(renderPage).not.toHaveBeenCalled();
     });
   });
 
@@ -283,19 +286,14 @@ describe('webRouter', () => {
     await withServer(app, async (baseUrl) => {
       const anonymous = await fetch(`${baseUrl}/somewhere-remote`);
       expect(anonymous.status).toBe(404);
-      expect(renderPage).toHaveBeenCalledWith(expect.objectContaining({
-        currentUser: null,
-        page: 'notFound',
-      }));
+      expect(await anonymous.text()).toContain('Well… that landing could have gone better.');
 
       const authenticated = await fetch(`${baseUrl}/arena/us/boulder-745/extra`, {
         headers: { cookie: 'glidehero_session=valid-token' },
       });
       expect(authenticated.status).toBe(404);
-      expect(renderPage).toHaveBeenCalledWith(expect.objectContaining({
-        currentUser: user,
-        page: 'notFound',
-      }));
+      expect(await authenticated.text()).toContain('/error-mascot.webp');
+      expect(renderPage).not.toHaveBeenCalled();
     });
   });
 
