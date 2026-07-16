@@ -363,7 +363,7 @@ describe('webRouter', () => {
         }),
       });
       expect(response.status).toBe(303);
-      expect(response.headers.get('location')).toBe('/');
+      expect(response.headers.get('location')).toBe('/global?onboarding=1');
       expect(response.headers.get('set-cookie')).toContain(
         'glidehero_session=new-token; Max-Age=604800; Path=/; HttpOnly; SameSite=Lax',
       );

@@ -193,6 +193,43 @@ describe('Glide Hero onboarding controller', () => {
     expect(fixture.headings[0]!.focus).not.toHaveBeenCalled();
   });
 
+  it('opens automatically after signup and consumes only the onboarding marker', () => {
+    const fixture = createFixture();
+    const historyRef = {
+      state: { preserved: true },
+      replaceState: vi.fn(),
+    };
+
+    initializeOnboarding({
+      documentRef: fixture.documentRef,
+      locationRef: { href: 'https://glidehero.test/global?onboarding=1&source=invite#map' },
+      historyRef,
+    });
+
+    expect(fixture.dialog.showModal).toHaveBeenCalledOnce();
+    expect(fixture.steps.map((step) => step.hidden)).toEqual([false, true, true]);
+    expect(fixture.close.focus).toHaveBeenCalledOnce();
+    expect(historyRef.replaceState).toHaveBeenCalledWith(
+      historyRef.state,
+      '',
+      '/global?source=invite#map',
+    );
+  });
+
+  it('does not open automatically without the post-signup marker', () => {
+    const fixture = createFixture();
+    const historyRef = { replaceState: vi.fn() };
+
+    initializeOnboarding({
+      documentRef: fixture.documentRef,
+      locationRef: { href: 'https://glidehero.test/global?source=login' },
+      historyRef,
+    });
+
+    expect(fixture.dialog.showModal).not.toHaveBeenCalled();
+    expect(historyRef.replaceState).not.toHaveBeenCalled();
+  });
+
   it.each([
     ['close button', (fixture: ReturnType<typeof createFixture>) => fixture.close.dispatch('click')],
     ['Done', (fixture: ReturnType<typeof createFixture>) => fixture.done.dispatch('click')],

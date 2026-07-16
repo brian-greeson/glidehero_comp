@@ -429,7 +429,7 @@ export function createWebRouter(dependencies: {
         displayName: parsed.data.displayName || undefined,
       });
       res.setHeader('set-cookie', dependencies.cookie.set(session.token));
-      res.redirect(303, '/');
+      res.redirect(303, '/global?onboarding=1');
     } catch (error) {
       if (error instanceof AuthFailure && error.code === 'duplicate_email') {
         await render(res, dependencies.renderPage, 409, {

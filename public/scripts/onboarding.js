@@ -1,4 +1,8 @@
-export function initializeOnboarding({ documentRef = document } = {}) {
+export function initializeOnboarding({
+  documentRef = document,
+  locationRef = globalThis.location,
+  historyRef = globalThis.history,
+} = {}) {
   const trigger = documentRef.querySelector('[data-onboarding-trigger]');
   const dialog = documentRef.querySelector('[data-onboarding-dialog]');
   if (!trigger || !dialog) return undefined;
@@ -90,6 +94,19 @@ export function initializeOnboarding({ documentRef = document } = {}) {
     restoreFocus?.focus();
     restoreFocus = null;
   });
+
+  if (locationRef?.href) {
+    const url = new URL(locationRef.href);
+    if (url.searchParams.get('onboarding') === '1') {
+      url.searchParams.delete('onboarding');
+      historyRef?.replaceState?.(
+        historyRef.state ?? null,
+        '',
+        `${url.pathname}${url.search}${url.hash}`,
+      );
+      open();
+    }
+  }
 
   return { open, close };
 }
