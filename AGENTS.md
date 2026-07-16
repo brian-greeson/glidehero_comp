@@ -90,3 +90,8 @@ The goal is continuous integration of the feature. At each meaningful step, ther
 - Inspect the existing code, tests, and documentation first.
 - When implementation details are still genuinely ambiguous, state the assumption being made rather than silently inventing product behavior.
 - Ask for clarification until a shared understanding of the requirements becomes clear
+
+
+## Project Architecture
+>> Where to put files
+parse `docs/architecture.md` for a description of the app architecture

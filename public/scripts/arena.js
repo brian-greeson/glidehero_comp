@@ -3,11 +3,16 @@ import { initializeArenaSearch } from './arenaSearch.js';
 import {
   colorCompetitionTerritory,
   createCompetitionColorRegistry,
-  initializeMobileSheet,
+} from './competitionMap.js';
+import {
   renderCompetitionLeaderboard,
   renderCompetitionStats,
-} from './dashboard.js';
+  resetCompetitionResults,
+} from './competitionResultsView.js';
+import { initializeDashboardChrome } from './dashboardChrome.js';
+import { createLatestRequest } from './latestRequest.js';
 import { createTerritoryBoundaryLayer, createTerritoryFillLayer } from './mapStyles.js';
+import { initializeMobileSheet } from './mobileSheet.js';
 import {
   ALL_TIME_COMPETITION_PERIOD,
   initializeCompetitionPeriodControl,
@@ -41,25 +46,6 @@ async function jsonRequest(url, accept, fetchImpl, signal) {
   return response.json();
 }
 
-function initializeAccountAndUpload(documentRef) {
-  const accountTrigger = documentRef.querySelector('[data-account-trigger]');
-  const accountPopover = documentRef.querySelector('[data-account-popover]');
-  if (accountTrigger && accountPopover) {
-    accountTrigger.addEventListener('click', () => {
-      const open = accountPopover.hidden;
-      accountPopover.hidden = !open;
-      accountTrigger.setAttribute('aria-expanded', String(open));
-    });
-  }
-  const uploadForm = documentRef.querySelector('[data-upload-form]');
-  const uploadInput = uploadForm?.querySelector('input[type="file"]');
-  if (uploadForm && uploadInput) {
-    uploadInput.addEventListener('change', () => {
-      if (uploadInput.files?.length) uploadForm.requestSubmit();
-    });
-  }
-}
-
 export function initializeArena({
   documentRef = document,
   maplibre = window.maplibregl,
@@ -71,7 +57,7 @@ export function initializeArena({
   initializeOnboarding({ documentRef });
   initializeMobileSheet({ documentRef });
   initializeArenaSearch({ documentRef, fetchImpl });
-  initializeAccountAndUpload(documentRef);
+  initializeDashboardChrome({ documentRef });
 
   const mapElement = documentRef.querySelector('[data-arena-map]');
   const emptyState = documentRef.querySelector('[data-map-empty-state]');
@@ -95,38 +81,23 @@ export function initializeArena({
   );
   let map;
   let mapReady = false;
-  let requestSequence = 0;
-  let abortController;
   const periodControl = initializeCompetitionPeriodControl({
     documentRef,
     locationRef,
     historyRef,
     now,
     onChange: async () => {
-      if (mapReady) await refreshCompetition();
+      if (mapReady) await refreshCompetition.run();
     },
   });
 
-  async function refreshCompetition() {
+  const refreshCompetition = createLatestRequest(async ({ signal, isCurrent }) => {
     if (!map) return;
-    abortController?.abort();
-    abortController = typeof AbortController === 'undefined' ? undefined : new AbortController();
-    const activeRequest = ++requestSequence;
     if (map.getLayer?.(ARENA_TERRITORY_FILL_LAYER_ID)) {
       map.setLayoutProperty(ARENA_TERRITORY_FILL_LAYER_ID, 'visibility', 'none');
       map.setLayoutProperty(ARENA_TERRITORY_OUTLINE_LAYER_ID, 'visibility', 'none');
     }
-    leaderboardList?.replaceChildren();
-    if (currentPilotResult) currentPilotResult.hidden = true;
-    for (const selector of [
-      '[data-competition-claimed-area]',
-      '[data-competition-flights]',
-      '[data-competition-pilots]',
-      '[data-competition-my-flights]',
-    ]) {
-      const value = documentRef.querySelector(selector);
-      if (value) value.textContent = '-';
-    }
+    resetCompetitionResults(documentRef);
     leaderboardCard?.setAttribute('aria-busy', 'true');
     competitionStatsCard?.setAttribute('aria-busy', 'true');
     if (leaderboardStatus) leaderboardStatus.textContent = 'Updating leaderboard…';
@@ -136,16 +107,16 @@ export function initializeArena({
           arenaTerritoryUrl(sourceId, periodControl.month),
           'application/geo+json',
           fetchImpl,
-          abortController?.signal,
+          signal,
         ),
         jsonRequest(
           arenaLeaderboardUrl(sourceId, periodControl.month),
           'application/json',
           fetchImpl,
-          abortController?.signal,
+          signal,
         ),
       ]);
-      if (activeRequest !== requestSequence) return;
+      if (!isCurrent()) return;
       const coloredTerritory = colorCompetitionTerritory(
         territory,
         mapElement.dataset.currentUserId,
@@ -191,18 +162,18 @@ export function initializeArena({
       }
     } catch (error) {
       if (error?.name === 'AbortError') return;
-      if (leaderboardStatus) leaderboardStatus.textContent = 'Unable to load this Arena.';
-      if (emptyState) {
+      if (isCurrent() && leaderboardStatus) leaderboardStatus.textContent = 'Unable to load this Arena.';
+      if (isCurrent() && emptyState) {
         emptyState.textContent = 'Unable to load this Arena. Try again.';
         emptyState.hidden = false;
       }
     } finally {
-      if (activeRequest === requestSequence) {
+      if (isCurrent()) {
         leaderboardCard?.removeAttribute('aria-busy');
         competitionStatsCard?.removeAttribute('aria-busy');
       }
     }
-  }
+  });
 
   try {
     map = new maplibre.Map({
@@ -234,7 +205,7 @@ export function initializeArena({
           { padding: 60, duration: 0 },
         );
         mapReady = true;
-        await refreshCompetition();
+        await refreshCompetition.run();
       } catch {
         if (leaderboardStatus) leaderboardStatus.textContent = 'Unable to load this Arena.';
         leaderboardCard?.removeAttribute('aria-busy');
