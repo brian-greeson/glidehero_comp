@@ -1,6 +1,6 @@
 # GlideHero
 
-GlideHero is a Node.js, Express, Vento, Drizzle, and PostgreSQL web application.
+GlideHero is a Node.js, Express, Vento, Drizzle, valkey, and PostgreSQL web application.
 The first milestone provides server-rendered email/password signup and login using
 revocable HTTP-only cookie sessions.
 
