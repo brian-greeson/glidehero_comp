@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createAdminPageRenderer, createErrorPageRenderer, createPageRenderer } from '../../src/views/renderer.js';
+import { createAdminAreaPageRenderer, createAdminPageRenderer, createErrorPageRenderer, createPageRenderer } from '../../src/views/renderer.js';
 
 describe('Vento page renderer', () => {
   const render = createPageRenderer({ mapTilerApiKey: 'maptiler-test-key' });
@@ -210,6 +210,31 @@ describe('Vento page renderer', () => {
     expect(html).toContain('Flight cells were reprocessed.');
     expect(html).not.toContain('dashboard.js');
     expect(html).not.toContain('maplibre-gl');
+    expect(html).toContain('href="/admin/areas"');
+    expect(html).toContain('href="/admin" class="admin-tab is-active" aria-current="page">Flights</a>');
+  });
+
+  it('renders the area editor with only its dedicated map assets', async () => {
+    const html = await createAdminAreaPageRenderer({ mapTilerApiKey: 'maptiler-test-key' })({
+      currentUser: {
+        userId: '00000000-0000-4000-8000-000000000001',
+        sessionId: '00000000-0000-4000-8000-000000000002',
+        email: 'admin@example.com',
+        displayName: 'Admin',
+        territoryColor: '#1769AA',
+      },
+    });
+
+    expect(html).toContain('data-admin-area-editor');
+    expect(html).toContain('data-map-style-url="https://api.maptiler.com/maps/outdoor-v2/style.json?key=maptiler-test-key"');
+    expect(html).toContain('/styles/adminAreaEditor.css');
+    expect(html).toContain('/scripts/admin/areaEditor.js');
+    expect(html).toContain('data-map-tool="paint"');
+    expect(html).toContain('data-map-tool="erase"');
+    expect(html).toContain('data-cancel-area');
+    expect(html).toContain('href="/admin/areas" class="admin-tab is-active" aria-current="page">Areas</a>');
+    expect(html).not.toContain('/scripts/dashboard.js');
+    expect(html).not.toContain('/scripts/arena.js');
   });
 
   it('autoescapes user-controlled values and never renders passwords', async () => {

@@ -1,4 +1,4 @@
-import { bigint, customType, date, doublePrecision, index, integer, pgEnum, pgTable, primaryKey, text, timestamp, unique, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
+import { bigint, customType, date, doublePrecision, index, integer, pgEnum, pgSequence, pgTable, primaryKey, text, timestamp, unique, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 
 const geometryPoint4326 = customType<{ data: string; driverData: string }>({
@@ -153,6 +153,10 @@ export const launchAreas = pgTable(
     index('launch_areas_area_gist_idx').using('gist', table.area).where(sql`${table.area} IS NOT NULL`),
   ],
 );
+
+export const customLaunchAreaSourceIdSequence = pgSequence('custom_launch_area_source_id_seq', {
+  startWith: 10_000,
+});
 
 export const launchAreaCells = pgTable(
   'launch_area_cells',

@@ -587,15 +587,46 @@ button {
 .admin-page {
   min-height: 100vh;
 }
-.admin-header {
-  display: flex;
-  min-height: 76px;
+.admin-nav {
+  position: relative;
+  z-index: 5;
+  display: grid;
+  height: 76px;
+  grid-template-columns: 1fr auto 1fr;
   align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
+  gap: 1.5rem;
   padding: 0 1.75rem;
   color: var(--color-on-primary);
   background: linear-gradient(110deg, var(--color-nav-start), var(--color-nav-end));
+  box-shadow: 0 2px 12px rgb(0 0 0 / 0.2);
+}
+.admin-tabs {
+  display: flex;
+  min-width: 0;
+  height: 100%;
+  align-items: stretch;
+  gap: 0.2rem;
+}
+.admin-tab {
+  display: inline-flex;
+  width: auto;
+  min-width: 130px;
+  align-items: center;
+  justify-content: center;
+  padding: 0 1rem;
+  border-bottom: 3px solid transparent;
+  color: #f8fafc;
+  font-weight: 600;
+  text-decoration: none;
+  text-transform: uppercase;
+}
+.admin-tab.is-active {
+  border-bottom-color: var(--color-primary);
+  color: var(--color-on-primary);
+}
+.admin-nav-actions {
+  display: flex;
+  justify-content: flex-end;
 }
 .admin-back-link {
   color: #fff;

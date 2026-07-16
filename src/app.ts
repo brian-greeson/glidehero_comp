@@ -11,7 +11,7 @@ export type AppDependencies = {
 };
 
 function isApiRequest(req: Request): boolean {
-  return req.path === '/v1' || req.path.startsWith('/v1/');
+  return req.path === '/v1' || req.path.startsWith('/v1/') || req.path.startsWith('/admin/api/');
 }
 
 function errorStatus(error: unknown): number {

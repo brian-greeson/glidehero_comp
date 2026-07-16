@@ -1,10 +1,7 @@
 {{ layout "layouts/appLayout.vto" }}
 
   <section class="admin-page">
-    <header class="admin-header">
-      <a class="brand admin-brand" href="/" aria-label="Return to Glide Hero dashboard"><img class="brand-logo" src="/android-chrome-192x192.png" alt=""><span class="brand-name">GLIDE HERO</span></a>
-      <a class="admin-back-link" href="/">Back to dashboard</a>
-    </header>
+    {{ include "components/adminNav.vto" { activeAdminPage: "flights" } }}
     <div class="admin-content">
       <div>
         <p class="admin-eyebrow">Administration</p>
