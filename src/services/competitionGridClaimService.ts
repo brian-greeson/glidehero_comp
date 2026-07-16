@@ -17,22 +17,23 @@ import { viewportCtes } from './viewportGrid.js';
 
 export interface CompetitionGridClaimService {
   process(input: { flightId: string; userId: string; launchTimezone: string }): Promise<void>;
-  getCurrent(input: { competitionMonth: string }): Promise<CompetitionGridClaimGeoJson>;
-  getArenaCurrent(input: { competitionMonth: string; launchAreaId: string }): Promise<CompetitionGridClaimGeoJson>;
-  getViewportLeaderboard(input: {
-    competitionMonth: string;
+  getCurrent(input: CompetitionTerritoryPeriod): Promise<CompetitionGridClaimGeoJson>;
+  getArenaCurrent(input: CompetitionTerritoryPeriod & { launchAreaId: string }): Promise<CompetitionGridClaimGeoJson>;
+  getViewportLeaderboard(input: CompetitionLeaderboardPeriod & {
     west: number;
     south: number;
     east: number;
     north: number;
     currentUserId: string;
   }): Promise<CompetitionLeaderboard>;
-  getArenaLeaderboard(input: {
-    competitionMonth: string;
+  getArenaLeaderboard(input: CompetitionLeaderboardPeriod & {
     launchAreaId: string;
     currentUserId: string;
   }): Promise<CompetitionLeaderboard>;
 }
+
+export type CompetitionTerritoryPeriod = { competitionMonth: string } | { period: 'all-time' };
+export type CompetitionLeaderboardPeriod = { competitionMonth: string } | { period: 'all-time' };
 
 type StoredProjection = { geojson: CompetitionGridClaimGeoJson };
 type StoredLeaderboardPilot = {
@@ -105,6 +106,16 @@ export function createCompetitionGridClaimService(
 ): CompetitionGridClaimService {
   const { cellSize } = options;
 
+  function territoryMonth(input: CompetitionTerritoryPeriod): string | undefined {
+    return 'competitionMonth' in input ? normalizeCompetitionMonth(input.competitionMonth) : undefined;
+  }
+
+  function leaderboardMonth(input: CompetitionLeaderboardPeriod): string | undefined {
+    return 'competitionMonth' in input
+      ? normalizeCompetitionLeaderboardMonth(input.competitionMonth)
+      : undefined;
+  }
+
   return {
     async process({ flightId, userId, launchTimezone }) {
       await database.transaction(async (tx) => {
@@ -117,8 +128,8 @@ export function createCompetitionGridClaimService(
       });
     },
 
-    async getCurrent({ competitionMonth }) {
-      const normalizedMonth = normalizeCompetitionMonth(competitionMonth);
+    async getCurrent(input) {
+      const normalizedMonth = territoryMonth(input);
       const result = await database.execute<StoredProjection>(sql`
         WITH ${currentCompetitionOwnershipCtes({ competitionMonth: normalizedMonth, cellSize })}
         SELECT jsonb_build_object(
@@ -159,8 +170,9 @@ export function createCompetitionGridClaimService(
       return result.rows[0]?.geojson ?? emptyCompetitionGridClaimGeoJson();
     },
 
-    async getArenaCurrent({ competitionMonth, launchAreaId }) {
-      const normalizedMonth = normalizeCompetitionMonth(competitionMonth);
+    async getArenaCurrent(input) {
+      const { launchAreaId } = input;
+      const normalizedMonth = territoryMonth(input);
       const result = await database.execute<StoredProjection>(sql`
         WITH ${currentCompetitionOwnershipCtes({ competitionMonth: normalizedMonth, cellSize })},
         arena_claims AS (
@@ -210,8 +222,9 @@ export function createCompetitionGridClaimService(
       return result.rows[0]?.geojson ?? emptyCompetitionGridClaimGeoJson();
     },
 
-    async getViewportLeaderboard({ competitionMonth, west, south, east, north, currentUserId }) {
-      const normalizedMonth = normalizeCompetitionLeaderboardMonth(competitionMonth);
+    async getViewportLeaderboard(input) {
+      const { west, south, east, north, currentUserId } = input;
+      const normalizedMonth = leaderboardMonth(input);
       const result = await database.execute<StoredLeaderboardPilot>(sql`
         WITH ${currentCompetitionOwnershipCtes({ competitionMonth: normalizedMonth, cellSize })},
         ${viewportCtes({ west, south, east, north })},
@@ -350,8 +363,9 @@ export function createCompetitionGridClaimService(
       };
     },
 
-    async getArenaLeaderboard({ competitionMonth, launchAreaId, currentUserId }) {
-      const normalizedMonth = normalizeCompetitionLeaderboardMonth(competitionMonth);
+    async getArenaLeaderboard(input) {
+      const { launchAreaId, currentUserId } = input;
+      const normalizedMonth = leaderboardMonth(input);
       const result = await database.execute<StoredLeaderboardPilot>(sql`
         WITH ${currentCompetitionOwnershipCtes({ competitionMonth: normalizedMonth, cellSize })},
         visible_claims AS (

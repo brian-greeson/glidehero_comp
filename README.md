@@ -86,7 +86,11 @@ The Global competition lives at `/global`. Its leaderboard and Competitive
 Stats are based on the current map viewport. As the user pans and zooms the
 Global map, the app dynamically recalculates rankings, claimed area, contributing
 flights, pilots, and the signed-in pilot's contributing flights for the visible
-area.
+area. Competition pages default to All Time, where the latest claimant across
+the complete recorded history owns each cell. Pilots can switch the map,
+leaderboard, and Stats together to Current Month. Competition pages encode that
+selection as `?month=YYYY-MM`; when the parameter is absent they show All Time.
+Global and Arena navigation carries the month parameter between pages.
 
 Launch areas with generated grid geometry are also available as Arenas. Arena
 routes use a lowercase ISO country code, a name slug, and the launch source ID,
@@ -94,7 +98,8 @@ for example `/arena/us/boulder-745`. The search box on Global and Arena pages is
 used exclusively to find Arenas by launch name, city, state, or country. The
 Personal page does not display Arena search.
 
-An Arena is a filtered view of the same global monthly cell ownership. Any
+An Arena is a filtered view of the same global competition ownership for the
+selected time period. Any
 flight that claims a cell in the Arena counts, regardless of its launch
 location. The Arena map hides claims outside its exact cell membership, and its
 leaderboard and Stats always cover the complete Arena. Panning and zooming an

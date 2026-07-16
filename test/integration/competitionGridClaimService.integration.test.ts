@@ -93,6 +93,14 @@ describe('CompetitionGridClaimService with PostGIS', () => {
       y: 0,
       displayName: 'Outside Pilot',
     });
+    const allTimeInside = await persistClaim({
+      competitionMonth: '2026-08-01',
+      claimTimestamp: new Date('2026-08-10T12:00:00Z'),
+      flightCreatedAt: new Date('2026-08-10T13:00:00Z'),
+      x: 0,
+      y: 0,
+      displayName: 'All Time Inside Pilot',
+    });
     const arena = await database.pool.query<{ id: string }>(`
       INSERT INTO launch_areas (
         source_id, name, country, state, city, location, altitude_meters, timezone, area
@@ -116,6 +124,12 @@ describe('CompetitionGridClaimService with PostGIS', () => {
       launchAreaId: arenaId,
       currentUserId: inside.userId,
     });
+    const allTimeTerritory = await service.getArenaCurrent({ period: 'all-time', launchAreaId: arenaId });
+    const allTimeLeaderboard = await service.getArenaLeaderboard({
+      period: 'all-time',
+      launchAreaId: arenaId,
+      currentUserId: inside.userId,
+    });
 
     expect(territory.features.map((feature) => feature.properties.cellId)).toEqual(['2026-07-01:1000:0:0']);
     expect(leaderboard.leaders).toEqual([expect.objectContaining({
@@ -131,6 +145,11 @@ describe('CompetitionGridClaimService with PostGIS', () => {
       pilotCount: 1,
       currentPilotFlightCount: 1,
     });
+    expect(allTimeTerritory.features[0]?.properties.ownerUserId).toBe(allTimeInside.userId);
+    expect(allTimeLeaderboard.leaders).toEqual([
+      expect.objectContaining({ userId: allTimeInside.userId, claimedCellCount: 1 }),
+    ]);
+    expect(allTimeLeaderboard.stats.currentPilotFlightCount).toBe(0);
   });
 
   it('returns aggregate stats from current viewport owners and excludes replaced flights', async () => {
@@ -185,6 +204,67 @@ describe('CompetitionGridClaimService with PostGIS', () => {
     expect(result.leaders.map((pilot) => pilot.userId)).toEqual(expect.arrayContaining([
       alphaOld.userId,
       bravo.userId,
+    ]));
+  });
+
+  it('treats the latest claim across all months as the all-time owner and excludes replaced flights from stats', async () => {
+    const julyPilot = await persistClaim({
+      competitionMonth: '2026-07-01',
+      claimTimestamp: new Date('2026-07-20T12:00:00Z'),
+      flightCreatedAt: new Date('2026-07-20T13:00:00Z'),
+      x: 0,
+      y: 0,
+      displayName: 'July Pilot',
+    });
+    await persistClaim({
+      competitionMonth: '2026-07-01',
+      claimTimestamp: new Date('2026-07-21T12:00:00Z'),
+      flightCreatedAt: new Date('2026-07-21T13:00:00Z'),
+      x: 1,
+      y: 0,
+      pilot: julyPilot,
+    });
+    const augustPilot = await persistClaim({
+      competitionMonth: '2026-08-01',
+      claimTimestamp: new Date('2026-08-02T12:00:00Z'),
+      flightCreatedAt: new Date('2026-08-02T13:00:00Z'),
+      x: 0,
+      y: 0,
+      displayName: 'August Pilot',
+    });
+    const bounds = await database.pool.query<{ west: number; south: number; east: number; north: number }>(`
+      SELECT
+        ST_X(ST_Transform(ST_SetSRID(ST_Point(1, 1), 6933), 4326)) AS west,
+        ST_Y(ST_Transform(ST_SetSRID(ST_Point(1, 1), 6933), 4326)) AS south,
+        ST_X(ST_Transform(ST_SetSRID(ST_Point(1999, 999), 6933), 4326)) AS east,
+        ST_Y(ST_Transform(ST_SetSRID(ST_Point(1999, 999), 6933), 4326)) AS north
+    `);
+    const viewport = bounds.rows[0];
+    if (!viewport) throw new Error('Expected viewport bounds.');
+    const service = createCompetitionGridClaimService(database.db, { cellSize: 1_000 });
+
+    const july = await service.getCurrent({ competitionMonth: '2026-07-14' });
+    const allTime = await service.getCurrent({ period: 'all-time' });
+    const leaderboard = await service.getViewportLeaderboard({
+      period: 'all-time',
+      ...viewport,
+      currentUserId: julyPilot.userId,
+    });
+
+    expect(july.features.find((feature) => feature.properties.x === 0)?.properties.ownerUserId)
+      .toBe(julyPilot.userId);
+    expect(allTime.features.find((feature) => feature.properties.x === 0)?.properties.ownerUserId)
+      .toBe(augustPilot.userId);
+    expect(leaderboard.stats).toEqual({
+      claimedCellCount: 2,
+      claimedAreaSquareMeters: 2_000_000,
+      flightCount: 2,
+      pilotCount: 2,
+      currentPilotFlightCount: 1,
+    });
+    expect(leaderboard.leaders).toEqual(expect.arrayContaining([
+      expect.objectContaining({ userId: julyPilot.userId, claimedCellCount: 1 }),
+      expect.objectContaining({ userId: augustPilot.userId, claimedCellCount: 1 }),
     ]));
   });
 

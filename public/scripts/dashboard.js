@@ -2,6 +2,10 @@ import { initializeOnboarding } from './onboarding.js';
 import { initializeArenaSearch } from './arenaSearch.js';
 import { COMPETITION_COLOR_PALETTE } from './competitionColors.js';
 import { createTerritoryBoundaryLayer, createTerritoryFillLayer } from './mapStyles.js';
+import {
+  ALL_TIME_COMPETITION_PERIOD,
+  initializeCompetitionPeriodControl,
+} from './competitionPeriod.js';
 
 export const PERSONAL_TERRITORY_SOURCE_ID = 'personal-territory';
 export const PERSONAL_TERRITORY_FILL_LAYER_ID = 'personal-territory-fill';
@@ -160,16 +164,17 @@ export async function loadCompetitionTerritory(
   {
     currentUserId,
     territoryColor,
-    date = new Date(),
+    month = null,
     fetchImpl = fetch,
+    signal,
     random = Math.random,
     colorRegistry = createCompetitionColorRegistry(currentUserId, territoryColor, random),
   },
 ) {
-  const competitionDate = formatBrowserLocalDate(date);
-  const response = await fetchImpl(`/v1/competition-territory?date=${encodeURIComponent(competitionDate)}`, {
+  const response = await fetchImpl(competitionTerritoryUrl(month), {
     credentials: 'same-origin',
     headers: { accept: 'application/geo+json' },
+    signal,
   });
   if (!response.ok) throw new Error(`Competition territory request failed with ${response.status}.`);
 
@@ -180,18 +185,29 @@ export async function loadCompetitionTerritory(
     random,
     colorRegistry,
   );
-  map.addSource(COMPETITION_TERRITORY_SOURCE_ID, { type: 'geojson', data: geojson });
-  map.addLayer(createTerritoryFillLayer({
-    id: COMPETITION_TERRITORY_FILL_LAYER_ID,
-    source: COMPETITION_TERRITORY_SOURCE_ID,
-    color: COMPETITION_COLOR_EXPRESSION,
-  }));
-  map.addLayer(createTerritoryBoundaryLayer({
-    id: COMPETITION_TERRITORY_OUTLINE_LAYER_ID,
-    source: COMPETITION_TERRITORY_SOURCE_ID,
-    color: COMPETITION_COLOR_EXPRESSION,
-  }));
+  const existingSource = map.getSource?.(COMPETITION_TERRITORY_SOURCE_ID);
+  if (existingSource?.setData) {
+    existingSource.setData(geojson);
+  } else {
+    map.addSource(COMPETITION_TERRITORY_SOURCE_ID, { type: 'geojson', data: geojson });
+    map.addLayer(createTerritoryFillLayer({
+      id: COMPETITION_TERRITORY_FILL_LAYER_ID,
+      source: COMPETITION_TERRITORY_SOURCE_ID,
+      color: COMPETITION_COLOR_EXPRESSION,
+    }));
+    map.addLayer(createTerritoryBoundaryLayer({
+      id: COMPETITION_TERRITORY_OUTLINE_LAYER_ID,
+      source: COMPETITION_TERRITORY_SOURCE_ID,
+      color: COMPETITION_COLOR_EXPRESSION,
+    }));
+  }
   return geojson;
+}
+
+export function competitionTerritoryUrl(month = null) {
+  return month
+    ? `/v1/competition-territory?month=${encodeURIComponent(month)}`
+    : '/v1/competition-territory';
 }
 
 function wrapLongitude(longitude, isEast = false) {
@@ -214,10 +230,10 @@ export function normalizeLeaderboardBounds(bounds) {
   };
 }
 
-export function competitionLeaderboardUrl(bounds, date = new Date()) {
+export function competitionLeaderboardUrl(bounds, month = null) {
   const normalized = normalizeLeaderboardBounds(bounds);
   const query = new URLSearchParams({
-    month: formatBrowserLocalMonth(date),
+    ...(month ? { month } : {}),
     west: String(normalized.west),
     south: String(normalized.south),
     east: String(normalized.east),
@@ -338,12 +354,13 @@ export function initializeDashboard({
   documentRef = document,
   maplibre = window.maplibregl,
   fetchImpl = window.fetch.bind(window),
+  locationRef = typeof window === 'undefined' ? { pathname: '', search: '' } : window.location,
+  historyRef = typeof window === 'undefined' ? undefined : window.history,
+  now = () => new Date(),
 } = {}) {
   initializeOnboarding({ documentRef });
   initializeMobileSheet({ documentRef });
   initializeArenaSearch({ documentRef, fetchImpl });
-
-  const competitionDate = new Date();
 
   const dashboardRoot = documentRef.querySelector('[data-dashboard]');
   const mapElement = documentRef.querySelector('[data-dashboard-map]');
@@ -360,8 +377,10 @@ export function initializeDashboard({
   let mapReady = false;
   let activeMode = dashboardRoot?.dataset.dashboardMode === 'global' ? 'competitive' : 'personal';
   let competitionLoaded = false;
-  let competitionLoading = false;
   let competitionIsEmpty = false;
+  let loadedCompetitionPeriod;
+  let territoryRequestSequence = 0;
+  let territoryAbortController;
   let leaderboardRequestSequence = 0;
   let leaderboardAbortController;
   let personalStatsRequestSequence = 0;
@@ -369,6 +388,34 @@ export function initializeDashboard({
   const colorRegistry = mapElement
     ? createCompetitionColorRegistry(mapElement.dataset.currentUserId, mapElement.dataset.territoryColor)
     : null;
+  const periodControl = initializeCompetitionPeriodControl({
+    documentRef,
+    locationRef,
+    historyRef,
+    now,
+    onChange: async () => {
+      leaderboardRequestSequence += 1;
+      leaderboardAbortController?.abort();
+      competitionLoaded = false;
+      loadedCompetitionPeriod = undefined;
+      leaderboardList?.replaceChildren();
+      if (currentPilotResult) currentPilotResult.hidden = true;
+      for (const selector of [
+        '[data-competition-claimed-area]',
+        '[data-competition-flights]',
+        '[data-competition-pilots]',
+        '[data-competition-my-flights]',
+      ]) {
+        const value = documentRef.querySelector(selector);
+        if (value) value.textContent = '-';
+      }
+      setLayerVisibility(
+        [COMPETITION_TERRITORY_FILL_LAYER_ID, COMPETITION_TERRITORY_OUTLINE_LAYER_ID],
+        'none',
+      );
+      if (activeMode === 'competitive' && mapReady) await selectCompetitiveMode();
+    },
+  });
 
   function showStatus(message) {
     if (emptyState) {
@@ -431,6 +478,7 @@ export function initializeDashboard({
       activeMode !== 'competitive'
       || !mapReady
       || !competitionLoaded
+      || loadedCompetitionPeriod !== periodControl.period
       || !map?.getBounds
       || !leaderboardCard
       || !leaderboardStatus
@@ -446,7 +494,10 @@ export function initializeDashboard({
     competitionStatsCard?.setAttribute('aria-busy', 'true');
     leaderboardStatus.textContent = 'Updating leaderboard…';
     try {
-      const response = await fetchImpl(competitionLeaderboardUrl(map.getBounds(), competitionDate), {
+      const response = await fetchImpl(competitionLeaderboardUrl(
+        map.getBounds(),
+        periodControl.month,
+      ), {
         credentials: 'same-origin',
         headers: { accept: 'application/json' },
         signal: leaderboardAbortController?.signal,
@@ -516,32 +567,43 @@ export function initializeDashboard({
     setTabState(activeMode);
     clearStatus();
     applyModeLayers();
-    if (!mapReady || competitionLoaded || competitionLoading) {
-      if (competitionLoaded && competitionIsEmpty) showStatus('No competition territory claimed this month.');
+    if (!mapReady || (competitionLoaded && loadedCompetitionPeriod === periodControl.period)) {
+      if (competitionLoaded && competitionIsEmpty) {
+        showStatus(periodControl.period === ALL_TIME_COMPETITION_PERIOD
+          ? 'No competition territory has been claimed.'
+          : 'No competition territory claimed this month.');
+      }
       if (competitionLoaded) await refreshLeaderboard();
       return;
     }
 
-    competitionLoading = true;
+    territoryAbortController?.abort();
+    territoryAbortController = typeof AbortController === 'undefined' ? undefined : new AbortController();
+    const requestSequence = ++territoryRequestSequence;
     try {
       const geojson = await loadCompetitionTerritory(map, {
         currentUserId: mapElement.dataset.currentUserId,
         territoryColor: mapElement.dataset.territoryColor,
-        date: competitionDate,
+        month: periodControl.month,
         fetchImpl,
+        signal: territoryAbortController?.signal,
         colorRegistry,
       });
+      if (requestSequence !== territoryRequestSequence) return;
       competitionLoaded = true;
+      loadedCompetitionPeriod = periodControl.period;
       competitionIsEmpty = geojson.features.length === 0;
       applyModeLayers();
       if (activeMode === 'competitive' && competitionIsEmpty) {
-        showStatus('No competition territory claimed this month.');
+        showStatus(periodControl.period === ALL_TIME_COMPETITION_PERIOD
+          ? 'No competition territory has been claimed.'
+          : 'No competition territory claimed this month.');
       }
       await refreshLeaderboard();
-    } catch {
-      if (activeMode === 'competitive') showStatus('Unable to load competition territory. Try again.');
-    } finally {
-      competitionLoading = false;
+    } catch (error) {
+      if (error?.name !== 'AbortError' && activeMode === 'competitive') {
+        showStatus('Unable to load competition territory. Try again.');
+      }
     }
   }
 
@@ -581,9 +643,6 @@ export function initializeDashboard({
   } else if (mapElement) {
     showMapUnavailable();
   }
-
-  const competitionMonth = documentRef.querySelector('[data-competition-month]');
-  if (competitionMonth) competitionMonth.textContent = formatBrowserLocalMonthLabel(competitionDate);
 
   const accountTrigger = documentRef.querySelector('[data-account-trigger]');
   const accountPopover = documentRef.querySelector('[data-account-popover]');

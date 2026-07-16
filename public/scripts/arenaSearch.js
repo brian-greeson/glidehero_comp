@@ -1,3 +1,5 @@
+import { competitionMonthFromSearch, competitionPageUrl } from './competitionPeriod.js';
+
 function arenaResultLabel(arena) {
   const region = [arena.city, arena.state, arena.country].filter(Boolean).join(', ');
   return region ? `${arena.name} — ${region}` : arena.name;
@@ -7,6 +9,7 @@ export function initializeArenaSearch({
   documentRef = document,
   fetchImpl = window.fetch.bind(window),
   navigate = (path) => window.location.assign(path),
+  locationRef = typeof window === 'undefined' ? { search: '' } : window.location,
   debounceMs = 200,
 } = {}) {
   const root = documentRef.querySelector('[data-arena-search]');
@@ -19,6 +22,10 @@ export function initializeArenaSearch({
   let requestSequence = 0;
   let arenas = [];
   let activeIndex = -1;
+
+  function navigateToArena(path) {
+    navigate(competitionPageUrl(path, competitionMonthFromSearch(locationRef.search)));
+  }
 
   function cancelPendingSearch() {
     clearTimeout(timer);
@@ -71,7 +78,7 @@ export function initializeArenaSearch({
         option.setAttribute('aria-selected', 'false');
         option.textContent = arenaResultLabel(arena);
         option.addEventListener('pointerdown', (event) => event.preventDefault());
-        option.addEventListener('click', () => navigate(arena.path));
+        option.addEventListener('click', () => navigateToArena(arena.path));
         results.append(option);
       });
     }
@@ -124,7 +131,7 @@ export function initializeArenaSearch({
       setActive(activeIndex < 0 ? arenas.length - 1 : activeIndex - 1);
     } else if (event.key === 'Enter' && activeIndex >= 0) {
       event.preventDefault();
-      navigate(arenas[activeIndex].path);
+      navigateToArena(arenas[activeIndex].path);
     }
   });
 

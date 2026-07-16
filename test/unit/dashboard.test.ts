@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 // The browser asset intentionally remains JavaScript; this test exercises its public module API.
 // @ts-expect-error TypeScript does not emit or typecheck files under public/.
-import { colorCompetitionTerritory, competitionLeaderboardUrl, COMPETITION_TERRITORY_FILL_LAYER_ID, COMPETITION_TERRITORY_OUTLINE_LAYER_ID, COMPETITION_TERRITORY_SOURCE_ID, createCompetitionColorRegistry, formatBrowserLocalDate, formatBrowserLocalMonth, formatBrowserLocalMonthLabel, formatClaimedArea, initializeDashboard, initializeMobileSheet, loadCompetitionTerritory, personalStatsUrl, renderCompetitionStats, renderPersonalStats } from '../../public/scripts/dashboard.js';
+import { colorCompetitionTerritory, competitionLeaderboardUrl, competitionTerritoryUrl, COMPETITION_TERRITORY_FILL_LAYER_ID, COMPETITION_TERRITORY_OUTLINE_LAYER_ID, COMPETITION_TERRITORY_SOURCE_ID, createCompetitionColorRegistry, formatBrowserLocalDate, formatBrowserLocalMonth, formatBrowserLocalMonthLabel, formatClaimedArea, initializeDashboard, initializeMobileSheet, loadCompetitionTerritory, personalStatsUrl, renderCompetitionStats, renderPersonalStats } from '../../public/scripts/dashboard.js';
 
 describe('Mobile dashboard sheet', () => {
   function interactiveElement() {
@@ -213,10 +213,24 @@ describe('Competition territory dashboard map', () => {
       getSouth: () => 39,
       getEast: () => -105,
       getNorth: () => 41,
-    }, new Date(2026, 6, 14));
+    }, '2026-07');
 
     expect(url).toBe('/v1/competition-leaderboard?month=2026-07&west=-107&south=39&east=-105&north=41');
     expect(formatClaimedArea(2_500_000, 'en-US')).toBe('2.5 km²');
+  });
+
+  it('builds all-time territory and viewport leaderboard URLs without a month', () => {
+    const bounds = {
+      getWest: () => -107,
+      getSouth: () => 39,
+      getEast: () => -105,
+      getNorth: () => 41,
+    };
+
+    expect(competitionTerritoryUrl()).toBe('/v1/competition-territory');
+    expect(competitionLeaderboardUrl(bounds)).toBe(
+      '/v1/competition-leaderboard?west=-107&south=39&east=-105&north=41',
+    );
   });
 
   it('builds a personal stats URL from the normalized viewport', () => {
@@ -262,13 +276,13 @@ describe('Competition territory dashboard map', () => {
       {
         currentUserId,
         territoryColor: '#1769AA',
-        date: new Date(2026, 6, 14, 23, 30),
+        month: '2026-07',
         fetchImpl,
         random: () => 0,
       },
     );
 
-    expect(fetchImpl).toHaveBeenCalledWith('/v1/competition-territory?date=2026-07-14', {
+    expect(fetchImpl).toHaveBeenCalledWith('/v1/competition-territory?month=2026-07', {
       credentials: 'same-origin',
       headers: { accept: 'application/geo+json' },
     });
@@ -284,6 +298,28 @@ describe('Competition territory dashboard map', () => {
       id: COMPETITION_TERRITORY_OUTLINE_LAYER_ID,
       paint: { 'line-color': ['get', 'displayColor'], 'line-width': 2 },
     }));
+  });
+
+  it('updates the existing map source when switching to all time', async () => {
+    const geojson = { type: 'FeatureCollection', features: [feature(otherUserId)] };
+    const setData = vi.fn();
+    const addSource = vi.fn();
+    const addLayer = vi.fn();
+    const fetchImpl = vi.fn().mockResolvedValue(new Response(JSON.stringify(geojson), { status: 200 }));
+
+    await loadCompetitionTerritory(
+      { getSource: () => ({ setData }), addSource, addLayer },
+      {
+        currentUserId,
+        territoryColor: '#1769AA',
+        fetchImpl,
+      },
+    );
+
+    expect(fetchImpl.mock.calls[0]?.[0]).toBe('/v1/competition-territory');
+    expect(setData).toHaveBeenCalledWith(expect.objectContaining({ type: 'FeatureCollection' }));
+    expect(addSource).not.toHaveBeenCalled();
+    expect(addLayer).not.toHaveBeenCalled();
   });
 
   function modeButton(active = false) {
@@ -412,7 +448,7 @@ describe('Competition territory dashboard map', () => {
     await context.competitiveButton.click();
 
     expect(context.mapStatus.hidden).toBe(false);
-    expect(context.mapStatus.textContent).toBe('No competition territory claimed this month.');
+    expect(context.mapStatus.textContent).toBe('No competition territory has been claimed.');
 
     await context.personalButton.click();
     expect(context.mapStatus.hidden).toBe(true);
@@ -642,7 +678,7 @@ describe('Competition territory dashboard map', () => {
     expect(context.leaderboardList.children).toHaveLength(1);
     expect(context.currentPilotResult.hidden).toBe(false);
     expect(context.fetchImpl.mock.calls[3]?.[0]).toContain(
-      '/v1/competition-leaderboard?month=',
+      '/v1/competition-leaderboard?west=',
     );
 
     context.move({ west: -106, south: 39, east: -104, north: 41 });

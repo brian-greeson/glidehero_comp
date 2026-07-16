@@ -69,7 +69,7 @@ describe('Vento page renderer', () => {
     expect(authenticated.indexOf('data-account-popover')).toBeLessThan(
       authenticated.indexOf('data-onboarding-trigger'),
     );
-    expect(authenticated).toContain('href="/global" class="mode-tab is-active" aria-current="page">Competitive</a>');
+    expect(authenticated).toContain('href="/global" data-competition-period-link="/global" class="mode-tab is-active" aria-current="page">Competitive</a>');
     expect(authenticated).toContain('href="/personal" class="mode-tab">Personal</a>');
     expect(authenticated).toContain('data-territory-color="#1769AA"');
     expect(authenticated).toContain('data-current-user-id="00000000-0000-4000-8000-000000000001"');
@@ -77,9 +77,9 @@ describe('Vento page renderer', () => {
     expect(authenticated).not.toContain('data-stub="full-leaderboard"');
     expect(authenticated).toContain('data-competition-leaderboard');
     expect(authenticated).toContain('data-leaderboard-list');
-    expect(authenticated).toContain('data-competition-month');
-    expect(authenticated).not.toContain('Time period');
-    expect(authenticated).not.toContain('data-current-month');
+    expect(authenticated).toContain('data-competition-period');
+    expect(authenticated).toContain('aria-label="Competition time period"');
+    expect(authenticated).toContain('data-current-month-option');
     expect(authenticated).toContain('<h2>Stats</h2>');
     expect(authenticated).not.toContain('data-personal-stats');
     expect(authenticated).toContain('data-competition-stats');
@@ -151,7 +151,7 @@ describe('Vento page renderer', () => {
     });
     expect(arena).toContain('data-arena-dashboard');
     expect(arena).toContain('data-arena-source-id="745"');
-    expect(arena).toContain('<a href="/global">Global</a>');
+    expect(arena).toContain('<a href="/global" data-competition-period-link="/global">Global</a>');
     expect(arena).toContain('aria-current="page">Boulder</span>');
     expect(arena).toContain('data-arena-search-input');
     expect(arena).toContain('<script type="module" src="/scripts/arena.js"></script>');

@@ -6,13 +6,13 @@ describe('landing page stylesheet contract', () => {
     const css = await readFile('public/styles/app.css', 'utf8');
 
     expect(css).toContain("background: var(--color-logo-navy) url('/landing-territories.webp') center / cover no-repeat");
-    expect(css).toContain('.landing { display: grid;');
-    expect(css).toContain('.auth-form-panel[hidden] { display: none; }');
+    expect(css).toMatch(/\.landing\s*{\s*display: grid;/);
+    expect(css).toMatch(/\.auth-form-panel\[hidden\]\s*{\s*display: none;/);
     expect(css).toContain('grid-template-columns: minmax(0, 1.68fr) minmax(360px, 1fr)');
     expect(css).toContain('background: linear-gradient(110deg, var(--color-primary-strong)');
     expect(css).toContain('@media (max-width: 720px)');
-    expect(css).toContain('.landing { display: block; }');
-    expect(css).toContain('.auth-brand { display: none; }');
+    expect(css).toMatch(/\.landing\s*{\s*display: block;/);
+    expect(css).toMatch(/\.auth-brand\s*{\s*display: none;/);
     expect(css).toContain('@media (prefers-reduced-motion: reduce)');
     expect(css).not.toContain('.auth-tabs');
   });

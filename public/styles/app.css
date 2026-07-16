@@ -841,9 +841,26 @@ button {
   line-height: 1.45;
 }
 .leaderboard-period {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
   margin: -0.55rem 0 0.8rem;
   color: var(--color-text-muted);
   font-size: 0.82rem;
+}
+.leaderboard-period button {
+  width: auto;
+  min-height: 36px;
+  padding: 0;
+  border: 0;
+  color: inherit;
+  background: transparent;
+  font: inherit;
+  cursor: pointer;
+}
+.leaderboard-period button.is-active {
+  color: var(--color-text);
+  font-weight: 700;
 }
 .leaderboard-status {
   margin: 0;
@@ -1099,6 +1116,7 @@ button {
   }
   .has-competition-breadcrumb .dashboard-info {
     inset-block-start: auto;
+    height: 292px;
   }
   .dashboard-info.is-expanded {
     height: calc(100dvh - 70px);
@@ -1124,7 +1142,10 @@ button {
     height: calc(100% - 25px);
     overflow: hidden;
   }
-  .dashboard-info:not(.is-expanded) .info-card > :not(h2) {
+  .dashboard-info:not(.is-expanded) .info-card > :not(h2):not(.leaderboard-period):not(.leaderboard-list) {
+    display: none;
+  }
+  .dashboard-info:not(.is-expanded) .leaderboard-list > :nth-child(n + 4) {
     display: none;
   }
   .dashboard-info.is-expanded .dashboard-information {

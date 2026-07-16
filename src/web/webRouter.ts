@@ -1,7 +1,6 @@
 import { Router, type Request, type Response } from 'express';
 import multer from 'multer';
 import { z } from 'zod';
-import { normalizeCompetitionMonth } from '../domain/competition/competitionMonth.js';
 import { normalizeCompetitionLeaderboardMonth } from '../domain/competition/competitionLeaderboardMonth.js';
 import { AppError } from '../domain/errors.js';
 import { AuthFailure, type AuthenticatedUser, type AuthService } from '../services/authService.js';
@@ -23,16 +22,15 @@ const signupSchema = z.object({
   displayName: z.string().trim().min(1).max(48).optional().or(z.literal('')),
 });
 const loginSchema = z.object({ email, password });
-const competitionDateSchema = z.object({
-  date: z.string().refine((value) => {
-    try {
-      normalizeCompetitionMonth(value);
-      return true;
-    } catch {
-      return false;
-    }
-  }),
+const competitionMonthValue = z.string().refine((value) => {
+  try {
+    normalizeCompetitionLeaderboardMonth(value);
+    return true;
+  } catch {
+    return false;
+  }
 });
+const competitionMonthSchema = z.object({ month: competitionMonthValue.optional() }).strict();
 const finiteCoordinate = z.string().refine(
   (value) => value.length > 0 && value.trim() === value && Number.isFinite(Number(value)),
 ).transform(Number);
@@ -46,14 +44,7 @@ const viewportBoundsSchema = z.object(viewportBoundsShape)
   .strict()
   .refine((bounds) => bounds.south < bounds.north && bounds.west !== bounds.east);
 const competitionLeaderboardSchema = z.object({
-  month: z.string().refine((value) => {
-    try {
-      normalizeCompetitionLeaderboardMonth(value);
-      return true;
-    } catch {
-      return false;
-    }
-  }),
+  month: competitionMonthValue.optional(),
   ...viewportBoundsShape,
 }).strict().refine((bounds) => bounds.south < bounds.north && bounds.west !== bounds.east);
 const arenaSearchSchema = z.object({ q: z.string().trim().min(1).max(100) }).strict();
@@ -92,9 +83,27 @@ export function createWebRouter(dependencies: {
   const isAdmin = (email: string) => adminEmails.has(email.trim().toLowerCase());
 
   function dashboardReturnTo(value: unknown): string {
-    if (value === '/global' || value === '/personal') return value;
-    if (typeof value === 'string' && /^\/arena\/[a-z]{2}\/[a-z0-9-]+-\d+$/.test(value)) return value;
-    return '/global';
+    if (typeof value !== 'string') return '/global';
+    try {
+      const url = new URL(value, 'http://glidehero.local');
+      if (url.origin !== 'http://glidehero.local') return '/global';
+      const validPath = url.pathname === '/global'
+        || url.pathname === '/personal'
+        || /^\/arena\/[a-z]{2}\/[a-z0-9-]+-\d+$/.test(url.pathname);
+      if (!validPath) return '/global';
+      const month = url.searchParams.get('month');
+      if (!month) return url.pathname;
+      normalizeCompetitionLeaderboardMonth(month);
+      return `${url.pathname}?month=${encodeURIComponent(month)}`;
+    } catch {
+      return '/global';
+    }
+  }
+
+  function dashboardSuccessRedirect(value: unknown, parameter: string): string {
+    const url = new URL(dashboardReturnTo(value), 'http://glidehero.local');
+    url.searchParams.set(parameter, 'success');
+    return `${url.pathname}?${url.searchParams}`;
   }
 
   function hasAdminAccess(currentUser: AuthenticatedUser | null): boolean {
@@ -148,18 +157,20 @@ export function createWebRouter(dependencies: {
       return;
     }
 
-    const competitionDate = competitionDateSchema.safeParse(req.query);
-    if (!competitionDate.success) {
+    const competitionMonth = competitionMonthSchema.safeParse(req.query);
+    if (!competitionMonth.success) {
       res.status(400).json({
-        error: { code: 'invalid_request', message: 'Competition date must be a valid ISO calendar date.' },
+        error: { code: 'invalid_request', message: 'Competition month must be a valid YYYY-MM value.' },
       });
       return;
     }
 
     try {
-      const territory = await dependencies.competitionGridClaim.getCurrent({
-        competitionMonth: competitionDate.data.date,
-      });
+      const territory = await dependencies.competitionGridClaim.getCurrent(
+        competitionMonth.data.month
+          ? { competitionMonth: `${competitionMonth.data.month}-01` }
+          : { period: 'all-time' },
+      );
       res.status(200).json(territory);
     } catch (error) {
       next(error);
@@ -183,7 +194,9 @@ export function createWebRouter(dependencies: {
 
     try {
       const leaderboard = await dependencies.competitionGridClaim.getViewportLeaderboard({
-        competitionMonth: viewport.data.month,
+        ...(viewport.data.month
+          ? { competitionMonth: viewport.data.month }
+          : { period: 'all-time' as const }),
         west: viewport.data.west,
         south: viewport.data.south,
         east: viewport.data.east,
@@ -241,9 +254,9 @@ export function createWebRouter(dependencies: {
       return;
     }
     const sourceId = arenaSourceIdSchema.safeParse(req.params.sourceId);
-    const competitionDate = competitionDateSchema.safeParse(req.query);
-    if (!sourceId.success || !competitionDate.success) {
-      res.status(400).json({ error: { code: 'invalid_request', message: 'Arena territory requires a valid Arena and ISO calendar date.' } });
+    const competitionMonth = competitionMonthSchema.safeParse(req.query);
+    if (!sourceId.success || !competitionMonth.success) {
+      res.status(400).json({ error: { code: 'invalid_request', message: 'Arena territory requires a valid Arena and YYYY-MM month.' } });
       return;
     }
     try {
@@ -253,7 +266,9 @@ export function createWebRouter(dependencies: {
         return;
       }
       const territory = await dependencies.competitionGridClaim.getArenaCurrent({
-        competitionMonth: competitionDate.data.date,
+        ...(competitionMonth.data.month
+          ? { competitionMonth: `${competitionMonth.data.month}-01` }
+          : { period: 'all-time' as const }),
         launchAreaId: arena.id,
       });
       res.status(200).json(territory);
@@ -269,17 +284,8 @@ export function createWebRouter(dependencies: {
       return;
     }
     const sourceId = arenaSourceIdSchema.safeParse(req.params.sourceId);
-    const month = z.object({
-      month: z.string().refine((value) => {
-        try {
-          normalizeCompetitionLeaderboardMonth(value);
-          return true;
-        } catch {
-          return false;
-        }
-      }),
-    }).strict().safeParse(req.query);
-    if (!sourceId.success || !month.success) {
+    const period = competitionMonthSchema.safeParse(req.query);
+    if (!sourceId.success || !period.success) {
       res.status(400).json({ error: { code: 'invalid_request', message: 'Arena leaderboard requires a valid Arena and YYYY-MM month.' } });
       return;
     }
@@ -290,7 +296,9 @@ export function createWebRouter(dependencies: {
         return;
       }
       res.status(200).json(await dependencies.competitionGridClaim.getArenaLeaderboard({
-        competitionMonth: month.data.month,
+        ...(period.data.month
+          ? { competitionMonth: period.data.month }
+          : { period: 'all-time' as const }),
         launchAreaId: arena.id,
         currentUserId: currentUser.userId,
       }));
@@ -499,7 +507,7 @@ export function createWebRouter(dependencies: {
     }
 
     await dependencies.profiles.updateTerritoryColor({ userId: currentUser.userId, territoryColor });
-    res.redirect(303, `${dashboardReturnTo(formBody(req.body).returnTo)}?territoryColor=success`);
+    res.redirect(303, dashboardSuccessRedirect(formBody(req.body).returnTo, 'territoryColor'));
   });
 
   router.post('/igc-files', async (req, res, next) => {
@@ -546,7 +554,7 @@ export function createWebRouter(dependencies: {
           await render(res, dependencies.renderPage, 422, { currentUser, uploadError: outcome.message });
           return;
         }
-        res.redirect(303, `${dashboardReturnTo(formBody(req.body).returnTo)}?igcUpload=success`);
+        res.redirect(303, dashboardSuccessRedirect(formBody(req.body).returnTo, 'igcUpload'));
       } catch (uploadError) {
         next(uploadError);
       }

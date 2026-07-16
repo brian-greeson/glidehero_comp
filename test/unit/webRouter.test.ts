@@ -307,17 +307,35 @@ describe('webRouter', () => {
       expect(search.status).toBe(200);
       expect(await search.json()).toEqual({ arenas: [arena] });
 
-      const territory = await fetch(`${baseUrl}/v1/arenas/745/competition-territory?date=2026-07-14`, { headers });
+      const territory = await fetch(`${baseUrl}/v1/arenas/745/competition-territory?month=2026-07`, { headers });
       expect(territory.status).toBe(200);
       expect(await territory.json()).toEqual(expectedCompetitionGeoJson);
       expect(competitionGridClaim.getArenaCurrent).toHaveBeenCalledWith({
-        competitionMonth: '2026-07-14', launchAreaId: arena.id,
+        competitionMonth: '2026-07-01', launchAreaId: arena.id,
       });
 
       const leaderboard = await fetch(`${baseUrl}/v1/arenas/745/competition-leaderboard?month=2026-07`, { headers });
       expect(leaderboard.status).toBe(200);
       expect(competitionGridClaim.getArenaLeaderboard).toHaveBeenCalledWith({
         competitionMonth: '2026-07', launchAreaId: arena.id, currentUserId: user.userId,
+      });
+
+      const allTimeTerritory = await fetch(
+        `${baseUrl}/v1/arenas/745/competition-territory`,
+        { headers },
+      );
+      expect(allTimeTerritory.status).toBe(200);
+      expect(competitionGridClaim.getArenaCurrent).toHaveBeenCalledWith({
+        period: 'all-time', launchAreaId: arena.id,
+      });
+
+      const allTimeLeaderboard = await fetch(
+        `${baseUrl}/v1/arenas/745/competition-leaderboard`,
+        { headers },
+      );
+      expect(allTimeLeaderboard.status).toBe(200);
+      expect(competitionGridClaim.getArenaLeaderboard).toHaveBeenCalledWith({
+        period: 'all-time', launchAreaId: arena.id, currentUserId: user.userId,
       });
     });
   });
@@ -590,11 +608,16 @@ describe('webRouter', () => {
           cookie: 'glidehero_session=valid-token',
           'content-type': 'application/x-www-form-urlencoded',
         },
-        body: new URLSearchParams({ territoryColor: '#a1b2c3' }),
+        body: new URLSearchParams({
+          territoryColor: '#a1b2c3',
+          returnTo: '/arena/us/boulder-745?month=2026-07',
+        }),
       });
 
       expect(response.status).toBe(303);
-      expect(response.headers.get('location')).toBe('/global?territoryColor=success');
+      expect(response.headers.get('location')).toBe(
+        '/arena/us/boulder-745?month=2026-07&territoryColor=success',
+      );
       expect(profiles.updateTerritoryColor).toHaveBeenCalledWith({
         userId: user.userId,
         territoryColor: '#A1B2C3',
@@ -716,30 +739,42 @@ describe('webRouter', () => {
     });
   });
 
-  it('returns current competition ownership for the browser date', async () => {
+  it('returns current competition ownership for the URL month', async () => {
     const { app, competitionGridClaim, expectedCompetitionGeoJson } = dependencies();
     await withServer(app, async (baseUrl) => {
-      const response = await fetch(`${baseUrl}/v1/competition-territory?date=2026-07-14`, {
+      const response = await fetch(`${baseUrl}/v1/competition-territory?month=2026-07`, {
         headers: { cookie: 'glidehero_session=valid-token' },
       });
 
       expect(response.status).toBe(200);
       expect(response.headers.get('content-type')).toContain('application/json');
       expect(await response.json()).toEqual(expectedCompetitionGeoJson);
-      expect(competitionGridClaim.getCurrent).toHaveBeenCalledWith({ competitionMonth: '2026-07-14' });
+      expect(competitionGridClaim.getCurrent).toHaveBeenCalledWith({ competitionMonth: '2026-07-01' });
     });
   });
 
-  it.each(['', '2026-02-29', '07-14-2026'])('rejects invalid competition date %j', async (date) => {
+  it('returns all-time competition ownership', async () => {
     const { app, competitionGridClaim } = dependencies();
     await withServer(app, async (baseUrl) => {
-      const response = await fetch(`${baseUrl}/v1/competition-territory?date=${encodeURIComponent(date)}`, {
+      const response = await fetch(`${baseUrl}/v1/competition-territory`, {
+        headers: { cookie: 'glidehero_session=valid-token' },
+      });
+
+      expect(response.status).toBe(200);
+      expect(competitionGridClaim.getCurrent).toHaveBeenCalledWith({ period: 'all-time' });
+    });
+  });
+
+  it.each(['', '2026-13', '07-2026'])('rejects invalid competition month %j', async (month) => {
+    const { app, competitionGridClaim } = dependencies();
+    await withServer(app, async (baseUrl) => {
+      const response = await fetch(`${baseUrl}/v1/competition-territory?month=${encodeURIComponent(month)}`, {
         headers: { cookie: 'glidehero_session=valid-token' },
       });
 
       expect(response.status).toBe(400);
       expect(await response.json()).toEqual({
-        error: { code: 'invalid_request', message: 'Competition date must be a valid ISO calendar date.' },
+        error: { code: 'invalid_request', message: 'Competition month must be a valid YYYY-MM value.' },
       });
       expect(competitionGridClaim.getCurrent).not.toHaveBeenCalled();
     });
@@ -748,7 +783,7 @@ describe('webRouter', () => {
   it('rejects an anonymous competition-territory request without reading claims', async () => {
     const { app, competitionGridClaim } = dependencies();
     await withServer(app, async (baseUrl) => {
-      const response = await fetch(`${baseUrl}/v1/competition-territory?date=2026-07-14`);
+      const response = await fetch(`${baseUrl}/v1/competition-territory`);
 
       expect(response.status).toBe(401);
       expect(await response.json()).toEqual({
@@ -780,6 +815,26 @@ describe('webRouter', () => {
       });
       expect(competitionGridClaim.getViewportLeaderboard).toHaveBeenCalledWith({
         competitionMonth: '2026-07',
+        west: -107,
+        south: 39,
+        east: -105,
+        north: 41,
+        currentUserId: user.userId,
+      });
+    });
+  });
+
+  it('returns the all-time viewport leaderboard and stats', async () => {
+    const { app, competitionGridClaim } = dependencies();
+    await withServer(app, async (baseUrl) => {
+      const response = await fetch(
+        `${baseUrl}/v1/competition-leaderboard?west=-107&south=39&east=-105&north=41`,
+        { headers: { cookie: 'glidehero_session=valid-token' } },
+      );
+
+      expect(response.status).toBe(200);
+      expect(competitionGridClaim.getViewportLeaderboard).toHaveBeenCalledWith({
+        period: 'all-time',
         west: -107,
         south: 39,
         east: -105,
@@ -867,6 +922,7 @@ describe('webRouter', () => {
     });
     const form = new FormData();
     form.set('igcFile', new Blob(['AXXX IGC flight']), 'flight.igc');
+    form.set('returnTo', '/global?month=2026-07');
 
     await withServer(app, async (baseUrl) => {
       const response = await fetch(`${baseUrl}/igc-files`, {
@@ -876,7 +932,7 @@ describe('webRouter', () => {
         body: form,
       });
       expect(response.status).toBe(303);
-      expect(response.headers.get('location')).toBe('/global?igcUpload=success');
+      expect(response.headers.get('location')).toBe('/global?month=2026-07&igcUpload=success');
       expect(igcFiles.upload).toHaveBeenCalledWith(
         expect.objectContaining({
           ownerUserId: user.userId,

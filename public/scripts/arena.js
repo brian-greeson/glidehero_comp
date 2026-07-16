@@ -3,14 +3,15 @@ import { initializeArenaSearch } from './arenaSearch.js';
 import {
   colorCompetitionTerritory,
   createCompetitionColorRegistry,
-  formatBrowserLocalDate,
-  formatBrowserLocalMonth,
-  formatBrowserLocalMonthLabel,
   initializeMobileSheet,
   renderCompetitionLeaderboard,
   renderCompetitionStats,
 } from './dashboard.js';
 import { createTerritoryBoundaryLayer, createTerritoryFillLayer } from './mapStyles.js';
+import {
+  ALL_TIME_COMPETITION_PERIOD,
+  initializeCompetitionPeriodControl,
+} from './competitionPeriod.js';
 
 export const ARENA_BOUNDARY_SOURCE_ID = 'arena-boundary';
 export const ARENA_BOUNDARY_LAYER_ID = 'arena-boundary-outline';
@@ -24,16 +25,18 @@ export function arenaBoundaryUrl(sourceId) {
   return `/v1/arenas/${encodeURIComponent(sourceId)}/boundary`;
 }
 
-export function arenaTerritoryUrl(sourceId, date = new Date()) {
-  return `/v1/arenas/${encodeURIComponent(sourceId)}/competition-territory?date=${encodeURIComponent(formatBrowserLocalDate(date))}`;
+export function arenaTerritoryUrl(sourceId, month = null) {
+  const query = month ? `?month=${encodeURIComponent(month)}` : '';
+  return `/v1/arenas/${encodeURIComponent(sourceId)}/competition-territory${query}`;
 }
 
-export function arenaLeaderboardUrl(sourceId, date = new Date()) {
-  return `/v1/arenas/${encodeURIComponent(sourceId)}/competition-leaderboard?month=${encodeURIComponent(formatBrowserLocalMonth(date))}`;
+export function arenaLeaderboardUrl(sourceId, month = null) {
+  const query = month ? `?month=${encodeURIComponent(month)}` : '';
+  return `/v1/arenas/${encodeURIComponent(sourceId)}/competition-leaderboard${query}`;
 }
 
-async function jsonRequest(url, accept, fetchImpl) {
-  const response = await fetchImpl(url, { credentials: 'same-origin', headers: { accept } });
+async function jsonRequest(url, accept, fetchImpl, signal) {
+  const response = await fetchImpl(url, { credentials: 'same-origin', headers: { accept }, signal });
   if (!response.ok) throw new Error(`Arena request failed with ${response.status}.`);
   return response.json();
 }
@@ -61,7 +64,9 @@ export function initializeArena({
   documentRef = document,
   maplibre = window.maplibregl,
   fetchImpl = window.fetch.bind(window),
-  date = new Date(),
+  locationRef = typeof window === 'undefined' ? { pathname: '', search: '' } : window.location,
+  historyRef = typeof window === 'undefined' ? undefined : window.history,
+  now = () => new Date(),
 } = {}) {
   initializeOnboarding({ documentRef });
   initializeMobileSheet({ documentRef });
@@ -75,8 +80,6 @@ export function initializeArena({
   const leaderboardList = documentRef.querySelector('[data-leaderboard-list]');
   const currentPilotResult = documentRef.querySelector('[data-current-pilot-result]');
   const competitionStatsCard = documentRef.querySelector('[data-competition-stats]');
-  const month = documentRef.querySelector('[data-competition-month]');
-  if (month) month.textContent = formatBrowserLocalMonthLabel(date);
   if (!mapElement || !maplibre) {
     if (emptyState) {
       emptyState.textContent = 'Map unavailable. Check your connection and try again.';
@@ -90,9 +93,119 @@ export function initializeArena({
     mapElement.dataset.currentUserId,
     mapElement.dataset.territoryColor,
   );
+  let map;
+  let mapReady = false;
+  let requestSequence = 0;
+  let abortController;
+  const periodControl = initializeCompetitionPeriodControl({
+    documentRef,
+    locationRef,
+    historyRef,
+    now,
+    onChange: async () => {
+      if (mapReady) await refreshCompetition();
+    },
+  });
+
+  async function refreshCompetition() {
+    if (!map) return;
+    abortController?.abort();
+    abortController = typeof AbortController === 'undefined' ? undefined : new AbortController();
+    const activeRequest = ++requestSequence;
+    if (map.getLayer?.(ARENA_TERRITORY_FILL_LAYER_ID)) {
+      map.setLayoutProperty(ARENA_TERRITORY_FILL_LAYER_ID, 'visibility', 'none');
+      map.setLayoutProperty(ARENA_TERRITORY_OUTLINE_LAYER_ID, 'visibility', 'none');
+    }
+    leaderboardList?.replaceChildren();
+    if (currentPilotResult) currentPilotResult.hidden = true;
+    for (const selector of [
+      '[data-competition-claimed-area]',
+      '[data-competition-flights]',
+      '[data-competition-pilots]',
+      '[data-competition-my-flights]',
+    ]) {
+      const value = documentRef.querySelector(selector);
+      if (value) value.textContent = '-';
+    }
+    leaderboardCard?.setAttribute('aria-busy', 'true');
+    competitionStatsCard?.setAttribute('aria-busy', 'true');
+    if (leaderboardStatus) leaderboardStatus.textContent = 'Updating leaderboard…';
+    try {
+      const [territory, leaderboard] = await Promise.all([
+        jsonRequest(
+          arenaTerritoryUrl(sourceId, periodControl.month),
+          'application/geo+json',
+          fetchImpl,
+          abortController?.signal,
+        ),
+        jsonRequest(
+          arenaLeaderboardUrl(sourceId, periodControl.month),
+          'application/json',
+          fetchImpl,
+          abortController?.signal,
+        ),
+      ]);
+      if (activeRequest !== requestSequence) return;
+      const coloredTerritory = colorCompetitionTerritory(
+        territory,
+        mapElement.dataset.currentUserId,
+        mapElement.dataset.territoryColor,
+        Math.random,
+        colorRegistry,
+      );
+      const territorySource = map.getSource?.(ARENA_TERRITORY_SOURCE_ID);
+      if (territorySource?.setData) {
+        territorySource.setData(coloredTerritory);
+        map.setLayoutProperty(ARENA_TERRITORY_FILL_LAYER_ID, 'visibility', 'visible');
+        map.setLayoutProperty(ARENA_TERRITORY_OUTLINE_LAYER_ID, 'visibility', 'visible');
+      } else {
+        map.addSource(ARENA_TERRITORY_SOURCE_ID, { type: 'geojson', data: coloredTerritory });
+        map.addLayer(createTerritoryFillLayer({
+          id: ARENA_TERRITORY_FILL_LAYER_ID,
+          source: ARENA_TERRITORY_SOURCE_ID,
+          color: COMPETITION_COLOR_EXPRESSION,
+        }));
+        map.addLayer(createTerritoryBoundaryLayer({
+          id: ARENA_TERRITORY_OUTLINE_LAYER_ID,
+          source: ARENA_TERRITORY_SOURCE_ID,
+          color: COMPETITION_COLOR_EXPRESSION,
+        }));
+      }
+      renderCompetitionLeaderboard({
+        documentRef,
+        leaderboard,
+        currentUserId: mapElement.dataset.currentUserId,
+        colorRegistry,
+        statusElement: leaderboardStatus,
+        listElement: leaderboardList,
+        currentPilotElement: currentPilotResult,
+      });
+      renderCompetitionStats({ documentRef, stats: leaderboard.stats });
+      if (emptyState) {
+        emptyState.hidden = coloredTerritory.features.length > 0;
+        if (!emptyState.hidden) {
+          emptyState.textContent = periodControl.period === ALL_TIME_COMPETITION_PERIOD
+            ? 'No competition territory has been claimed in this Arena.'
+            : 'No competition territory claimed in this Arena this month.';
+        }
+      }
+    } catch (error) {
+      if (error?.name === 'AbortError') return;
+      if (leaderboardStatus) leaderboardStatus.textContent = 'Unable to load this Arena.';
+      if (emptyState) {
+        emptyState.textContent = 'Unable to load this Arena. Try again.';
+        emptyState.hidden = false;
+      }
+    } finally {
+      if (activeRequest === requestSequence) {
+        leaderboardCard?.removeAttribute('aria-busy');
+        competitionStatsCard?.removeAttribute('aria-busy');
+      }
+    }
+  }
 
   try {
-    const map = new maplibre.Map({
+    map = new maplibre.Map({
       container: mapElement,
       style: mapElement.dataset.mapStyleUrl,
       center: [-106.2, 39.2],
@@ -107,31 +220,9 @@ export function initializeArena({
     });
     map.once('load', async () => {
       try {
-        const [boundary, territory, leaderboard] = await Promise.all([
-          jsonRequest(arenaBoundaryUrl(sourceId), 'application/geo+json', fetchImpl),
-          jsonRequest(arenaTerritoryUrl(sourceId, date), 'application/geo+json', fetchImpl),
-          jsonRequest(arenaLeaderboardUrl(sourceId, date), 'application/json', fetchImpl),
-        ]);
+        const boundary = await jsonRequest(arenaBoundaryUrl(sourceId), 'application/geo+json', fetchImpl);
 
         map.addSource(ARENA_BOUNDARY_SOURCE_ID, { type: 'geojson', data: boundary });
-        const coloredTerritory = colorCompetitionTerritory(
-          territory,
-          mapElement.dataset.currentUserId,
-          mapElement.dataset.territoryColor,
-          Math.random,
-          colorRegistry,
-        );
-        map.addSource(ARENA_TERRITORY_SOURCE_ID, { type: 'geojson', data: coloredTerritory });
-        map.addLayer(createTerritoryFillLayer({
-          id: ARENA_TERRITORY_FILL_LAYER_ID,
-          source: ARENA_TERRITORY_SOURCE_ID,
-          color: COMPETITION_COLOR_EXPRESSION,
-        }));
-        map.addLayer(createTerritoryBoundaryLayer({
-          id: ARENA_TERRITORY_OUTLINE_LAYER_ID,
-          source: ARENA_TERRITORY_SOURCE_ID,
-          color: COMPETITION_COLOR_EXPRESSION,
-        }));
         map.addLayer({
           id: ARENA_BOUNDARY_LAYER_ID,
           type: 'line',
@@ -142,22 +233,8 @@ export function initializeArena({
           [[boundary.bbox[0], boundary.bbox[1]], [boundary.bbox[2], boundary.bbox[3]]],
           { padding: 60, duration: 0 },
         );
-        renderCompetitionLeaderboard({
-          documentRef,
-          leaderboard,
-          currentUserId: mapElement.dataset.currentUserId,
-          colorRegistry,
-          statusElement: leaderboardStatus,
-          listElement: leaderboardList,
-          currentPilotElement: currentPilotResult,
-        });
-        renderCompetitionStats({ documentRef, stats: leaderboard.stats });
-        leaderboardCard?.removeAttribute('aria-busy');
-        competitionStatsCard?.removeAttribute('aria-busy');
-        if (coloredTerritory.features.length === 0 && emptyState) {
-          emptyState.textContent = 'No competition territory claimed in this Arena this month.';
-          emptyState.hidden = false;
-        }
+        mapReady = true;
+        await refreshCompetition();
       } catch {
         if (leaderboardStatus) leaderboardStatus.textContent = 'Unable to load this Arena.';
         leaderboardCard?.removeAttribute('aria-busy');

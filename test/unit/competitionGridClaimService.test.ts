@@ -59,6 +59,18 @@ describe('CompetitionGridClaimService', () => {
     expect(execute).not.toHaveBeenCalled();
   });
 
+  it('selects latest ownership across every month for all time', async () => {
+    const execute = vi.fn(async (_query: unknown) => ({ rows: [] }));
+    const service = createCompetitionGridClaimService({ execute } as never, { cellSize: 1_000 });
+
+    await service.getCurrent({ period: 'all-time' });
+
+    const query = JSON.stringify(execute.mock.calls[0]?.[0]);
+    expect(query).toContain('ROW_NUMBER');
+    expect(query).toContain('PARTITION BY c.cell_size, c.x, c.y');
+    expect(query).not.toContain('c.competition_month =');
+  });
+
   it('builds a full-cell viewport leaderboard from a YYYY-MM value', async () => {
     const execute = vi.fn(async (_query: unknown) => ({ rows: [{
       userId: '00000000-0000-4000-8000-000000000001',
@@ -120,5 +132,24 @@ describe('CompetitionGridClaimService', () => {
       currentUserId: '00000000-0000-4000-8000-000000000001',
     })).rejects.toThrow(RangeError);
     expect(execute).not.toHaveBeenCalled();
+  });
+
+  it('builds the existing leaderboard and contributing-flight stats from all-time winners', async () => {
+    const execute = vi.fn(async (_query: unknown) => ({ rows: [] }));
+    const service = createCompetitionGridClaimService({ execute } as never, { cellSize: 1_000 });
+
+    await service.getViewportLeaderboard({
+      period: 'all-time',
+      west: -107,
+      south: 39,
+      east: -105,
+      north: 41,
+      currentUserId: '00000000-0000-4000-8000-000000000001',
+    });
+
+    const query = JSON.stringify(execute.mock.calls[0]?.[0]);
+    expect(query).not.toContain('c.competition_month =');
+    expect(query).toContain('COUNT(DISTINCT claim_flight)');
+    expect(query).toContain('display_position <= 10');
   });
 });

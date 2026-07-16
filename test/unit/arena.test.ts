@@ -5,11 +5,12 @@ import { arenaBoundaryUrl, arenaLeaderboardUrl, arenaTerritoryUrl, initializeAre
 
 describe('Arena dashboard', () => {
   it('builds Arena requests without viewport bounds', () => {
-    const date = new Date(2026, 6, 14, 12);
     expect(arenaBoundaryUrl('745')).toBe('/v1/arenas/745/boundary');
-    expect(arenaTerritoryUrl('745', date)).toBe('/v1/arenas/745/competition-territory?date=2026-07-14');
-    expect(arenaLeaderboardUrl('745', date)).toBe('/v1/arenas/745/competition-leaderboard?month=2026-07');
-    expect(arenaLeaderboardUrl('745', date)).not.toContain('west=');
+    expect(arenaTerritoryUrl('745', '2026-07')).toBe('/v1/arenas/745/competition-territory?month=2026-07');
+    expect(arenaLeaderboardUrl('745', '2026-07')).toBe('/v1/arenas/745/competition-leaderboard?month=2026-07');
+    expect(arenaLeaderboardUrl('745', '2026-07')).not.toContain('west=');
+    expect(arenaTerritoryUrl('745')).toBe('/v1/arenas/745/competition-territory');
+    expect(arenaLeaderboardUrl('745')).toBe('/v1/arenas/745/competition-leaderboard');
   });
 
   it('does not register a map movement scoring refresh', () => {

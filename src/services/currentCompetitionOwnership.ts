@@ -1,7 +1,7 @@
 import { sql } from 'drizzle-orm';
 
 export function currentCompetitionOwnershipCtes(input: {
-  competitionMonth: string;
+  competitionMonth?: string;
   cellSize: number;
 }) {
   return sql`
@@ -23,8 +23,10 @@ export function currentCompetitionOwnershipCtes(input: {
         ) AS ownership_rank
       FROM competition_grid_claims c
       INNER JOIN flights f ON f.flight_id = c.claim_flight
-      WHERE c.competition_month = ${input.competitionMonth}::date
-        AND c.cell_size = ${input.cellSize}
+      WHERE c.cell_size = ${input.cellSize}
+        ${input.competitionMonth
+          ? sql`AND c.competition_month = ${input.competitionMonth}::date`
+          : sql``}
     ),
     current_claims AS (
       SELECT

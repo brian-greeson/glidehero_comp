@@ -7,7 +7,7 @@ describe('onboarding stylesheet contract', () => {
 
     expect(css).toContain('.onboarding-dialog');
     expect(css).toContain('max-height: calc(100dvh - 2rem)');
-    expect(css).toContain('.onboarding-pages { overflow-y: auto; }');
+    expect(css).toMatch(/\.onboarding-pages\s*{\s*overflow-y: auto;/);
     expect(css).toContain('min-height: 44px');
     expect(css).toContain('.account-help-button');
     expect(css).toContain('.onboarding-dialog :focus-visible');
@@ -17,7 +17,7 @@ describe('onboarding stylesheet contract', () => {
     expect(css).toContain('[data-onboarding-step][data-active] .onboarding-loop-track');
     expect(css).toContain('[data-onboarding-step][data-active] .onboarding-loop-claim-cell');
     expect(css).toContain('@keyframes onboarding-loop-claim');
-    expect(css).toContain('0%, 55% { opacity: 0; }');
+    expect(css).toMatch(/0%,\s*55%\s*{\s*opacity: 0;/);
     expect(css).toContain('@media (prefers-reduced-motion: reduce)');
     expect(css).toContain('stroke-dashoffset: 0');
     expect(css).toContain('fill: var(--territory-color)');
