@@ -5,6 +5,7 @@ const GRID_LINE_LAYER_ID = 'admin-area-grid-line';
 const AREA_SOURCE_ID = 'admin-area-cells';
 const AREA_FILL_LAYER_ID = 'admin-area-cells-fill';
 const AREA_LINE_LAYER_ID = 'admin-area-cells-line';
+const EDITOR_CELL_ZOOM = 13;
 
 export function areaCellKey(cell) {
   return `${cell.properties.x}:${cell.properties.y}`;
@@ -26,6 +27,37 @@ export function filterAndSortAreas(areas, query, sortColumn = 'name', sortDirect
 export function normalizeEditorLongitude(longitude) {
   const wrapped = ((longitude + 180) % 360 + 360) % 360 - 180;
   return Object.is(wrapped, -0) ? 0 : wrapped;
+}
+
+export function parseEditorCoordinates(latitudeValue, longitudeValue) {
+  const latitudeText = String(latitudeValue).trim();
+  const longitudeText = String(longitudeValue).trim();
+  if (!latitudeText || !longitudeText) return null;
+  const latitude = Number(latitudeText);
+  const longitude = Number(longitudeText);
+  if (!Number.isFinite(latitude) || latitude < -90 || latitude > 90) return null;
+  if (!Number.isFinite(longitude) || longitude < -180 || longitude > 180) return null;
+  return { latitude, longitude };
+}
+
+export function newAreaEditorView(latitude, longitude, currentZoom) {
+  return {
+    center: [longitude, latitude],
+    zoom: Math.max(currentZoom, EDITOR_CELL_ZOOM),
+  };
+}
+
+export function createLatestRequestGate() {
+  let sequence = 0;
+  return {
+    start() {
+      const request = ++sequence;
+      return () => request === sequence;
+    },
+    invalidate() {
+      sequence += 1;
+    },
+  };
 }
 
 function timezoneValues() {
@@ -96,7 +128,9 @@ export function initializeAdminAreaEditor({
     painting: false,
     pendingAction: null,
     marker: null,
-    lookupSequence: 0,
+    locationRequests: createLatestRequestGate(),
+    selectionRequests: createLatestRequestGate(),
+    gridRequests: createLatestRequestGate(),
   };
 
   const map = new maplibre.Map({
@@ -233,12 +267,12 @@ export function initializeAdminAreaEditor({
   }
 
   async function lookupLocation(latitude, longitude) {
-    const request = ++state.lookupSequence;
+    const isCurrentRequest = state.locationRequests.start();
     setStatus('Looking up the nearest location…');
     try {
       const query = new URLSearchParams({ latitude: String(latitude), longitude: String(longitude) });
       const { location } = await jsonRequest(`/admin/api/location?${query}`, {}, fetchImpl);
-      if (request !== state.lookupSequence) return;
+      if (!isCurrentRequest()) return;
       fields.country.value = location.country;
       fields.state.value = location.state;
       fields.city.value = location.city;
@@ -248,16 +282,17 @@ export function initializeAdminAreaEditor({
       setStatus('Location details updated.');
       updateSaveState();
     } catch (error) {
-      if (request !== state.lookupSequence) return;
+      if (!isCurrentRequest()) return;
       setStatus(`${error.message} You can enter the values manually.`, true);
     }
   }
 
   function setCoordinates(latitude, longitude, lookup = false) {
-    if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return;
+    if (!parseEditorCoordinates(latitude, longitude)) return;
     fields.latitude.value = String(Number(latitude.toFixed(6)));
     fields.longitude.value = String(Number(longitude.toFixed(6)));
     setMarker(latitude, longitude);
+    if (state.isNew) map.easeTo(newAreaEditorView(latitude, longitude, map.getZoom()));
     updateSaveState();
     if (lookup) void lookupLocation(latitude, longitude);
   }
@@ -268,6 +303,8 @@ export function initializeAdminAreaEditor({
   }
 
   function populateArea(area) {
+    state.locationRequests.invalidate();
+    state.selectionRequests.invalidate();
     state.selectedId = area.id;
     state.isNew = false;
     state.cells = new Map(area.cells.features.map((cell) => [areaCellKey(cell), cell]));
@@ -293,16 +330,22 @@ export function initializeAdminAreaEditor({
   }
 
   async function selectArea(id) {
+    state.locationRequests.invalidate();
+    const isCurrentRequest = state.selectionRequests.start();
     setStatus('Loading area…');
     try {
       const { area } = await jsonRequest(`/admin/api/areas/${encodeURIComponent(id)}`, {}, fetchImpl);
+      if (!isCurrentRequest()) return;
       populateArea(area);
     } catch (error) {
+      if (!isCurrentRequest()) return;
       setStatus(error.message, true);
     }
   }
 
   function newArea() {
+    state.locationRequests.invalidate();
+    state.selectionRequests.invalidate();
     state.selectedId = null;
     state.isNew = true;
     state.cells = new Map();
@@ -322,6 +365,8 @@ export function initializeAdminAreaEditor({
   }
 
   function clearSelection() {
+    state.locationRequests.invalidate();
+    state.selectionRequests.invalidate();
     state.selectedId = null;
     state.isNew = false;
     state.cells = new Map();
@@ -351,25 +396,44 @@ export function initializeAdminAreaEditor({
   }
 
   async function saveArea() {
+    state.locationRequests.invalidate();
+    state.selectionRequests.invalidate();
     const payload = areaPayload();
     const isNew = state.isNew;
     saveButton.disabled = true;
     setStatus('Saving area…');
+    let savedArea;
     try {
       const url = isNew ? '/admin/api/areas' : `/admin/api/areas/${encodeURIComponent(state.selectedId)}`;
       const method = isNew ? 'POST' : 'PUT';
-      const { area } = await jsonRequest(url, { method, body: JSON.stringify(payload) }, fetchImpl);
-      const detail = await jsonRequest(`/admin/api/areas/${encodeURIComponent(area.id)}`, {}, fetchImpl);
-      const listResponse = await jsonRequest('/admin/api/areas', {}, fetchImpl);
-      state.areas = listResponse.areas;
-      populateArea(detail.area);
-      setStatus('Area saved.');
-      return true;
+      ({ area: savedArea } = await jsonRequest(url, { method, body: JSON.stringify(payload) }, fetchImpl));
     } catch (error) {
       setStatus(error.message, true);
       updateSaveState();
       return false;
     }
+
+    state.selectedId = savedArea.id;
+    state.isNew = false;
+    fields.id.value = savedArea.id;
+    fields.sourceId.value = String(savedArea.sourceId);
+    state.original = snapshot();
+    updateSaveState();
+
+    const isCurrentRefresh = state.selectionRequests.start();
+    const [detailResult, listResult] = await Promise.allSettled([
+      jsonRequest(`/admin/api/areas/${encodeURIComponent(savedArea.id)}`, {}, fetchImpl),
+      jsonRequest('/admin/api/areas', {}, fetchImpl),
+    ]);
+    if (listResult.status === 'fulfilled') {
+      state.areas = listResult.value.areas;
+      renderList();
+    }
+    if (!isCurrentRefresh()) return true;
+    if (detailResult.status === 'fulfilled') populateArea(detailResult.value.area);
+    const refreshFailed = detailResult.status === 'rejected' || listResult.status === 'rejected';
+    setStatus(refreshFailed ? 'Area saved, but the editor could not reload all current details.' : 'Area saved.', refreshFailed);
+    return true;
   }
 
   function requestAction(action) {
@@ -398,6 +462,7 @@ export function initializeAdminAreaEditor({
 
   async function refreshGrid() {
     if (!map.getSource(GRID_SOURCE_ID)) return;
+    const isCurrentRequest = state.gridRequests.start();
     const bounds = map.getBounds();
     const query = new URLSearchParams({
       west: String(normalizeEditorLongitude(bounds.getWest())),
@@ -411,10 +476,12 @@ export function initializeAdminAreaEditor({
         headers: { accept: 'application/geo+json' },
       });
       const body = await response.json();
+      if (!isCurrentRequest()) return;
       if (!response.ok) throw new Error(body.error?.message ?? 'Unable to load game cells.');
       map.getSource(GRID_SOURCE_ID)?.setData(body);
       if (hasSelection()) setTool(state.tool);
     } catch (error) {
+      if (!isCurrentRequest()) return;
       map.getSource(GRID_SOURCE_ID)?.setData(EMPTY_GEOJSON);
       mapHelp.textContent = error.message;
     }
@@ -478,9 +545,8 @@ export function initializeAdminAreaEditor({
   });
   for (const field of [fields.latitude, fields.longitude]) {
     field.addEventListener('change', () => {
-      const latitude = Number(fields.latitude.value);
-      const longitude = Number(fields.longitude.value);
-      if (Number.isFinite(latitude) && Number.isFinite(longitude)) setCoordinates(latitude, longitude, true);
+      const coordinates = parseEditorCoordinates(fields.latitude.value, fields.longitude.value);
+      if (coordinates) setCoordinates(coordinates.latitude, coordinates.longitude, true);
     });
   }
   form.addEventListener('submit', async (event) => {
