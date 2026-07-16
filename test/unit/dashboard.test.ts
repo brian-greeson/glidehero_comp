@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 // The browser asset intentionally remains JavaScript; this test exercises its public module API.
 // @ts-expect-error TypeScript does not emit or typecheck files under public/.
-import { colorCompetitionTerritory, competitionLeaderboardUrl, COMPETITION_TERRITORY_FILL_LAYER_ID, COMPETITION_TERRITORY_OUTLINE_LAYER_ID, COMPETITION_TERRITORY_SOURCE_ID, createCompetitionColorRegistry, formatBrowserLocalDate, formatBrowserLocalMonth, formatBrowserLocalMonthLabel, formatClaimedArea, formatClaimedPercentage, initializeDashboard, initializeMobileSheet, loadCompetitionTerritory, personalStatsUrl, renderCompetitionStats, renderPersonalStats } from '../../public/scripts/dashboard.js';
+import { colorCompetitionTerritory, competitionLeaderboardUrl, COMPETITION_TERRITORY_FILL_LAYER_ID, COMPETITION_TERRITORY_OUTLINE_LAYER_ID, COMPETITION_TERRITORY_SOURCE_ID, createCompetitionColorRegistry, formatBrowserLocalDate, formatBrowserLocalMonth, formatBrowserLocalMonthLabel, formatClaimedArea, initializeDashboard, initializeMobileSheet, loadCompetitionTerritory, personalStatsUrl, renderCompetitionStats, renderPersonalStats } from '../../public/scripts/dashboard.js';
 
 describe('Mobile dashboard sheet', () => {
   function interactiveElement() {
@@ -234,10 +234,6 @@ describe('Competition territory dashboard map', () => {
     expect(formatBrowserLocalMonthLabel(new Date(2026, 6, 14), 'en-US')).toBe('July 2026');
   });
 
-  it('formats claimed percentages with one decimal place', () => {
-    expect(formatClaimedPercentage(27.44, 'en-US')).toBe('27.4%');
-  });
-
   it('keeps the current pilot color and assigns one temporary color per other owner', () => {
     const colored = colorCompetitionTerritory({
       type: 'FeatureCollection',
@@ -461,13 +457,11 @@ describe('Competition territory dashboard map', () => {
       ['[data-personal-stats]', element()],
       ['[data-personal-claimed-area]', element()],
       ['[data-personal-flights]', element()],
-      ['[data-personal-claimed-percentage]', element()],
       ['[data-competition-stats]', element()],
       ['[data-competition-claimed-area]', element()],
       ['[data-competition-flights]', element()],
       ['[data-competition-pilots]', element()],
       ['[data-competition-my-flights]', element()],
-      ['[data-competition-claimed-percentage]', element()],
     ]);
     const documentRef = { querySelector: (selector: string) => elements.get(selector) ?? null };
 
@@ -478,13 +472,10 @@ describe('Competition territory dashboard map', () => {
         claimedCellCount: 2,
         claimedAreaSquareMeters: 2_500_000,
         flightCount: 2,
-        visibleCellCount: 8,
-        claimedPercentage: 25,
       },
     });
     expect(elements.get('[data-personal-claimed-area]')?.textContent).toBe('2.5 km²');
     expect(elements.get('[data-personal-flights]')?.textContent).toBe('2');
-    expect(elements.get('[data-personal-claimed-percentage]')?.textContent).toBe('25.0%');
 
     renderCompetitionStats({
       documentRef,
@@ -495,8 +486,6 @@ describe('Competition territory dashboard map', () => {
         flightCount: 0,
         pilotCount: 0,
         currentPilotFlightCount: 0,
-        visibleCellCount: 8,
-        claimedPercentage: 0,
       },
     });
     for (const selector of [
@@ -504,7 +493,6 @@ describe('Competition territory dashboard map', () => {
       '[data-competition-flights]',
       '[data-competition-pilots]',
       '[data-competition-my-flights]',
-      '[data-competition-claimed-percentage]',
     ]) expect(elements.get(selector)?.textContent).toBe('-');
   });
 
@@ -530,12 +518,10 @@ describe('Competition territory dashboard map', () => {
     const competitionStatsCard = element();
     const personalClaimedArea = element();
     const personalFlights = element();
-    const personalClaimedPercentage = element();
     const competitionClaimedArea = element();
     const competitionFlights = element();
     const competitionPilots = element();
     const competitionMyFlights = element();
-    const competitionClaimedPercentage = element();
     const documentRef = {
       createElement: () => element(),
       querySelector(selector: string) {
@@ -551,12 +537,10 @@ describe('Competition territory dashboard map', () => {
         if (selector === '[data-competition-stats]') return competitionStatsCard;
         if (selector === '[data-personal-claimed-area]') return personalClaimedArea;
         if (selector === '[data-personal-flights]') return personalFlights;
-        if (selector === '[data-personal-claimed-percentage]') return personalClaimedPercentage;
         if (selector === '[data-competition-claimed-area]') return competitionClaimedArea;
         if (selector === '[data-competition-flights]') return competitionFlights;
         if (selector === '[data-competition-pilots]') return competitionPilots;
         if (selector === '[data-competition-my-flights]') return competitionMyFlights;
-        if (selector === '[data-competition-claimed-percentage]') return competitionClaimedPercentage;
         return null;
       },
     };
@@ -596,8 +580,6 @@ describe('Competition territory dashboard map', () => {
           claimedCellCount: 1,
           claimedAreaSquareMeters: 1_000_000,
           flightCount: 1,
-          visibleCellCount: 10,
-          claimedPercentage: 10,
         }), { status: 200 });
       }
       if (typeof leaderboardResponse === 'function') return leaderboardResponse(url);
@@ -616,12 +598,11 @@ describe('Competition territory dashboard map', () => {
       leaderboardCard,
       leaderboardList,
       leaderboardStatus,
-      competitionClaimedPercentage,
       competitionStatsCard,
       load: async () => loadHandler?.(),
       move: (nextBounds = bounds) => { bounds = nextBounds; moveEndHandler?.(); },
       personalButton,
-      personalClaimedPercentage,
+      personalClaimedArea,
       personalStatsCard,
     };
   }
@@ -648,19 +629,16 @@ describe('Competition territory dashboard map', () => {
         flightCount: 2,
         pilotCount: 1,
         currentPilotFlightCount: 0,
-        visibleCellCount: 10,
-        claimedPercentage: 20,
       },
     });
     await context.load();
     expect(context.leaderboardCard.hidden).toBe(true);
     expect(context.personalStatsCard.hidden).toBe(false);
-    expect(context.personalClaimedPercentage.textContent).toBe('10.0%');
+    expect(context.personalClaimedArea.textContent).toBe('1 km²');
 
     await context.competitiveButton.click();
     expect(context.leaderboardCard.hidden).toBe(false);
     expect(context.competitionStatsCard.hidden).toBe(false);
-    expect(context.competitionClaimedPercentage.textContent).toBe('20.0%');
     expect(context.leaderboardList.children).toHaveLength(1);
     expect(context.currentPilotResult.hidden).toBe(false);
     expect(context.fetchImpl.mock.calls[3]?.[0]).toContain(
@@ -697,8 +675,6 @@ describe('Competition territory dashboard map', () => {
         flightCount: 1,
         pilotCount: 1,
         currentPilotFlightCount: 0,
-        visibleCellCount: 10,
-        claimedPercentage: 10,
       },
     }), { status: 200 });
     const context = initializeLeaderboardDashboard(async () => {
@@ -725,12 +701,10 @@ describe('Competition territory dashboard map', () => {
   it('ignores an older personal stats response that finishes after a newer one', async () => {
     const pending: Array<(response: Response) => void> = [];
     let requestCount = 0;
-    const responseFor = (claimedPercentage: number) => new Response(JSON.stringify({
+    const responseFor = (claimedAreaSquareMeters: number) => new Response(JSON.stringify({
       claimedCellCount: 1,
-      claimedAreaSquareMeters: 1_000_000,
+      claimedAreaSquareMeters,
       flightCount: 1,
-      visibleCellCount: 10,
-      claimedPercentage,
     }), { status: 200 });
     const context = initializeLeaderboardDashboard(
       { leaders: [], currentPilot: null, stats: {
@@ -739,12 +713,10 @@ describe('Competition territory dashboard map', () => {
         flightCount: 0,
         pilotCount: 0,
         currentPilotFlightCount: 0,
-        visibleCellCount: 10,
-        claimedPercentage: 0,
       } },
       async () => {
         requestCount += 1;
-        if (requestCount === 1) return responseFor(10);
+        if (requestCount === 1) return responseFor(1_000_000);
         return new Promise<Response>((resolve) => pending.push(resolve));
       },
     );
@@ -753,11 +725,11 @@ describe('Competition territory dashboard map', () => {
     context.move({ west: -106, south: 39, east: -105, north: 41 });
     context.move({ west: -104, south: 39, east: -103, north: 41 });
     expect(pending).toHaveLength(2);
-    pending[1]!(responseFor(30));
-    await vi.waitFor(() => expect(context.personalClaimedPercentage.textContent).toBe('30.0%'));
+    pending[1]!(responseFor(3_000_000));
+    await vi.waitFor(() => expect(context.personalClaimedArea.textContent).toBe('3 km²'));
 
-    pending[0]!(responseFor(20));
+    pending[0]!(responseFor(2_000_000));
     await new Promise((resolve) => setTimeout(resolve, 0));
-    expect(context.personalClaimedPercentage.textContent).toBe('30.0%');
+    expect(context.personalClaimedArea.textContent).toBe('3 km²');
   });
 });

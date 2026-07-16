@@ -1,4 +1,5 @@
 import { initializeOnboarding } from './onboarding.js';
+import { initializeArenaSearch } from './arenaSearch.js';
 import { COMPETITION_COLOR_PALETTE } from './competitionColors.js';
 import { createTerritoryBoundaryLayer, createTerritoryFillLayer } from './mapStyles.js';
 
@@ -240,13 +241,6 @@ export function formatClaimedArea(squareMeters, locale) {
   return `${new Intl.NumberFormat(locale, { maximumFractionDigits: 2 }).format(squareMeters / 1_000_000)} km²`;
 }
 
-export function formatClaimedPercentage(percentage, locale) {
-  return `${new Intl.NumberFormat(locale, {
-    minimumFractionDigits: 1,
-    maximumFractionDigits: 1,
-  }).format(percentage)}%`;
-}
-
 function formatCount(count, locale) {
   return new Intl.NumberFormat(locale).format(count);
 }
@@ -258,17 +252,15 @@ function renderStatsValues(stats, values, locale) {
 
   values.claimedArea.textContent = formatClaimedArea(stats.claimedAreaSquareMeters, locale);
   values.flights.textContent = formatCount(stats.flightCount, locale);
-  values.claimedPercentage.textContent = formatClaimedPercentage(stats.claimedPercentage, locale);
 }
 
 export function renderPersonalStats({ documentRef, stats, locale }) {
   const card = documentRef.querySelector('[data-personal-stats]');
   const claimedArea = documentRef.querySelector('[data-personal-claimed-area]');
   const flights = documentRef.querySelector('[data-personal-flights]');
-  const claimedPercentage = documentRef.querySelector('[data-personal-claimed-percentage]');
-  if (!card || !claimedArea || !flights || !claimedPercentage) return;
+  if (!card || !claimedArea || !flights) return;
 
-  renderStatsValues(stats, { claimedArea, flights, claimedPercentage }, locale);
+  renderStatsValues(stats, { claimedArea, flights }, locale);
   card.removeAttribute('aria-busy');
 }
 
@@ -278,10 +270,9 @@ export function renderCompetitionStats({ documentRef, stats, locale }) {
   const flights = documentRef.querySelector('[data-competition-flights]');
   const pilots = documentRef.querySelector('[data-competition-pilots]');
   const myFlights = documentRef.querySelector('[data-competition-my-flights]');
-  const claimedPercentage = documentRef.querySelector('[data-competition-claimed-percentage]');
-  if (!card || !claimedArea || !flights || !pilots || !myFlights || !claimedPercentage) return;
+  if (!card || !claimedArea || !flights || !pilots || !myFlights) return;
 
-  renderStatsValues(stats, { claimedArea, flights, claimedPercentage }, locale);
+  renderStatsValues(stats, { claimedArea, flights }, locale);
   if (stats.claimedCellCount > 0) {
     pilots.textContent = formatCount(stats.pilotCount, locale);
     myFlights.textContent = formatCount(stats.currentPilotFlightCount, locale);
@@ -350,9 +341,11 @@ export function initializeDashboard({
 } = {}) {
   initializeOnboarding({ documentRef });
   initializeMobileSheet({ documentRef });
+  initializeArenaSearch({ documentRef, fetchImpl });
 
   const competitionDate = new Date();
 
+  const dashboardRoot = documentRef.querySelector('[data-dashboard]');
   const mapElement = documentRef.querySelector('[data-dashboard-map]');
   const emptyState = documentRef.querySelector('[data-map-empty-state]');
   const personalMode = documentRef.querySelector('[data-personal-mode]');
@@ -365,7 +358,7 @@ export function initializeDashboard({
   const competitionStatsCard = documentRef.querySelector('[data-competition-stats]');
   let map;
   let mapReady = false;
-  let activeMode = 'personal';
+  let activeMode = dashboardRoot?.dataset.dashboardMode === 'global' ? 'competitive' : 'personal';
   let competitionLoaded = false;
   let competitionLoading = false;
   let competitionIsEmpty = false;
@@ -567,10 +560,12 @@ export function initializeDashboard({
       map.addControl(new maplibre.NavigationControl(), 'top-right');
       map.once('error', showMapUnavailable);
       map.once('load', async () => {
-        try {
-          await loadPersonalTerritory(map, mapElement.dataset.territoryColor, fetchImpl);
-        } catch {
-          showTerritoryUnavailable();
+        if (activeMode === 'personal') {
+          try {
+            await loadPersonalTerritory(map, mapElement.dataset.territoryColor, fetchImpl);
+          } catch {
+            showTerritoryUnavailable();
+          }
         }
         mapReady = true;
         if (activeMode === 'competitive') await selectCompetitiveMode();
@@ -610,5 +605,7 @@ export function initializeDashboard({
 }
 
 if (typeof window !== 'undefined' && typeof document !== 'undefined') {
-  window.addEventListener('DOMContentLoaded', () => initializeDashboard(), { once: true });
+  window.addEventListener('DOMContentLoaded', () => {
+    if (document.querySelector('[data-dashboard]')) initializeDashboard();
+  }, { once: true });
 }

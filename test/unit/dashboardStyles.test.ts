@@ -10,5 +10,9 @@ describe('dashboard stylesheet contract', () => {
     expect(css).not.toContain('.leaderboard-card { grid-column: 3;');
     expect(css).toContain('@media (max-width: 900px)');
     expect(css).toContain('.dashboard-information { display: block;');
+    expect(css).toContain('.competition-breadcrumb {');
+    expect(css).toContain('.has-competition-breadcrumb .map-stage { inset-block-start: 110px; }');
+    expect(css).toContain('.arena-search-results {');
+    expect(css).toContain('.has-competition-breadcrumb .dashboard-info { inset-block-start: auto; }');
   });
 });

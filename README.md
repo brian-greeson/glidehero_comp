@@ -80,16 +80,47 @@ ownership starts fresh each month while prior claim history remains recorded.
 Every pilot is displayed using a distinct map color to make ownership easy to
 understand.
 
-### Leaderboard
+### Global competition and Arenas
 
-The leaderboard is based on the current map viewport.
+The Global competition lives at `/global`. Its leaderboard and Competitive
+Stats are based on the current map viewport. As the user pans and zooms the
+Global map, the app dynamically recalculates rankings, claimed area, contributing
+flights, pilots, and the signed-in pilot's contributing flights for the visible
+area.
 
-As the user pans and zooms the map, the leaderboard dynamically ranks pilots by
-the amount of territory they currently own within the visible portion of the
-Competitive Map.
+Launch areas with generated grid geometry are also available as Arenas. Arena
+routes use a lowercase ISO country code, a name slug, and the launch source ID,
+for example `/arena/us/boulder-745`. The search box on Global and Arena pages is
+used exclusively to find Arenas by launch name, city, state, or country. The
+Personal page does not display Arena search.
 
-This creates local competition anywhere in the world without predefined regions
-or flying sites.
+An Arena is a filtered view of the same global monthly cell ownership. Any
+flight that claims a cell in the Arena counts, regardless of its launch
+location. The Arena map hides claims outside its exact cell membership, and its
+leaderboard and Stats always cover the complete Arena. Panning and zooming an
+Arena never change scoring.
+
+Opening an Arena fits the map to its generated boundary and draws an outline
+around it. A breadcrumb below the main navigation shows `Global >> Arena Name`;
+selecting `Global` returns to the viewport-based Global competition. Arena
+leaderboards use the same ranking, tie, top-ten, color, and current-pilot rules
+as Global, but their scoring scope is the Arena instead of the visible map.
+
+### Map routes and navigation
+
+- `/` displays login and signup to signed-out visitors. A signed-in request to
+  `/` redirects to `/global`.
+- `/global` displays the viewport-based monthly competition.
+- `/personal` displays the signed-in pilot's permanent Personal Map and
+  viewport Stats.
+- `/arena/{country-code}/{name}-{source-id}` displays a fixed-area monthly
+  competition backed by a generated launch area.
+- Signed-out requests to Global, Personal, and Arena pages redirect to `/`.
+- Invalid or unavailable Arena routes display an Arena 404 page.
+
+The Competitive and Personal controls navigate between `/global` and
+`/personal`. Arena pages remain Competitive views; selecting Personal navigates
+to `/personal` rather than applying Arena filtering to personal territory.
 
 ### Initial version scope
 
@@ -103,6 +134,7 @@ Included features:
 - Personal territory map.
 - Monthly competitive territory map.
 - Dynamic viewport-based leaderboard.
+- Launch-area Arena search and fixed-area leaderboards.
 - Flight statistics after upload.
 
 Excluded from Version 1:
@@ -142,7 +174,23 @@ npm run dev
 ```
 
 `GRID_CLAIM_CELL_SIZE` is required and specifies the grid-cell size in meters;
-the example environment uses `1000`.
+the example environment uses `1000`. Arena generation uses this same value so
+Arena membership can be joined directly to competition claims by cell size and
+grid coordinates.
+
+To populate launch-backed Arenas, import launch data and metadata, then generate
+the exact Arena cells using the same configured competition cell size:
+
+```bash
+npm run import:launches
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f injest/importLaunchAreas.sql
+npm run generate:launch-areas
+```
+
+Only launch areas with generated geometry and cell membership appear in Arena
+search results. `generate:launch-areas` accepts an optional positive odd grid
+count and defaults to a `5x5` area centered on each launch. Rerunning it replaces
+the previously generated launch-area cells and boundaries.
 
 Open <http://localhost:3000>. Create an account, log out, and log back in.
 The process health endpoint is <http://localhost:3000/v1/up>.

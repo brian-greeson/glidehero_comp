@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createApp } from '../../src/app.js';
 import { createAuthService } from '../../src/services/authService.js';
+import { createArenaService } from '../../src/services/arenaService.js';
 import { createCompetitionGridClaimService } from '../../src/services/competitionGridClaimService.js';
 import { createGridClaimService } from '../../src/services/gridClaimService.js';
 import { createProfileService } from '../../src/services/profileService.js';
@@ -30,6 +31,7 @@ describe('GlideHero browser authentication flow', () => {
     const profiles = createProfileService(testDatabase.db);
     const gridClaim = createGridClaimService(testDatabase.db, { cellSize: 1_000 });
     const competitionGridClaim = createCompetitionGridClaimService(testDatabase.db, { cellSize: 1_000 });
+    const arenas = createArenaService(testDatabase.db, { cellSize: 1_000 });
     const cookie = createSessionCookie({
       name: 'glidehero_session',
       secure: false,
@@ -45,6 +47,7 @@ describe('GlideHero browser authentication flow', () => {
           profiles,
           gridClaim,
           competitionGridClaim,
+          arenas,
           renderPage: createPageRenderer({ mapTilerApiKey: 'maptiler-test-key' }),
         }),
       ],

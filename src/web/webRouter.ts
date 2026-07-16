@@ -9,6 +9,7 @@ import type { CompetitionGridClaimService } from '../services/competitionGridCla
 import { normalizeTerritoryColor, type ProfileService } from '../services/profileService.js';
 import type { GridClaimService } from '../services/gridClaimService.js';
 import type { AdminFlightService } from '../services/adminFlightService.js';
+import type { ArenaService } from '../services/arenaService.js';
 import type { PageModel, PageRenderer } from '../views/renderer.js';
 import type { AdminPageRenderer } from '../views/renderer.js';
 import type { IgcFileService } from '../services/igcFileService.js';
@@ -55,6 +56,8 @@ const competitionLeaderboardSchema = z.object({
   }),
   ...viewportBoundsShape,
 }).strict().refine((bounds) => bounds.south < bounds.north && bounds.west !== bounds.east);
+const arenaSearchSchema = z.object({ q: z.string().trim().min(1).max(100) }).strict();
+const arenaSourceIdSchema = z.coerce.number().int().positive().safe();
 
 function formBody(body: unknown): Record<string, unknown> {
   if (typeof body !== 'object' || body === null || Array.isArray(body)) return {};
@@ -77,7 +80,8 @@ export function createWebRouter(dependencies: {
   igcFiles: IgcFileService;
   profiles: ProfileService;
   gridClaim: GridClaimService;
-  competitionGridClaim: Pick<CompetitionGridClaimService, 'getCurrent' | 'getViewportLeaderboard'>;
+  competitionGridClaim: Pick<CompetitionGridClaimService, 'getCurrent' | 'getViewportLeaderboard' | 'getArenaCurrent' | 'getArenaLeaderboard'>;
+  arenas: ArenaService;
   renderPage: PageRenderer;
   adminEmails?: readonly string[];
   adminFlights?: AdminFlightService;
@@ -86,6 +90,12 @@ export function createWebRouter(dependencies: {
   const router = Router();
   const adminEmails = new Set((dependencies.adminEmails ?? []).map((email) => email.trim().toLowerCase()));
   const isAdmin = (email: string) => adminEmails.has(email.trim().toLowerCase());
+
+  function dashboardReturnTo(value: unknown): string {
+    if (value === '/global' || value === '/personal') return value;
+    if (typeof value === 'string' && /^\/arena\/[a-z]{2}\/[a-z0-9-]+-\d+$/.test(value)) return value;
+    return '/global';
+  }
 
   function hasAdminAccess(currentUser: AuthenticatedUser | null): boolean {
     return Boolean(currentUser && isAdmin(currentUser.email));
@@ -186,13 +196,173 @@ export function createWebRouter(dependencies: {
     }
   });
 
+  router.get('/v1/arenas', async (req, res, next) => {
+    if (!res.locals.currentUser) {
+      next(new AppError(401, 'unauthorized', 'Sign in to search Arenas.'));
+      return;
+    }
+    const input = arenaSearchSchema.safeParse(req.query);
+    if (!input.success) {
+      res.status(400).json({ error: { code: 'invalid_request', message: 'Arena search requires a query.' } });
+      return;
+    }
+    try {
+      res.status(200).json({ arenas: await dependencies.arenas.search(input.data.q) });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.get('/v1/arenas/:sourceId/boundary', async (req, res, next) => {
+    if (!res.locals.currentUser) {
+      next(new AppError(401, 'unauthorized', 'Sign in to view an Arena.'));
+      return;
+    }
+    const sourceId = arenaSourceIdSchema.safeParse(req.params.sourceId);
+    if (!sourceId.success) {
+      res.status(404).json({ error: { code: 'not_found', message: 'Arena not found.' } });
+      return;
+    }
+    try {
+      const arena = await dependencies.arenas.getBySourceId(sourceId.data);
+      if (!arena) {
+        res.status(404).json({ error: { code: 'not_found', message: 'Arena not found.' } });
+        return;
+      }
+      res.status(200).type('application/geo+json').send(arena.boundary);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.get('/v1/arenas/:sourceId/competition-territory', async (req, res, next) => {
+    if (!res.locals.currentUser) {
+      next(new AppError(401, 'unauthorized', 'Sign in to view Arena territory.'));
+      return;
+    }
+    const sourceId = arenaSourceIdSchema.safeParse(req.params.sourceId);
+    const competitionDate = competitionDateSchema.safeParse(req.query);
+    if (!sourceId.success || !competitionDate.success) {
+      res.status(400).json({ error: { code: 'invalid_request', message: 'Arena territory requires a valid Arena and ISO calendar date.' } });
+      return;
+    }
+    try {
+      const arena = await dependencies.arenas.getBySourceId(sourceId.data);
+      if (!arena) {
+        res.status(404).json({ error: { code: 'not_found', message: 'Arena not found.' } });
+        return;
+      }
+      const territory = await dependencies.competitionGridClaim.getArenaCurrent({
+        competitionMonth: competitionDate.data.date,
+        launchAreaId: arena.id,
+      });
+      res.status(200).json(territory);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.get('/v1/arenas/:sourceId/competition-leaderboard', async (req, res, next) => {
+    const currentUser = res.locals.currentUser;
+    if (!currentUser) {
+      next(new AppError(401, 'unauthorized', 'Sign in to view the Arena leaderboard.'));
+      return;
+    }
+    const sourceId = arenaSourceIdSchema.safeParse(req.params.sourceId);
+    const month = z.object({
+      month: z.string().refine((value) => {
+        try {
+          normalizeCompetitionLeaderboardMonth(value);
+          return true;
+        } catch {
+          return false;
+        }
+      }),
+    }).strict().safeParse(req.query);
+    if (!sourceId.success || !month.success) {
+      res.status(400).json({ error: { code: 'invalid_request', message: 'Arena leaderboard requires a valid Arena and YYYY-MM month.' } });
+      return;
+    }
+    try {
+      const arena = await dependencies.arenas.getBySourceId(sourceId.data);
+      if (!arena) {
+        res.status(404).json({ error: { code: 'not_found', message: 'Arena not found.' } });
+        return;
+      }
+      res.status(200).json(await dependencies.competitionGridClaim.getArenaLeaderboard({
+        competitionMonth: month.data.month,
+        launchAreaId: arena.id,
+        currentUserId: currentUser.userId,
+      }));
+    } catch (error) {
+      next(error);
+    }
+  });
+
   router.get('/', async (req, res) => {
+    if (res.locals.currentUser) {
+      res.redirect(302, '/global');
+      return;
+    }
     await render(res, dependencies.renderPage, 200, {
-      currentUser: res.locals.currentUser,
-      isAdmin: res.locals.currentUser ? isAdmin(res.locals.currentUser.email) : false,
+      currentUser: null,
+      page: 'landing',
+    });
+  });
+
+  router.get('/global', async (req, res) => {
+    const currentUser = res.locals.currentUser;
+    if (!currentUser) {
+      res.redirect(302, '/');
+      return;
+    }
+    await render(res, dependencies.renderPage, 200, {
+      currentUser,
+      page: 'global',
+      isAdmin: isAdmin(currentUser.email),
       uploadSuccess: req.query.igcUpload === 'success',
       territoryColorSuccess: req.query.territoryColor === 'success',
     });
+  });
+
+  router.get('/personal', async (req, res) => {
+    const currentUser = res.locals.currentUser;
+    if (!currentUser) {
+      res.redirect(302, '/');
+      return;
+    }
+    await render(res, dependencies.renderPage, 200, {
+      currentUser,
+      page: 'personal',
+      isAdmin: isAdmin(currentUser.email),
+      uploadSuccess: req.query.igcUpload === 'success',
+      territoryColorSuccess: req.query.territoryColor === 'success',
+    });
+  });
+
+  router.get('/arena/:countryCode/:arenaSlug', async (req, res, next) => {
+    const currentUser = res.locals.currentUser;
+    if (!currentUser) {
+      res.redirect(302, '/');
+      return;
+    }
+    try {
+      const arena = await dependencies.arenas.getByRoute(req.params.countryCode, req.params.arenaSlug);
+      if (!arena) {
+        await render(res, dependencies.renderPage, 404, { currentUser, page: 'notFound' });
+        return;
+      }
+      await render(res, dependencies.renderPage, 200, {
+        currentUser,
+        page: 'arena',
+        arena,
+        isAdmin: isAdmin(currentUser.email),
+        uploadSuccess: req.query.igcUpload === 'success',
+        territoryColorSuccess: req.query.territoryColor === 'success',
+      });
+    } catch (error) {
+      next(error);
+    }
   });
 
   router.get('/admin', async (req, res, next) => {
@@ -329,7 +499,7 @@ export function createWebRouter(dependencies: {
     }
 
     await dependencies.profiles.updateTerritoryColor({ userId: currentUser.userId, territoryColor });
-    res.redirect(303, '/?territoryColor=success');
+    res.redirect(303, `${dashboardReturnTo(formBody(req.body).returnTo)}?territoryColor=success`);
   });
 
   router.post('/igc-files', async (req, res, next) => {
@@ -376,11 +546,22 @@ export function createWebRouter(dependencies: {
           await render(res, dependencies.renderPage, 422, { currentUser, uploadError: outcome.message });
           return;
         }
-        res.redirect(303, '/?igcUpload=success');
+        res.redirect(303, `${dashboardReturnTo(formBody(req.body).returnTo)}?igcUpload=success`);
       } catch (uploadError) {
         next(uploadError);
       }
     });
+  });
+
+  router.use(async (_req, res, next) => {
+    try {
+      await render(res, dependencies.renderPage, 404, {
+        currentUser: res.locals.currentUser,
+        page: 'notFound',
+      });
+    } catch (error) {
+      next(error);
+    }
   });
 
   return router;

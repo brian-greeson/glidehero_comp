@@ -1,0 +1,2337 @@
+{
+  "version": "8",
+  "dialect": "postgres",
+  "id": "762e4919-84e9-42e3-ad92-3d8d4b3eee24",
+  "prevIds": [
+    "bc49e362-9dab-4910-905c-33206e4720ac"
+  ],
+  "ddl": [
+    {
+      "values": [
+        "processing",
+        "completed",
+        "failed"
+      ],
+      "name": "flight_processing_status",
+      "entityType": "enums",
+      "schema": "public"
+    },
+    {
+      "isRlsEnabled": false,
+      "name": "app_sessions",
+      "entityType": "tables",
+      "schema": "public"
+    },
+    {
+      "isRlsEnabled": false,
+      "name": "competition_grid_claims",
+      "entityType": "tables",
+      "schema": "public"
+    },
+    {
+      "isRlsEnabled": false,
+      "name": "flights",
+      "entityType": "tables",
+      "schema": "public"
+    },
+    {
+      "isRlsEnabled": false,
+      "name": "igc_files",
+      "entityType": "tables",
+      "schema": "public"
+    },
+    {
+      "isRlsEnabled": false,
+      "name": "launch_area_cells",
+      "entityType": "tables",
+      "schema": "public"
+    },
+    {
+      "isRlsEnabled": false,
+      "name": "launch_areas",
+      "entityType": "tables",
+      "schema": "public"
+    },
+    {
+      "isRlsEnabled": false,
+      "name": "launches",
+      "entityType": "tables",
+      "schema": "public"
+    },
+    {
+      "isRlsEnabled": false,
+      "name": "user_grid_claims",
+      "entityType": "tables",
+      "schema": "public"
+    },
+    {
+      "isRlsEnabled": false,
+      "name": "profiles",
+      "entityType": "tables",
+      "schema": "public"
+    },
+    {
+      "isRlsEnabled": false,
+      "name": "track_points",
+      "entityType": "tables",
+      "schema": "public"
+    },
+    {
+      "isRlsEnabled": false,
+      "name": "user_passwords",
+      "entityType": "tables",
+      "schema": "public"
+    },
+    {
+      "isRlsEnabled": false,
+      "name": "users",
+      "entityType": "tables",
+      "schema": "public"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "gen_random_uuid()",
+      "generated": null,
+      "identity": null,
+      "name": "session_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "app_sessions"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "user_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "app_sessions"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "token_hash",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "app_sessions"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "expires_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "app_sessions"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "created_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "app_sessions"
+    },
+    {
+      "type": "date",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "competition_month",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "competition_grid_claims"
+    },
+    {
+      "type": "integer",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "cell_size",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "competition_grid_claims"
+    },
+    {
+      "type": "integer",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "x",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "competition_grid_claims"
+    },
+    {
+      "type": "integer",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "y",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "competition_grid_claims"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "claim_flight",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "competition_grid_claims"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "claim_user",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "competition_grid_claims"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "claim_timestamp",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "competition_grid_claims"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "gen_random_uuid()",
+      "generated": null,
+      "identity": null,
+      "name": "flight_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "flights"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "user_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "flights"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "igc_file_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "flights"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "content_hash",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "flights"
+    },
+    {
+      "type": "flight_processing_status",
+      "typeSchema": "public",
+      "notNull": true,
+      "dimensions": 0,
+      "default": "'processing'",
+      "generated": null,
+      "identity": null,
+      "name": "processing_status",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "flights"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "processing_error",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "flights"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "started_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "flights"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "ended_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "flights"
+    },
+    {
+      "type": "integer",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "duration_seconds",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "flights"
+    },
+    {
+      "type": "double precision",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "distance_meters",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "flights"
+    },
+    {
+      "type": "double precision",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "launch_latitude",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "flights"
+    },
+    {
+      "type": "double precision",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "launch_longitude",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "flights"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "launch_timezone",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "flights"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "created_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "flights"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "updated_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "flights"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "gen_random_uuid()",
+      "generated": null,
+      "identity": null,
+      "name": "igc_file_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "igc_files"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "user_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "igc_files"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "original_filename",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "igc_files"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "content_type",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "igc_files"
+    },
+    {
+      "type": "integer",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "byte_size",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "igc_files"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "bucket_key",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "igc_files"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "created_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "igc_files"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "updated_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "igc_files"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "launch_area_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "launch_area_cells"
+    },
+    {
+      "type": "integer",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "cell_size",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "launch_area_cells"
+    },
+    {
+      "type": "integer",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "x",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "launch_area_cells"
+    },
+    {
+      "type": "integer",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "y",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "launch_area_cells"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "gen_random_uuid()",
+      "generated": null,
+      "identity": null,
+      "name": "id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "launch_areas"
+    },
+    {
+      "type": "bigint",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "source_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "launch_areas"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "name",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "launch_areas"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "country",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "launch_areas"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "state",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "launch_areas"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "city",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "launch_areas"
+    },
+    {
+      "type": "geometry(point,4326)",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "location",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "launch_areas"
+    },
+    {
+      "type": "integer",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "altitude_meters",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "launch_areas"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "timezone",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "launch_areas"
+    },
+    {
+      "type": "geometry(multipolygon,6933)",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "area",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "launch_areas"
+    },
+    {
+      "type": "bigint",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "launches"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "name",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "launches"
+    },
+    {
+      "type": "double precision",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "longitude",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "launches"
+    },
+    {
+      "type": "double precision",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "latitude",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "launches"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "country",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "launches"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "state",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "launches"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "city",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "launches"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "description",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "launches"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "xc_by_month",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "launches"
+    },
+    {
+      "type": "integer",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "timezone_offset",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "launches"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "xc_by_year",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "launches"
+    },
+    {
+      "type": "integer",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "rank",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "launches"
+    },
+    {
+      "type": "integer",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "0",
+      "generated": null,
+      "identity": null,
+      "name": "elevation",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "launches"
+    },
+    {
+      "type": "integer",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "rank_1",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "launches"
+    },
+    {
+      "type": "integer",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "rank_2",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "launches"
+    },
+    {
+      "type": "integer",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "rank_3",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "launches"
+    },
+    {
+      "type": "integer",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "rank_4",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "launches"
+    },
+    {
+      "type": "integer",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "rank_5",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "launches"
+    },
+    {
+      "type": "integer",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "rank_6",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "launches"
+    },
+    {
+      "type": "integer",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "rank_7",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "launches"
+    },
+    {
+      "type": "integer",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "rank_8",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "launches"
+    },
+    {
+      "type": "integer",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "rank_9",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "launches"
+    },
+    {
+      "type": "integer",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "rank_10",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "launches"
+    },
+    {
+      "type": "integer",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "rank_11",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "launches"
+    },
+    {
+      "type": "integer",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "rank_12",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "launches"
+    },
+    {
+      "type": "integer",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "xcontest_launch_site",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "launches"
+    },
+    {
+      "type": "integer",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "cell_size",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "user_grid_claims"
+    },
+    {
+      "type": "integer",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "x",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "user_grid_claims"
+    },
+    {
+      "type": "integer",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "y",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "user_grid_claims"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "claim_flight",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "user_grid_claims"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "claim_user",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "user_grid_claims"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "claim_timestamp",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "user_grid_claims"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "gen_random_uuid()",
+      "generated": null,
+      "identity": null,
+      "name": "id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "profiles"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "user_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "profiles"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "display_name",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "profiles"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "'#1769AA'",
+      "generated": null,
+      "identity": null,
+      "name": "territory_color",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "profiles"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "created_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "profiles"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "updated_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "profiles"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "gen_random_uuid()",
+      "generated": null,
+      "identity": null,
+      "name": "track_point_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "track_points"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "flight_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "track_points"
+    },
+    {
+      "type": "integer",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "sequence_number",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "track_points"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "recorded_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "track_points"
+    },
+    {
+      "type": "double precision",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "latitude",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "track_points"
+    },
+    {
+      "type": "double precision",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "longitude",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "track_points"
+    },
+    {
+      "type": "integer",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "gps_altitude_meters",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "track_points"
+    },
+    {
+      "type": "integer",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "pressure_altitude_meters",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "track_points"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "user_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "user_passwords"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "password_hash",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "user_passwords"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "created_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "user_passwords"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "updated_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "user_passwords"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "gen_random_uuid()",
+      "generated": null,
+      "identity": null,
+      "name": "user_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "users"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "email",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "users"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "last_login",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "users"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "created_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "users"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "updated_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "users"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "user_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "app_sessions_user_id_idx",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "app_sessions"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "token_hash",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": true,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "app_sessions_token_hash_idx",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "app_sessions"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "competition_month",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "cell_size",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "x",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "y",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "claim_timestamp",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "competition_grid_claims_month_cell_timestamp_idx",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "competition_grid_claims"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "cell_size",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "x",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "y",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "competition_month",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "claim_timestamp",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "competition_grid_claims_cell_history_idx",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "competition_grid_claims"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "claim_flight",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "competition_grid_claims_claim_flight_idx",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "competition_grid_claims"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "user_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "flights_user_id_idx",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "flights"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "igc_file_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "flights_igc_file_id_idx",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "flights"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "user_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "igc_files_user_id_idx",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "igc_files"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "bucket_key",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": true,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "igc_files_bucket_key_idx",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "igc_files"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "cell_size",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "x",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "y",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "launch_area_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "launch_area_cells_cell_idx",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "launch_area_cells"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "area",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": "\"area\" IS NOT NULL",
+      "with": "",
+      "method": "gist",
+      "concurrently": false,
+      "name": "launch_areas_area_gist_idx",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "launch_areas"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "name",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "launches_name_idx",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "launches"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "country",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "launches_country_idx",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "launches"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "state",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "launches_state_idx",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "launches"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "xcontest_launch_site",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "launches_xcontest_launch_site_idx",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "launches"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "claim_user",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "cell_size",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "user_grid_claims_claim_user_cell_size_idx",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "user_grid_claims"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "claim_flight",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "user_grid_claims_claim_flight_idx",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "user_grid_claims"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "user_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "profiles_user_id_idx",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "profiles"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "flight_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "sequence_number",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "track_points_flight_id_sequence_number_idx",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "track_points"
+    },
+    {
+      "nameExplicit": false,
+      "columns": [
+        "user_id"
+      ],
+      "schemaTo": "public",
+      "tableTo": "users",
+      "columnsTo": [
+        "user_id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "name": "app_sessions_user_id_users_user_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "app_sessions"
+    },
+    {
+      "nameExplicit": false,
+      "columns": [
+        "claim_flight"
+      ],
+      "schemaTo": "public",
+      "tableTo": "flights",
+      "columnsTo": [
+        "flight_id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "name": "competition_grid_claims_claim_flight_flights_flight_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "competition_grid_claims"
+    },
+    {
+      "nameExplicit": false,
+      "columns": [
+        "claim_user"
+      ],
+      "schemaTo": "public",
+      "tableTo": "users",
+      "columnsTo": [
+        "user_id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "name": "competition_grid_claims_claim_user_users_user_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "competition_grid_claims"
+    },
+    {
+      "nameExplicit": false,
+      "columns": [
+        "user_id"
+      ],
+      "schemaTo": "public",
+      "tableTo": "users",
+      "columnsTo": [
+        "user_id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "name": "flights_user_id_users_user_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "flights"
+    },
+    {
+      "nameExplicit": false,
+      "columns": [
+        "igc_file_id"
+      ],
+      "schemaTo": "public",
+      "tableTo": "igc_files",
+      "columnsTo": [
+        "igc_file_id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "name": "flights_igc_file_id_igc_files_igc_file_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "flights"
+    },
+    {
+      "nameExplicit": false,
+      "columns": [
+        "user_id"
+      ],
+      "schemaTo": "public",
+      "tableTo": "users",
+      "columnsTo": [
+        "user_id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "name": "igc_files_user_id_users_user_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "igc_files"
+    },
+    {
+      "nameExplicit": false,
+      "columns": [
+        "launch_area_id"
+      ],
+      "schemaTo": "public",
+      "tableTo": "launch_areas",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "name": "launch_area_cells_launch_area_id_launch_areas_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "launch_area_cells"
+    },
+    {
+      "nameExplicit": false,
+      "columns": [
+        "claim_flight"
+      ],
+      "schemaTo": "public",
+      "tableTo": "flights",
+      "columnsTo": [
+        "flight_id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "name": "user_grid_claims_claim_flight_flights_flight_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "user_grid_claims"
+    },
+    {
+      "nameExplicit": false,
+      "columns": [
+        "claim_user"
+      ],
+      "schemaTo": "public",
+      "tableTo": "users",
+      "columnsTo": [
+        "user_id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "name": "user_grid_claims_claim_user_users_user_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "user_grid_claims"
+    },
+    {
+      "nameExplicit": false,
+      "columns": [
+        "user_id"
+      ],
+      "schemaTo": "public",
+      "tableTo": "users",
+      "columnsTo": [
+        "user_id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "name": "profiles_user_id_users_user_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "profiles"
+    },
+    {
+      "nameExplicit": false,
+      "columns": [
+        "flight_id"
+      ],
+      "schemaTo": "public",
+      "tableTo": "flights",
+      "columnsTo": [
+        "flight_id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "name": "track_points_flight_id_flights_flight_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "track_points"
+    },
+    {
+      "nameExplicit": false,
+      "columns": [
+        "user_id"
+      ],
+      "schemaTo": "public",
+      "tableTo": "users",
+      "columnsTo": [
+        "user_id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "name": "user_passwords_user_id_users_user_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "user_passwords"
+    },
+    {
+      "columns": [
+        "competition_month",
+        "cell_size",
+        "x",
+        "y",
+        "claim_flight"
+      ],
+      "nameExplicit": false,
+      "name": "competition_grid_claims_pkey",
+      "entityType": "pks",
+      "schema": "public",
+      "table": "competition_grid_claims"
+    },
+    {
+      "columns": [
+        "launch_area_id",
+        "cell_size",
+        "x",
+        "y"
+      ],
+      "nameExplicit": false,
+      "name": "launch_area_cells_pkey",
+      "entityType": "pks",
+      "schema": "public",
+      "table": "launch_area_cells"
+    },
+    {
+      "columns": [
+        "claim_user",
+        "cell_size",
+        "x",
+        "y",
+        "claim_flight"
+      ],
+      "nameExplicit": false,
+      "name": "user_grid_claims_pkey",
+      "entityType": "pks",
+      "schema": "public",
+      "table": "user_grid_claims"
+    },
+    {
+      "columns": [
+        "session_id"
+      ],
+      "nameExplicit": false,
+      "name": "app_sessions_pkey",
+      "schema": "public",
+      "table": "app_sessions",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "flight_id"
+      ],
+      "nameExplicit": false,
+      "name": "flights_pkey",
+      "schema": "public",
+      "table": "flights",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "igc_file_id"
+      ],
+      "nameExplicit": false,
+      "name": "igc_files_pkey",
+      "schema": "public",
+      "table": "igc_files",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "launch_areas_pkey",
+      "schema": "public",
+      "table": "launch_areas",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "launches_pkey",
+      "schema": "public",
+      "table": "launches",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "profiles_pkey",
+      "schema": "public",
+      "table": "profiles",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "track_point_id"
+      ],
+      "nameExplicit": false,
+      "name": "track_points_pkey",
+      "schema": "public",
+      "table": "track_points",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "user_id"
+      ],
+      "nameExplicit": false,
+      "name": "user_passwords_pkey",
+      "schema": "public",
+      "table": "user_passwords",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "user_id"
+      ],
+      "nameExplicit": false,
+      "name": "users_pkey",
+      "schema": "public",
+      "table": "users",
+      "entityType": "pks"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        "igc_file_id"
+      ],
+      "nullsNotDistinct": false,
+      "name": "flights_igc_file_id_unique",
+      "entityType": "uniques",
+      "schema": "public",
+      "table": "flights"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        "content_hash"
+      ],
+      "nullsNotDistinct": false,
+      "name": "flights_content_hash_unique",
+      "entityType": "uniques",
+      "schema": "public",
+      "table": "flights"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        "source_id"
+      ],
+      "nullsNotDistinct": false,
+      "name": "launch_areas_source_id_unique",
+      "entityType": "uniques",
+      "schema": "public",
+      "table": "launch_areas"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        "flight_id",
+        "sequence_number"
+      ],
+      "nullsNotDistinct": false,
+      "name": "track_points_flight_id_sequence_number_unique",
+      "entityType": "uniques",
+      "schema": "public",
+      "table": "track_points"
+    },
+    {
+      "nameExplicit": false,
+      "columns": [
+        "user_id"
+      ],
+      "nullsNotDistinct": false,
+      "name": "profiles_user_id_key",
+      "schema": "public",
+      "table": "profiles",
+      "entityType": "uniques"
+    },
+    {
+      "nameExplicit": false,
+      "columns": [
+        "email"
+      ],
+      "nullsNotDistinct": false,
+      "name": "users_email_key",
+      "schema": "public",
+      "table": "users",
+      "entityType": "uniques"
+    }
+  ],
+  "renames": []
+}

@@ -14,6 +14,7 @@ import type { FlightProcessingOutcome } from '../../src/services/flightProcessin
 import type { GridClaimService } from '../../src/services/gridClaimService.js';
 import type { CompetitionGridClaimService } from '../../src/services/competitionGridClaimService.js';
 import type { AdminFlightService } from '../../src/services/adminFlightService.js';
+import type { ArenaService } from '../../src/services/arenaService.js';
 import { createPageRenderer } from '../../src/views/renderer.js';
 import { createCurrentUserMiddleware } from '../../src/web/currentUserMiddleware.js';
 import { createSessionCookie } from '../../src/web/sessionCookie.js';
@@ -24,8 +25,6 @@ const viewportStats = {
   claimedCellCount: 2,
   claimedAreaSquareMeters: 2_000_000,
   flightCount: 1,
-  visibleCellCount: 20,
-  claimedPercentage: 10,
 };
 
 const competitionStats = {
@@ -41,6 +40,31 @@ const user = {
   displayName: 'Sky Pilot',
   territoryColor: '#1769AA',
 };
+
+const arena = {
+  id: '00000000-0000-4000-8000-000000000099',
+  sourceId: 745,
+  name: 'Boulder',
+  city: 'Boulder',
+  state: 'Colorado',
+  country: 'United States',
+  countryCode: 'us',
+  path: '/arena/us/boulder-745',
+  boundary: {
+    type: 'Feature' as const,
+    properties: { sourceId: 745, name: 'Boulder' },
+    geometry: { type: 'MultiPolygon' as const, coordinates: [] },
+    bbox: [-106, 39, -105, 40] as [number, number, number, number],
+  },
+};
+
+function arenaService(): ArenaService {
+  return {
+    search: vi.fn(async () => []),
+    getBySourceId: vi.fn(async () => null),
+    getByRoute: vi.fn(async () => null),
+  };
+}
 
 function dependencies(
   outcome: FlightProcessingOutcome = {
@@ -122,6 +146,7 @@ function dependencies(
   const competitionGridClaim: CompetitionGridClaimService = {
     process: vi.fn(async () => undefined),
     getCurrent: vi.fn(async () => expectedCompetitionGeoJson),
+    getArenaCurrent: vi.fn(async () => expectedCompetitionGeoJson),
     getViewportLeaderboard: vi.fn(async () => ({
       leaders: [{
         userId: user.userId,
@@ -133,7 +158,11 @@ function dependencies(
       currentPilot: null,
       stats: competitionStats,
     })),
+    getArenaLeaderboard: vi.fn(async () => ({
+      leaders: [], currentPilot: null, stats: competitionStats,
+    })),
   };
+  const arenas = arenaService();
   const router = createWebRouter({
     auth,
     cookie,
@@ -141,6 +170,7 @@ function dependencies(
     profiles,
     gridClaim,
     competitionGridClaim,
+    arenas,
     renderPage,
   });
   return {
@@ -149,6 +179,7 @@ function dependencies(
     profiles,
     gridClaim,
     competitionGridClaim,
+    arenas,
     expectedGridGeoJson,
     expectedCompetitionGeoJson,
     renderPage,
@@ -159,7 +190,7 @@ function dependencies(
 
 describe('webRouter', () => {
   it('limits admin routes to configured admin emails and redirects completed reprocessing', async () => {
-    const { auth, cookie, igcFiles, profiles, gridClaim, competitionGridClaim, renderPage } = dependencies();
+    const { auth, cookie, igcFiles, profiles, gridClaim, competitionGridClaim, arenas, renderPage } = dependencies();
     const adminFlights: AdminFlightService = {
       listRecentFlights: vi.fn(async () => [{
         id: '00000000-0000-4000-8000-000000000020',
@@ -181,6 +212,7 @@ describe('webRouter', () => {
       profiles,
       gridClaim,
       competitionGridClaim,
+      arenas,
       renderPage,
       adminEmails: ['PILOT@example.com'],
       adminFlights,
@@ -221,6 +253,74 @@ describe('webRouter', () => {
       });
       expect(authenticated.status).toBe(200);
       expect(await authenticated.text()).toContain('Sky Pilot');
+    });
+  });
+
+  it('protects dashboard routes and renders canonical Arenas with a basic 404', async () => {
+    const { app, arenas, renderPage } = dependencies();
+    vi.mocked(arenas.getByRoute).mockResolvedValueOnce(arena).mockResolvedValueOnce(null);
+    await withServer(app, async (baseUrl) => {
+      const anonymous = await fetch(`${baseUrl}/global`, { redirect: 'manual' });
+      expect(anonymous.status).toBe(302);
+      expect(anonymous.headers.get('location')).toBe('/');
+
+      const found = await fetch(`${baseUrl}/arena/us/boulder-745`, {
+        headers: { cookie: 'glidehero_session=valid-token' },
+      });
+      expect(found.status).toBe(200);
+      expect(renderPage).toHaveBeenCalledWith(expect.objectContaining({ page: 'arena', arena }));
+
+      const missing = await fetch(`${baseUrl}/arena/us/missing-999`, {
+        headers: { cookie: 'glidehero_session=valid-token' },
+      });
+      expect(missing.status).toBe(404);
+      expect(renderPage).toHaveBeenCalledWith(expect.objectContaining({ page: 'notFound' }));
+    });
+  });
+
+  it('renders the site-wide 404 page model for every unmatched route', async () => {
+    const { app, renderPage } = dependencies();
+    await withServer(app, async (baseUrl) => {
+      const anonymous = await fetch(`${baseUrl}/somewhere-remote`);
+      expect(anonymous.status).toBe(404);
+      expect(renderPage).toHaveBeenCalledWith(expect.objectContaining({
+        currentUser: null,
+        page: 'notFound',
+      }));
+
+      const authenticated = await fetch(`${baseUrl}/arena/us/boulder-745/extra`, {
+        headers: { cookie: 'glidehero_session=valid-token' },
+      });
+      expect(authenticated.status).toBe(404);
+      expect(renderPage).toHaveBeenCalledWith(expect.objectContaining({
+        currentUser: user,
+        page: 'notFound',
+      }));
+    });
+  });
+
+  it('searches Arenas and returns fixed-area territory and leaderboard data', async () => {
+    const { app, arenas, competitionGridClaim, expectedCompetitionGeoJson } = dependencies();
+    vi.mocked(arenas.search).mockResolvedValueOnce([arena]);
+    vi.mocked(arenas.getBySourceId).mockResolvedValue(arena);
+    await withServer(app, async (baseUrl) => {
+      const headers = { cookie: 'glidehero_session=valid-token' };
+      const search = await fetch(`${baseUrl}/v1/arenas?q=Boulder`, { headers });
+      expect(search.status).toBe(200);
+      expect(await search.json()).toEqual({ arenas: [arena] });
+
+      const territory = await fetch(`${baseUrl}/v1/arenas/745/competition-territory?date=2026-07-14`, { headers });
+      expect(territory.status).toBe(200);
+      expect(await territory.json()).toEqual(expectedCompetitionGeoJson);
+      expect(competitionGridClaim.getArenaCurrent).toHaveBeenCalledWith({
+        competitionMonth: '2026-07-14', launchAreaId: arena.id,
+      });
+
+      const leaderboard = await fetch(`${baseUrl}/v1/arenas/745/competition-leaderboard?month=2026-07`, { headers });
+      expect(leaderboard.status).toBe(200);
+      expect(competitionGridClaim.getArenaLeaderboard).toHaveBeenCalledWith({
+        competitionMonth: '2026-07', launchAreaId: arena.id, currentUserId: user.userId,
+      });
     });
   });
 
@@ -387,8 +487,11 @@ describe('webRouter', () => {
       },
       competitionGridClaim: {
         getCurrent: vi.fn(async () => emptyCompetitionGridClaimGeoJson()),
+        getArenaCurrent: vi.fn(async () => emptyCompetitionGridClaimGeoJson()),
         getViewportLeaderboard: vi.fn(async () => ({ leaders: [], currentPilot: null, stats: competitionStats })),
+        getArenaLeaderboard: vi.fn(async () => ({ leaders: [], currentPilot: null, stats: competitionStats })),
       },
+      arenas: arenaService(),
       renderPage: createPageRenderer({ mapTilerApiKey: 'maptiler-test-key' }),
     });
     const app = createApp({ webMiddleware: [middleware, router] });
@@ -442,15 +545,18 @@ describe('webRouter', () => {
           },
           competitionGridClaim: {
             getCurrent: vi.fn(async () => emptyCompetitionGridClaimGeoJson()),
+            getArenaCurrent: vi.fn(async () => emptyCompetitionGridClaimGeoJson()),
             getViewportLeaderboard: vi.fn(async () => ({ leaders: [], currentPilot: null, stats: competitionStats })),
+            getArenaLeaderboard: vi.fn(async () => ({ leaders: [], currentPilot: null, stats: competitionStats })),
           },
+          arenas: arenaService(),
           renderPage: createPageRenderer({ mapTilerApiKey: 'maptiler-test-key' }),
         }),
       ],
     });
 
     await withServer(app, async (baseUrl) => {
-      const response = await fetch(`${baseUrl}/?igcUpload=success`, {
+      const response = await fetch(`${baseUrl}/global?igcUpload=success`, {
         headers: { cookie: 'glidehero_session=valid-token' },
       });
 
@@ -490,7 +596,7 @@ describe('webRouter', () => {
       });
 
       expect(response.status).toBe(303);
-      expect(response.headers.get('location')).toBe('/?territoryColor=success');
+      expect(response.headers.get('location')).toBe('/global?territoryColor=success');
       expect(profiles.updateTerritoryColor).toHaveBeenCalledWith({
         userId: user.userId,
         territoryColor: '#A1B2C3',
@@ -772,7 +878,7 @@ describe('webRouter', () => {
         body: form,
       });
       expect(response.status).toBe(303);
-      expect(response.headers.get('location')).toBe('/?igcUpload=success');
+      expect(response.headers.get('location')).toBe('/global?igcUpload=success');
       expect(igcFiles.upload).toHaveBeenCalledWith(
         expect.objectContaining({
           ownerUserId: user.userId,

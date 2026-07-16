@@ -91,8 +91,6 @@ describe('PersonalGridClaimService', () => {
       claimedCellCount: 2,
       claimedAreaSquareMeters: 2_000_000,
       flightCount: 2,
-      visibleCellCount: 8,
-      claimedPercentage: 25,
     };
     const { database, execute } = projectionDatabaseDouble([stats]);
     const service = createPersonalGridClaimService(database as never, { cellSize: 1_000 });
@@ -108,6 +106,6 @@ describe('PersonalGridClaimService', () => {
     const query = JSON.stringify(execute.mock.calls[0]?.[0]);
     expect(query).toContain('ST_Intersects');
     expect(query).toContain('COUNT(DISTINCT claim_flight)');
-    expect(query).toContain('viewport_grid_total');
+    expect(query).not.toContain('viewport_grid_total');
   });
 });

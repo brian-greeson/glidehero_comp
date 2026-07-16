@@ -1,78 +1,9 @@
 {{ layout "layouts/appLayout.vto" }}
-
-  {{ if currentUser }}
-    <section class="dashboard" data-dashboard>
-      <header class="dashboard-nav">
-        <a class="brand" href="/" aria-label="Glide Hero dashboard"><img class="brand-logo" src="/android-chrome-192x192.png" alt=""><span class="brand-name">GLIDE HERO</span></a>
-        <nav class="mode-tabs" aria-label="Map mode">
-          <button type="button" class="mode-tab" data-competitive-mode>Competitive</button>
-          <button type="button" class="mode-tab is-active" data-personal-mode aria-current="page">Personal</button>
-        </nav>
-        <div class="nav-actions">
-          <form class="upload-form" data-upload-form method="post" action="/igc-files" enctype="multipart/form-data">
-            <label class="upload-button">Upload<input name="igcFile" type="file" accept=".igc" required></label>
-          </form>
-          {{ if uploadSuccess }}<p class="toast success" role="status">IGC flight processed successfully.</p>{{ /if }}
-          {{ if uploadError }}<p class="toast error" role="alert">{{ uploadError }}</p>{{ /if }}
-          <button type="button" class="icon-button" data-onboarding-trigger aria-label="Open Glide Hero walkthrough" aria-controls="glide-hero-onboarding">?</button>
-          <div class="account-menu">
-            <button type="button" class="account-trigger" data-account-trigger aria-expanded="false" aria-controls="account-popover">
-              <span class="avatar" aria-hidden="true">{{ currentUser.displayName.slice(0, 1) }}</span>
-              <span class="account-name">{{ currentUser.displayName }}</span>
-            </button>
-            <section id="account-popover" class="account-popover" data-account-popover hidden>
-              <p class="account-email">{{ currentUser.email }}</p>
-              {{ if isAdmin }}<a class="admin-link" href="/admin">Admin</a>{{ /if }}
-              <form method="post" action="/profile/territory-color">
-                <label>Territory color<input name="territoryColor" type="color" value="{{ currentUser.territoryColor }}" required></label>
-                {{ if territoryColorSuccess }}<p class="success" role="status">Map color saved.</p>{{ /if }}
-                {{ if territoryColorError }}<p class="error" role="alert">{{ territoryColorError }}</p>{{ /if }}
-                <button type="submit" class="secondary-button">Save map color</button>
-              </form>
-              <form method="post" action="/logout"><button type="submit" class="logout-button">Log out</button></form>
-            </section>
-          </div>
-        </div>
-      </header>
-
-      <section class="map-stage" aria-label="Territory map">
-        <div class="map-canvas" data-dashboard-map data-map-style-url="{{ mapTilerStyleUrl }}" data-current-user-id="{{ currentUser.userId }}" data-territory-color="{{ currentUser.territoryColor }}"></div>
-        <div class="map-search">
-          <!-- STUB: Location search will geocode and move the map viewport. -->
-          <input type="search" data-stub="location-search" aria-label="Search location" placeholder="Search location..." disabled>
-        </div>
-        <div class="map-actions" aria-label="Map actions">
-          <!-- STUB: Recenter will move the map to the signed-in pilot's active flying area. -->
-          <button type="button" data-stub="recenter-map" aria-label="Recenter map" aria-disabled="true">◎</button>
-          <!-- STUB: Layer selector will toggle territory and flight-map layers. -->
-          <button type="button" data-stub="layer-selector" aria-label="Select map layers" aria-disabled="true">▱</button>
-        </div>
-        <p class="map-empty-state" data-map-empty-state hidden>Map unavailable. Check your connection and try again.</p>
-      </section>
-
-      <aside class="dashboard-info" data-mobile-sheet aria-label="Map information">
-        <button type="button" class="sheet-handle" data-sheet-toggle aria-expanded="false" aria-controls="dashboard-information"><span aria-hidden="true"></span><span class="sr-only" data-sheet-toggle-label>Expand map information</span></button>
-        <div id="dashboard-information" class="dashboard-information">
-          <section class="info-card leaderboard-card" data-competition-leaderboard hidden>
-            <h2>Leaderboard</h2>
-            <p class="leaderboard-period" data-competition-month>Loading current month…</p>
-            <p class="leaderboard-status" data-leaderboard-status aria-live="polite">Open the Competitive map to view local rankings.</p>
-            <div class="leaderboard-list" data-leaderboard-list role="list" aria-label="Viewport leaders"></div>
-            <div class="current-pilot-result" data-current-pilot-result hidden></div>
-          </section>
-          {{ include "components/personalStatsCard.vto" }}
-          {{ include "components/competitionStatsCard.vto" }}
-        </div>
-      </aside>
-      {{ include "components/onboarding.vto" { territoryColor: currentUser.territoryColor } }}
-    </section>
-  {{ else }}
-    {{ include "components/unauthenticatedLanding.vto" {
-      loginError,
-      signupError,
-      loginEmail,
-      signupEmail,
-      signupDisplayName
-    } }}
-  {{ /if }}
+  {{ include "components/unauthenticatedLanding.vto" {
+    loginError,
+    signupError,
+    loginEmail,
+    signupEmail,
+    signupDisplayName
+  } }}
 {{ /layout }}
