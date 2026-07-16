@@ -1,0 +1,34 @@
+<header class="dashboard-nav">
+  <a class="brand" href="/global" aria-label="Glide Hero dashboard"><img class="brand-logo" src="/android-chrome-192x192.png" alt=""><span class="brand-name">GLIDE HERO</span></a>
+  <nav class="mode-tabs" aria-label="Map mode">
+    <a href="/global" class="mode-tab{{ if activeMode === 'competitive' }} is-active{{ /if }}"{{ if activeMode === 'competitive' }} aria-current="page"{{ /if }}>Competitive</a>
+    <a href="/personal" class="mode-tab{{ if activeMode === 'personal' }} is-active{{ /if }}"{{ if activeMode === 'personal' }} aria-current="page"{{ /if }}>Personal</a>
+  </nav>
+  <div class="nav-actions">
+    <form class="upload-form" data-upload-form method="post" action="/igc-files" enctype="multipart/form-data">
+      <input type="hidden" name="returnTo" value="{{ currentPath }}">
+      <label class="upload-button">Upload<input name="igcFile" type="file" accept=".igc" required></label>
+    </form>
+    {{ if uploadSuccess }}<p class="toast success" role="status">IGC flight processed successfully.</p>{{ /if }}
+    {{ if uploadError }}<p class="toast error" role="alert">{{ uploadError }}</p>{{ /if }}
+    <button type="button" class="icon-button" data-onboarding-trigger aria-label="Open Glide Hero walkthrough" aria-controls="glide-hero-onboarding">?</button>
+    <div class="account-menu">
+      <button type="button" class="account-trigger" data-account-trigger aria-expanded="false" aria-controls="account-popover">
+        <span class="avatar" aria-hidden="true">{{ currentUser.displayName.slice(0, 1) }}</span>
+        <span class="account-name">{{ currentUser.displayName }}</span>
+      </button>
+      <section id="account-popover" class="account-popover" data-account-popover hidden>
+        <p class="account-email">{{ currentUser.email }}</p>
+        {{ if isAdmin }}<a class="admin-link" href="/admin">Admin</a>{{ /if }}
+        <form method="post" action="/profile/territory-color">
+          <input type="hidden" name="returnTo" value="{{ currentPath }}">
+          <label>Territory color<input name="territoryColor" type="color" value="{{ currentUser.territoryColor }}" required></label>
+          {{ if territoryColorSuccess }}<p class="success" role="status">Map color saved.</p>{{ /if }}
+          {{ if territoryColorError }}<p class="error" role="alert">{{ territoryColorError }}</p>{{ /if }}
+          <button type="submit" class="secondary-button">Save map color</button>
+        </form>
+        <form method="post" action="/logout"><button type="submit" class="logout-button">Log out</button></form>
+      </section>
+    </div>
+  </div>
+</header>

@@ -10,7 +10,7 @@ beforeAll(async () => {
 });
 
 beforeEach(async () => {
-  await database.pool.query('TRUNCATE TABLE users CASCADE');
+  await database.pool.query('TRUNCATE TABLE users, launch_areas CASCADE');
 });
 
 afterAll(async () => {
@@ -76,6 +76,63 @@ async function persistClaim(input: PersistClaimInput): Promise<{ userId: string;
 }
 
 describe('CompetitionGridClaimService with PostGIS', () => {
+  it('filters Arena territory, leaderboard, and stats by exact Arena cell membership', async () => {
+    const inside = await persistClaim({
+      competitionMonth: '2026-07-01',
+      claimTimestamp: new Date('2026-07-10T12:00:00Z'),
+      flightCreatedAt: new Date('2026-07-10T13:00:00Z'),
+      x: 0,
+      y: 0,
+      displayName: 'Inside Pilot',
+    });
+    await persistClaim({
+      competitionMonth: '2026-07-01',
+      claimTimestamp: new Date('2026-07-10T12:01:00Z'),
+      flightCreatedAt: new Date('2026-07-10T13:01:00Z'),
+      x: 1,
+      y: 0,
+      displayName: 'Outside Pilot',
+    });
+    const arena = await database.pool.query<{ id: string }>(`
+      INSERT INTO launch_areas (
+        source_id, name, country, state, city, location, altitude_meters, timezone, area
+      ) VALUES (
+        745, 'Arena', 'United States', 'Colorado', 'Boulder',
+        ST_Transform(ST_SetSRID(ST_Point(500, 500), 6933), 4326), 1000, 'America/Denver',
+        ST_Multi(ST_MakeEnvelope(0, 0, 1000, 1000, 6933))
+      ) RETURNING id
+    `);
+    const arenaId = arena.rows[0]?.id;
+    if (!arenaId) throw new Error('Expected Arena id.');
+    await database.pool.query(
+      'INSERT INTO launch_area_cells (launch_area_id, cell_size, x, y) VALUES ($1, 1000, 0, 0)',
+      [arenaId],
+    );
+
+    const service = createCompetitionGridClaimService(database.db, { cellSize: 1_000 });
+    const territory = await service.getArenaCurrent({ competitionMonth: '2026-07-14', launchAreaId: arenaId });
+    const leaderboard = await service.getArenaLeaderboard({
+      competitionMonth: '2026-07',
+      launchAreaId: arenaId,
+      currentUserId: inside.userId,
+    });
+
+    expect(territory.features.map((feature) => feature.properties.cellId)).toEqual(['2026-07-01:1000:0:0']);
+    expect(leaderboard.leaders).toEqual([expect.objectContaining({
+      userId: inside.userId,
+      claimedCellCount: 1,
+      claimedAreaSquareMeters: 1_000_000,
+      rank: 1,
+    })]);
+    expect(leaderboard.stats).toEqual({
+      claimedCellCount: 1,
+      claimedAreaSquareMeters: 1_000_000,
+      flightCount: 1,
+      pilotCount: 1,
+      currentPilotFlightCount: 1,
+    });
+  });
+
   it('returns aggregate stats from current viewport owners and excludes replaced flights', async () => {
     const alphaOld = await persistClaim({
       competitionMonth: '2026-07-01',
@@ -124,8 +181,6 @@ describe('CompetitionGridClaimService with PostGIS', () => {
       flightCount: 2,
       pilotCount: 2,
       currentPilotFlightCount: 1,
-      visibleCellCount: 2,
-      claimedPercentage: 100,
     });
     expect(result.leaders.map((pilot) => pilot.userId)).toEqual(expect.arrayContaining([
       alphaOld.userId,

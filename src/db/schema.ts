@@ -1,4 +1,13 @@
-import { date, doublePrecision, index, integer, pgEnum, pgTable, primaryKey, text, timestamp, unique, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
+import { bigint, customType, date, doublePrecision, index, integer, pgEnum, pgTable, primaryKey, text, timestamp, unique, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
+import { sql } from 'drizzle-orm';
+
+const geometryPoint4326 = customType<{ data: string; driverData: string }>({
+  dataType: () => 'geometry(point,4326)',
+});
+
+const geometryMultiPolygon6933 = customType<{ data: string; driverData: string }>({
+  dataType: () => 'geometry(multipolygon,6933)',
+});
 
 const timestamps = {
   createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
@@ -84,6 +93,78 @@ export const flights = pgTable(
     unique('flights_content_hash_unique').on(table.contentHash),
     index('flights_user_id_idx').on(table.userId),
     index('flights_igc_file_id_idx').on(table.igcFileId),
+  ],
+);
+
+export const launches = pgTable(
+  'launches',
+  {
+    id: bigint('id', { mode: 'number' }).primaryKey(),
+    name: text('name').notNull(),
+    longitude: doublePrecision('longitude').notNull(),
+    latitude: doublePrecision('latitude').notNull(),
+    country: text('country').notNull(),
+    state: text('state').notNull(),
+    city: text('city').notNull(),
+    description: text('description').notNull(),
+    xcByMonth: text('xc_by_month').notNull(),
+    timezoneOffset: integer('timezone_offset').notNull(),
+    xcByYear: text('xc_by_year').notNull(),
+    rank: integer('rank').notNull(),
+    elevation: integer('elevation').notNull().default(0),
+    rank1: integer('rank_1').notNull(),
+    rank2: integer('rank_2').notNull(),
+    rank3: integer('rank_3').notNull(),
+    rank4: integer('rank_4').notNull(),
+    rank5: integer('rank_5').notNull(),
+    rank6: integer('rank_6').notNull(),
+    rank7: integer('rank_7').notNull(),
+    rank8: integer('rank_8').notNull(),
+    rank9: integer('rank_9').notNull(),
+    rank10: integer('rank_10').notNull(),
+    rank11: integer('rank_11').notNull(),
+    rank12: integer('rank_12').notNull(),
+    xcontestLaunchSite: integer('xcontest_launch_site').notNull(),
+  },
+  (table) => [
+    index('launches_name_idx').on(table.name),
+    index('launches_country_idx').on(table.country),
+    index('launches_state_idx').on(table.state),
+    index('launches_xcontest_launch_site_idx').on(table.xcontestLaunchSite),
+  ],
+);
+
+export const launchAreas = pgTable(
+  'launch_areas',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    sourceId: bigint('source_id', { mode: 'number' }).notNull(),
+    name: text('name').notNull(),
+    country: text('country').notNull(),
+    state: text('state').notNull(),
+    city: text('city').notNull(),
+    location: geometryPoint4326('location').notNull(),
+    altitudeMeters: integer('altitude_meters').notNull(),
+    timezone: text('timezone').notNull(),
+    area: geometryMultiPolygon6933('area'),
+  },
+  (table) => [
+    unique('launch_areas_source_id_unique').on(table.sourceId),
+    index('launch_areas_area_gist_idx').using('gist', table.area).where(sql`${table.area} IS NOT NULL`),
+  ],
+);
+
+export const launchAreaCells = pgTable(
+  'launch_area_cells',
+  {
+    launchAreaId: uuid('launch_area_id').notNull().references(() => launchAreas.id, { onDelete: 'cascade' }),
+    cellSize: integer('cell_size').notNull(),
+    x: integer('x').notNull(),
+    y: integer('y').notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.launchAreaId, table.cellSize, table.x, table.y] }),
+    index('launch_area_cells_cell_idx').on(table.cellSize, table.x, table.y, table.launchAreaId),
   ],
 );
 

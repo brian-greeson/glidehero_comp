@@ -152,8 +152,6 @@ describe('GridClaimService with PostGIS', () => {
       claimedCellCount: 2,
       claimedAreaSquareMeters: 2_000_000,
       flightCount: 2,
-      visibleCellCount: 2,
-      claimedPercentage: 100,
     });
   });
 

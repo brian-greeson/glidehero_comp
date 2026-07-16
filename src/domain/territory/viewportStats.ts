@@ -2,8 +2,6 @@ export type ViewportStats = {
   claimedCellCount: number;
   claimedAreaSquareMeters: number;
   flightCount: number;
-  visibleCellCount: number;
-  claimedPercentage: number;
 };
 
 export type CompetitionViewportStats = ViewportStats & {
@@ -16,8 +14,6 @@ export function emptyViewportStats(): ViewportStats {
     claimedCellCount: 0,
     claimedAreaSquareMeters: 0,
     flightCount: 0,
-    visibleCellCount: 0,
-    claimedPercentage: 0,
   };
 }
 

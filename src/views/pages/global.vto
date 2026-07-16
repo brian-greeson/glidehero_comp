@@ -1,0 +1,23 @@
+{{ layout "layouts/appLayout.vto" }}
+  <section class="dashboard has-competition-breadcrumb" data-dashboard data-dashboard-mode="global">
+    {{ include "components/dashboardNav.vto" { activeMode: "competitive", currentPath: "/global", currentUser, isAdmin, uploadSuccess, uploadError, territoryColorSuccess, territoryColorError } }}
+    {{ include "components/competitionBreadcrumb.vto" { arena: undefined } }}
+    <section class="map-stage" aria-label="Global competition map">
+      <div class="map-canvas" data-dashboard-map data-map-style-url="{{ mapTilerStyleUrl }}" data-current-user-id="{{ currentUser.userId }}" data-territory-color="{{ currentUser.territoryColor }}"></div>
+      {{ include "components/arenaSearch.vto" }}
+      <div class="map-actions" aria-label="Map actions">
+        <button type="button" data-stub="recenter-map" aria-label="Recenter map" aria-disabled="true">◎</button>
+        <button type="button" data-stub="layer-selector" aria-label="Select map layers" aria-disabled="true">▱</button>
+      </div>
+      <p class="map-empty-state" data-map-empty-state hidden>Map unavailable. Check your connection and try again.</p>
+    </section>
+    <aside class="dashboard-info" data-mobile-sheet aria-label="Map information">
+      <button type="button" class="sheet-handle" data-sheet-toggle aria-expanded="false" aria-controls="dashboard-information"><span aria-hidden="true"></span><span class="sr-only" data-sheet-toggle-label>Expand map information</span></button>
+      <div id="dashboard-information" class="dashboard-information">
+        {{ include "components/competitionLeaderboardCard.vto" }}
+        {{ include "components/competitionStatsCard.vto" }}
+      </div>
+    </aside>
+    {{ include "components/onboarding.vto" { territoryColor: currentUser.territoryColor } }}
+  </section>
+{{ /layout }}

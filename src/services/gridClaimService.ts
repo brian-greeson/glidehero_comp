@@ -8,7 +8,7 @@ import {
 import { emptyViewportStats, type ViewportStats } from '../domain/territory/viewportStats.js';
 import { createCompetitionGridClaimService, rebuildCompetitionGridClaims } from './competitionGridClaimService.js';
 import { gridClaimCandidateCtes } from './gridClaimCandidates.js';
-import { viewportGridCtes, type ViewportBounds } from './viewportGrid.js';
+import { viewportCtes, type ViewportBounds } from './viewportGrid.js';
 
 export type GridClaimProcessResult = {
   flightId: string;
@@ -150,7 +150,7 @@ export function createPersonalGridClaimService(
 
     async getViewportStats({ userId, west, south, east, north }) {
       const result = await database.execute<StoredViewportStats>(sql`
-        WITH ${viewportGridCtes({ west, south, east, north, cellSize })},
+        WITH ${viewportCtes({ west, south, east, north })},
         visible_claims AS (
           SELECT DISTINCT claims.x, claims.y, claims.claim_flight
           FROM user_grid_claims claims
@@ -173,15 +173,8 @@ export function createPersonalGridClaimService(
         SELECT
           COUNT(*)::integer AS "claimedCellCount",
           (COUNT(*) * ${cellSize}::bigint * ${cellSize}::bigint)::double precision AS "claimedAreaSquareMeters",
-          (SELECT COUNT(DISTINCT claim_flight)::integer FROM visible_claims) AS "flightCount",
-          viewport.visible_cell_count AS "visibleCellCount",
-          CASE
-            WHEN viewport.visible_cell_count = 0 THEN 0::double precision
-            ELSE (COUNT(*)::double precision / viewport.visible_cell_count * 100)::double precision
-          END AS "claimedPercentage"
+          (SELECT COUNT(DISTINCT claim_flight)::integer FROM visible_claims) AS "flightCount"
         FROM claimed_cells
-        CROSS JOIN viewport_grid_total viewport
-        GROUP BY viewport.visible_cell_count
       `);
 
       return result.rows[0] ?? emptyViewportStats();

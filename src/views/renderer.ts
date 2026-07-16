@@ -2,9 +2,12 @@ import { resolve } from 'node:path';
 import vento from 'ventojs';
 import type { AuthenticatedUser } from '../services/authService.js';
 import type { AdminFlight } from '../services/adminFlightService.js';
+import type { ArenaDetail } from '../services/arenaService.js';
 
 export type PageModel = {
   currentUser: AuthenticatedUser | null;
+  page?: 'landing' | 'global' | 'personal' | 'arena' | 'notFound';
+  arena?: ArenaDetail;
   loginError?: string;
   signupError?: string;
   loginEmail?: string;
@@ -37,9 +40,19 @@ function createEnvironment() {
 export function createPageRenderer(options: { mapTilerApiKey: string }): PageRenderer {
   const environment = createEnvironment();
 
-  return async (model) =>
-    (
-      await environment.run('pages/index.vto', {
+  return async (model) => {
+    const page = model.page ?? (model.currentUser ? 'global' : 'landing');
+    const template = {
+      landing: 'pages/index.vto',
+      global: 'pages/global.vto',
+      personal: 'pages/personal.vto',
+      arena: 'pages/arena.vto',
+      notFound: 'pages/notFound.vto',
+    }[page];
+    const dashboardScript = page === 'arena' ? '/scripts/arena.js' : '/scripts/dashboard.js';
+
+    return (
+      await environment.run(template, {
         loginError: undefined,
         signupError: undefined,
         loginEmail: '',
@@ -50,11 +63,15 @@ export function createPageRenderer(options: { mapTilerApiKey: string }): PageRen
         territoryColorError: undefined,
         territoryColorSuccess: false,
         isAdmin: false,
-        isDashboard: model.currentUser !== null,
+        arena: undefined,
+        isDashboard: page === 'global' || page === 'personal' || page === 'arena',
+        isNotFound: page === 'notFound',
+        dashboardScript,
         mapTilerStyleUrl: `https://api.maptiler.com/maps/outdoor-v2/style.json?key=${options.mapTilerApiKey}`,
         ...model,
       })
     ).content;
+  };
 }
 
 export function createAdminPageRenderer(): AdminPageRenderer {
@@ -65,6 +82,8 @@ export function createAdminPageRenderer(): AdminPageRenderer {
       reprocessSuccess: false,
       reprocessError: false,
       isDashboard: false,
+      isNotFound: false,
+      dashboardScript: '',
       ...model,
     })
   ).content;

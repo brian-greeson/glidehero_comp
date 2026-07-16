@@ -73,8 +73,6 @@ describe('CompetitionGridClaimService', () => {
       flightCount: 1,
       pilotCount: 1,
       currentPilotFlightCount: 1,
-      visibleCellCount: 20,
-      claimedPercentage: 10,
     }] }));
     const service = createCompetitionGridClaimService({ execute } as never, { cellSize: 1_000 });
 
@@ -100,8 +98,6 @@ describe('CompetitionGridClaimService', () => {
         flightCount: 1,
         pilotCount: 1,
         currentPilotFlightCount: 1,
-        visibleCellCount: 20,
-        claimedPercentage: 10,
       },
     });
 

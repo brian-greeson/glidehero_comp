@@ -65,9 +65,8 @@ describe('Vento page renderer', () => {
     expect(authenticated).toContain('style="--territory-color: #1769AA"');
     expect(authenticated).toContain('data-mobile-sheet');
     expect(authenticated).toContain('data-account-popover');
-    expect(authenticated).toContain('class="mode-tab" data-competitive-mode>Competitive</button>');
-    expect(authenticated).not.toContain('data-stub="competitive-mode"');
-    expect(authenticated).toContain('class="mode-tab is-active" data-personal-mode aria-current="page">Personal</button>');
+    expect(authenticated).toContain('href="/global" class="mode-tab is-active" aria-current="page">Competitive</a>');
+    expect(authenticated).toContain('href="/personal" class="mode-tab">Personal</a>');
     expect(authenticated).toContain('data-territory-color="#1769AA"');
     expect(authenticated).toContain('data-current-user-id="00000000-0000-4000-8000-000000000001"');
     expect(authenticated).toContain('<script type="module" src="/scripts/dashboard.js"></script>');
@@ -78,9 +77,12 @@ describe('Vento page renderer', () => {
     expect(authenticated).not.toContain('Time period');
     expect(authenticated).not.toContain('data-current-month');
     expect(authenticated).toContain('<h2>Stats</h2>');
-    expect(authenticated).toContain('data-personal-stats');
+    expect(authenticated).not.toContain('data-personal-stats');
     expect(authenticated).toContain('data-competition-stats');
-    expect(authenticated).toContain('data-personal-claimed-percentage');
+    expect(authenticated).toContain('data-arena-search-input');
+    expect(authenticated).toContain('aria-current="page">Global</span>');
+    expect(authenticated).not.toContain('Visible Map Claimed');
+    expect(authenticated).not.toContain('claimed-percentage');
     expect(authenticated).toContain('data-competition-my-flights');
     expect(authenticated.match(/<dt>Pilots<\/dt>/g)).toHaveLength(1);
     expect(authenticated).not.toContain('data-stub="viewport-statistics"');
@@ -107,6 +109,59 @@ describe('Vento page renderer', () => {
     });
 
     expect(html).toContain('<a class="admin-link" href="/admin">Admin</a>');
+  });
+
+  it('renders dedicated Personal and Arena pages with separated scripts and search UI', async () => {
+    const currentUser = {
+      userId: '00000000-0000-4000-8000-000000000001',
+      sessionId: '00000000-0000-4000-8000-000000000002',
+      email: 'pilot@example.com',
+      displayName: 'Sky Pilot',
+      territoryColor: '#1769AA',
+    };
+    const personal = await render({ currentUser, page: 'personal' });
+    expect(personal).toContain('href="/personal" class="mode-tab is-active" aria-current="page">Personal</a>');
+    expect(personal).toContain('data-personal-stats');
+    expect(personal).not.toContain('data-arena-search');
+    expect(personal).not.toContain('competition-breadcrumb');
+
+    const arena = await render({
+      currentUser,
+      page: 'arena',
+      arena: {
+        id: '00000000-0000-4000-8000-000000000099',
+        sourceId: 745,
+        name: 'Boulder',
+        city: 'Boulder',
+        state: 'Colorado',
+        country: 'United States',
+        countryCode: 'us',
+        path: '/arena/us/boulder-745',
+        boundary: {
+          type: 'Feature',
+          properties: { sourceId: 745, name: 'Boulder' },
+          geometry: { type: 'MultiPolygon', coordinates: [] },
+          bbox: [-106, 39, -105, 40],
+        },
+      },
+    });
+    expect(arena).toContain('data-arena-dashboard');
+    expect(arena).toContain('data-arena-source-id="745"');
+    expect(arena).toContain('<a href="/global">Global</a>');
+    expect(arena).toContain('aria-current="page">Boulder</span>');
+    expect(arena).toContain('data-arena-search-input');
+    expect(arena).toContain('<script type="module" src="/scripts/arena.js"></script>');
+  });
+
+  it('renders the generic landing-out 404 without dashboard or landing scripts', async () => {
+    const html = await render({ currentUser: null, page: 'notFound' });
+
+    expect(html).toContain('Looks like you landed out.');
+    expect(html).toContain('/404-flying-squirrel.webp');
+    expect(html).toContain('href="/">Head home</a>');
+    expect(html).toContain('class="not-found-body"');
+    expect(html).not.toContain('/scripts/dashboard.js');
+    expect(html).not.toContain('/scripts/landing.js');
   });
 
   it('renders the admin flight table without dashboard map assets', async () => {
