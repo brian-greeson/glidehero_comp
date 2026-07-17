@@ -32,6 +32,23 @@ export function colorCoverageTerritory(geojson, colorRegistry) {
   };
 }
 
+export function coverageCellFeatureAtPoint(map, point) {
+  return map.queryRenderedFeatures?.(point, { layers: [COVERAGE_FILL_LAYER_ID] })?.[0] ?? null;
+}
+
+export function positionCoverageCellPopup(popup, point, containerWidth) {
+  const edgePadding = 8;
+  const halfWidth = popup.offsetWidth / 2;
+  const minimumX = halfWidth + edgePadding;
+  const maximumX = containerWidth - halfWidth - edgePadding;
+  const centeredX = maximumX >= minimumX
+    ? Math.min(Math.max(point.x, minimumX), maximumX)
+    : containerWidth / 2;
+  popup.style.left = `${centeredX}px`;
+  popup.style.top = `${point.y}px`;
+  popup.dataset.placement = point.y < popup.offsetHeight + 12 ? 'below' : 'above';
+}
+
 export function setCoverageData(map, geojson) {
   const source = map.getSource?.(COVERAGE_SOURCE_ID);
   if (source?.setData) {

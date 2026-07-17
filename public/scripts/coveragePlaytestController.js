@@ -10,7 +10,12 @@ import {
   globalCoverageLeaderboardUrl,
 } from './coveragePlaytestApi.js';
 import { renderCoverageLeaderboard } from './coveragePlaytestLeaderboard.js';
-import { colorCoverageTerritory, COVERAGE_FILL_LAYER_ID, setCoverageData } from './coveragePlaytestMap.js';
+import {
+  colorCoverageTerritory,
+  coverageCellFeatureAtPoint,
+  positionCoverageCellPopup,
+  setCoverageData,
+} from './coveragePlaytestMap.js';
 
 async function jsonRequest(url, fetchImpl, signal) {
   const response = await fetchImpl(url, { credentials: 'same-origin', headers: { accept: 'application/json' }, signal });
@@ -43,6 +48,12 @@ export function initializeCoveragePlaytest({
   let mapReady = false;
   let selectedPilotId = null;
   let leaderboard = { leaders: [], currentPilot: null };
+  let cellPopupRequestId = 0;
+
+  function hideCellPopup() {
+    cellPopupRequestId += 1;
+    if (cellPopup) cellPopup.hidden = true;
+  }
 
   function setStatus(message = '') {
     if (!emptyState) return;
@@ -112,7 +123,7 @@ export function initializeCoveragePlaytest({
   async function refreshPeriod() {
     selectedPilotId = null;
     overviewButton?.setAttribute('aria-pressed', 'true');
-    if (cellPopup) cellPopup.hidden = true;
+    hideCellPopup();
     await Promise.all([leaderboardRequest.run(), territoryRequest.run()]);
   }
 
@@ -149,11 +160,19 @@ export function initializeCoveragePlaytest({
       }
     });
     if (!arenaSourceId) map.on('moveend', () => { if (mapReady) void leaderboardRequest.run(); });
-    map.on('click', COVERAGE_FILL_LAYER_ID, async (event) => {
-      const properties = event.features?.[0]?.properties;
-      if (!properties || !cellPopup) return;
+    map.on('click', async (event) => {
+      if (!cellPopup) return;
+      const feature = coverageCellFeatureAtPoint(map, event.point);
+      const properties = feature?.properties;
+      if (!properties) {
+        hideCellPopup();
+        return;
+      }
+      const requestId = ++cellPopupRequestId;
+      cellPopup.hidden = true;
       try {
         const payload = await jsonRequest(coverageCellClaimantsUrl(properties.x, properties.y, periodControl.month), fetchImpl);
+        if (requestId !== cellPopupRequestId) return;
         const heading = documentRef.createElement('strong');
         heading.textContent = 'Claimed by';
         const list = documentRef.createElement('ul');
@@ -164,7 +183,10 @@ export function initializeCoveragePlaytest({
         }
         cellPopup.replaceChildren(heading, list);
         cellPopup.hidden = false;
-      } catch { cellPopup.hidden = true; }
+        positionCoverageCellPopup(cellPopup, event.point, mapElement.clientWidth);
+      } catch {
+        if (requestId === cellPopupRequestId) cellPopup.hidden = true;
+      }
     });
   } catch {
     setStatus('Map unavailable. Check your connection and try again.');

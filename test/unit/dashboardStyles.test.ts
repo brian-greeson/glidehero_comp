@@ -17,4 +17,11 @@ describe('dashboard stylesheet contract', () => {
     expect(css).toContain('height: 292px;');
     expect(css).toContain('.leaderboard-list > :nth-child(n + 4)');
   });
+
+  it('anchors the coverage claimant card around its map tap', async () => {
+    const css = await readFile('public/styles/app.css', 'utf8');
+
+    expect(css).toMatch(/\.coverage-cell-popup\s*{[^}]*width: max-content;[^}]*transform: translate\(-50%, calc\(-100% - 0\.75rem\)\);/s);
+    expect(css).toMatch(/\.coverage-cell-popup\[data-placement='below'\]\s*{\s*transform: translate\(-50%, 0\.75rem\);/);
+  });
 });

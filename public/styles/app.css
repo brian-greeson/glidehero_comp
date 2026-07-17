@@ -932,14 +932,18 @@ button {
 .coverage-cell-popup {
   position: absolute;
   z-index: 5;
-  right: 1rem;
-  bottom: 1rem;
+  width: max-content;
   max-width: min(18rem, calc(100% - 2rem));
   padding: 0.75rem 0.9rem;
   border: 1px solid var(--color-border);
   border-radius: 0.75rem;
+  transform: translate(-50%, calc(-100% - 0.75rem));
   background: rgb(255 255 255 / 94%);
   box-shadow: 0 0.5rem 1.5rem rgb(15 23 42 / 18%);
+}
+
+.coverage-cell-popup[data-placement='below'] {
+  transform: translate(-50%, 0.75rem);
 }
 
 .coverage-cell-popup ul {
