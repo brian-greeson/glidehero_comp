@@ -14,7 +14,13 @@ describe('dashboard stylesheet contract', () => {
     expect(css).toContain('.arena-search-results {');
     expect(css).toMatch(/\.has-competition-breadcrumb \.dashboard-info\s*{\s*inset-block-start: auto;/);
     expect(css).toContain('height: 292px;');
-    expect(css).toContain('.leaderboard-list > :nth-child(n + 4)');
+    expect(css).toMatch(/@media \(max-width: 900px\)[\s\S]*?\.coverage-table\s*{\s*min-width: 39rem;/);
+    expect(css).toMatch(/\.dashboard-info:not\(\.is-expanded\) \.coverage-table-header,\s*\.dashboard-info:not\(\.is-expanded\) \.coverage-pilot-row\s*{\s*grid-template-columns: minmax\(9rem, 1fr\) 5rem;/);
+    expect(css).toMatch(/\.dashboard-info:not\(\.is-expanded\) \.coverage-table-header > :nth-child\(n \+ 3\),\s*\.dashboard-info:not\(\.is-expanded\) \.coverage-pilot-row > :nth-child\(n \+ 3\),\s*\.dashboard-info:not\(\.is-expanded\) \.coverage-pilot-row:nth-child\(n \+ 4\)\s*{\s*display: none;/);
+    expect(css).toMatch(/\.dashboard-info:not\(\.is-expanded\) \.coverage-leaderboard > \.coverage-table\s*{\s*display: block;\s*min-width: 0;/);
+    expect(css).toMatch(/\.dashboard-info\.is-expanded \.dashboard-information\s*{\s*overflow-y: auto;/);
+    expect(css).not.toContain('.leaderboard-list');
+    expect(css).not.toContain('.leaderboard-row');
   });
 
   it('anchors the coverage claimant card around its map tap', async () => {

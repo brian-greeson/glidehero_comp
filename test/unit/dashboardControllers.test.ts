@@ -7,16 +7,39 @@ import { initializePersonalDashboard } from '../../public/scripts/personalDashbo
 
 function element(): any {
   const attributes = new Map<string, string>();
+  const listeners = new Map<string, Array<(event?: any) => any>>();
+  const classes = new Set<string>();
   const node = {
     hidden: true,
     textContent: '',
     className: '',
+    dataset: {} as Record<string, string>,
     children: [] as any[],
-    classList: { add() {}, toggle() {} },
-    style: { setProperty() {} },
+    offsetWidth: 100,
+    offsetHeight: 40,
+    classList: {
+      add(className: string) { classes.add(className); },
+      toggle(className: string, force?: boolean) {
+        if (force ?? !classes.has(className)) classes.add(className);
+        else classes.delete(className);
+      },
+      contains(className: string) { return classes.has(className); },
+    },
+    style: {
+      left: '',
+      top: '',
+      setProperty() {},
+    },
     setAttribute(name: string, value: string) { attributes.set(name, value); },
     removeAttribute(name: string) { attributes.delete(name); },
-    addEventListener() {},
+    getAttribute(name: string) { return attributes.get(name) ?? null; },
+    addEventListener(name: string, listener: (event?: any) => any) {
+      listeners.set(name, [...(listeners.get(name) ?? []), listener]);
+    },
+    async emit(name: string, event?: any) {
+      await Promise.all((listeners.get(name) ?? []).map((listener) => listener(event)));
+    },
+    click() { return node.emit('click'); },
     append(...children: any[]) { node.children.push(...children); },
     replaceChildren(...children: any[]) { node.children = children; },
   };
@@ -26,14 +49,20 @@ function element(): any {
 function mapHarness() {
   let loadHandler: (() => Promise<void>) | undefined;
   let moveHandler: (() => void) | undefined;
+  let errorHandler: (() => void) | undefined;
+  let clickHandler: ((event: any) => Promise<void>) | undefined;
   const layers = new Set<string>();
   let viewport = { west: -107, east: -105 };
+  let renderedFeatures: any[] = [];
+  const sources = new Map<string, any>();
   const map = {
-    addSource: vi.fn(),
+    addSource: vi.fn((id: string, source: any) => sources.set(id, { ...source, setData: vi.fn() })),
     addLayer: vi.fn((layer: { id: string }) => layers.add(layer.id)),
     addControl: vi.fn(),
+    getSource: vi.fn((id: string) => sources.get(id)),
     getLayer: vi.fn((id: string) => (layers.has(id) ? { id } : undefined)),
     setLayoutProperty: vi.fn(),
+    queryRenderedFeatures: vi.fn(() => renderedFeatures),
     getBounds: () => ({
       getWest: () => viewport.west,
       getSouth: () => 39,
@@ -42,9 +71,11 @@ function mapHarness() {
     }),
     once: vi.fn((event: string, handler: () => Promise<void>) => {
       if (event === 'load') loadHandler = handler;
+      if (event === 'error') errorHandler = handler;
     }),
-    on: vi.fn((event: string, handler: () => void) => {
+    on: vi.fn((event: string, handler: any) => {
       if (event === 'moveend') moveHandler = handler;
+      if (event === 'click') clickHandler = handler;
     }),
   };
   return {
@@ -55,7 +86,80 @@ function mapHarness() {
     },
     load: async () => loadHandler?.(),
     move(next = viewport) { viewport = next; moveHandler?.(); },
+    error() { errorHandler?.(); },
+    click(point = { x: 50, y: 80 }) { return clickHandler?.({ point }); },
+    setRenderedFeatures(features: any[]) { renderedFeatures = features; },
   };
+}
+
+function pilot(userId: string, displayName = userId, claimedCellCount = 3) {
+  return {
+    userId,
+    displayName,
+    rank: 1,
+    claimedCellCount,
+    exclusiveCellCount: claimedCellCount,
+    sharedCellCount: 0,
+    claimedAreaSquareMeters: claimedCellCount * 250_000,
+  };
+}
+
+function globalDashboardHarness(fetchImpl: any, search = '') {
+  const map = mapHarness();
+  const mapElement = element();
+  mapElement.dataset = {
+    mapStyleUrl: 'map-style', currentUserId: 'current-user', territoryColor: '#1769AA',
+  };
+  mapElement.clientWidth = 600;
+  const allTime = element();
+  allTime.dataset.competitionPeriodOption = 'all-time';
+  const currentMonth = element();
+  currentMonth.dataset.competitionPeriodOption = 'current-month';
+  const elements = new Map<string, any>([
+    ['[data-competition-coverage]', element()],
+    ['[data-coverage-map]', mapElement],
+    ['[data-map-empty-state]', element()],
+    ['[data-coverage-leaderboard]', element()],
+    ['[data-coverage-overview]', element()],
+    ['[data-coverage-status]', element()],
+    ['[data-coverage-list]', element()],
+    ['[data-coverage-current-pilot]', element()],
+    ['[data-coverage-cell-popup]', element()],
+    ['[data-current-month-option]', currentMonth],
+  ]);
+  const documentRef = {
+    createElement: () => element(),
+    querySelector: (selector: string) => elements.get(selector) ?? null,
+    querySelectorAll: (selector: string) => selector === '[data-competition-period-option]'
+      ? [allTime, currentMonth]
+      : [],
+  };
+  const historyRef = { replaceState: vi.fn() };
+  initializeGlobalDashboard({
+    documentRef,
+    maplibre: map.maplibre,
+    fetchImpl,
+    locationRef: { pathname: '/global', search },
+    historyRef,
+    now: () => new Date(2026, 6, 17),
+  });
+  return {
+    ...map,
+    elements,
+    allTime,
+    currentMonth,
+    historyRef,
+  };
+}
+
+function jsonResponse(body: unknown, status = 200) {
+  return new Response(JSON.stringify(body), { status });
+}
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((resolvePromise) => { resolve = resolvePromise; });
+  return { promise, resolve };
 }
 
 describe('Personal dashboard controller', () => {
@@ -156,5 +260,138 @@ describe('Global dashboard controller', () => {
     harness.move({ west: -106, east: -104 });
     await vi.waitFor(() => expect(fetchImpl).toHaveBeenCalledTimes(3));
     expect(fetchImpl.mock.calls[2]?.[0]).toContain('west=-106');
+  });
+
+  it('selects a pilot and returns to the overview', async () => {
+    const territoryUrls: string[] = [];
+    const fetchImpl = vi.fn(async (url: string) => {
+      if (url.startsWith('/v1/competition-territory')) {
+        territoryUrls.push(url);
+        return jsonResponse({ type: 'FeatureCollection', features: [] });
+      }
+      return jsonResponse({ leaders: [pilot('pilot-one', 'Pilot One')], currentPilot: null });
+    });
+    const harness = globalDashboardHarness(fetchImpl);
+    await harness.load();
+
+    const list = harness.elements.get('[data-coverage-list]');
+    const overview = harness.elements.get('[data-coverage-overview]');
+    await list.children[0].click();
+    await vi.waitFor(() => expect(territoryUrls).toHaveLength(2));
+    expect(territoryUrls[1]).toBe('/v1/competition-territory?pilot=pilot-one');
+    expect(list.children[0].getAttribute('aria-pressed')).toBe('true');
+    expect(overview.getAttribute('aria-pressed')).toBe('false');
+
+    await overview.click();
+    await vi.waitFor(() => expect(territoryUrls).toHaveLength(3));
+    expect(territoryUrls[2]).toBe('/v1/competition-territory');
+    expect(list.children[0].getAttribute('aria-pressed')).toBe('false');
+    expect(overview.getAttribute('aria-pressed')).toBe('true');
+  });
+
+  it('resets pilot selection and refreshes territory and rankings when the period changes', async () => {
+    const requestedUrls: string[] = [];
+    const fetchImpl = vi.fn(async (url: string) => {
+      requestedUrls.push(url);
+      if (url.startsWith('/v1/competition-territory')) {
+        return jsonResponse({ type: 'FeatureCollection', features: [] });
+      }
+      return jsonResponse({ leaders: [pilot('pilot-one')], currentPilot: null });
+    });
+    const harness = globalDashboardHarness(fetchImpl);
+    await harness.load();
+    const list = harness.elements.get('[data-coverage-list]');
+    const overview = harness.elements.get('[data-coverage-overview]');
+    await list.children[0].click();
+    await vi.waitFor(() => expect(requestedUrls.some((url) => url.includes('pilot=pilot-one'))).toBe(true));
+
+    await harness.currentMonth.click();
+
+    expect(harness.historyRef.replaceState).toHaveBeenCalledWith(null, '', '/global?month=2026-07');
+    expect(overview.getAttribute('aria-pressed')).toBe('true');
+    expect(requestedUrls).toContain('/v1/competition-territory?month=2026-07');
+    expect(requestedUrls).toContain('/v1/competition-leaderboard?month=2026-07&west=-107&south=39&east=-105&north=41');
+    expect(requestedUrls.at(-1)).not.toContain('pilot=pilot-one');
+  });
+
+  it('returns to overview when the selected pilot leaves the refreshed leaderboard', async () => {
+    let leaderboard = { leaders: [pilot('pilot-one')], currentPilot: null };
+    const territoryUrls: string[] = [];
+    const fetchImpl = vi.fn(async (url: string) => {
+      if (url.startsWith('/v1/competition-territory')) {
+        territoryUrls.push(url);
+        return jsonResponse({ type: 'FeatureCollection', features: [] });
+      }
+      return jsonResponse(leaderboard);
+    });
+    const harness = globalDashboardHarness(fetchImpl);
+    await harness.load();
+    await harness.elements.get('[data-coverage-list]').children[0].click();
+    await vi.waitFor(() => expect(territoryUrls.at(-1)).toContain('pilot=pilot-one'));
+
+    leaderboard = { leaders: [], currentPilot: null };
+    harness.move({ west: -106, east: -104 });
+
+    await vi.waitFor(() => expect(territoryUrls.at(-1)).toBe('/v1/competition-territory'));
+    expect(harness.elements.get('[data-coverage-overview]').getAttribute('aria-pressed')).toBe('true');
+    expect(harness.elements.get('[data-coverage-list]').children).toHaveLength(0);
+  });
+
+  it('renders cell claimants and ignores a stale popup response after dismissal', async () => {
+    const firstClaimants = deferred<Response>();
+    let claimantRequestCount = 0;
+    const fetchImpl = vi.fn(async (url: string) => {
+      if (url.startsWith('/v1/competition-territory')) {
+        return jsonResponse({ type: 'FeatureCollection', features: [] });
+      }
+      if (url.startsWith('/v1/competition-cells/')) {
+        claimantRequestCount += 1;
+        if (claimantRequestCount === 1) return firstClaimants.promise;
+        return jsonResponse({ claimants: [{ userId: 'pilot-one', displayName: 'Pilot One' }] });
+      }
+      return jsonResponse({ leaders: [], currentPilot: null });
+    });
+    const harness = globalDashboardHarness(fetchImpl);
+    await harness.load();
+    const popup = harness.elements.get('[data-coverage-cell-popup]');
+    harness.setRenderedFeatures([{ properties: { x: 12, y: -3 } }]);
+    const staleClick = harness.click({ x: 50, y: 80 });
+    await vi.waitFor(() => expect(claimantRequestCount).toBe(1));
+
+    harness.setRenderedFeatures([]);
+    await harness.click({ x: 70, y: 90 });
+    firstClaimants.resolve(jsonResponse({ claimants: [{ userId: 'stale', displayName: 'Stale Pilot' }] }));
+    await staleClick;
+    expect(popup.hidden).toBe(true);
+    expect(popup.children).toHaveLength(0);
+
+    harness.setRenderedFeatures([{ properties: { x: 12, y: -3 } }]);
+    await harness.click({ x: 50, y: 80 });
+    expect(fetchImpl).toHaveBeenCalledWith(
+      '/v1/competition-cells/12/-3/claimants',
+      expect.objectContaining({ credentials: 'same-origin' }),
+    );
+    expect(popup.hidden).toBe(false);
+    expect(popup.children[0].textContent).toBe('Claimed by');
+    expect(popup.children[1].children[0].textContent).toBe('Pilot One');
+    expect(popup.style.left).toBe('58px');
+    expect(popup.dataset.placement).toBe('above');
+
+    harness.setRenderedFeatures([]);
+    await harness.click();
+    expect(popup.hidden).toBe(true);
+  });
+
+  it('shows distinct territory, ranking, and map error states', async () => {
+    const fetchImpl = vi.fn(async (url: string) => jsonResponse({}, url.startsWith('/v1/competition-territory') ? 503 : 502));
+    const harness = globalDashboardHarness(fetchImpl);
+    await harness.load();
+
+    expect(harness.elements.get('[data-map-empty-state]').textContent).toBe('Unable to load coverage. Try again.');
+    expect(harness.elements.get('[data-coverage-status]').textContent).toBe('Unable to update coverage rankings.');
+    expect(harness.elements.get('[data-coverage-leaderboard]').getAttribute('aria-busy')).toBe(null);
+
+    harness.error();
+    expect(harness.elements.get('[data-map-empty-state]').textContent).toBe('Map unavailable. Check your connection and try again.');
   });
 });

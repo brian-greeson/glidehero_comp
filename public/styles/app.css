@@ -983,28 +983,6 @@ button {
 .leaderboard-status:empty {
   display: none;
 }
-.leaderboard-list {
-  display: grid;
-  margin-top: 0.25rem;
-}
-.leaderboard-row {
-  display: grid;
-  grid-template-columns: 1.5rem 0.75rem minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 0.45rem;
-  min-height: 2.25rem;
-  border-bottom: 1px solid #e2e8f0;
-  font-size: 0.86rem;
-}
-.leaderboard-row:last-child {
-  border-bottom: 0;
-}
-.leaderboard-row.is-current-pilot {
-  margin-inline: -0.4rem;
-  padding-inline: 0.4rem;
-  border-radius: 0.4rem;
-  background: #eaf4ff;
-}
 .leaderboard-rank {
   color: #52657a;
   font-variant-numeric: tabular-nums;
@@ -1266,10 +1244,7 @@ button {
   .dashboard-info:not(.is-expanded) .coverage-pilot-row:nth-child(n + 4) {
     display: none;
   }
-  .dashboard-info:not(.is-expanded) .info-card > :not(h2):not(.leaderboard-period):not(.leaderboard-list):not(.coverage-card-heading):not(.coverage-table) {
-    display: none;
-  }
-  .dashboard-info:not(.is-expanded) .leaderboard-list > :nth-child(n + 4) {
+  .dashboard-info:not(.is-expanded) .info-card > :not(h2):not(.leaderboard-period):not(.coverage-card-heading):not(.coverage-table) {
     display: none;
   }
   .dashboard-info:not(.is-expanded) .coverage-leaderboard > .coverage-card-heading {

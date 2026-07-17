@@ -17,7 +17,13 @@ async function createPilot(displayName: string) {
   return { userId: user.id, displayName };
 }
 
-async function addClaim(pilot: { userId: string }, input: { month: string; x: number; y: number; at: string }) {
+async function addClaim(pilot: { userId: string }, input: {
+  month: string;
+  x: number;
+  y: number;
+  at: string;
+  cellSize?: number;
+}) {
   const [file] = await database.db.insert(igcFiles).values({
     userId: pilot.userId,
     originalFilename: 'coverage.igc',
@@ -36,7 +42,7 @@ async function addClaim(pilot: { userId: string }, input: { month: string; x: nu
   if (!flight) throw new Error('Expected a flight.');
   await database.db.insert(competitionGridClaims).values({
     competitionMonth: input.month,
-    cellSize: 1_000,
+    cellSize: input.cellSize ?? 1_000,
     x: input.x,
     y: input.y,
     claimFlight: flight.id,
@@ -115,5 +121,113 @@ describe('MonthlyCoverageService with PostGIS', () => {
     ]);
     const territory = await service.getArenaTerritory({ competitionMonth: '2026-07', launchAreaId: arenaId });
     expect(territory.features.map((feature) => feature.properties.x)).toEqual([0]);
+  });
+
+  it('shares ranks, orders ties alphabetically, caps leaders at ten, and reports signed-in pilots outside the leaders', async () => {
+    const pilots = [];
+    for (let index = 0; index < 11; index += 1) {
+      const pilot = await createPilot(`Pilot ${String(index).padStart(2, '0')}`);
+      pilots.push(pilot);
+      await addClaim(pilot, {
+        month: '2026-07-01',
+        x: index,
+        y: 0,
+        at: '2026-07-10T12:00:00Z',
+      });
+    }
+    const zeroClaimPilot = await createPilot('Zero Claim Pilot');
+    const service = createMonthlyCoverageService(database.db, { cellSize: 1_000 });
+
+    const excludedClaimant = await service.getGlobalLeaderboard({
+      competitionMonth: '2026-07',
+      ...world,
+      currentUserId: pilots[10]!.userId,
+    });
+
+    expect(excludedClaimant.leaders).toHaveLength(10);
+    expect(excludedClaimant.leaders.map((pilot) => pilot.displayName)).toEqual(
+      Array.from({ length: 10 }, (_, index) => `Pilot ${String(index).padStart(2, '0')}`),
+    );
+    expect(excludedClaimant.leaders.every((pilot) => pilot.rank === 1)).toBe(true);
+    expect(excludedClaimant.currentPilot).toMatchObject({
+      userId: pilots[10]!.userId,
+      displayName: 'Pilot 10',
+      claimedCellCount: 1,
+      exclusiveCellCount: 1,
+      sharedCellCount: 0,
+      rank: 1,
+    });
+
+    const absentPilot = await service.getGlobalLeaderboard({
+      competitionMonth: '2026-07',
+      ...world,
+      currentUserId: zeroClaimPilot.userId,
+    });
+    expect(absentPilot.currentPilot).toEqual({
+      userId: zeroClaimPilot.userId,
+      displayName: 'Zero Claim Pilot',
+      claimedCellCount: 0,
+      exclusiveCellCount: 0,
+      sharedCellCount: 0,
+      claimedAreaSquareMeters: 0,
+      rank: null,
+    });
+  });
+
+  it('includes cells across an international-date-line-crossing viewport', async () => {
+    const indexes = await database.pool.query<{ x: number; y: number }>(`
+      SELECT
+        floor(ST_X(ST_Transform(ST_SetSRID(ST_Point(179.95, 0), 4326), 6933)) / 1000)::integer AS x,
+        floor(ST_Y(ST_Transform(ST_SetSRID(ST_Point(179.95, 0), 4326), 6933)) / 1000)::integer AS y
+    `);
+    const cell = indexes.rows[0];
+    if (!cell) throw new Error('Expected projected grid coordinates.');
+    const pilot = await createPilot('Date Line Pilot');
+    await addClaim(pilot, {
+      month: '2026-07-01',
+      x: cell.x,
+      y: cell.y,
+      at: '2026-07-10T12:00:00Z',
+    });
+
+    const result = await createMonthlyCoverageService(database.db, { cellSize: 1_000 })
+      .getGlobalLeaderboard({
+        competitionMonth: '2026-07',
+        west: 179.9,
+        south: -0.1,
+        east: -179.9,
+        north: 0.1,
+        currentUserId: pilot.userId,
+      });
+
+    expect(result.leaders).toMatchObject([{ userId: pilot.userId, claimedCellCount: 1 }]);
+    expect(result.currentPilot).toBeNull();
+  });
+
+  it('isolates configured cell sizes and returns deterministic polygons or an empty collection', async () => {
+    const pilot = await createPilot('Geometry Pilot');
+    await addClaim(pilot, { month: '2026-07-01', x: 1, y: 0, at: '2026-07-10T12:00:00Z' });
+    await addClaim(pilot, { month: '2026-07-01', x: 0, y: 0, at: '2026-07-10T13:00:00Z' });
+    await addClaim(pilot, {
+      month: '2026-07-01',
+      x: 2,
+      y: 0,
+      at: '2026-07-10T14:00:00Z',
+      cellSize: 2_000,
+    });
+    const service = createMonthlyCoverageService(database.db, { cellSize: 1_000 });
+
+    const july = await service.getGlobalTerritory({ competitionMonth: '2026-07' });
+    const august = await service.getGlobalTerritory({ competitionMonth: '2026-08' });
+
+    expect(july.features).toHaveLength(2);
+    expect(july.features.map((feature) => feature.properties.cellId)).toEqual([
+      '1000:0:0',
+      '1000:1:0',
+    ]);
+    expect(july.features.every((feature) => feature.geometry.type === 'Polygon')).toBe(true);
+    expect(july.features.flatMap((feature) => feature.geometry.coordinates).flat(2)
+      .every((coordinate) => Math.abs(coordinate) <= 180)).toBe(true);
+    expect(august).toEqual({ type: 'FeatureCollection', features: [] });
   });
 });
