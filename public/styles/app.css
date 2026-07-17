@@ -833,6 +833,11 @@ button {
 }
 
 .coverage-playtest-nav .secondary-button {
+  width: auto;
+  border: 1px solid rgb(255 255 255 / 32%);
+  border-radius: 0.6rem;
+  color: var(--color-on-primary);
+  background: rgb(255 255 255 / 8%);
   text-decoration: none;
 }
 
@@ -852,13 +857,19 @@ button {
   text-transform: uppercase;
 }
 
-.coverage-overview-button[aria-pressed="true"] {
+.coverage-overview-button {
   border-color: var(--color-primary-strong);
-  background: color-mix(in srgb, var(--color-primary-strong) 14%, white);
+  color: var(--color-primary-strong);
+  background: var(--color-surface);
+}
+
+.coverage-overview-button[aria-pressed="true"] {
+  color: var(--color-on-primary);
+  background: var(--color-primary-strong);
 }
 
 .coverage-table {
-  min-width: 39rem;
+  min-width: 0;
   font-variant-numeric: tabular-nums;
 }
 
@@ -869,7 +880,7 @@ button {
 .coverage-table-header,
 .coverage-pilot-row {
   display: grid;
-  grid-template-columns: minmax(12rem, 1.8fr) repeat(3, minmax(5rem, 0.7fr)) minmax(7rem, 0.9fr);
+  grid-template-columns: minmax(9rem, 1.7fr) repeat(3, minmax(4.6rem, 0.7fr)) minmax(6.5rem, 0.9fr);
   align-items: center;
   gap: 0.55rem;
   width: 100%;
@@ -935,6 +946,17 @@ button {
   margin: 0.35rem 0 0;
   padding-left: 1.15rem;
 }
+
+@media (min-width: 901px) {
+  .coverage-playtest .dashboard-info {
+    inset-block-start: 196px;
+  }
+
+  .coverage-playtest .dashboard-information {
+    grid-template-columns: minmax(560px, 640px) minmax(0, 1fr);
+  }
+}
+
 .leaderboard-card[hidden] {
   display: none;
 }
@@ -1246,11 +1268,33 @@ button {
     height: calc(100% - 25px);
     overflow: hidden;
   }
-  .dashboard-info:not(.is-expanded) .info-card > :not(h2):not(.leaderboard-period):not(.leaderboard-list) {
+  .coverage-table {
+    min-width: 39rem;
+  }
+  .dashboard-info:not(.is-expanded) .coverage-table-header,
+  .dashboard-info:not(.is-expanded) .coverage-pilot-row {
+    grid-template-columns: minmax(9rem, 1fr) 5rem;
+  }
+  .dashboard-info:not(.is-expanded) .coverage-table-header > :nth-child(n + 3),
+  .dashboard-info:not(.is-expanded) .coverage-pilot-row > :nth-child(n + 3),
+  .dashboard-info:not(.is-expanded) .coverage-pilot-row:nth-child(n + 4) {
+    display: none;
+  }
+  .dashboard-info:not(.is-expanded) .info-card > :not(h2):not(.leaderboard-period):not(.leaderboard-list):not(.coverage-card-heading):not(.coverage-table) {
     display: none;
   }
   .dashboard-info:not(.is-expanded) .leaderboard-list > :nth-child(n + 4) {
     display: none;
+  }
+  .dashboard-info:not(.is-expanded) .coverage-leaderboard > .coverage-card-heading {
+    display: flex;
+  }
+  .dashboard-info:not(.is-expanded) .coverage-card-heading .coverage-overview-button {
+    display: none;
+  }
+  .dashboard-info:not(.is-expanded) .coverage-leaderboard > .coverage-table {
+    display: block;
+    min-width: 0;
   }
   .dashboard-info.is-expanded .dashboard-information {
     overflow-y: auto;
