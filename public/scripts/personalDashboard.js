@@ -2,11 +2,14 @@ import { createLatestRequest } from './latestRequest.js';
 import { loadPersonalTerritory } from './personalMap.js';
 import { renderPersonalStats } from './personalStatsView.js';
 import { personalStatsUrl } from './viewportQuery.js';
+import { initializeMapFlightAids } from './mapFlightAids.js';
 
 export function initializePersonalDashboard({
   documentRef = document,
   maplibre = window.maplibregl,
   fetchImpl = window.fetch.bind(window),
+  navigatorRef = globalThis.navigator,
+  storage,
 } = {}) {
   const mapElement = documentRef.querySelector('[data-dashboard-map]');
   const emptyState = documentRef.querySelector('[data-map-empty-state]');
@@ -56,6 +59,9 @@ export function initializePersonalDashboard({
       } catch {
         showStatus('Unable to load your territory. Refresh the page.');
       }
+      initializeMapFlightAids({
+        map, mapElement, documentRef, fetchImpl, navigatorRef, storage,
+      });
       mapReady = true;
       if (map.getBounds) await statsRequest.run(map.getBounds());
     });

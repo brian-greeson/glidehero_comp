@@ -14,6 +14,7 @@ import {
   positionCoverageCellPopup,
   setCoverageData,
 } from './competitionCoverageMap.js';
+import { initializeMapFlightAids } from './mapFlightAids.js';
 
 async function jsonRequest(url, fetchImpl, signal) {
   const response = await fetchImpl(url, { credentials: 'same-origin', headers: { accept: 'application/json' }, signal });
@@ -28,6 +29,8 @@ export function initializeCompetitionCoverage({
   locationRef = typeof window === 'undefined' ? { pathname: '', search: '' } : window.location,
   historyRef = typeof window === 'undefined' ? undefined : window.history,
   now = () => new Date(),
+  navigatorRef = globalThis.navigator,
+  storage,
 } = {}) {
   const root = documentRef.querySelector('[data-competition-coverage]');
   const mapElement = documentRef.querySelector('[data-coverage-map]');
@@ -153,6 +156,10 @@ export function initializeCompetitionCoverage({
       } catch {
         setStatus('Unable to load competition coverage. Try again.');
         card?.removeAttribute('aria-busy');
+      } finally {
+        initializeMapFlightAids({
+          map, mapElement, documentRef, fetchImpl, navigatorRef, storage,
+        });
       }
     });
     if (!arenaSourceId) map.on('moveend', () => { if (mapReady) void leaderboardRequest.run(); });

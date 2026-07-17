@@ -427,8 +427,7 @@ button {
   font-weight: 600;
   text-transform: uppercase;
 }
-.mode-tab[aria-disabled='true'],
-.map-actions button[aria-disabled='true'] {
+.mode-tab[aria-disabled='true'] {
   cursor: default;
 }
 .mode-tab.is-active {
@@ -754,24 +753,40 @@ button {
   color: var(--color-text-muted);
   font-size: 0.86rem;
 }
-.map-actions {
-  position: absolute;
-  z-index: 2;
-  top: 112px;
-  right: 16px;
-  display: grid;
-  gap: 0.6rem;
+.flight-aid-control[hidden] {
+  display: none;
 }
-.map-actions button {
+.flight-aid-button {
+  display: grid;
   width: 44px;
+  min-width: 44px;
   height: 44px;
+  min-height: 44px;
+  place-items: center;
   padding: 0;
-  border: 0;
-  border-radius: 0.7rem;
   color: #0f172a;
-  background: #fff;
-  box-shadow: 0 3px 12px rgb(0 0 0 / 0.14);
-  font-size: 1.4rem;
+  font-size: 1.2rem;
+  line-height: 1;
+}
+.flight-aid-button[aria-pressed='true'] {
+  color: #fff;
+  background: var(--color-primary-strong);
+}
+.map-flight-aid-status {
+  position: absolute;
+  z-index: 5;
+  right: 16px;
+  bottom: 24px;
+  max-width: min(20rem, calc(100% - 2rem));
+  margin: 0;
+  padding: 0.65rem 0.8rem;
+  border-radius: 0.65rem;
+  color: var(--color-text-strong);
+  background: rgb(255 255 255 / 94%);
+  box-shadow: 0 5px 18px rgb(15 23 42 / 18%);
+}
+.map-flight-aid-status[hidden] {
+  display: none;
 }
 .map-empty-state {
   position: absolute;
@@ -1276,9 +1291,12 @@ button {
     top: 14px;
     right: 12px;
   }
-  .map-actions {
-    top: 110px;
+  .map-flight-aid-status {
     right: 12px;
+    bottom: 92px;
+  }
+  .has-competition-breadcrumb .map-flight-aid-status {
+    bottom: 308px;
   }
   .toast {
     top: 70px;

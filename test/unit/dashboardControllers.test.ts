@@ -48,7 +48,7 @@ function element(): any {
 
 function mapHarness() {
   let loadHandler: (() => Promise<void>) | undefined;
-  let moveHandler: (() => void) | undefined;
+  const moveHandlers: Array<() => void> = [];
   let errorHandler: (() => void) | undefined;
   let clickHandler: ((event: any) => Promise<void>) | undefined;
   const layers = new Set<string>();
@@ -74,7 +74,7 @@ function mapHarness() {
       if (event === 'error') errorHandler = handler;
     }),
     on: vi.fn((event: string, handler: any) => {
-      if (event === 'moveend') moveHandler = handler;
+      if (event === 'moveend') moveHandlers.push(handler);
       if (event === 'click') clickHandler = handler;
     }),
   };
@@ -85,7 +85,7 @@ function mapHarness() {
       NavigationControl: vi.fn(function NavigationControl() {}),
     },
     load: async () => loadHandler?.(),
-    move(next = viewport) { viewport = next; moveHandler?.(); },
+    move(next = viewport) { viewport = next; moveHandlers.forEach((handler) => handler()); },
     error() { errorHandler?.(); },
     click(point = { x: 50, y: 80 }) { return clickHandler?.({ point }); },
     setRenderedFeatures(features: any[]) { renderedFeatures = features; },
@@ -171,6 +171,7 @@ describe('Personal dashboard controller', () => {
     const claimedArea = element();
     const flights = element();
     const documentRef = {
+      createElement: element,
       querySelector(selector: string) {
         return new Map<string, any>([
           ['[data-dashboard-map]', mapElement],

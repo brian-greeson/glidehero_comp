@@ -13,6 +13,7 @@ import { createIgcFileService } from './services/igcFileService.js';
 import { createProfileService } from './services/profileService.js';
 import { createLocationLookupService } from './services/locationLookupService.js';
 import { createMonthlyCoverageService } from './services/monthlyCoverageService.js';
+import { createMapGridService } from './services/mapGridService.js';
 import { createAdminAreaPageRenderer, createAdminPageRenderer, createPageRenderer } from './views/renderer.js';
 import { createAdminAreaRouter } from './web/adminAreaRouter.js';
 import { createCurrentUserMiddleware } from './web/currentUserMiddleware.js';
@@ -29,6 +30,7 @@ const adminAreas = createAdminAreaService(db, { cellSize: config.gridClaimCellSi
 const locationLookup = createLocationLookupService();
 const arenas = createArenaService(db, { cellSize: config.gridClaimCellSize });
 const monthlyCoverage = createMonthlyCoverageService(db, { cellSize: config.gridClaimCellSize });
+const mapGrid = createMapGridService(db, { cellSize: config.gridClaimCellSize });
 const flightProcessing = createFlightProcessingService(db, {
   s3Client,
   bucketName: config.bucket.bucketName,
@@ -58,6 +60,7 @@ const webMiddleware = [
     igcFiles,
     profiles,
     gridClaim,
+    mapGrid,
     coverage: monthlyCoverage,
     arenas,
     renderPage: createPageRenderer({ mapTilerApiKey: config.mapTilerApiKey }),

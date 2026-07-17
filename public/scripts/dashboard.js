@@ -12,6 +12,8 @@ export function initializeDashboard({
   locationRef = typeof window === 'undefined' ? { pathname: '', search: '' } : window.location,
   historyRef = typeof window === 'undefined' ? undefined : window.history,
   now = () => new Date(),
+  navigatorRef = globalThis.navigator,
+  storage,
 } = {}) {
   initializeOnboarding({ documentRef });
   initializeMobileSheet({ documentRef });
@@ -27,11 +29,13 @@ export function initializeDashboard({
       locationRef,
       historyRef,
       now,
+      navigatorRef,
+      storage,
     });
     return;
   }
 
-  initializePersonalDashboard({ documentRef, maplibre, fetchImpl });
+  initializePersonalDashboard({ documentRef, maplibre, fetchImpl, navigatorRef, storage });
 }
 
 if (typeof window !== 'undefined' && typeof document !== 'undefined') {

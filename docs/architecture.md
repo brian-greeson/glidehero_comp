@@ -338,6 +338,35 @@ Extract reusable browser behavior into a focused module instead of continually g
 
 Feature-specific browser assets may use a subdirectory, as the admin area editor does.
 
+### Map flight aids
+
+The reusable flight-aid modules in `public/scripts/` are composed by
+`mapFlightAids.js` and initialized by the Global/Arena competition controller
+and the Personal dashboard. They keep three concerns separate:
+
+- `mapGridOverlay.js` fetches and renders neutral grid outlines. Viewport maps
+  use `/v1/grid`; Arena maps use `/v1/arenas/:sourceId/grid`.
+- `mapLocationTracker.js` owns the foreground geolocation watch, follow/pan
+  state, accuracy filtering, and trail segmentation.
+- `mapTrailStore.js` owns the single browser-local trail. `mapTrailLayer.js`
+  renders its segments and current-position dot.
+
+The shared `mapButtonControl.js` keeps the custom MapLibre controls accessible
+and visually consistent. `mapFlightAidStatus.vto` is the reusable page contract
+for transient status and error messages.
+
+Grid geometry remains server-owned. `MapGridService` in `src/services/` uses
+PostGIS to return viewport grid cells or exact persisted Arena membership, while
+`mapGridGeoJson.ts` in `src/domain/territory/` builds the response shape. The
+browser controls only presentation and request timing; API routes remain
+authenticated and enforce viewport validation and result limits.
+
+Live location and its trail deliberately remain browser-only state. They are
+not sent to the server, do not enter the flight-upload pipeline, and do not
+affect territory or competition calculations. Browser background execution is
+not part of this architecture; visibility changes break the trail into separate
+segments before foreground tracking resumes.
+
 ### Styles
 
 Location: `public/styles/`

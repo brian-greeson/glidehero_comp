@@ -15,6 +15,7 @@ import type { GridClaimService } from '../../src/services/gridClaimService.js';
 import type { MonthlyCoverageService } from '../../src/services/monthlyCoverageService.js';
 import type { AdminFlightService } from '../../src/services/adminFlightService.js';
 import type { ArenaService } from '../../src/services/arenaService.js';
+import type { MapGridService } from '../../src/services/mapGridService.js';
 import { createPageRenderer } from '../../src/views/renderer.js';
 import { createCurrentUserMiddleware } from '../../src/web/currentUserMiddleware.js';
 import { createSessionCookie } from '../../src/web/sessionCookie.js';
@@ -57,6 +58,16 @@ function arenaService(): ArenaService {
     search: vi.fn(async () => []),
     getBySourceId: vi.fn(async () => null),
     getByRoute: vi.fn(async () => null),
+  };
+}
+
+function mapGridService(): MapGridService {
+  return {
+    getViewport: vi.fn(async () => ({
+      status: 'ok' as const,
+      geojson: { type: 'FeatureCollection' as const, features: [] },
+    })),
+    getArena: vi.fn(async () => ({ type: 'FeatureCollection' as const, features: [] })),
   };
 }
 
@@ -159,12 +170,14 @@ function dependencies(
     getCellClaimants: vi.fn(async () => [{ userId: user.userId, displayName: user.displayName }]),
   };
   const arenas = arenaService();
+  const mapGrid = mapGridService();
   const router = createWebRouter({
     auth,
     cookie,
     igcFiles,
     profiles,
     gridClaim,
+    mapGrid,
     coverage,
     arenas,
     renderPage,
@@ -174,6 +187,7 @@ function dependencies(
     igcFiles,
     profiles,
     gridClaim,
+    mapGrid,
     coverage,
     arenas,
     expectedGridGeoJson,
@@ -185,8 +199,49 @@ function dependencies(
 }
 
 describe('webRouter', () => {
+  it('serves bounded viewport and Arena grids only to authenticated users', async () => {
+    const { app, mapGrid, arenas } = dependencies();
+    await withServer(app, async (baseUrl) => {
+      const anonymous = await fetch(`${baseUrl}/v1/grid?west=-107&south=39&east=-105&north=41`);
+      expect(anonymous.status).toBe(401);
+
+      const invalid = await fetch(`${baseUrl}/v1/grid?west=nope&south=39&east=-105&north=41`, {
+        headers: { cookie: 'glidehero_session=valid-token' },
+      });
+      expect(invalid.status).toBe(400);
+
+      const valid = await fetch(`${baseUrl}/v1/grid?west=-107&south=39&east=-105&north=41`, {
+        headers: { cookie: 'glidehero_session=valid-token' },
+      });
+      expect(valid.status).toBe(200);
+      expect(valid.headers.get('content-type')).toContain('application/geo+json');
+      expect(mapGrid.getViewport).toHaveBeenCalledWith({ west: -107, south: 39, east: -105, north: 41 });
+
+      vi.mocked(mapGrid.getViewport).mockResolvedValueOnce({ status: 'too_large' });
+      const tooLarge = await fetch(`${baseUrl}/v1/grid?west=-107&south=39&east=-105&north=41`, {
+        headers: { cookie: 'glidehero_session=valid-token' },
+      });
+      expect(tooLarge.status).toBe(422);
+      expect(await tooLarge.json()).toEqual({
+        error: { code: 'grid_viewport_too_large', message: 'Zoom in to view grid.' },
+      });
+
+      vi.mocked(arenas.getBySourceId).mockResolvedValueOnce(arena);
+      const arenaGrid = await fetch(`${baseUrl}/v1/arenas/745/grid`, {
+        headers: { cookie: 'glidehero_session=valid-token' },
+      });
+      expect(arenaGrid.status).toBe(200);
+      expect(mapGrid.getArena).toHaveBeenCalledWith({ launchAreaId: arena.id });
+
+      const unknown = await fetch(`${baseUrl}/v1/arenas/999/grid`, {
+        headers: { cookie: 'glidehero_session=valid-token' },
+      });
+      expect(unknown.status).toBe(404);
+    });
+  });
+
   it('limits admin routes to configured admin emails and redirects completed reprocessing', async () => {
-    const { auth, cookie, igcFiles, profiles, gridClaim, coverage, arenas, renderPage } = dependencies();
+    const { auth, cookie, igcFiles, profiles, gridClaim, mapGrid, coverage, arenas, renderPage } = dependencies();
     const adminFlights: AdminFlightService = {
       listRecentFlights: vi.fn(async () => [{
         id: '00000000-0000-4000-8000-000000000020',
@@ -207,6 +262,7 @@ describe('webRouter', () => {
       igcFiles,
       profiles,
       gridClaim,
+      mapGrid,
       coverage,
       arenas,
       renderPage,
@@ -520,6 +576,7 @@ describe('webRouter', () => {
         })),
         reprocess: vi.fn(async () => ({ status: 'not_found' as const })),
       },
+      mapGrid: mapGridService(),
       coverage: {
         getGlobalTerritory: vi.fn(async () => emptyMonthlyCoverageGeoJson()),
         getArenaTerritory: vi.fn(async () => emptyMonthlyCoverageGeoJson()),
@@ -579,6 +636,7 @@ describe('webRouter', () => {
             })),
             reprocess: vi.fn(async () => ({ status: 'not_found' as const })),
           },
+          mapGrid: mapGridService(),
           coverage: {
             getGlobalTerritory: vi.fn(async () => emptyMonthlyCoverageGeoJson()),
             getArenaTerritory: vi.fn(async () => emptyMonthlyCoverageGeoJson()),

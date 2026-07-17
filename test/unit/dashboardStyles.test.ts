@@ -29,4 +29,15 @@ describe('dashboard stylesheet contract', () => {
     expect(css).toMatch(/\.coverage-cell-popup\s*{[^}]*width: max-content;[^}]*transform: translate\(-50%, calc\(-100% - 0\.75rem\)\);/s);
     expect(css).toMatch(/\.coverage-cell-popup\[data-placement='below'\]\s*{\s*transform: translate\(-50%, 0\.75rem\);/);
   });
+
+  it('provides accessible flight-aid controls above the mobile sheet', async () => {
+    const css = await readFile('public/styles/app.css', 'utf8');
+
+    expect(css).toMatch(/\.flight-aid-button\s*{[^}]*width: 44px;[^}]*min-height: 44px;/s);
+    expect(css).toMatch(/\.flight-aid-button\[aria-pressed='true'\]\s*{[^}]*background: var\(--color-primary-strong\);/s);
+    expect(css).toMatch(/\.flight-aid-control\[hidden\]\s*{\s*display: none;/);
+    expect(css).toMatch(/\.map-flight-aid-status\s*{[^}]*z-index: 5;/s);
+    expect(css).toMatch(/@media \(max-width: 900px\)[\s\S]*?\.map-flight-aid-status\s*{[^}]*bottom: 92px;/);
+    expect(css).not.toContain('.map-actions');
+  });
 });

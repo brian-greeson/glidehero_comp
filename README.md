@@ -118,6 +118,27 @@ The Competitive and Personal controls navigate between `/global` and
 `/personal`. Arena pages remain Competitive views; selecting Personal navigates
 to `/personal` rather than applying Arena filtering to personal territory.
 
+### Live map flight aids
+
+Every Global, Personal, and Arena map includes optional grid and location
+controls. The grid control draws neutral cell outlines over the existing map
+without changing claims, scoring, or the selected coverage. Global and Personal
+maps request cells for the visible viewport once the map is zoomed in far
+enough; Arena maps draw the Arena's exact generated cells at any zoom level.
+
+The location control uses the browser's foreground geolocation support to show
+the pilot's current-position dot and one temporary trail. Manual
+panning pauses automatic following while location updates and trail collection
+continue; selecting the location control again resumes following. Fixes with
+accuracy worse than 100 meters are ignored.
+
+The trail is stored only in browser storage and is shared across the app's maps.
+It is never uploaded or treated as a flight track. A clear-trail control appears
+only when a trail exists. Stopping tracking, leaving the app in the background,
+or returning after a long update gap starts a new trail segment so separate
+positions are not joined by a misleading line. Background tracking is not
+supported.
+
 ### Initial version scope
 
 Version 1 intentionally remains focused on the core gameplay.
@@ -131,6 +152,7 @@ Included features:
 - Monthly competitive territory map.
 - Dynamic viewport-based leaderboard.
 - Launch-area Arena search and fixed-area leaderboards.
+- Optional grid overlay and foreground live-position trail on every map.
 - Flight statistics after upload.
 
 Excluded from Version 1:

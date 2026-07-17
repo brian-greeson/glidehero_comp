@@ -3,11 +3,8 @@
     {{ include "components/dashboardNav.vto" { activeMode: "personal", currentPath: "/personal", currentUser, isAdmin, uploadSuccess, uploadError, territoryColorSuccess, territoryColorError } }}
     <section class="map-stage" aria-label="Personal territory map">
       <div class="map-canvas" data-dashboard-map data-map-style-url="{{ mapTilerStyleUrl }}" data-current-user-id="{{ currentUser.userId }}" data-territory-color="{{ currentUser.territoryColor }}"></div>
-      <div class="map-actions" aria-label="Map actions">
-        <button type="button" data-stub="recenter-map" aria-label="Recenter map" aria-disabled="true">◎</button>
-        <button type="button" data-stub="layer-selector" aria-label="Select map layers" aria-disabled="true">▱</button>
-      </div>
       <p class="map-empty-state" data-map-empty-state hidden>Map unavailable. Check your connection and try again.</p>
+      {{ include "components/mapFlightAidStatus.vto" }}
     </section>
     <aside class="dashboard-info" data-mobile-sheet aria-label="Map information">
       <button type="button" class="sheet-handle" data-sheet-toggle aria-expanded="false" aria-controls="dashboard-information"><span aria-hidden="true"></span><span class="sr-only" data-sheet-toggle-label>Expand map information</span></button>

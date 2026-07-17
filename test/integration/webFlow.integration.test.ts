@@ -4,6 +4,7 @@ import { createAuthService } from '../../src/services/authService.js';
 import { createArenaService } from '../../src/services/arenaService.js';
 import { createMonthlyCoverageService } from '../../src/services/monthlyCoverageService.js';
 import { createGridClaimService } from '../../src/services/gridClaimService.js';
+import { createMapGridService } from '../../src/services/mapGridService.js';
 import { createProfileService } from '../../src/services/profileService.js';
 import { createPageRenderer } from '../../src/views/renderer.js';
 import { createCurrentUserMiddleware } from '../../src/web/currentUserMiddleware.js';
@@ -30,6 +31,7 @@ describe('GlideHero browser authentication flow', () => {
     const auth = createAuthService(testDatabase.db, { sessionTtlSeconds: 604800 });
     const profiles = createProfileService(testDatabase.db);
     const gridClaim = createGridClaimService(testDatabase.db, { cellSize: 1_000 });
+    const mapGrid = createMapGridService(testDatabase.db, { cellSize: 1_000 });
     const coverage = createMonthlyCoverageService(testDatabase.db, { cellSize: 1_000 });
     const arenas = createArenaService(testDatabase.db, { cellSize: 1_000 });
     const cookie = createSessionCookie({
@@ -46,6 +48,7 @@ describe('GlideHero browser authentication flow', () => {
           igcFiles: { upload: async () => ({ status: 'completed', flightId: '00000000-0000-4000-8000-000000000020' }) },
           profiles,
           gridClaim,
+          mapGrid,
           coverage,
           arenas,
           renderPage: createPageRenderer({ mapTilerApiKey: 'maptiler-test-key' }),

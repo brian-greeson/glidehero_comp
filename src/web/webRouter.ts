@@ -5,6 +5,7 @@ import { normalizeCompetitionLeaderboardMonth } from '../domain/competition/comp
 import { AppError } from '../domain/errors.js';
 import { AuthFailure, type AuthenticatedUser, type AuthService } from '../services/authService.js';
 import type { MonthlyCoveragePeriod, MonthlyCoverageService } from '../services/monthlyCoverageService.js';
+import type { MapGridService } from '../services/mapGridService.js';
 import { normalizeTerritoryColor, type ProfileService } from '../services/profileService.js';
 import type { GridClaimService } from '../services/gridClaimService.js';
 import type { AdminFlightService } from '../services/adminFlightService.js';
@@ -80,6 +81,7 @@ export function createWebRouter(dependencies: {
   igcFiles: IgcFileService;
   profiles: ProfileService;
   gridClaim: GridClaimService;
+  mapGrid: MapGridService;
   coverage: MonthlyCoverageService;
   arenas: ArenaService;
   renderPage: PageRenderer;
@@ -155,6 +157,32 @@ export function createWebRouter(dependencies: {
         ...viewport.data,
       });
       res.status(200).json(stats);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.get('/v1/grid', async (req, res, next) => {
+    if (!res.locals.currentUser) {
+      next(new AppError(401, 'unauthorized', 'Sign in to view the map grid.'));
+      return;
+    }
+    const viewport = viewportBoundsSchema.safeParse(req.query);
+    if (!viewport.success) {
+      res.status(400).json({
+        error: { code: 'invalid_request', message: 'Grid requires valid viewport bounds.' },
+      });
+      return;
+    }
+    try {
+      const result = await dependencies.mapGrid.getViewport(viewport.data);
+      if (result.status === 'too_large') {
+        res.status(422).json({
+          error: { code: 'grid_viewport_too_large', message: 'Zoom in to view grid.' },
+        });
+        return;
+      }
+      res.status(200).type('application/geo+json').send(result.geojson);
     } catch (error) {
       next(error);
     }
@@ -249,6 +277,29 @@ export function createWebRouter(dependencies: {
         return;
       }
       res.status(200).type('application/geo+json').send(arena.boundary);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.get('/v1/arenas/:sourceId/grid', async (req, res, next) => {
+    if (!res.locals.currentUser) {
+      next(new AppError(401, 'unauthorized', 'Sign in to view an Arena grid.'));
+      return;
+    }
+    const sourceId = arenaSourceIdSchema.safeParse(req.params.sourceId);
+    if (!sourceId.success) {
+      res.status(404).json({ error: { code: 'not_found', message: 'Arena not found.' } });
+      return;
+    }
+    try {
+      const arena = await dependencies.arenas.getBySourceId(sourceId.data);
+      if (!arena) {
+        res.status(404).json({ error: { code: 'not_found', message: 'Arena not found.' } });
+        return;
+      }
+      const grid = await dependencies.mapGrid.getArena({ launchAreaId: arena.id });
+      res.status(200).type('application/geo+json').send(grid);
     } catch (error) {
       next(error);
     }

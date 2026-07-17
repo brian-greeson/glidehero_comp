@@ -6,6 +6,7 @@
       <div class="map-canvas" data-coverage-map data-map-style-url="{{ mapTilerStyleUrl }}" data-current-user-id="{{ currentUser.userId }}" data-territory-color="{{ currentUser.territoryColor }}" data-arena-source-id="{{ arena.sourceId }}"></div>
       {{ include "components/arenaSearch.vto" }}
       <p class="map-empty-state" data-map-empty-state hidden></p>
+      {{ include "components/mapFlightAidStatus.vto" }}
       <div class="coverage-cell-popup" data-coverage-cell-popup hidden></div>
     </section>
     <aside class="dashboard-info" data-mobile-sheet aria-label="{{ arena.name }} coverage rankings">

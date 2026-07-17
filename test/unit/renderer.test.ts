@@ -78,6 +78,8 @@ describe('Vento page renderer', () => {
     expect(authenticated).toContain('<h2>Coverage leaderboard</h2>');
     expect(authenticated).toContain('data-coverage-overview');
     expect(authenticated).toContain('data-coverage-cell-popup');
+    expect(authenticated).toContain('data-map-flight-aid-status');
+    expect(authenticated).toContain('role="status" aria-live="polite"');
     expect(authenticated).toContain('data-competition-period');
     expect(authenticated).toContain('aria-label="Coverage time period"');
     expect(authenticated).toContain('data-current-month-option');
@@ -121,6 +123,9 @@ describe('Vento page renderer', () => {
     const personal = await render({ currentUser, page: 'personal' });
     expect(personal).toContain('href="/personal" class="mode-tab is-active" aria-current="page">Personal</a>');
     expect(personal).toContain('data-personal-stats');
+    expect(personal).toContain('data-map-flight-aid-status');
+    expect(personal).not.toContain('data-stub="recenter-map"');
+    expect(personal).not.toContain('data-stub="layer-selector"');
     expect(personal).not.toContain('data-arena-search');
     expect(personal).not.toContain('competition-breadcrumb');
 
@@ -147,6 +152,7 @@ describe('Vento page renderer', () => {
     expect(arena).toContain('data-competition-coverage="arena"');
     expect(arena).toContain('data-coverage-map');
     expect(arena).toContain('data-arena-source-id="745"');
+    expect(arena).toContain('data-map-flight-aid-status');
     expect(arena).toContain('<a href="/global" data-competition-period-link="/global">Global</a>');
     expect(arena).toContain('aria-current="page">Boulder</span>');
     expect(arena).toContain('data-arena-search-input');
