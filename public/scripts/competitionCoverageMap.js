@@ -1,8 +1,8 @@
 import { createTerritoryBoundaryLayer } from './mapStyles.js';
 
-export const COVERAGE_SOURCE_ID = 'coverage-playtest';
-export const COVERAGE_FILL_LAYER_ID = 'coverage-playtest-fill';
-export const COVERAGE_OUTLINE_LAYER_ID = 'coverage-playtest-outline';
+export const COVERAGE_SOURCE_ID = 'competition-coverage';
+export const COVERAGE_FILL_LAYER_ID = 'competition-coverage-fill';
+export const COVERAGE_OUTLINE_LAYER_ID = 'competition-coverage-outline';
 
 const COVERAGE_COLOR = [
   'case',

@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { normalizeCompetitionLeaderboardMonth } from '../domain/competition/competitionLeaderboardMonth.js';
 import { AppError } from '../domain/errors.js';
 import { AuthFailure, type AuthenticatedUser, type AuthService } from '../services/authService.js';
-import type { CompetitionGridClaimService } from '../services/competitionGridClaimService.js';
+import type { MonthlyCoveragePeriod, MonthlyCoverageService } from '../services/monthlyCoverageService.js';
 import { normalizeTerritoryColor, type ProfileService } from '../services/profileService.js';
 import type { GridClaimService } from '../services/gridClaimService.js';
 import type { AdminFlightService } from '../services/adminFlightService.js';
@@ -31,6 +31,10 @@ const competitionMonthValue = z.string().refine((value) => {
   }
 });
 const competitionMonthSchema = z.object({ month: competitionMonthValue.optional() }).strict();
+const competitionTerritorySchema = z.object({
+  month: competitionMonthValue.optional(),
+  pilot: z.string().uuid().optional(),
+}).strict();
 const finiteCoordinate = z.string().refine(
   (value) => value.length > 0 && value.trim() === value && Number.isFinite(Number(value)),
 ).transform(Number);
@@ -49,6 +53,11 @@ const competitionLeaderboardSchema = z.object({
 }).strict().refine((bounds) => bounds.south < bounds.north && bounds.west !== bounds.east);
 const arenaSearchSchema = z.object({ q: z.string().trim().min(1).max(100) }).strict();
 const arenaSourceIdSchema = z.coerce.number().int().positive().safe();
+const cellCoordinateSchema = z.coerce.number().int().safe();
+
+function coveragePeriod(month?: string): MonthlyCoveragePeriod {
+  return month ? { competitionMonth: month } : { period: 'all-time' };
+}
 
 function formBody(body: unknown): Record<string, unknown> {
   if (typeof body !== 'object' || body === null || Array.isArray(body)) return {};
@@ -71,7 +80,7 @@ export function createWebRouter(dependencies: {
   igcFiles: IgcFileService;
   profiles: ProfileService;
   gridClaim: GridClaimService;
-  competitionGridClaim: Pick<CompetitionGridClaimService, 'getCurrent' | 'getViewportLeaderboard' | 'getArenaCurrent' | 'getArenaLeaderboard'>;
+  coverage: MonthlyCoverageService;
   arenas: ArenaService;
   renderPage: PageRenderer;
   adminEmails?: readonly string[];
@@ -157,8 +166,8 @@ export function createWebRouter(dependencies: {
       return;
     }
 
-    const competitionMonth = competitionMonthSchema.safeParse(req.query);
-    if (!competitionMonth.success) {
+    const input = competitionTerritorySchema.safeParse(req.query);
+    if (!input.success) {
       res.status(400).json({
         error: { code: 'invalid_request', message: 'Competition month must be a valid YYYY-MM value.' },
       });
@@ -166,11 +175,10 @@ export function createWebRouter(dependencies: {
     }
 
     try {
-      const territory = await dependencies.competitionGridClaim.getCurrent(
-        competitionMonth.data.month
-          ? { competitionMonth: `${competitionMonth.data.month}-01` }
-          : { period: 'all-time' },
-      );
+      const territory = await dependencies.coverage.getGlobalTerritory({
+        ...coveragePeriod(input.data.month),
+        ...(input.data.pilot ? { pilotUserId: input.data.pilot } : {}),
+      });
       res.status(200).json(territory);
     } catch (error) {
       next(error);
@@ -193,10 +201,8 @@ export function createWebRouter(dependencies: {
     }
 
     try {
-      const leaderboard = await dependencies.competitionGridClaim.getViewportLeaderboard({
-        ...(viewport.data.month
-          ? { competitionMonth: viewport.data.month }
-          : { period: 'all-time' as const }),
+      const leaderboard = await dependencies.coverage.getGlobalLeaderboard({
+        ...coveragePeriod(viewport.data.month),
         west: viewport.data.west,
         south: viewport.data.south,
         east: viewport.data.east,
@@ -254,8 +260,8 @@ export function createWebRouter(dependencies: {
       return;
     }
     const sourceId = arenaSourceIdSchema.safeParse(req.params.sourceId);
-    const competitionMonth = competitionMonthSchema.safeParse(req.query);
-    if (!sourceId.success || !competitionMonth.success) {
+    const input = competitionTerritorySchema.safeParse(req.query);
+    if (!sourceId.success || !input.success) {
       res.status(400).json({ error: { code: 'invalid_request', message: 'Arena territory requires a valid Arena and YYYY-MM month.' } });
       return;
     }
@@ -265,11 +271,10 @@ export function createWebRouter(dependencies: {
         res.status(404).json({ error: { code: 'not_found', message: 'Arena not found.' } });
         return;
       }
-      const territory = await dependencies.competitionGridClaim.getArenaCurrent({
-        ...(competitionMonth.data.month
-          ? { competitionMonth: `${competitionMonth.data.month}-01` }
-          : { period: 'all-time' as const }),
+      const territory = await dependencies.coverage.getArenaTerritory({
+        ...coveragePeriod(input.data.month),
         launchAreaId: arena.id,
+        ...(input.data.pilot ? { pilotUserId: input.data.pilot } : {}),
       });
       res.status(200).json(territory);
     } catch (error) {
@@ -295,13 +300,35 @@ export function createWebRouter(dependencies: {
         res.status(404).json({ error: { code: 'not_found', message: 'Arena not found.' } });
         return;
       }
-      res.status(200).json(await dependencies.competitionGridClaim.getArenaLeaderboard({
-        ...(period.data.month
-          ? { competitionMonth: period.data.month }
-          : { period: 'all-time' as const }),
+      res.status(200).json(await dependencies.coverage.getArenaLeaderboard({
+        ...coveragePeriod(period.data.month),
         launchAreaId: arena.id,
         currentUserId: currentUser.userId,
       }));
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.get('/v1/competition-cells/:x/:y/claimants', async (req, res, next) => {
+    if (!res.locals.currentUser) {
+      next(new AppError(401, 'unauthorized', 'Sign in to view competition cell claimants.'));
+      return;
+    }
+    const x = cellCoordinateSchema.safeParse(req.params.x);
+    const y = cellCoordinateSchema.safeParse(req.params.y);
+    const period = competitionMonthSchema.safeParse(req.query);
+    if (!x.success || !y.success || !period.success) {
+      res.status(400).json({ error: { code: 'invalid_request', message: 'Cell claimants require valid coordinates and a YYYY-MM month.' } });
+      return;
+    }
+    try {
+      const claimants = await dependencies.coverage.getCellClaimants({
+        ...coveragePeriod(period.data.month),
+        x: x.data,
+        y: y.data,
+      });
+      res.status(200).json({ claimants });
     } catch (error) {
       next(error);
     }

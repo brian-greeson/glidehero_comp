@@ -64,33 +64,25 @@ their personal map gradually grow over time.
 
 ### Competitive map
 
-The Competitive Map provides a lightweight monthly competition.
+The Competitive Map gives every pilot additive credit for each competition cell
+they claim. A cell can count for more than one pilot, so the leaderboard separates
+each pilot's claimed cells into exclusive cells and cells shared with other pilots.
+Selecting a pilot shows that pilot's coverage; Overview shows how many pilots have
+covered each cell. Selecting a covered cell lists its claimants.
 
-Instead of permanently owning territory, pilots compete to control territory
-during the current month.
-
-Each cell has one current owner per month. Ownership goes to the latest direct
-or enclosed claim according to the flight timestamps in the IGC file, not the
-upload time, so a later flight can take a cell from its current owner.
-
-Claims are assigned to calendar months using the local time zone of each
-flight's launch location. Only that month's latest claims determine the map, so
-ownership starts fresh each month while prior claim history remains recorded.
-
-Every pilot is displayed using a distinct map color to make ownership easy to
-understand.
+Competition pages default to All Time. Current Month limits coverage to claims in
+the browser-selected local month, using each flight's stored competition month.
 
 ### Global competition and Arenas
 
-The Global competition lives at `/global`. Its leaderboard and Competitive
-Stats are based on the current map viewport. As the user pans and zooms the
-Global map, the app dynamically recalculates rankings, claimed area, contributing
-flights, pilots, and the signed-in pilot's contributing flights for the visible
-area. Competition pages default to All Time, where the latest claimant across
-the complete recorded history owns each cell. Pilots can switch the map,
-leaderboard, and Stats together to Current Month. Competition pages encode that
-selection as `?month=YYYY-MM`; when the parameter is absent they show All Time.
-Global and Arena navigation carries the month parameter between pages.
+The Global competition lives at `/global`. Its additive coverage leaderboard is
+based on the current map viewport and refreshes after the map moves. An Arena is a
+filtered view of the same coverage data for its exact generated cells. Arena
+rankings cover the complete Arena and do not change when its map moves.
+
+Competition pages encode the Current Month selection as `?month=YYYY-MM`; when
+the parameter is absent they show All Time. Global and Arena navigation carries
+the month parameter between pages.
 
 Launch areas with generated grid geometry are also available as Arenas. Arena
 routes use a lowercase ISO country code, a name slug, and the launch source ID,
@@ -98,28 +90,27 @@ for example `/arena/us/boulder-745`. The search box on Global and Arena pages is
 used exclusively to find Arenas by launch name, city, state, or country. The
 Personal page does not display Arena search.
 
-An Arena is a filtered view of the same global competition ownership for the
-selected time period. Any
+Any
 flight that claims a cell in the Arena counts, regardless of its launch
 location. The Arena map hides claims outside its exact cell membership, and its
-leaderboard and Stats always cover the complete Arena. Panning and zooming an
-Arena never change scoring.
+leaderboard always covers the complete Arena. Panning and zooming an Arena never
+change scoring.
 
 Opening an Arena fits the map to its generated boundary and draws an outline
 around it. A breadcrumb below the main navigation shows `Global >> Arena Name`;
 selecting `Global` returns to the viewport-based Global competition. Arena
-leaderboards use the same ranking, tie, top-ten, color, and current-pilot rules
-as Global, but their scoring scope is the Arena instead of the visible map.
+leaderboards use the same additive coverage rules as Global, but their scoring
+scope is the Arena instead of the visible map.
 
 ### Map routes and navigation
 
 - `/` displays login and signup to signed-out visitors. A signed-in request to
   `/` redirects to `/global`.
-- `/global` displays the viewport-based monthly competition.
+- `/global` displays the viewport-based additive coverage competition.
 - `/personal` displays the signed-in pilot's permanent Personal Map and
   viewport Stats.
-- `/arena/{country-code}/{name}-{source-id}` displays a fixed-area monthly
-  competition backed by a generated launch area.
+- `/arena/{country-code}/{name}-{source-id}` displays a fixed-area additive
+  coverage competition backed by a generated launch area.
 - Signed-out requests to Global, Personal, and Arena pages redirect to `/`.
 - Invalid or unavailable Arena routes display an Arena 404 page.
 

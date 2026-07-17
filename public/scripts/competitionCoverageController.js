@@ -1,21 +1,19 @@
-import { initializeArenaSearch } from './arenaSearch.js';
-import { createCompetitionColorRegistry } from './competitionMap.js';
+import { createCompetitionColorRegistry } from './competitionColors.js';
 import { initializeCompetitionPeriodControl } from './competitionPeriod.js';
 import { createLatestRequest } from './latestRequest.js';
-import { initializeMobileSheet } from './mobileSheet.js';
 import {
   arenaCoverageLeaderboardUrl,
   coverageCellClaimantsUrl,
   coverageTerritoryUrl,
   globalCoverageLeaderboardUrl,
-} from './coveragePlaytestApi.js';
-import { renderCoverageLeaderboard } from './coveragePlaytestLeaderboard.js';
+} from './competitionCoverageApi.js';
+import { renderCoverageLeaderboard } from './competitionCoverageLeaderboard.js';
 import {
   colorCoverageTerritory,
   coverageCellFeatureAtPoint,
   positionCoverageCellPopup,
   setCoverageData,
-} from './coveragePlaytestMap.js';
+} from './competitionCoverageMap.js';
 
 async function jsonRequest(url, fetchImpl, signal) {
   const response = await fetchImpl(url, { credentials: 'same-origin', headers: { accept: 'application/json' }, signal });
@@ -23,17 +21,15 @@ async function jsonRequest(url, fetchImpl, signal) {
   return response.json();
 }
 
-export function initializeCoveragePlaytest({
+export function initializeCompetitionCoverage({
   documentRef = document,
   maplibre = window.maplibregl,
   fetchImpl = window.fetch.bind(window),
-  locationRef = window.location,
-  historyRef = window.history,
+  locationRef = typeof window === 'undefined' ? { pathname: '', search: '' } : window.location,
+  historyRef = typeof window === 'undefined' ? undefined : window.history,
   now = () => new Date(),
 } = {}) {
-  initializeMobileSheet({ documentRef });
-  initializeArenaSearch({ documentRef, fetchImpl, locationRef, pathPrefix: '/playtest/coverage' });
-  const root = documentRef.querySelector('[data-coverage-playtest]');
+  const root = documentRef.querySelector('[data-competition-coverage]');
   const mapElement = documentRef.querySelector('[data-coverage-map]');
   const card = documentRef.querySelector('[data-coverage-leaderboard]');
   const overviewButton = documentRef.querySelector('[data-coverage-overview]');
@@ -148,14 +144,14 @@ export function initializeCoveragePlaytest({
       try {
         if (arenaSourceId) {
           const boundary = await jsonRequest(`/v1/arenas/${encodeURIComponent(arenaSourceId)}/boundary`, fetchImpl);
-          map.addSource('coverage-arena-boundary', { type: 'geojson', data: boundary });
-          map.addLayer({ id: 'coverage-arena-boundary', type: 'line', source: 'coverage-arena-boundary', paint: { 'line-color': '#0f172a', 'line-width': 3 } });
+          map.addSource('competition-arena-boundary', { type: 'geojson', data: boundary });
+          map.addLayer({ id: 'competition-arena-boundary', type: 'line', source: 'competition-arena-boundary', paint: { 'line-color': '#0f172a', 'line-width': 3 } });
           map.fitBounds([[boundary.bbox[0], boundary.bbox[1]], [boundary.bbox[2], boundary.bbox[3]]], { padding: 60, duration: 0 });
         }
         mapReady = true;
         await refreshPeriod();
       } catch {
-        setStatus('Unable to load the coverage playtest. Try again.');
+        setStatus('Unable to load competition coverage. Try again.');
         card?.removeAttribute('aria-busy');
       }
     });

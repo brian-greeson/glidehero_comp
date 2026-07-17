@@ -6,13 +6,13 @@ import {
   type GridClaimGeoJson,
 } from '../../src/domain/territory/gridClaimGeoJson.js';
 import {
-  emptyCompetitionGridClaimGeoJson,
-  type CompetitionGridClaimGeoJson,
-} from '../../src/domain/territory/competitionGridClaimGeoJson.js';
+  emptyMonthlyCoverageGeoJson,
+  type MonthlyCoverageGeoJson,
+} from '../../src/domain/competition/monthlyCoverage.js';
 import type { ProfileService } from '../../src/services/profileService.js';
 import type { FlightProcessingOutcome } from '../../src/services/flightProcessingService.js';
 import type { GridClaimService } from '../../src/services/gridClaimService.js';
-import type { CompetitionGridClaimService } from '../../src/services/competitionGridClaimService.js';
+import type { MonthlyCoverageService } from '../../src/services/monthlyCoverageService.js';
 import type { AdminFlightService } from '../../src/services/adminFlightService.js';
 import type { ArenaService } from '../../src/services/arenaService.js';
 import { createPageRenderer } from '../../src/views/renderer.js';
@@ -25,12 +25,6 @@ const viewportStats = {
   claimedCellCount: 2,
   claimedAreaSquareMeters: 2_000_000,
   flightCount: 1,
-};
-
-const competitionStats = {
-  ...viewportStats,
-  pilotCount: 1,
-  currentPilotFlightCount: 1,
 };
 
 const user = {
@@ -119,17 +113,18 @@ function dependencies(
     })),
     reprocess: vi.fn(async () => ({ status: 'not_found' as const })),
   };
-  const expectedCompetitionGeoJson: CompetitionGridClaimGeoJson = {
+  const expectedCoverageGeoJson: MonthlyCoverageGeoJson = {
     type: 'FeatureCollection',
     features: [{
       type: 'Feature',
       properties: {
-        ownerUserId: user.userId,
-        cellId: '2026-07-01:1000:0:0',
-        competitionMonth: '2026-07-01',
+        cellId: '1000:0:0',
         cellSize: 1_000,
         x: 0,
         y: 0,
+        claimantCount: 1,
+        isShared: false,
+        pilotUserId: user.userId,
       },
       geometry: {
         type: 'Polygon',
@@ -143,24 +138,25 @@ function dependencies(
       },
     }],
   };
-  const competitionGridClaim: CompetitionGridClaimService = {
-    process: vi.fn(async () => undefined),
-    getCurrent: vi.fn(async () => expectedCompetitionGeoJson),
-    getArenaCurrent: vi.fn(async () => expectedCompetitionGeoJson),
-    getViewportLeaderboard: vi.fn(async () => ({
+  const coverage: MonthlyCoverageService = {
+    getGlobalTerritory: vi.fn(async () => expectedCoverageGeoJson),
+    getArenaTerritory: vi.fn(async () => expectedCoverageGeoJson),
+    getGlobalLeaderboard: vi.fn(async () => ({
       leaders: [{
         userId: user.userId,
         displayName: user.displayName,
         claimedCellCount: 2,
+        exclusiveCellCount: 1,
+        sharedCellCount: 1,
         claimedAreaSquareMeters: 2_000_000,
         rank: 1,
       }],
       currentPilot: null,
-      stats: competitionStats,
     })),
     getArenaLeaderboard: vi.fn(async () => ({
-      leaders: [], currentPilot: null, stats: competitionStats,
+      leaders: [], currentPilot: null,
     })),
+    getCellClaimants: vi.fn(async () => [{ userId: user.userId, displayName: user.displayName }]),
   };
   const arenas = arenaService();
   const router = createWebRouter({
@@ -169,7 +165,7 @@ function dependencies(
     igcFiles,
     profiles,
     gridClaim,
-    competitionGridClaim,
+    coverage,
     arenas,
     renderPage,
   });
@@ -178,10 +174,10 @@ function dependencies(
     igcFiles,
     profiles,
     gridClaim,
-    competitionGridClaim,
+    coverage,
     arenas,
     expectedGridGeoJson,
-    expectedCompetitionGeoJson,
+    expectedCoverageGeoJson,
     renderPage,
     cookie,
     app: createApp({ webMiddleware: [middleware, router] }),
@@ -190,7 +186,7 @@ function dependencies(
 
 describe('webRouter', () => {
   it('limits admin routes to configured admin emails and redirects completed reprocessing', async () => {
-    const { auth, cookie, igcFiles, profiles, gridClaim, competitionGridClaim, arenas, renderPage } = dependencies();
+    const { auth, cookie, igcFiles, profiles, gridClaim, coverage, arenas, renderPage } = dependencies();
     const adminFlights: AdminFlightService = {
       listRecentFlights: vi.fn(async () => [{
         id: '00000000-0000-4000-8000-000000000020',
@@ -211,7 +207,7 @@ describe('webRouter', () => {
       igcFiles,
       profiles,
       gridClaim,
-      competitionGridClaim,
+      coverage,
       arenas,
       renderPage,
       adminEmails: ['PILOT@example.com'],
@@ -293,12 +289,23 @@ describe('webRouter', () => {
       });
       expect(authenticated.status).toBe(404);
       expect(await authenticated.text()).toContain('/error-mascot.webp');
+
+      const retiredPrefix = `/${['play', 'test'].join('')}/coverage`;
+      const removedPage = await fetch(`${baseUrl}${retiredPrefix}/global`, {
+        headers: { cookie: 'glidehero_session=valid-token' },
+      });
+      expect(removedPage.status).toBe(404);
+
+      const removedApi = await fetch(`${baseUrl}/v1${retiredPrefix}/global/territory`, {
+        headers: { cookie: 'glidehero_session=valid-token' },
+      });
+      expect(removedApi.status).toBe(404);
       expect(renderPage).not.toHaveBeenCalled();
     });
   });
 
   it('searches Arenas and returns fixed-area territory and leaderboard data', async () => {
-    const { app, arenas, competitionGridClaim, expectedCompetitionGeoJson } = dependencies();
+    const { app, arenas, coverage, expectedCoverageGeoJson } = dependencies();
     vi.mocked(arenas.search).mockResolvedValueOnce([arena]);
     vi.mocked(arenas.getBySourceId).mockResolvedValue(arena);
     await withServer(app, async (baseUrl) => {
@@ -307,16 +314,16 @@ describe('webRouter', () => {
       expect(search.status).toBe(200);
       expect(await search.json()).toEqual({ arenas: [arena] });
 
-      const territory = await fetch(`${baseUrl}/v1/arenas/745/competition-territory?month=2026-07`, { headers });
+      const territory = await fetch(`${baseUrl}/v1/arenas/745/competition-territory?month=2026-07&pilot=${user.userId}`, { headers });
       expect(territory.status).toBe(200);
-      expect(await territory.json()).toEqual(expectedCompetitionGeoJson);
-      expect(competitionGridClaim.getArenaCurrent).toHaveBeenCalledWith({
-        competitionMonth: '2026-07-01', launchAreaId: arena.id,
+      expect(await territory.json()).toEqual(expectedCoverageGeoJson);
+      expect(coverage.getArenaTerritory).toHaveBeenCalledWith({
+        competitionMonth: '2026-07', launchAreaId: arena.id, pilotUserId: user.userId,
       });
 
       const leaderboard = await fetch(`${baseUrl}/v1/arenas/745/competition-leaderboard?month=2026-07`, { headers });
       expect(leaderboard.status).toBe(200);
-      expect(competitionGridClaim.getArenaLeaderboard).toHaveBeenCalledWith({
+      expect(coverage.getArenaLeaderboard).toHaveBeenCalledWith({
         competitionMonth: '2026-07', launchAreaId: arena.id, currentUserId: user.userId,
       });
 
@@ -325,7 +332,7 @@ describe('webRouter', () => {
         { headers },
       );
       expect(allTimeTerritory.status).toBe(200);
-      expect(competitionGridClaim.getArenaCurrent).toHaveBeenCalledWith({
+      expect(coverage.getArenaTerritory).toHaveBeenCalledWith({
         period: 'all-time', launchAreaId: arena.id,
       });
 
@@ -334,8 +341,20 @@ describe('webRouter', () => {
         { headers },
       );
       expect(allTimeLeaderboard.status).toBe(200);
-      expect(competitionGridClaim.getArenaLeaderboard).toHaveBeenCalledWith({
+      expect(coverage.getArenaLeaderboard).toHaveBeenCalledWith({
         period: 'all-time', launchAreaId: arena.id, currentUserId: user.userId,
+      });
+
+      const claimants = await fetch(
+        `${baseUrl}/v1/competition-cells/1/2/claimants?month=2026-07`,
+        { headers },
+      );
+      expect(claimants.status).toBe(200);
+      expect(await claimants.json()).toEqual({
+        claimants: [{ userId: user.userId, displayName: user.displayName }],
+      });
+      expect(coverage.getCellClaimants).toHaveBeenCalledWith({
+        competitionMonth: '2026-07', x: 1, y: 2,
       });
     });
   });
@@ -501,11 +520,12 @@ describe('webRouter', () => {
         })),
         reprocess: vi.fn(async () => ({ status: 'not_found' as const })),
       },
-      competitionGridClaim: {
-        getCurrent: vi.fn(async () => emptyCompetitionGridClaimGeoJson()),
-        getArenaCurrent: vi.fn(async () => emptyCompetitionGridClaimGeoJson()),
-        getViewportLeaderboard: vi.fn(async () => ({ leaders: [], currentPilot: null, stats: competitionStats })),
-        getArenaLeaderboard: vi.fn(async () => ({ leaders: [], currentPilot: null, stats: competitionStats })),
+      coverage: {
+        getGlobalTerritory: vi.fn(async () => emptyMonthlyCoverageGeoJson()),
+        getArenaTerritory: vi.fn(async () => emptyMonthlyCoverageGeoJson()),
+        getGlobalLeaderboard: vi.fn(async () => ({ leaders: [], currentPilot: null })),
+        getArenaLeaderboard: vi.fn(async () => ({ leaders: [], currentPilot: null })),
+        getCellClaimants: vi.fn(async () => []),
       },
       arenas: arenaService(),
       renderPage: createPageRenderer({ mapTilerApiKey: 'maptiler-test-key' }),
@@ -559,11 +579,12 @@ describe('webRouter', () => {
             })),
             reprocess: vi.fn(async () => ({ status: 'not_found' as const })),
           },
-          competitionGridClaim: {
-            getCurrent: vi.fn(async () => emptyCompetitionGridClaimGeoJson()),
-            getArenaCurrent: vi.fn(async () => emptyCompetitionGridClaimGeoJson()),
-            getViewportLeaderboard: vi.fn(async () => ({ leaders: [], currentPilot: null, stats: competitionStats })),
-            getArenaLeaderboard: vi.fn(async () => ({ leaders: [], currentPilot: null, stats: competitionStats })),
+          coverage: {
+            getGlobalTerritory: vi.fn(async () => emptyMonthlyCoverageGeoJson()),
+            getArenaTerritory: vi.fn(async () => emptyMonthlyCoverageGeoJson()),
+            getGlobalLeaderboard: vi.fn(async () => ({ leaders: [], currentPilot: null })),
+            getArenaLeaderboard: vi.fn(async () => ({ leaders: [], currentPilot: null })),
+            getCellClaimants: vi.fn(async () => []),
           },
           arenas: arenaService(),
           renderPage: createPageRenderer({ mapTilerApiKey: 'maptiler-test-key' }),
@@ -739,34 +760,36 @@ describe('webRouter', () => {
     });
   });
 
-  it('returns current competition ownership for the URL month', async () => {
-    const { app, competitionGridClaim, expectedCompetitionGeoJson } = dependencies();
+  it('returns selected-pilot coverage for the URL month', async () => {
+    const { app, coverage, expectedCoverageGeoJson } = dependencies();
     await withServer(app, async (baseUrl) => {
-      const response = await fetch(`${baseUrl}/v1/competition-territory?month=2026-07`, {
+      const response = await fetch(`${baseUrl}/v1/competition-territory?month=2026-07&pilot=${user.userId}`, {
         headers: { cookie: 'glidehero_session=valid-token' },
       });
 
       expect(response.status).toBe(200);
       expect(response.headers.get('content-type')).toContain('application/json');
-      expect(await response.json()).toEqual(expectedCompetitionGeoJson);
-      expect(competitionGridClaim.getCurrent).toHaveBeenCalledWith({ competitionMonth: '2026-07-01' });
+      expect(await response.json()).toEqual(expectedCoverageGeoJson);
+      expect(coverage.getGlobalTerritory).toHaveBeenCalledWith({
+        competitionMonth: '2026-07', pilotUserId: user.userId,
+      });
     });
   });
 
   it('returns all-time competition ownership', async () => {
-    const { app, competitionGridClaim } = dependencies();
+    const { app, coverage } = dependencies();
     await withServer(app, async (baseUrl) => {
       const response = await fetch(`${baseUrl}/v1/competition-territory`, {
         headers: { cookie: 'glidehero_session=valid-token' },
       });
 
       expect(response.status).toBe(200);
-      expect(competitionGridClaim.getCurrent).toHaveBeenCalledWith({ period: 'all-time' });
+      expect(coverage.getGlobalTerritory).toHaveBeenCalledWith({ period: 'all-time' });
     });
   });
 
   it.each(['', '2026-13', '07-2026'])('rejects invalid competition month %j', async (month) => {
-    const { app, competitionGridClaim } = dependencies();
+    const { app, coverage } = dependencies();
     await withServer(app, async (baseUrl) => {
       const response = await fetch(`${baseUrl}/v1/competition-territory?month=${encodeURIComponent(month)}`, {
         headers: { cookie: 'glidehero_session=valid-token' },
@@ -776,12 +799,12 @@ describe('webRouter', () => {
       expect(await response.json()).toEqual({
         error: { code: 'invalid_request', message: 'Competition month must be a valid YYYY-MM value.' },
       });
-      expect(competitionGridClaim.getCurrent).not.toHaveBeenCalled();
+      expect(coverage.getGlobalTerritory).not.toHaveBeenCalled();
     });
   });
 
   it('rejects an anonymous competition-territory request without reading claims', async () => {
-    const { app, competitionGridClaim } = dependencies();
+    const { app, coverage } = dependencies();
     await withServer(app, async (baseUrl) => {
       const response = await fetch(`${baseUrl}/v1/competition-territory`);
 
@@ -789,12 +812,12 @@ describe('webRouter', () => {
       expect(await response.json()).toEqual({
         error: { code: 'unauthorized', message: 'Sign in to view competition territory.' },
       });
-      expect(competitionGridClaim.getCurrent).not.toHaveBeenCalled();
+      expect(coverage.getGlobalTerritory).not.toHaveBeenCalled();
     });
   });
 
   it('returns the leaderboard for an authenticated YYYY-MM viewport request', async () => {
-    const { app, competitionGridClaim } = dependencies();
+    const { app, coverage } = dependencies();
     await withServer(app, async (baseUrl) => {
       const response = await fetch(
         `${baseUrl}/v1/competition-leaderboard?month=2026-07&west=-107&south=39&east=-105&north=41`,
@@ -807,13 +830,14 @@ describe('webRouter', () => {
           userId: user.userId,
           displayName: user.displayName,
           claimedCellCount: 2,
+          exclusiveCellCount: 1,
+          sharedCellCount: 1,
           claimedAreaSquareMeters: 2_000_000,
           rank: 1,
         }],
         currentPilot: null,
-        stats: competitionStats,
       });
-      expect(competitionGridClaim.getViewportLeaderboard).toHaveBeenCalledWith({
+      expect(coverage.getGlobalLeaderboard).toHaveBeenCalledWith({
         competitionMonth: '2026-07',
         west: -107,
         south: 39,
@@ -825,7 +849,7 @@ describe('webRouter', () => {
   });
 
   it('returns the all-time viewport leaderboard and stats', async () => {
-    const { app, competitionGridClaim } = dependencies();
+    const { app, coverage } = dependencies();
     await withServer(app, async (baseUrl) => {
       const response = await fetch(
         `${baseUrl}/v1/competition-leaderboard?west=-107&south=39&east=-105&north=41`,
@@ -833,7 +857,7 @@ describe('webRouter', () => {
       );
 
       expect(response.status).toBe(200);
-      expect(competitionGridClaim.getViewportLeaderboard).toHaveBeenCalledWith({
+      expect(coverage.getGlobalLeaderboard).toHaveBeenCalledWith({
         period: 'all-time',
         west: -107,
         south: 39,
@@ -855,7 +879,7 @@ describe('webRouter', () => {
     'month=2026-07&west=-107&south=39&east=-105',
     'month=2026-07&west=-107&south=39&east=-105&north=41&extra=value',
   ])('rejects invalid leaderboard query %s', async (query) => {
-    const { app, competitionGridClaim } = dependencies();
+    const { app, coverage } = dependencies();
     await withServer(app, async (baseUrl) => {
       const response = await fetch(`${baseUrl}/v1/competition-leaderboard?${query}`, {
         headers: { cookie: 'glidehero_session=valid-token' },
@@ -868,12 +892,12 @@ describe('webRouter', () => {
           message: 'Competition leaderboard requires a valid YYYY-MM month and viewport bounds.',
         },
       });
-      expect(competitionGridClaim.getViewportLeaderboard).not.toHaveBeenCalled();
+      expect(coverage.getGlobalLeaderboard).not.toHaveBeenCalled();
     });
   });
 
   it('accepts a date-line-crossing viewport', async () => {
-    const { app, competitionGridClaim } = dependencies();
+    const { app, coverage } = dependencies();
     await withServer(app, async (baseUrl) => {
       const response = await fetch(
         `${baseUrl}/v1/competition-leaderboard?month=2026-07&west=179.9&south=-1&east=-179.9&north=1`,
@@ -881,7 +905,7 @@ describe('webRouter', () => {
       );
 
       expect(response.status).toBe(200);
-      expect(competitionGridClaim.getViewportLeaderboard).toHaveBeenCalledWith(expect.objectContaining({
+      expect(coverage.getGlobalLeaderboard).toHaveBeenCalledWith(expect.objectContaining({
         west: 179.9,
         east: -179.9,
       }));
@@ -889,7 +913,7 @@ describe('webRouter', () => {
   });
 
   it('rejects an anonymous leaderboard request without querying claims', async () => {
-    const { app, competitionGridClaim } = dependencies();
+    const { app, coverage } = dependencies();
     await withServer(app, async (baseUrl) => {
       const response = await fetch(
         `${baseUrl}/v1/competition-leaderboard?month=2026-07&west=-107&south=39&east=-105&north=41`,
@@ -899,7 +923,25 @@ describe('webRouter', () => {
       expect(await response.json()).toEqual({
         error: { code: 'unauthorized', message: 'Sign in to view the competition leaderboard.' },
       });
-      expect(competitionGridClaim.getViewportLeaderboard).not.toHaveBeenCalled();
+      expect(coverage.getGlobalLeaderboard).not.toHaveBeenCalled();
+    });
+  });
+
+  it('rejects invalid and anonymous cell claimant requests without querying coverage', async () => {
+    const { app, coverage } = dependencies();
+    await withServer(app, async (baseUrl) => {
+      const invalid = await fetch(
+        `${baseUrl}/v1/competition-cells/not-an-integer/2/claimants?month=2026-07`,
+        { headers: { cookie: 'glidehero_session=valid-token' } },
+      );
+      expect(invalid.status).toBe(400);
+      expect(await invalid.json()).toEqual({
+        error: { code: 'invalid_request', message: 'Cell claimants require valid coordinates and a YYYY-MM month.' },
+      });
+
+      const anonymous = await fetch(`${baseUrl}/v1/competition-cells/1/2/claimants?month=2026-07`);
+      expect(anonymous.status).toBe(401);
+      expect(coverage.getCellClaimants).not.toHaveBeenCalled();
     });
   });
 

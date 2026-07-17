@@ -2,12 +2,11 @@ import { readFile } from 'node:fs/promises';
 import { describe, expect, it } from 'vitest';
 
 describe('dashboard stylesheet contract', () => {
-  it('stacks the desktop leaderboard above stats on the left without changing the mobile flow', async () => {
+  it('lays out the promoted coverage leaderboard without changing the mobile flow', async () => {
     const css = await readFile('public/styles/app.css', 'utf8');
 
-    expect(css).toMatch(/\.viewport-stats\s*{\s*grid-column: 1;/);
-    expect(css).toMatch(/\.leaderboard-card\s*{\s*grid-column: 1;/);
-    expect(css).not.toContain('.leaderboard-card { grid-column: 3;');
+    expect(css).toMatch(/\.competition-coverage \.dashboard-information\s*{[^}]*grid-template-columns: minmax\(560px, 640px\)/s);
+    expect(css).not.toContain('.coverage-eyebrow');
     expect(css).toContain('@media (max-width: 900px)');
     expect(css).toMatch(/\.dashboard-information\s*{\s*display: block;/);
     expect(css).toContain('.competition-breadcrumb {');

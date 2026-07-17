@@ -46,7 +46,8 @@ describe('Vento page renderer', () => {
     expect(authenticated).toContain('action="/logout"');
     expect(authenticated).toContain('action="/profile/territory-color"');
     expect(authenticated).toContain('value="#1769AA"');
-    expect(authenticated).toContain('data-dashboard-map');
+    expect(authenticated).toContain('data-competition-coverage="global"');
+    expect(authenticated).toContain('data-coverage-map');
     expect(authenticated).toContain('data-onboarding-trigger');
     expect(authenticated).toContain('aria-controls="glide-hero-onboarding"');
     expect(authenticated).not.toContain('data-stub="help"');
@@ -74,25 +75,19 @@ describe('Vento page renderer', () => {
     expect(authenticated).toContain('data-territory-color="#1769AA"');
     expect(authenticated).toContain('data-current-user-id="00000000-0000-4000-8000-000000000001"');
     expect(authenticated).toContain('<script type="module" src="/scripts/dashboard.js"></script>');
-    expect(authenticated).not.toContain('data-stub="full-leaderboard"');
-    expect(authenticated).toContain('data-competition-leaderboard');
-    expect(authenticated).toContain('data-leaderboard-list');
+    expect(authenticated).toContain('<h2>Coverage leaderboard</h2>');
+    expect(authenticated).toContain('data-coverage-overview');
+    expect(authenticated).toContain('data-coverage-cell-popup');
     expect(authenticated).toContain('data-competition-period');
-    expect(authenticated).toContain('aria-label="Competition time period"');
+    expect(authenticated).toContain('aria-label="Coverage time period"');
     expect(authenticated).toContain('data-current-month-option');
-    expect(authenticated).toContain('<h2>Stats</h2>');
+    expect(authenticated).not.toContain('<h2>Stats</h2>');
     expect(authenticated).not.toContain('data-personal-stats');
-    expect(authenticated).toContain('data-competition-stats');
     expect(authenticated).toContain('data-arena-search-input');
     expect(authenticated).toContain('aria-current="page">Global</span>');
     expect(authenticated).not.toContain('Visible Map Claimed');
     expect(authenticated).not.toContain('claimed-percentage');
-    expect(authenticated).toContain('data-competition-my-flights');
-    expect(authenticated.match(/<dt>Pilots<\/dt>/g)).toHaveLength(1);
-    expect(authenticated).not.toContain('data-stub="viewport-statistics"');
-    expect(authenticated.indexOf('data-competition-leaderboard')).toBeLessThan(
-      authenticated.indexOf('class="info-card viewport-stats"'),
-    );
+    expect(authenticated).not.toContain('data-competition-my-flights');
     expect(authenticated).not.toContain('No territory data is available for this viewport yet.');
     expect(authenticated).toContain('https://api.maptiler.com/maps/outdoor-v2/style.json?key=maptiler-test-key');
     expect(authenticated).not.toContain('action="/login"');
@@ -149,7 +144,8 @@ describe('Vento page renderer', () => {
         },
       },
     });
-    expect(arena).toContain('data-arena-dashboard');
+    expect(arena).toContain('data-competition-coverage="arena"');
+    expect(arena).toContain('data-coverage-map');
     expect(arena).toContain('data-arena-source-id="745"');
     expect(arena).toContain('<a href="/global" data-competition-period-link="/global">Global</a>');
     expect(arena).toContain('aria-current="page">Boulder</span>');

@@ -25,3 +25,32 @@ export const COMPETITION_COLOR_PALETTE = [
   '#587B7F',
   '#6D597A',
 ];
+
+export function createCompetitionColorRegistry(
+  currentUserId,
+  currentUserColor,
+  random = Math.random,
+) {
+  const ownerColors = new Map([[currentUserId, currentUserColor]]);
+  const usedColors = new Set([currentUserColor.toUpperCase()]);
+  return {
+    colorFor(ownerUserId) {
+      let displayColor = ownerColors.get(ownerUserId);
+      if (!displayColor) {
+        const firstColorIndex = Math.floor(random() * COMPETITION_COLOR_PALETTE.length);
+        for (let offset = 0; offset < COMPETITION_COLOR_PALETTE.length; offset += 1) {
+          const index = (firstColorIndex + offset) % COMPETITION_COLOR_PALETTE.length;
+          const candidate = COMPETITION_COLOR_PALETTE[index];
+          if (candidate && !usedColors.has(candidate)) {
+            displayColor = candidate;
+            break;
+          }
+        }
+        displayColor ??= COMPETITION_COLOR_PALETTE[firstColorIndex] ?? COMPETITION_COLOR_PALETTE[0];
+        ownerColors.set(ownerUserId, displayColor);
+        usedColors.add(displayColor);
+      }
+      return displayColor;
+    },
+  };
+}

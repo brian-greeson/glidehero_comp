@@ -1,22 +1,16 @@
 {{ layout "layouts/appLayout.vto" }}
-  <section class="dashboard has-competition-breadcrumb" data-arena-dashboard>
+  <section class="dashboard competition-coverage has-competition-breadcrumb" data-competition-coverage="arena">
     {{ include "components/dashboardNav.vto" { activeMode: "competitive", currentPath: arena.path, currentUser, isAdmin, uploadSuccess, uploadError, territoryColorSuccess, territoryColorError } }}
     {{ include "components/competitionBreadcrumb.vto" { arena } }}
-    <section class="map-stage" aria-label="{{ arena.name }} Arena competition map">
-      <div class="map-canvas" data-arena-map data-map-style-url="{{ mapTilerStyleUrl }}" data-current-user-id="{{ currentUser.userId }}" data-territory-color="{{ currentUser.territoryColor }}" data-arena-source-id="{{ arena.sourceId }}"></div>
+    <section class="map-stage" aria-label="{{ arena.name }} Arena competition coverage map">
+      <div class="map-canvas" data-coverage-map data-map-style-url="{{ mapTilerStyleUrl }}" data-current-user-id="{{ currentUser.userId }}" data-territory-color="{{ currentUser.territoryColor }}" data-arena-source-id="{{ arena.sourceId }}"></div>
       {{ include "components/arenaSearch.vto" }}
-      <div class="map-actions" aria-label="Map actions">
-        <button type="button" data-stub="recenter-map" aria-label="Recenter Arena" aria-disabled="true">◎</button>
-        <button type="button" data-stub="layer-selector" aria-label="Select map layers" aria-disabled="true">▱</button>
-      </div>
-      <p class="map-empty-state" data-map-empty-state hidden>Map unavailable. Check your connection and try again.</p>
+      <p class="map-empty-state" data-map-empty-state hidden></p>
+      <div class="coverage-cell-popup" data-coverage-cell-popup hidden></div>
     </section>
-    <aside class="dashboard-info" data-mobile-sheet aria-label="Arena information">
-      <button type="button" class="sheet-handle" data-sheet-toggle aria-expanded="false" aria-controls="dashboard-information"><span aria-hidden="true"></span><span class="sr-only" data-sheet-toggle-label>Expand Arena information</span></button>
-      <div id="dashboard-information" class="dashboard-information">
-        {{ include "components/competitionLeaderboardCard.vto" }}
-        {{ include "components/competitionStatsCard.vto" }}
-      </div>
+    <aside class="dashboard-info" data-mobile-sheet aria-label="{{ arena.name }} coverage rankings">
+      <button type="button" class="sheet-handle" data-sheet-toggle aria-expanded="false" aria-controls="coverage-information"><span aria-hidden="true"></span><span class="sr-only" data-sheet-toggle-label>Expand coverage rankings</span></button>
+      <div id="coverage-information" class="dashboard-information">{{ include "components/coverageLeaderboardCard.vto" }}</div>
     </aside>
     {{ include "components/onboarding.vto" { territoryColor: currentUser.territoryColor } }}
   </section>

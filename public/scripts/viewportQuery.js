@@ -29,13 +29,6 @@ export function viewportSearchParams(bounds, values = {}) {
   });
 }
 
-export function competitionLeaderboardUrl(bounds, month = null) {
-  return `/v1/competition-leaderboard?${viewportSearchParams(
-    bounds,
-    month ? { month } : {},
-  )}`;
-}
-
 export function personalStatsUrl(bounds) {
   return `/v1/personal-stats?${viewportSearchParams(bounds)}`;
 }

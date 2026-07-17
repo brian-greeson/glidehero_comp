@@ -16,6 +16,7 @@ function element(): any {
     style: { setProperty() {} },
     setAttribute(name: string, value: string) { attributes.set(name, value); },
     removeAttribute(name: string) { attributes.delete(name); },
+    addEventListener() {},
     append(...children: any[]) { node.children.push(...children); },
     replaceChildren(...children: any[]) { node.children = children; },
   };
@@ -111,17 +112,15 @@ describe('Global dashboard controller', () => {
     };
     const emptyState = element();
     const elements = new Map<string, any>([
-      ['[data-dashboard-map]', mapElement],
+      ['[data-competition-coverage]', element()],
+      ['[data-coverage-map]', mapElement],
       ['[data-map-empty-state]', emptyState],
-      ['[data-competition-leaderboard]', element()],
-      ['[data-leaderboard-status]', element()],
-      ['[data-leaderboard-list]', element()],
-      ['[data-current-pilot-result]', element()],
-      ['[data-competition-stats]', element()],
-      ['[data-competition-claimed-area]', element()],
-      ['[data-competition-flights]', element()],
-      ['[data-competition-pilots]', element()],
-      ['[data-competition-my-flights]', element()],
+      ['[data-coverage-leaderboard]', element()],
+      ['[data-coverage-overview]', element()],
+      ['[data-coverage-status]', element()],
+      ['[data-coverage-list]', element()],
+      ['[data-coverage-current-pilot]', element()],
+      ['[data-coverage-cell-popup]', element()],
     ]);
     const documentRef = {
       createElement: () => element(),
@@ -131,13 +130,6 @@ describe('Global dashboard controller', () => {
     const leaderboard = {
       leaders: [],
       currentPilot: null,
-      stats: {
-        claimedCellCount: 1,
-        claimedAreaSquareMeters: 1_000_000,
-        flightCount: 1,
-        pilotCount: 1,
-        currentPilotFlightCount: 1,
-      },
     };
     const fetchImpl = vi.fn(async (url: string) => {
       if (url.startsWith('/v1/competition-territory')) {
@@ -154,10 +146,12 @@ describe('Global dashboard controller', () => {
       historyRef: { replaceState: vi.fn() },
     });
     await harness.load();
-    expect(fetchImpl.mock.calls[0]?.[0]).toBe('/v1/competition-territory');
-    expect(fetchImpl.mock.calls[1]?.[0]).toContain('/v1/competition-leaderboard?west=-107');
+    expect(fetchImpl.mock.calls.slice(0, 2).map(([url]) => url)).toEqual(expect.arrayContaining([
+      '/v1/competition-territory',
+      expect.stringContaining('/v1/competition-leaderboard?west=-107'),
+    ]));
     expect(emptyState.hidden).toBe(false);
-    expect(emptyState.textContent).toBe('No competition territory has been claimed.');
+    expect(emptyState.textContent).toBe('No coverage for this selection.');
 
     harness.move({ west: -106, east: -104 });
     await vi.waitFor(() => expect(fetchImpl).toHaveBeenCalledTimes(3));

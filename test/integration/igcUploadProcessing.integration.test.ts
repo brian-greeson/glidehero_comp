@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { DeleteObjectCommand, GetObjectCommand, PutObjectCommand, type S3 } from '@aws-sdk/client-s3';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { createAuthService } from '../../src/services/authService.js';
-import { createCompetitionGridClaimService } from '../../src/services/competitionGridClaimService.js';
+import { createMonthlyCoverageService } from '../../src/services/monthlyCoverageService.js';
 import { createFlightProcessingService } from '../../src/services/flightProcessingService.js';
 import { createIgcFileService } from '../../src/services/igcFileService.js';
 import { resetAndPushTestDatabase } from './database.js';
@@ -143,10 +143,10 @@ describe('IGC upload processing', () => {
     expect(stored.rows[0]?.grid_claim_count).toBeGreaterThan(0);
     expect(stored.rows[0]?.competition_claim_count).toBeGreaterThan(0);
     expect(stored.rows[0]?.last_fix.getTime()).toBeGreaterThan(stored.rows[0]?.first_fix.getTime() ?? 0);
-    const competition = await createCompetitionGridClaimService(database.db, { cellSize: 1_000 })
-      .getCurrent({ competitionMonth: '2026-05-10' });
+    const competition = await createMonthlyCoverageService(database.db, { cellSize: 1_000 })
+      .getGlobalTerritory({ competitionMonth: '2026-05', pilotUserId: pilot.user.userId });
     expect(competition.features.length).toBeGreaterThan(0);
-    expect(competition.features.every((feature) => feature.properties.ownerUserId === pilot.user.userId)).toBe(true);
+    expect(competition.features.every((feature) => feature.properties.pilotUserId === pilot.user.userId)).toBe(true);
   }, 60_000);
 
   it('rejects an identical upload from another pilot without retaining extra metadata or objects', async () => {

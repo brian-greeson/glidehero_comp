@@ -5,25 +5,27 @@ function periodValues(month) {
 }
 
 export function globalCoverageLeaderboardUrl(bounds, month = null) {
-  return `/v1/playtest/coverage/global/leaderboard?${viewportSearchParams(bounds, periodValues(month))}`;
+  return `/v1/competition-leaderboard?${viewportSearchParams(bounds, periodValues(month))}`;
 }
 
 export function coverageTerritoryUrl({ arenaSourceId, month = null, pilotUserId = null }) {
   const params = new URLSearchParams(periodValues(month));
   if (pilotUserId) params.set('pilot', pilotUserId);
-  const scope = arenaSourceId ? `arenas/${encodeURIComponent(arenaSourceId)}` : 'global';
+  const path = arenaSourceId
+    ? `/v1/arenas/${encodeURIComponent(arenaSourceId)}/competition-territory`
+    : '/v1/competition-territory';
   const query = params.toString();
-  return `/v1/playtest/coverage/${scope}/territory${query ? `?${query}` : ''}`;
+  return `${path}${query ? `?${query}` : ''}`;
 }
 
 export function arenaCoverageLeaderboardUrl(arenaSourceId, month = null) {
   const params = new URLSearchParams(periodValues(month));
   const query = params.toString();
-  return `/v1/playtest/coverage/arenas/${encodeURIComponent(arenaSourceId)}/leaderboard${query ? `?${query}` : ''}`;
+  return `/v1/arenas/${encodeURIComponent(arenaSourceId)}/competition-leaderboard${query ? `?${query}` : ''}`;
 }
 
 export function coverageCellClaimantsUrl(x, y, month = null) {
   const params = new URLSearchParams(periodValues(month));
   const query = params.toString();
-  return `/v1/playtest/coverage/cells/${encodeURIComponent(x)}/${encodeURIComponent(y)}/claimants${query ? `?${query}` : ''}`;
+  return `/v1/competition-cells/${encodeURIComponent(x)}/${encodeURIComponent(y)}/claimants${query ? `?${query}` : ''}`;
 }
