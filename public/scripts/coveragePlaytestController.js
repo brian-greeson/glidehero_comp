@@ -42,7 +42,6 @@ export function initializeCoveragePlaytest({
   let map;
   let mapReady = false;
   let selectedPilotId = null;
-  let selectedPilotColor = null;
   let leaderboard = { leaders: [], currentPilot: null };
 
   function setStatus(message = '') {
@@ -59,7 +58,7 @@ export function initializeCoveragePlaytest({
         pilotUserId: selectedPilotId,
       }), fetchImpl, signal);
       if (!isCurrent()) return;
-      const colored = colorCoverageTerritory(territory, selectedPilotColor, selectedPilotId);
+      const colored = colorCoverageTerritory(territory, colorRegistry);
       setCoverageData(map, colored);
       setStatus(colored.features.length === 0 ? 'No coverage for this selection.' : '');
     } catch (error) {
@@ -75,9 +74,8 @@ export function initializeCoveragePlaytest({
       currentUserId,
       colorRegistry,
       onSelect: (pilot) => {
-        selectedPilotId = pilot.userId;
-        selectedPilotColor = colorRegistry.colorFor(pilot.userId);
-        overviewButton?.setAttribute('aria-pressed', 'false');
+        selectedPilotId = pilot?.userId ?? null;
+        overviewButton?.setAttribute('aria-pressed', String(!selectedPilotId));
         renderLeaderboard();
         void territoryRequest.run();
       },
@@ -97,7 +95,6 @@ export function initializeCoveragePlaytest({
       const pilots = [...next.leaders, ...(next.currentPilot ? [next.currentPilot] : [])];
       if (selectedPilotId && !pilots.some((pilot) => pilot.userId === selectedPilotId && pilot.claimedCellCount > 0)) {
         selectedPilotId = null;
-        selectedPilotColor = null;
         overviewButton?.setAttribute('aria-pressed', 'true');
         await territoryRequest.run();
       }
@@ -114,7 +111,6 @@ export function initializeCoveragePlaytest({
 
   async function refreshPeriod() {
     selectedPilotId = null;
-    selectedPilotColor = null;
     overviewButton?.setAttribute('aria-pressed', 'true');
     if (cellPopup) cellPopup.hidden = true;
     await Promise.all([leaderboardRequest.run(), territoryRequest.run()]);
@@ -128,7 +124,6 @@ export function initializeCoveragePlaytest({
   overviewButton?.addEventListener('click', () => {
     if (!selectedPilotId) return;
     selectedPilotId = null;
-    selectedPilotColor = null;
     overviewButton.setAttribute('aria-pressed', 'true');
     renderLeaderboard();
     void territoryRequest.run();

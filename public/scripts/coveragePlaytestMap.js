@@ -17,14 +17,16 @@ const COVERAGE_OPACITY = [
   0.34,
 ];
 
-export function colorCoverageTerritory(geojson, displayColor, pilotUserId = null) {
+export function colorCoverageTerritory(geojson, colorRegistry) {
   return {
     ...geojson,
     features: geojson.features.map((feature) => ({
       ...feature,
       properties: {
         ...feature.properties,
-        ...(pilotUserId ? { pilotUserId, displayColor } : {}),
+        ...(feature.properties.pilotUserId
+          ? { displayColor: colorRegistry.colorFor(feature.properties.pilotUserId) }
+          : {}),
       },
     })),
   };

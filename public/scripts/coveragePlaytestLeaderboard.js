@@ -8,7 +8,7 @@ function pilotRow(documentRef, pilot, { selectedPilotId, currentUserId, colorReg
   button.setAttribute('aria-pressed', String(pilot.userId === selectedPilotId));
   if (pilot.userId === selectedPilotId) button.classList.add('is-selected');
   if (pilot.userId === currentUserId) button.classList.add('is-current-pilot');
-  button.addEventListener('click', () => onSelect(pilot));
+  button.addEventListener('click', () => onSelect(pilot.userId === selectedPilotId ? null : pilot));
 
   const name = documentRef.createElement('span');
   name.className = 'coverage-pilot-name';

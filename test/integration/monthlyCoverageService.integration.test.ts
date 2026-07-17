@@ -83,6 +83,8 @@ describe('MonthlyCoverageService with PostGIS', () => {
     });
     const overview = await service.getGlobalTerritory({ competitionMonth: '2026-07' });
     expect(overview.features).toHaveLength(2);
+    expect(overview.features.find((feature) => feature.properties.x === 0)?.properties.pilotUserId).toBeUndefined();
+    expect(overview.features.find((feature) => feature.properties.x === 1)?.properties.pilotUserId).toBe(alpha.userId);
     await expect(service.getCellClaimants({ competitionMonth: '2026-07', x: 0, y: 0 }))
       .resolves.toEqual([{ userId: alpha.userId, displayName: 'Alpha' }, { userId: bravo.userId, displayName: 'Bravo' }]);
   });

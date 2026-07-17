@@ -34,7 +34,12 @@ function coverageClaimsCtes(input: { competitionMonth?: string; cellSize: number
           : sql``}
     ),
     cell_claimants AS (
-      SELECT cell_size, x, y, COUNT(*)::integer AS claimant_count
+      SELECT
+        cell_size,
+        x,
+        y,
+        COUNT(*)::integer AS claimant_count,
+        CASE WHEN COUNT(*) = 1 THEN MIN(claim_user::text)::uuid END AS pilot_user_id
       FROM pilot_cells
       GROUP BY cell_size, x, y
     )
@@ -164,7 +169,7 @@ function territoryQuery(input: {
             'y', scoped.y,
             'claimantCount', scoped.claimant_count,
             'isShared', scoped.claimant_count > 1,
-            'pilotUserId', ${input.pilotUserId ? sql`${input.pilotUserId}::uuid` : sql`NULL::uuid`}
+            'pilotUserId', ${input.pilotUserId ? sql`${input.pilotUserId}::uuid` : sql`scoped.pilot_user_id`}
           )),
           'geometry', ST_AsGeoJSON(ST_Transform(ST_MakeEnvelope(
             scoped.x * ${input.cellSize}, scoped.y * ${input.cellSize},
@@ -235,8 +240,8 @@ export function createMonthlyCoverageService(
           cellSize,
           pilotUserId: input.pilotUserId,
           scopedCells: input.pilotUserId
-            ? sql`SELECT pilot.x, pilot.y, claimant.claimant_count FROM pilot_cells pilot INNER JOIN cell_claimants claimant USING (cell_size, x, y) WHERE pilot.claim_user = ${input.pilotUserId}`
-            : sql`SELECT x, y, claimant_count FROM cell_claimants`,
+            ? sql`SELECT pilot.x, pilot.y, claimant.claimant_count, pilot.claim_user AS pilot_user_id FROM pilot_cells pilot INNER JOIN cell_claimants claimant USING (cell_size, x, y) WHERE pilot.claim_user = ${input.pilotUserId}`
+            : sql`SELECT x, y, claimant_count, pilot_user_id FROM cell_claimants`,
         })}
       `);
       return result.rows[0]?.geojson ?? emptyMonthlyCoverageGeoJson();
@@ -250,9 +255,9 @@ export function createMonthlyCoverageService(
           cellSize,
           pilotUserId: input.pilotUserId,
           scopedCells: sql`
-            SELECT source.x, source.y, source.claimant_count
+            SELECT source.x, source.y, source.claimant_count, source.pilot_user_id
             FROM ${input.pilotUserId
-              ? sql`(SELECT pilot.x, pilot.y, claimant.claimant_count, pilot.cell_size FROM pilot_cells pilot INNER JOIN cell_claimants claimant USING (cell_size, x, y) WHERE pilot.claim_user = ${input.pilotUserId})`
+              ? sql`(SELECT pilot.x, pilot.y, claimant.claimant_count, pilot.cell_size, pilot.claim_user AS pilot_user_id FROM pilot_cells pilot INNER JOIN cell_claimants claimant USING (cell_size, x, y) WHERE pilot.claim_user = ${input.pilotUserId})`
               : sql`cell_claimants`} source
             INNER JOIN launch_area_cells arena ON arena.launch_area_id = ${input.launchAreaId}
               AND arena.cell_size = ${cellSize} AND arena.x = source.x AND arena.y = source.y
