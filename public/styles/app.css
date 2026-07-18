@@ -237,7 +237,12 @@ button {
   min-height: 50px;
   margin-top: 0.35rem;
   border: 0;
-  background: linear-gradient(110deg, var(--color-primary-strong), var(--color-primary) 60%, var(--color-logo-aqua));
+  background: linear-gradient(
+    110deg,
+    var(--color-primary-strong),
+    var(--color-primary) 60%,
+    var(--color-logo-aqua)
+  );
   box-shadow: 0 10px 22px rgb(23 105 170 / 0.22);
   transition:
     transform 0.15s ease,
@@ -644,8 +649,7 @@ button {
   gap: 0.45rem;
   padding: 0 1.75rem;
   border-bottom: 1px solid #d6dee8;
-      color: #cfe7fa;
-
+  color: #cfe7fa;
 
   background: linear-gradient(110deg, #2b2c2e, #3b3e43);
 
@@ -657,9 +661,7 @@ button {
 }
 .competition-breadcrumb a {
   /* color: #cfe7fa; */
-    color: #a3bbcf;
-
-
+  color: #a3bbcf;
 }
 
 .admin-body {
@@ -956,20 +958,24 @@ button {
   grid-column: 1;
 }
 
-.coverage-card-heading {
+.territory-card-heading {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
   gap: 0.75rem;
 }
 
-.coverage-overview-button {
+.territory-allpilots-button {
   border-color: var(--color-primary-strong);
   color: var(--color-primary-strong);
   background: var(--color-surface);
+  width: fit-content;
+    margin-left: auto;
+   padding: 0.35rem 0.55rem;
+  font-size: 0.75rem;
 }
 
-.coverage-overview-button[aria-pressed="true"] {
+.territory-allpilots-button[aria-pressed='true'] {
   color: var(--color-on-primary);
   background: var(--color-primary-strong);
 }
@@ -979,7 +985,7 @@ button {
   font-variant-numeric: tabular-nums;
 }
 
-.coverage-leaderboard {
+.territory-leaderboard {
   overflow-x: auto;
 }
 
@@ -1202,7 +1208,12 @@ button {
 .error-page::after {
   position: absolute;
   inset: 38% 0 0;
-  background: linear-gradient(to bottom, transparent, rgb(10 22 13 / 0.18) 18%, rgb(10 22 13 / 0.9) 100%);
+  background: linear-gradient(
+    to bottom,
+    transparent,
+    rgb(10 22 13 / 0.18) 18%,
+    rgb(10 22 13 / 0.9) 100%
+  );
   content: '';
   pointer-events: none;
 }
@@ -1368,16 +1379,18 @@ button {
   .dashboard-info:not(.is-expanded) .coverage-pilot-row:nth-child(n + 4) {
     display: none;
   }
-  .dashboard-info:not(.is-expanded) .info-card > :not(h2):not(.leaderboard-period):not(.coverage-card-heading):not(.coverage-table) {
+  .dashboard-info:not(.is-expanded)
+    .info-card
+    > :not(h2):not(.leaderboard-period):not(.territory-card-heading):not(.coverage-table) {
     display: none;
   }
-  .dashboard-info:not(.is-expanded) .coverage-leaderboard > .coverage-card-heading {
+  .dashboard-info:not(.is-expanded) .territory-leaderboard > .territory-card-heading {
     display: flex;
   }
-  .dashboard-info:not(.is-expanded) .coverage-card-heading .coverage-overview-button {
+  .dashboard-info:not(.is-expanded) .territory-card-heading .territory-allpilots-button {
     display: none;
   }
-  .dashboard-info:not(.is-expanded) .coverage-leaderboard > .coverage-table {
+  .dashboard-info:not(.is-expanded) .territory-leaderboard > .coverage-table {
     display: block;
     min-width: 0;
   }
@@ -2135,30 +2148,78 @@ button {
   }
 }
 @keyframes onboarding-orange-score {
-  0%, 8% { content: '0'; }
-  13% { content: '1'; }
-  18% { content: '2'; }
-  23% { content: '3'; }
-  28% { content: '4'; }
-  33% { content: '5'; }
-  38% { content: '6'; }
-  43% { content: '7'; }
-  48% { content: '8'; }
-  49%, 88% { content: '9'; }
-  100% { content: '0'; }
+  0%,
+  8% {
+    content: '0';
+  }
+  13% {
+    content: '1';
+  }
+  18% {
+    content: '2';
+  }
+  23% {
+    content: '3';
+  }
+  28% {
+    content: '4';
+  }
+  33% {
+    content: '5';
+  }
+  38% {
+    content: '6';
+  }
+  43% {
+    content: '7';
+  }
+  48% {
+    content: '8';
+  }
+  49%,
+  88% {
+    content: '9';
+  }
+  100% {
+    content: '0';
+  }
 }
 @keyframes onboarding-blue-score {
-  0%, 18% { content: '0'; }
-  23% { content: '1'; }
-  28% { content: '2'; }
-  33% { content: '3'; }
-  38% { content: '4'; }
-  43% { content: '5'; }
-  48% { content: '6'; }
-  53% { content: '7'; }
-  58% { content: '8'; }
-  59%, 88% { content: '9'; }
-  100% { content: '0'; }
+  0%,
+  18% {
+    content: '0';
+  }
+  23% {
+    content: '1';
+  }
+  28% {
+    content: '2';
+  }
+  33% {
+    content: '3';
+  }
+  38% {
+    content: '4';
+  }
+  43% {
+    content: '5';
+  }
+  48% {
+    content: '6';
+  }
+  53% {
+    content: '7';
+  }
+  58% {
+    content: '8';
+  }
+  59%,
+  88% {
+    content: '9';
+  }
+  100% {
+    content: '0';
+  }
 }
 @keyframes onboarding-globe-zoom {
   0%,
@@ -2176,9 +2237,16 @@ button {
   }
 }
 @keyframes onboarding-globe-spin {
-  0% { transform: translateX(-8px); }
-  26% { transform: translateX(8px); }
-  58%, 100% { transform: translateX(18px); }
+  0% {
+    transform: translateX(-8px);
+  }
+  26% {
+    transform: translateX(8px);
+  }
+  58%,
+  100% {
+    transform: translateX(18px);
+  }
 }
 @keyframes onboarding-local-zoom {
   0%,
@@ -2264,19 +2332,45 @@ button {
   }
 }
 @keyframes onboarding-global-copy {
-  0%, 4% { opacity: 0; }
-  8%, 42% { opacity: 1; }
-  48%, 100% { opacity: 0; }
+  0%,
+  4% {
+    opacity: 0;
+  }
+  8%,
+  42% {
+    opacity: 1;
+  }
+  48%,
+  100% {
+    opacity: 0;
+  }
 }
 @keyframes onboarding-arena-copy {
-  0%, 54% { opacity: 0; }
-  60%, 68% { opacity: 1; }
-  73%, 100% { opacity: 0; }
+  0%,
+  54% {
+    opacity: 0;
+  }
+  60%,
+  68% {
+    opacity: 1;
+  }
+  73%,
+  100% {
+    opacity: 0;
+  }
 }
 @keyframes onboarding-arena-points-copy {
-  0%, 72% { opacity: 0; }
-  77%, 94% { opacity: 1; }
-  100% { opacity: 0; }
+  0%,
+  72% {
+    opacity: 0;
+  }
+  77%,
+  94% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

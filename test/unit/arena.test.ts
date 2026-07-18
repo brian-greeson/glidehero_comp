@@ -12,11 +12,19 @@ function element(): any {
     children: [] as any[],
     classList: { add() {}, contains: () => false, toggle() {} },
     style: { setProperty() {} },
-    setAttribute(name: string, value: string) { attributes.set(name, value); },
-    removeAttribute(name: string) { attributes.delete(name); },
+    setAttribute(name: string, value: string) {
+      attributes.set(name, value);
+    },
+    removeAttribute(name: string) {
+      attributes.delete(name);
+    },
     addEventListener() {},
-    append(...children: any[]) { node.children.push(...children); },
-    replaceChildren(...children: any[]) { node.children = children; },
+    append(...children: any[]) {
+      node.children.push(...children);
+    },
+    replaceChildren(...children: any[]) {
+      node.children = children;
+    },
   };
   return node;
 }
@@ -43,7 +51,9 @@ function arenaHarness() {
   return {
     map,
     maplibre: {
-      Map: vi.fn(function MapStub() { return map; }),
+      Map: vi.fn(function MapStub() {
+        return map;
+      }),
       NavigationControl: vi.fn(),
     },
     load: async () => loadHandler?.(),
@@ -61,14 +71,14 @@ function arenaDocument() {
   };
   const elements = new Map<string, any>([
     ['[data-competition-coverage]', element()],
-    ['[data-coverage-map]', mapElement],
-    ['[data-coverage-leaderboard]', element()],
-    ['[data-coverage-overview]', element()],
+    ['[data-territory-map]', mapElement],
+    ['[data-territory-leaderboard]', element()],
+    ['[data-territory-allpilots]', element()],
     ['[data-map-empty-state]', element()],
-    ['[data-coverage-status]', element()],
-    ['[data-coverage-list]', element()],
-    ['[data-coverage-current-pilot]', element()],
-    ['[data-coverage-cell-popup]', element()],
+    ['[data-territory-status]', element()],
+    ['[data-territory-list]', element()],
+    ['[data-territory-current-pilot]', element()],
+    ['[data-territory-cell-popup]', element()],
   ]);
   return {
     elements,
@@ -119,13 +129,18 @@ describe('Arena dashboard', () => {
       type: 'geojson',
       data: boundary,
     });
-    expect(harness.map.addLayer).toHaveBeenCalledWith(expect.objectContaining({
-      id: 'competition-arena-boundary',
-      source: 'competition-arena-boundary',
-      type: 'line',
-    }));
+    expect(harness.map.addLayer).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: 'competition-arena-boundary',
+        source: 'competition-arena-boundary',
+        type: 'line',
+      }),
+    );
     expect(harness.map.fitBounds).toHaveBeenCalledWith(
-      [[-106, 39], [-105, 40]],
+      [
+        [-106, 39],
+        [-105, 40],
+      ],
       { padding: 60, duration: 0 },
     );
     expect(harness.map.on).toHaveBeenCalledWith('moveend', expect.any(Function));

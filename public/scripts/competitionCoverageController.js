@@ -17,7 +17,11 @@ import {
 import { initializeMapFlightAids } from './mapFlightAids.js';
 
 async function jsonRequest(url, fetchImpl, signal) {
-  const response = await fetchImpl(url, { credentials: 'same-origin', headers: { accept: 'application/json' }, signal });
+  const response = await fetchImpl(url, {
+    credentials: 'same-origin',
+    headers: { accept: 'application/json' },
+    signal,
+  });
   if (!response.ok) throw new Error(`Coverage request failed with ${response.status}.`);
   return response.json();
 }
@@ -33,16 +37,19 @@ export function initializeCompetitionCoverage({
   storage,
 } = {}) {
   const root = documentRef.querySelector('[data-competition-coverage]');
-  const mapElement = documentRef.querySelector('[data-coverage-map]');
-  const card = documentRef.querySelector('[data-coverage-leaderboard]');
-  const overviewButton = documentRef.querySelector('[data-coverage-overview]');
+  const mapElement = documentRef.querySelector('[data-territory-map]');
+  const card = documentRef.querySelector('[data-territory-leaderboard]');
+  const overviewButton = documentRef.querySelector('[data-territory-allpilots]');
   const emptyState = documentRef.querySelector('[data-map-empty-state]');
-  const cellPopup = documentRef.querySelector('[data-coverage-cell-popup]');
+  const cellPopup = documentRef.querySelector('[data-territory-cell-popup]');
   if (!root || !mapElement || !maplibre) return;
 
   const arenaSourceId = mapElement.dataset.arenaSourceId || null;
   const currentUserId = mapElement.dataset.currentUserId;
-  const colorRegistry = createCompetitionColorRegistry(currentUserId, mapElement.dataset.territoryColor);
+  const colorRegistry = createCompetitionColorRegistry(
+    currentUserId,
+    mapElement.dataset.territoryColor,
+  );
   let map;
   let mapReady = false;
   let selectedPilotId = null;
@@ -62,17 +69,22 @@ export function initializeCompetitionCoverage({
 
   const territoryRequest = createLatestRequest(async ({ signal, isCurrent }) => {
     try {
-      const territory = await jsonRequest(coverageTerritoryUrl({
-        arenaSourceId,
-        month: periodControl.month,
-        pilotUserId: selectedPilotId,
-      }), fetchImpl, signal);
+      const territory = await jsonRequest(
+        coverageTerritoryUrl({
+          arenaSourceId,
+          month: periodControl.month,
+          pilotUserId: selectedPilotId,
+        }),
+        fetchImpl,
+        signal,
+      );
       if (!isCurrent()) return;
       const colored = colorCoverageTerritory(territory, colorRegistry);
       setCoverageData(map, colored);
       setStatus(colored.features.length === 0 ? 'No coverage for this selection.' : '');
     } catch (error) {
-      if (error?.name !== 'AbortError' && isCurrent()) setStatus('Unable to load coverage. Try again.');
+      if (error?.name !== 'AbortError' && isCurrent())
+        setStatus('Unable to load coverage. Try again.');
     }
   });
 
@@ -103,7 +115,10 @@ export function initializeCompetitionCoverage({
       if (!isCurrent()) return;
       leaderboard = next;
       const pilots = [...next.leaders, ...(next.currentPilot ? [next.currentPilot] : [])];
-      if (selectedPilotId && !pilots.some((pilot) => pilot.userId === selectedPilotId && pilot.claimedCellCount > 0)) {
+      if (
+        selectedPilotId &&
+        !pilots.some((pilot) => pilot.userId === selectedPilotId && pilot.claimedCellCount > 0)
+      ) {
         selectedPilotId = null;
         overviewButton?.setAttribute('aria-pressed', 'true');
         await territoryRequest.run();
@@ -111,7 +126,7 @@ export function initializeCompetitionCoverage({
       renderLeaderboard();
     } catch (error) {
       if (error?.name !== 'AbortError' && isCurrent()) {
-        const status = documentRef.querySelector('[data-coverage-status]');
+        const status = documentRef.querySelector('[data-territory-status]');
         if (status) status.textContent = 'Unable to update coverage rankings.';
       }
     } finally {
@@ -127,8 +142,13 @@ export function initializeCompetitionCoverage({
   }
 
   const periodControl = initializeCompetitionPeriodControl({
-    documentRef, locationRef, historyRef, now,
-    onChange: async () => { if (mapReady) await refreshPeriod(); },
+    documentRef,
+    locationRef,
+    historyRef,
+    now,
+    onChange: async () => {
+      if (mapReady) await refreshPeriod();
+    },
   });
 
   overviewButton?.addEventListener('click', () => {
@@ -140,16 +160,35 @@ export function initializeCompetitionCoverage({
   });
 
   try {
-    map = new maplibre.Map({ container: mapElement, style: mapElement.dataset.mapStyleUrl, center: [-106.2, 39.2], zoom: 7 });
+    map = new maplibre.Map({
+      container: mapElement,
+      style: mapElement.dataset.mapStyleUrl,
+      center: [-106.2, 39.2],
+      zoom: 7,
+    });
     map.addControl(new maplibre.NavigationControl(), 'top-right');
     map.once('error', () => setStatus('Map unavailable. Check your connection and try again.'));
     map.once('load', async () => {
       try {
         if (arenaSourceId) {
-          const boundary = await jsonRequest(`/v1/arenas/${encodeURIComponent(arenaSourceId)}/boundary`, fetchImpl);
+          const boundary = await jsonRequest(
+            `/v1/arenas/${encodeURIComponent(arenaSourceId)}/boundary`,
+            fetchImpl,
+          );
           map.addSource('competition-arena-boundary', { type: 'geojson', data: boundary });
-          map.addLayer({ id: 'competition-arena-boundary', type: 'line', source: 'competition-arena-boundary', paint: { 'line-color': '#0f172a', 'line-width': 3 } });
-          map.fitBounds([[boundary.bbox[0], boundary.bbox[1]], [boundary.bbox[2], boundary.bbox[3]]], { padding: 60, duration: 0 });
+          map.addLayer({
+            id: 'competition-arena-boundary',
+            type: 'line',
+            source: 'competition-arena-boundary',
+            paint: { 'line-color': '#0f172a', 'line-width': 3 },
+          });
+          map.fitBounds(
+            [
+              [boundary.bbox[0], boundary.bbox[1]],
+              [boundary.bbox[2], boundary.bbox[3]],
+            ],
+            { padding: 60, duration: 0 },
+          );
         }
         mapReady = true;
         await refreshPeriod();
@@ -158,11 +197,19 @@ export function initializeCompetitionCoverage({
         card?.removeAttribute('aria-busy');
       } finally {
         initializeMapFlightAids({
-          map, mapElement, documentRef, fetchImpl, navigatorRef, storage,
+          map,
+          mapElement,
+          documentRef,
+          fetchImpl,
+          navigatorRef,
+          storage,
         });
       }
     });
-    if (!arenaSourceId) map.on('moveend', () => { if (mapReady) void leaderboardRequest.run(); });
+    if (!arenaSourceId)
+      map.on('moveend', () => {
+        if (mapReady) void leaderboardRequest.run();
+      });
     map.on('click', async (event) => {
       if (!cellPopup) return;
       const feature = coverageCellFeatureAtPoint(map, event.point);
@@ -174,7 +221,10 @@ export function initializeCompetitionCoverage({
       const requestId = ++cellPopupRequestId;
       cellPopup.hidden = true;
       try {
-        const payload = await jsonRequest(coverageCellClaimantsUrl(properties.x, properties.y, periodControl.month), fetchImpl);
+        const payload = await jsonRequest(
+          coverageCellClaimantsUrl(properties.x, properties.y, periodControl.month),
+          fetchImpl,
+        );
         if (requestId !== cellPopupRequestId) return;
         const heading = documentRef.createElement('strong');
         heading.textContent = 'Claimed by';

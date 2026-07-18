@@ -75,7 +75,7 @@ the browser-selected local month, using each flight's stored competition month.
 
 ### Global competition and Arenas
 
-The Global competition lives at `/global`. Its additive coverage leaderboard is
+The Global competition lives at `/global`. Its additive Territory leaderboard is
 based on the current map viewport and refreshes after the map moves. An Arena is a
 filtered view of the same coverage data using one canonical EPSG:6933 MultiPolygon. Arena
 rankings cover the complete Arena and do not change when its map moves.

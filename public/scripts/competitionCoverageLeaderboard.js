@@ -44,17 +44,33 @@ export function renderCoverageLeaderboard({
   colorRegistry,
   onSelect,
 }) {
-  const list = documentRef.querySelector('[data-coverage-list]');
-  const status = documentRef.querySelector('[data-coverage-status]');
-  const current = documentRef.querySelector('[data-coverage-current-pilot]');
+  const list = documentRef.querySelector('[data-territory-list]');
+  const status = documentRef.querySelector('[data-territory-status]');
+  const current = documentRef.querySelector('[data-territory-current-pilot]');
   if (!list || !status || !current) return;
-  list.replaceChildren(...leaderboard.leaders.map((pilot) => pilotRow(documentRef, pilot, {
-    selectedPilotId, currentUserId, colorRegistry, onSelect,
-  })));
+  list.replaceChildren(
+    ...leaderboard.leaders.map((pilot) =>
+      pilotRow(documentRef, pilot, {
+        selectedPilotId,
+        currentUserId,
+        colorRegistry,
+        onSelect,
+      }),
+    ),
+  );
   current.replaceChildren();
   current.hidden = !leaderboard.currentPilot;
-  if (leaderboard.currentPilot) current.append(pilotRow(documentRef, leaderboard.currentPilot, {
-    selectedPilotId, currentUserId, colorRegistry, onSelect,
-  }));
-  status.textContent = leaderboard.leaders.length === 0 ? 'No coverage in this area.' : 'Select a pilot to view their coverage.';
+  if (leaderboard.currentPilot)
+    current.append(
+      pilotRow(documentRef, leaderboard.currentPilot, {
+        selectedPilotId,
+        currentUserId,
+        colorRegistry,
+        onSelect,
+      }),
+    );
+  status.textContent =
+    leaderboard.leaders.length === 0
+      ? 'No coverage in this area.'
+      : 'Select a pilot to view their coverage.';
 }

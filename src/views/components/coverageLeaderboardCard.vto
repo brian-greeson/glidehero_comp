@@ -1,19 +1,22 @@
-<section class="info-card leaderboard-card coverage-leaderboard" data-coverage-leaderboard aria-busy="true">
-  <div class="coverage-card-heading">
-    <h2>Coverage leaderboard</h2>
-    <button type="button" class="secondary-button coverage-overview-button" data-coverage-overview aria-pressed="true">Overview</button>
+<section class="info-card leaderboard-card territory-leaderboard" data-territory-leaderboard aria-busy="true">
+  <div class="territory-card-heading">
+    <h2>Territory leaderboard</h2>
+    <button type="button" class="secondary-button territory-allpilots-button" data-territory-allpilots
+      aria-pressed="true">All Pilots</button>
   </div>
   <div class="leaderboard-period" data-competition-period role="group" aria-label="Coverage time period">
     <button type="button" data-competition-period-option="all-time" aria-pressed="true">All Time</button>
     <span aria-hidden="true">|</span>
-    <button type="button" data-competition-period-option="current-month" aria-pressed="false"><span data-current-month-option>Current Month</span></button>
+    <button type="button" data-competition-period-option="current-month" aria-pressed="false"><span
+        data-current-month-option>Current Month</span></button>
   </div>
-  <p class="leaderboard-status" data-coverage-status aria-live="polite">Loading coverage…</p>
+  <p class="leaderboard-status" data-territory-status aria-live="polite">Loading coverage…</p>
   <div class="coverage-table" role="table" aria-label="Coverage leaders">
     <div class="coverage-table-header" role="row">
-      <span role="columnheader">Pilot</span><span role="columnheader">Claimed</span><span role="columnheader">Exclusive</span><span role="columnheader">Shared</span><span role="columnheader">Area</span>
+      <span role="columnheader">Pilot</span><span role="columnheader">Claimed</span><span
+        role="columnheader">Exclusive</span><span role="columnheader">Shared</span><span role="columnheader">Area</span>
     </div>
-    <div data-coverage-list role="rowgroup"></div>
+    <div data-territory-list role="rowgroup"></div>
   </div>
-  <div class="current-pilot-result" data-coverage-current-pilot hidden></div>
+  <div class="current-pilot-result" data-territory-current-pilot hidden></div>
 </section>
