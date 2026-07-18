@@ -61,6 +61,28 @@ describe('FlightWorkerRuntime', () => {
     expect(signals.listenerCount('SIGTERM')).toBe(0);
   });
 
+  it('closes the dedicated stream reader during shutdown', async () => {
+    const signals = new EventEmitter();
+    const stopped = Promise.withResolvers<void>();
+    const worker = {
+      run: vi.fn(async (signal: AbortSignal) => {
+        signal.addEventListener('abort', () => stopped.resolve(), { once: true });
+        await stopped.promise;
+      }),
+    };
+    const valkey = { close: vi.fn() };
+    const streamReader = { close: vi.fn() };
+    const pool = { end: vi.fn(async () => undefined) };
+
+    const running = runFlightWorkerRuntime({ worker, valkey, streamReader, pool, signalSource: signals });
+    await vi.waitFor(() => expect(worker.run).toHaveBeenCalledOnce());
+    signals.emit('SIGTERM');
+
+    await expect(running).resolves.toBe('stopped');
+    expect(streamReader.close).toHaveBeenCalledOnce();
+    expect(valkey.close).toHaveBeenCalledOnce();
+  });
+
   it('returns predictably at the shutdown deadline without closing active dependencies', async () => {
     vi.useFakeTimers();
     const signals = new EventEmitter();

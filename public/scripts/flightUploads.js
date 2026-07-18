@@ -1,10 +1,7 @@
 const MAX_ACTIVE_FILES = 1000;
 const MAX_FILE_BYTES = 10 * 1024 * 1024;
 const CONCURRENCY = 4;
-
-function statusLabel(status) {
-  return { uploading: 'Uploading', queued: 'Queued', processing: 'Processing', completed: 'Completed', duplicate: 'Duplicate', failed: 'Failed' }[status] ?? status;
-}
+const PROGRESS_POLL_INTERVAL_MS = 10_000;
 
 function putFile(url, file, onProgress) {
   return new Promise((resolve, reject) => {
@@ -34,23 +31,16 @@ export function initializeFlightUploads(documentRef = document, windowRef = glob
   const uploadDialog = documentRef.querySelector('[data-upload-dialog]');
   const uploadList = documentRef.querySelector('[data-upload-list]');
   const overall = documentRef.querySelector('[data-upload-overall]');
-  const progressTrigger = documentRef.querySelector('[data-flight-progress-trigger]');
   const progressBar = documentRef.querySelector('[data-flight-progress-bar]');
   const progressCount = documentRef.querySelector('[data-flight-progress-count]');
-  const progressDialog = documentRef.querySelector('[data-flight-progress-dialog]');
-  const progressList = documentRef.querySelector('[data-flight-progress-list]');
-  const previousProgress = documentRef.querySelector('[data-flight-progress-previous]');
-  const nextProgress = documentRef.querySelector('[data-flight-progress-next]');
-  const progressPage = documentRef.querySelector('[data-flight-progress-page]');
-  const closeProgress = documentRef.querySelector('[data-flight-progress-close]');
-  const clearFailed = documentRef.querySelector('[data-clear-failed]');
-  if (!windowRef || !uploadDialog || !uploadList || !overall || !progressTrigger || !progressBar || !progressCount) return;
+  if (!windowRef || !uploadDialog || !uploadList || !overall || !progressBar || !progressCount) return;
   const inputs = [...documentRef.querySelectorAll('[data-upload-input], [data-upload-more-input]')];
 
   const pending = [];
   let running = 0;
   let settled = 0;
   let selected = 0;
+  let failed = 0;
   let serverTotal = 0;
   let modalServerBaseline = null;
   let observedExternalGrowth = 0;
@@ -61,38 +51,13 @@ export function initializeFlightUploads(documentRef = document, windowRef = glob
   let reloadTimer = null;
   let initialProgressResolved = false;
   let resolveInitialProgress;
-  const initialProgress = new Promise((resolve) => { resolveInitialProgress = resolve; });
-  let requestedProgressPage = 1;
-  let progressPageCount = 1;
-  let detailRequestSequence = 0;
-
-  async function loadProgressDetails(page = 1) {
-    if (!progressList) return;
-    requestedProgressPage = Math.max(1, Math.min(page, progressPageCount));
-    const requestSequence = ++detailRequestSequence;
-    const result = await jsonRequest(`/v1/igc-upload-jobs?page=${requestedProgressPage}`);
-    if (requestSequence !== detailRequestSequence) return;
-    progressPageCount = Math.max(1, Math.ceil(result.total / result.pageSize));
-    requestedProgressPage = Math.min(result.page, progressPageCount);
-    progressList.replaceChildren(...result.jobs.map((job) => {
-      const row = documentRef.createElement('div');
-      row.className = 'flight-progress-row';
-      const name = documentRef.createElement('span');
-      name.textContent = job.originalFilename;
-      const state = documentRef.createElement('span');
-      state.textContent = job.error || statusLabel(job.status);
-      if (job.status === 'failed') state.className = 'error';
-      row.append(name, state);
-      return row;
-    }));
-    if (progressPage) progressPage.textContent = `Page ${requestedProgressPage} of ${progressPageCount}`;
-    if (previousProgress) previousProgress.disabled = requestedProgressPage <= 1;
-    if (nextProgress) nextProgress.disabled = requestedProgressPage >= progressPageCount;
-  }
+  let initialProgress = new Promise((resolve) => { resolveInitialProgress = resolve; });
+  let progressPollTimer = null;
+  let progressPollCycle = 0;
 
   function updateOverall() {
     overall.textContent = `${settled}/${selected}`;
-    if (selected > 0 && settled === selected && running === 0 && pending.length === 0 && !reloadScheduled) {
+    if (selected > 0 && settled === selected && failed === 0 && running === 0 && pending.length === 0 && !reloadScheduled) {
       reloadScheduled = true;
       reloadTimer = windowRef.setTimeout(() => {
         reloadTimer = null;
@@ -158,6 +123,7 @@ export function initializeFlightUploads(documentRef = document, windowRef = glob
       const item = pending.shift();
       running += 1;
       void upload(item).catch(async (error) => {
+        failed += 1;
         item.row.status.textContent = error.message;
         item.row.status.classList.add('error');
         await releaseFailedUpload(item);
@@ -170,12 +136,7 @@ export function initializeFlightUploads(documentRef = document, windowRef = glob
     }
   }
 
-  function addFiles(fileList) {
-    const files = [...fileList];
-    if (!files.length) return;
-    const valid = files.filter((file) => file.name.toLowerCase().endsWith('.igc') && file.size > 0 && file.size <= MAX_FILE_BYTES);
-    if (valid.length !== files.length) windowRef.alert('Only non-empty .igc files of 10 MB or less can be uploaded.');
-    if (!valid.length) return;
+  function addFiles(valid) {
     if (modalServerBaseline === null) modalServerBaseline = serverTotal;
     const accountedTotal = Math.max(serverTotal, modalServerBaseline + observedExternalGrowth + currentReservations.size);
     if (valid.length > MAX_ACTIVE_FILES - accountedTotal) {
@@ -194,14 +155,14 @@ export function initializeFlightUploads(documentRef = document, windowRef = glob
     }
     selected += valid.length;
     updateOverall();
-    if (valid.length && !uploadDialog.open) uploadDialog.showModal();
     pump();
   }
 
-  async function pollProgress() {
+  async function pollProgress(cycle) {
     const intentIdsBeforeRequest = new Set(currentIntentIds);
     try {
       const progress = await jsonRequest('/v1/igc-upload-progress');
+      if (cycle !== progressPollCycle || !uploadDialog.open) return;
       serverTotal = progress.total;
       for (const id of intentIdsBeforeRequest) {
         if (currentIntentIds.has(id)) representedIntentIds.add(id);
@@ -212,16 +173,9 @@ export function initializeFlightUploads(documentRef = document, windowRef = glob
           serverTotal - modalServerBaseline - representedIntentIds.size,
         );
       }
-      if (!progress.total) {
-        progressTrigger.hidden = true;
-      } else {
-        progressTrigger.hidden = false;
-        progressBar.max = progress.total;
-        progressBar.value = progress.finished;
-        progressCount.textContent = `${progress.finished}/${progress.total}`;
-      }
-      if (clearFailed) clearFailed.hidden = progress.failed === 0;
-      if (progressDialog?.open) await loadProgressDetails(requestedProgressPage);
+      progressBar.max = Math.max(progress.total, 1);
+      progressBar.value = progress.finished;
+      progressCount.textContent = `${progress.finished}/${progress.total}`;
       if (!initialProgressResolved) {
         initialProgressResolved = true;
         resolveInitialProgress();
@@ -229,33 +183,43 @@ export function initializeFlightUploads(documentRef = document, windowRef = glob
     } catch (error) {
       console.error('Unable to load flight progress', error);
     }
-    windowRef.setTimeout(pollProgress, 2500);
+    if (cycle === progressPollCycle && uploadDialog.open) {
+      progressPollTimer = windowRef.setTimeout(() => {
+        progressPollTimer = null;
+        void pollProgress(cycle);
+      }, PROGRESS_POLL_INTERVAL_MS);
+    }
+  }
+
+  function startProgressPolling() {
+    if (progressPollTimer !== null) windowRef.clearTimeout?.(progressPollTimer);
+    progressPollTimer = null;
+    progressPollCycle += 1;
+    if (initialProgressResolved) {
+      initialProgressResolved = false;
+      initialProgress = new Promise((resolve) => { resolveInitialProgress = resolve; });
+    }
+    void pollProgress(progressPollCycle);
+  }
+
+  function stopProgressPolling() {
+    progressPollCycle += 1;
+    if (progressPollTimer !== null) windowRef.clearTimeout?.(progressPollTimer);
+    progressPollTimer = null;
   }
 
   for (const input of inputs) input.addEventListener('change', () => {
-    const selectedFiles = [...input.files];
+    const files = [...input.files];
     input.value = '';
-    void initialProgress.then(() => addFiles(selectedFiles));
-  });
-  progressTrigger.addEventListener('click', () => {
-    progressDialog?.showModal();
-    void loadProgressDetails(1).catch((error) => console.error('Unable to load flight details', error));
-  });
-  previousProgress?.addEventListener('click', () => {
-    if (requestedProgressPage > 1) void loadProgressDetails(requestedProgressPage - 1);
-  });
-  nextProgress?.addEventListener('click', () => {
-    if (requestedProgressPage < progressPageCount) void loadProgressDetails(requestedProgressPage + 1);
-  });
-  closeProgress?.addEventListener('click', () => progressDialog.close());
-  clearFailed?.addEventListener('click', async () => {
-    clearFailed.disabled = true;
-    try {
-      await jsonRequest('/v1/igc-upload-failures', { method: 'DELETE' });
-      windowRef.location.reload();
-    } finally {
-      clearFailed.disabled = false;
+    if (!files.length) return;
+    const valid = files.filter((file) => file.name.toLowerCase().endsWith('.igc') && file.size > 0 && file.size <= MAX_FILE_BYTES);
+    if (valid.length !== files.length) windowRef.alert('Only non-empty .igc files of 10 MB or less can be uploaded.');
+    if (!valid.length) return;
+    if (!uploadDialog.open) {
+      uploadDialog.showModal();
+      startProgressPolling();
     }
+    void initialProgress.then(() => addFiles(valid));
   });
-  void pollProgress();
+  uploadDialog.addEventListener('close', stopProgressPolling);
 }

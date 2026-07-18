@@ -64,8 +64,15 @@ export function createFlightWorkerService(
   valkey: GlideClient,
   queue: FlightUploadQueueService,
   processor: FlightProcessingService,
-  options: { s3Client: Pick<S3, 'send'>; bucketName: string; consumerName: string; readRetryDelayMs?: number },
+  options: {
+    s3Client: Pick<S3, 'send'>;
+    bucketName: string;
+    consumerName: string;
+    readRetryDelayMs?: number;
+    streamReader?: Pick<GlideClient, 'xreadgroup'>;
+  },
 ): FlightWorkerService {
+  const streamReader = options.streamReader ?? valkey;
   async function acknowledge(streamId: string) {
     try {
       if (typeof valkey.exec === 'function') {
@@ -630,7 +637,7 @@ export function createFlightWorkerService(
         while (!signal?.aborted) {
         let result: Awaited<ReturnType<GlideClient['xreadgroup']>>;
         try {
-          result = await valkey.xreadgroup(
+          result = await streamReader.xreadgroup(
             FLIGHT_JOB_GROUP,
             options.consumerName,
             { [FLIGHT_JOB_STREAM]: '>' },

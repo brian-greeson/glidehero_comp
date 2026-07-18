@@ -444,34 +444,6 @@ button {
 .upload-form {
   display: block;
 }
-.flight-progress-trigger {
-  display: grid;
-  min-width: 190px;
-  grid-template-columns: 1fr auto;
-  gap: 0.2rem 0.65rem;
-  padding: 0.45rem 0.8rem;
-  border: 0;
-  border-radius: 0.7rem;
-  color: #fff;
-  background: rgb(255 255 255 / 0.12);
-  cursor: pointer;
-  text-align: left;
-}
-.flight-progress-trigger[hidden],
-[data-clear-failed][hidden] {
-  display: none;
-}
-.flight-progress-trigger progress {
-  width: 100%;
-  grid-column: 1;
-  accent-color: var(--color-logo-aqua);
-}
-.flight-progress-trigger [data-flight-progress-count] {
-  grid-column: 2;
-  grid-row: 1 / span 2;
-  align-self: center;
-  font-variant-numeric: tabular-nums;
-}
 .upload-button,
 .account-trigger {
   display: inline-flex;
@@ -501,8 +473,7 @@ button {
   opacity: 0;
   pointer-events: none;
 }
-.flight-upload-dialog,
-.flight-progress-dialog {
+.flight-upload-dialog {
   width: 100vw;
   max-width: none;
   height: 100vh;
@@ -511,12 +482,10 @@ button {
   border: 0;
   background: rgb(10 25 43 / 0.78);
 }
-.flight-upload-dialog::backdrop,
-.flight-progress-dialog::backdrop {
+.flight-upload-dialog::backdrop {
   background: rgb(10 25 43 / 0.78);
 }
-.flight-upload-panel,
-.flight-progress-panel {
+.flight-upload-panel {
   display: flex;
   width: min(760px, calc(100% - 2rem));
   max-height: calc(100vh - 2rem);
@@ -529,26 +498,41 @@ button {
   background: var(--color-surface);
   box-shadow: 0 20px 60px rgb(0 0 0 / 0.35);
 }
-.flight-upload-panel > header,
-.flight-progress-panel > header {
+.flight-upload-panel > header {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
 }
-.flight-upload-panel h2,
-.flight-progress-panel h2 {
+.flight-upload-panel h2 {
   margin: 0;
 }
-.flight-upload-list,
-.flight-progress-list {
+.flight-processing-progress {
+  display: grid;
+  gap: 0.45rem;
+  padding: 0.75rem;
+  border-radius: 0.6rem;
+  background: var(--color-surface-subtle);
+}
+.flight-processing-progress > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+}
+.flight-processing-progress progress {
+  width: 100%;
+  accent-color: var(--color-primary);
+}
+.flight-processing-progress [data-flight-progress-count] {
+  font-variant-numeric: tabular-nums;
+}
+.flight-upload-list {
   display: grid;
   min-height: 0;
   gap: 0.45rem;
   overflow: auto;
 }
-.flight-upload-row,
-.flight-progress-row {
+.flight-upload-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(100px, 0.7fr) minmax(90px, auto);
   align-items: center;
@@ -557,24 +541,15 @@ button {
   border-radius: 0.6rem;
   background: var(--color-surface-subtle);
 }
-.flight-upload-row > span:first-child,
-.flight-progress-row > span:first-child {
+.flight-upload-row > span:first-child {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.flight-progress-pages {
-  align-items: center;
-  display: flex;
-  justify-content: space-between;
-}
 .flight-upload-row progress {
   width: 100%;
   accent-color: var(--color-primary);
-}
-.flight-progress-row {
-  grid-template-columns: minmax(0, 1fr) minmax(120px, auto);
 }
 .flight-upload-panel footer {
   display: flex;
@@ -1543,7 +1518,8 @@ button {
   stroke-width: 1.5;
 }
 .onboarding-flight-track,
-.onboarding-loop-track {
+.onboarding-loop-track,
+.onboarding-flight-claim-mask-track {
   fill: none;
   stroke: var(--color-accent);
   stroke-width: 5;
@@ -1552,13 +1528,26 @@ button {
   stroke-dasharray: 1;
   stroke-dashoffset: 1;
 }
+.onboarding-flight-claim-mask-track {
+  stroke: white;
+  stroke-width: 112;
+  stroke-linecap: butt;
+}
 .onboarding-glider {
   fill: var(--color-accent);
+}
+.onboarding-flight-glider {
+  offset-path: path('M25 194 C52 189 57 153 82 151 S116 158 144 113 S189 75 226 73 S255 44 279 27');
+  offset-rotate: auto;
+  offset-distance: 100%;
 }
 .onboarding-claim-cell,
 .onboarding-enclosed-cell {
   fill: var(--territory-color);
   opacity: 0;
+}
+.onboarding-crossed-cells .onboarding-claim-cell {
+  opacity: 0.58;
 }
 .onboarding-competition-demo {
   display: grid;
@@ -1863,29 +1852,14 @@ button {
 [data-onboarding-step][data-active] .onboarding-flight-track {
   animation: onboarding-draw 6s ease-in-out infinite;
 }
+[data-onboarding-step][data-active] .onboarding-flight-claim-mask-track {
+  animation: onboarding-draw 6s ease-in-out infinite;
+}
+[data-onboarding-step][data-active] .onboarding-flight-glider {
+  animation: onboarding-flight-glider 6s ease-in-out infinite;
+}
 [data-onboarding-step][data-active] .onboarding-loop-track {
   animation: onboarding-draw-loop 6s ease-in-out infinite;
-}
-[data-onboarding-step][data-active] .onboarding-claim-cell {
-  animation: onboarding-claim 6s ease-out infinite;
-}
-[data-onboarding-step][data-active] .claim-2 {
-  animation-delay: 0.25s;
-}
-[data-onboarding-step][data-active] .claim-3 {
-  animation-delay: 0.5s;
-}
-[data-onboarding-step][data-active] .claim-4 {
-  animation-delay: 0.75s;
-}
-[data-onboarding-step][data-active] .claim-5 {
-  animation-delay: 1s;
-}
-[data-onboarding-step][data-active] .claim-6 {
-  animation-delay: 1.25s;
-}
-[data-onboarding-step][data-active] .claim-7 {
-  animation-delay: 1.5s;
 }
 [data-onboarding-step][data-active] .onboarding-loop-claim-cell {
   animation: onboarding-loop-claim 6s ease-out infinite;
@@ -2013,6 +1987,26 @@ button {
     stroke-dashoffset: -1;
   }
 }
+@keyframes onboarding-flight-glider {
+  0%,
+  8% {
+    offset-distance: 0%;
+    opacity: 0;
+  }
+  9% {
+    opacity: 1;
+  }
+  58%,
+  82% {
+    offset-distance: 100%;
+    opacity: 1;
+  }
+  83%,
+  100% {
+    offset-distance: 100%;
+    opacity: 0;
+  }
+}
 @keyframes onboarding-draw-loop {
   0%,
   8% {
@@ -2024,19 +2018,6 @@ button {
   }
   100% {
     stroke-dashoffset: -1;
-  }
-}
-@keyframes onboarding-claim {
-  0%,
-  18% {
-    opacity: 0;
-  }
-  30%,
-  82% {
-    opacity: 0.58;
-  }
-  100% {
-    opacity: 0;
   }
 }
 @keyframes onboarding-loop-claim {
@@ -2300,6 +2281,8 @@ button {
 
 @media (prefers-reduced-motion: reduce) {
   [data-onboarding-step][data-active] .onboarding-flight-track,
+  [data-onboarding-step][data-active] .onboarding-flight-claim-mask-track,
+  [data-onboarding-step][data-active] .onboarding-flight-glider,
   [data-onboarding-step][data-active] .onboarding-loop-track,
   [data-onboarding-step][data-active] .onboarding-claim-cell,
   [data-onboarding-step][data-active] .onboarding-enclosed-cell,
@@ -2321,11 +2304,16 @@ button {
     animation: none;
   }
   .onboarding-flight-track,
+  .onboarding-flight-claim-mask-track,
   .onboarding-loop-track,
   .onboarding-square-track,
   .onboarding-square-mask,
   .onboarding-arena-flight-track {
     stroke-dashoffset: 0;
+  }
+  .onboarding-flight-glider {
+    offset-distance: 100%;
+    opacity: 1;
   }
   .onboarding-claim-cell,
   .onboarding-enclosed-cell {

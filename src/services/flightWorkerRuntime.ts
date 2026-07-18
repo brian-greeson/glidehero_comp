@@ -12,6 +12,7 @@ interface SignalSource {
 interface WorkerRuntimeOptions {
   worker: Pick<FlightWorkerService, 'run'>;
   valkey: { close(): void };
+  streamReader?: { close(): void };
   pool: { end(): Promise<void> };
   signalSource?: SignalSource;
   shutdownDeadlineMs?: number;
@@ -55,9 +56,14 @@ export async function runFlightWorkerRuntime(options: WorkerRuntimeOptions): Pro
       const outcome = await runOutcome;
       let closeError: unknown;
       try {
-        options.valkey.close();
+        options.streamReader?.close();
       } catch (error) {
         closeError = error;
+      }
+      try {
+        options.valkey.close();
+      } catch (error) {
+        closeError ??= error;
       }
       try {
         await options.pool.end();

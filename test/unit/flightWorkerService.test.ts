@@ -719,6 +719,32 @@ describe('FlightWorkerService', () => {
     expect(valkey.xreadgroup).toHaveBeenCalledTimes(2);
   });
 
+  it('uses a dedicated client for blocking stream reads', async () => {
+    const controller = new AbortController();
+    const valkey = {
+      xgroupCreate: vi.fn(async () => 'OK'),
+      xreadgroup: vi.fn(),
+    };
+    const streamReader = {
+      xreadgroup: vi.fn(async () => {
+        controller.abort();
+        return null;
+      }),
+    };
+    const worker = createFlightWorkerService({} as never, valkey as never, {} as never, { process: vi.fn() }, {
+      s3Client: { send: vi.fn() } as never,
+      bucketName: 'flights',
+      consumerName: 'worker-1',
+      streamReader: streamReader as never,
+    });
+    worker.recoverStale = vi.fn(async () => undefined);
+    worker.cleanupAbandoned = vi.fn(async () => undefined);
+
+    await expect(worker.run(controller.signal)).resolves.toBeUndefined();
+    expect(streamReader.xreadgroup).toHaveBeenCalledOnce();
+    expect(valkey.xreadgroup).not.toHaveBeenCalled();
+  });
+
   it('does not accept a job returned after shutdown interrupts a blocked stream read', async () => {
     const controller = new AbortController();
     const blockedRead = Promise.withResolvers<unknown>();

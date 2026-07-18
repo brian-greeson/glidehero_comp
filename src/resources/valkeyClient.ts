@@ -1,6 +1,9 @@
 import { GlideClient } from '@valkey/valkey-glide';
 
-export async function createValkeyClient(connectionUrl: string): Promise<GlideClient> {
+export async function createValkeyClient(
+  connectionUrl: string,
+  options: { requestTimeout?: number } = {},
+): Promise<GlideClient> {
   const url = new URL(connectionUrl);
   if (url.protocol !== 'redis:' && url.protocol !== 'rediss:') {
     throw new Error('VALKEY_URL must use redis:// or rediss://.');
@@ -13,6 +16,6 @@ export async function createValkeyClient(connectionUrl: string): Promise<GlideCl
     credentials: url.password
       ? { username: decodeURIComponent(url.username || 'default'), password: decodeURIComponent(url.password) }
       : undefined,
-    requestTimeout: 5_000,
+    requestTimeout: options.requestTimeout ?? 5_000,
   });
 }

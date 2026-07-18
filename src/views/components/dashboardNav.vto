@@ -5,11 +5,6 @@
     <a href="/personal" class="mode-tab{{ if activeMode === 'personal' }} is-active{{ /if }}"{{ if activeMode === 'personal' }} aria-current="page"{{ /if }}>Personal</a>
   </nav>
   <div class="nav-actions">
-    <button class="flight-progress-trigger" type="button" data-flight-progress-trigger hidden>
-      <span data-flight-progress-label>Processing flights</span>
-      <progress max="1" value="0" data-flight-progress-bar></progress>
-      <span data-flight-progress-count>0/0</span>
-    </button>
     <div class="upload-form">
       <label class="upload-button">Upload<input data-upload-input type="file" accept=".igc" multiple></label>
     </div>
@@ -38,15 +33,11 @@
 <dialog class="flight-upload-dialog" data-upload-dialog>
   <section class="flight-upload-panel">
     <header><div><p class="admin-eyebrow">Flight upload</p><h2>Uploading flights</h2></div><strong data-upload-overall>0/0</strong></header>
+    <div class="flight-processing-progress">
+      <div><strong>Processing flights</strong><span data-flight-progress-count>0/0</span></div>
+      <progress max="1" value="0" data-flight-progress-bar></progress>
+    </div>
     <div class="flight-upload-list" data-upload-list></div>
     <footer><label class="secondary-button">Upload more<input data-upload-more-input type="file" accept=".igc" multiple></label></footer>
-  </section>
-</dialog>
-<dialog class="flight-progress-dialog" data-flight-progress-dialog>
-  <section class="flight-progress-panel">
-    <header><h2>Processing flights</h2><button type="button" class="secondary-button" data-flight-progress-close>Close</button></header>
-    <div class="flight-progress-list" data-flight-progress-list></div>
-    <footer class="flight-progress-pages"><button type="button" class="secondary-button" data-flight-progress-previous>Previous</button><span data-flight-progress-page></span><button type="button" class="secondary-button" data-flight-progress-next>Next</button></footer>
-    <button type="button" class="secondary-button" data-clear-failed hidden>Clear failed</button>
   </section>
 </dialog>
