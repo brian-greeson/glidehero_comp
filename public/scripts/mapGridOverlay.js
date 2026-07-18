@@ -26,7 +26,6 @@ export function initializeMapGridOverlay({
   minimumViewportZoom = MINIMUM_VIEWPORT_GRID_ZOOM,
 }) {
   let enabled = false;
-  let arenaCache = null;
 
   function setVisible(visible) {
     if (map.getLayer?.(MAP_GRID_LAYER_ID)) {
@@ -59,25 +58,20 @@ export function initializeMapGridOverlay({
     if (!response.ok) throw new Error(`Grid request failed with ${response.status}.`);
     const data = await response.json();
     if (!isCurrent() || !enabled) return;
-    if (arenaSourceId) arenaCache = data;
     setData(data);
     status('');
   });
 
   async function refresh() {
     if (!enabled) return;
-    if (arenaSourceId && arenaCache) {
-      setData(arenaCache);
-      return;
-    }
-    if (!arenaSourceId && map.getZoom() < minimumViewportZoom) {
+    if (map.getZoom() < minimumViewportZoom) {
       request.cancel();
       setVisible(false);
       status('Zoom in to view grid.');
       return;
     }
     try {
-      await request.run(arenaSourceId ? arenaGridUrl(arenaSourceId) : viewportGridUrl(map.getBounds()));
+      await request.run(arenaSourceId ? arenaGridUrl(arenaSourceId, map.getBounds()) : viewportGridUrl(map.getBounds()));
     } catch (error) {
       if (error?.name === 'AbortError') return;
       setVisible(false);
@@ -105,9 +99,9 @@ export function initializeMapGridOverlay({
     onClick: () => { void toggle(); },
   });
   const onMoveEnd = () => {
-    if (enabled && !arenaSourceId) void refresh();
+    if (enabled) void refresh();
   };
-  if (!arenaSourceId) map.on('moveend', onMoveEnd);
+  map.on('moveend', onMoveEnd);
 
   return {
     control,
@@ -115,7 +109,7 @@ export function initializeMapGridOverlay({
     refresh,
     destroy() {
       request.cancel();
-      if (!arenaSourceId) map.off?.('moveend', onMoveEnd);
+      map.off?.('moveend', onMoveEnd);
     },
   };
 }

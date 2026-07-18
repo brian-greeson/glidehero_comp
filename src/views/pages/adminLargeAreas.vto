@@ -1,0 +1,35 @@
+{{ layout "layouts/adminLargeAreaEditorLayout.vto" }}
+  <main class="admin-area-page" data-admin-large-area-editor>
+    {{ include "components/adminNav.vto" { activeAdminPage: "areas" } }}
+    {{ include "components/adminAreaTabs.vto" { activeAreaPage: "large" } }}
+    <aside class="admin-area-sidebar" aria-label="Large Arena editor controls">
+      <form class="admin-area-card" data-large-area-form>
+        <div class="admin-area-card-heading"><div><p class="admin-eyebrow">Selected Arena</p><h1 data-area-heading>No Arena selected</h1></div><button type="button" class="admin-area-new" data-new-area>New</button></div>
+        <div class="admin-area-system-fields">
+          <label>ID<input data-field="id" readonly value="—"></label>
+          <label>Source ID<input data-field="sourceId" readonly value="—"></label>
+          <label>Components<input data-field="componentCount" readonly value="0"></label>
+        </div>
+        <label>Name<input data-field="name" maxlength="160" required disabled></label>
+        <label>Country<input data-field="country" maxlength="120" required disabled></label>
+        <label>State or region<input data-field="state" maxlength="120" disabled></label>
+        <label class="admin-area-import">Import GeoJSON<input type="file" accept=".geojson,.json,application/geo+json,application/json" data-geojson-import disabled></label>
+        <p class="admin-area-form-status" data-form-status role="status"></p>
+        <div class="admin-area-form-actions"><button type="submit" data-save-area disabled>Save Arena</button><button type="button" class="secondary" data-cancel-area disabled>Cancel</button></div>
+      </form>
+      <section class="admin-area-list-section">
+        <div class="admin-area-list-heading"><h2>Large Arenas</h2><span data-area-total>0</span></div>
+        <label class="admin-area-search"><span class="sr-only">Search Large Arenas</span><input type="search" placeholder="Search name or location" data-area-search></label>
+        <div class="admin-area-list-table" role="table" aria-label="Existing Large Arenas">
+          <div class="admin-area-list-columns" role="row"><button type="button" data-sort="name" role="columnheader">Name</button><button type="button" data-sort="country" role="columnheader">Country</button><button type="button" data-sort="state" role="columnheader">State</button></div>
+          <div data-area-list role="rowgroup"><p class="muted">Loading Large Arenas…</p></div>
+        </div>
+      </section>
+    </aside>
+    <section class="admin-area-map-stage" aria-label="Large Arena polygon map">
+      <p class="admin-area-map-help" data-map-help>Select an Arena or create a new one. Draw, reshape, or delete polygons with the map controls.</p>
+      <div class="admin-area-map" data-area-map data-map-style-url="{{ mapTilerStyleUrl }}"></div>
+    </section>
+    <dialog class="admin-area-dialog" data-unsaved-dialog><h2>Unsaved changes</h2><p>Save this Arena before continuing?</p><div><button type="button" data-dialog-action="cancel" class="secondary">Cancel</button><button type="button" data-dialog-action="discard" class="secondary">Discard</button><button type="button" data-dialog-action="save">Save</button></div></dialog>
+  </main>
+{{ /layout }}

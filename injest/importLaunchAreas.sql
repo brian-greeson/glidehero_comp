@@ -1,5 +1,5 @@
--- One-off, rerunnable import from launches into launch_areas.
--- Run after applying the launch-area migration:
+-- Rerunnable launch-metadata refresh for existing grid-authored arenas.
+-- It intentionally does not create Arenas or touch area/definition_type.
 --   psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f injest/importLaunchAreas.sql
 
 BEGIN;
@@ -2043,35 +2043,18 @@ BEGIN
 END
 $validation$;
 
-INSERT INTO launch_areas (
-  source_id,
-  name,
-  country,
-  state,
-  city,
-  location,
-  altitude_meters,
-  timezone
-)
-SELECT
-  launch.id,
-  launch.name,
-  launch.country,
-  launch.state,
-  launch.city,
-  ST_SetSRID(ST_MakePoint(launch.longitude, launch.latitude), 4326),
-  launch.elevation,
-  mapping.timezone
+UPDATE arenas arena
+SET
+  name = launch.name,
+  country = launch.country,
+  state = launch.state,
+  city = launch.city,
+  location = ST_SetSRID(ST_MakePoint(launch.longitude, launch.latitude), 4326),
+  altitude_meters = launch.elevation,
+  timezone = mapping.timezone
 FROM launches launch
 INNER JOIN launch_timezone_import mapping ON mapping.source_id = launch.id
-ON CONFLICT (source_id) DO UPDATE
-SET
-  name = EXCLUDED.name,
-  country = EXCLUDED.country,
-  state = EXCLUDED.state,
-  city = EXCLUDED.city,
-  location = EXCLUDED.location,
-  altitude_meters = EXCLUDED.altitude_meters,
-  timezone = EXCLUDED.timezone;
+WHERE arena.source_id = launch.id
+  AND arena.definition_type = 'grid';
 
 COMMIT;

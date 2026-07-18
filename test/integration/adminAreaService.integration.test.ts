@@ -9,8 +9,8 @@ beforeAll(async () => {
 });
 
 beforeEach(async () => {
-  await database.pool.query('TRUNCATE TABLE launch_areas CASCADE');
-  await database.pool.query('ALTER SEQUENCE custom_launch_area_source_id_seq RESTART WITH 10000');
+  await database.pool.query('TRUNCATE TABLE arenas CASCADE');
+  await database.pool.query('ALTER SEQUENCE arena_source_id_seq RESTART WITH 10000');
 });
 
 afterAll(async () => {
@@ -52,7 +52,7 @@ describe('admin area service with PostGIS', () => {
     expect(detail?.bbox).not.toBeNull();
 
     const geometry = await database.pool.query<{ parts: number; valid: boolean }>(
-      'SELECT ST_NumGeometries(area)::integer AS parts, ST_IsValid(area) AS valid FROM launch_areas WHERE id = $1',
+      'SELECT ST_NumGeometries(area)::integer AS parts, ST_IsValid(area) AS valid FROM arenas WHERE id = $1',
       [first.id],
     );
     expect(geometry.rows[0]).toEqual({ parts: 2, valid: true });
@@ -91,7 +91,7 @@ describe('admin area service with PostGIS', () => {
   it('rejects empty areas and returns aligned editable grid features for a viewport', async () => {
     const service = createAdminAreaService(database.db, { cellSize: 1_000 });
     await expect(service.create({ ...baseArea, cells: [] })).rejects.toThrow('at least one cell');
-    const count = await database.pool.query<{ count: number }>('SELECT COUNT(*)::integer AS count FROM launch_areas');
+    const count = await database.pool.query<{ count: number }>('SELECT COUNT(*)::integer AS count FROM arenas');
     expect(count.rows[0]?.count).toBe(0);
 
     const grid = await service.grid({ west: -0.02, south: -0.02, east: 0.02, north: 0.02 });
@@ -106,5 +106,27 @@ describe('admin area service with PostGIS', () => {
     expect(westernGrid.features.length).toBeLessThan(100);
     await expect(service.grid({ west: -120, south: 30, east: -100, north: 50 }))
       .rejects.toThrow('Zoom in');
+  });
+
+  it('normalizes Large Arena polygons, preserves disconnected parts and holes, and previews center membership', async () => {
+    const service = createAdminAreaService(database.db, { cellSize: 1_000 });
+    const area = await service.createLarge({
+      name: 'Large Test', country: 'United States', state: 'Test State', geometries: [
+        { type: 'Polygon', coordinates: [[[0, 0], [0, 0.02], [0.02, 0.02], [0.02, 0], [0, 0]]] },
+        { type: 'Polygon', coordinates: [[[0.01, 0], [0.01, 0.02], [0.03, 0.02], [0.03, 0], [0.01, 0]]] },
+        { type: 'Polygon', coordinates: [[[1, 1], [1, 1.02], [1.02, 1.02], [1.02, 1], [1, 1]], [[1.005, 1.005], [1.015, 1.005], [1.015, 1.015], [1.005, 1.015], [1.005, 1.005]]] },
+      ],
+    });
+    expect(area.componentCount).toBe(2);
+    expect(area.geometry.type).toBe('MultiPolygon');
+    expect(area.geometry.coordinates.some((component) => component.length === 2)).toBe(true);
+    await expect(service.list('polygon')).resolves.toEqual([expect.objectContaining({ id: area.id, name: 'Large Test' })]);
+
+    const preview = await service.preview(
+      { west: 0, south: 0, east: 0.03, north: 0.02 },
+      [{ type: 'Polygon', coordinates: [[[0, 0], [0, 0.02], [0.02, 0.02], [0.02, 0], [0, 0]]] }],
+    );
+    expect(preview.features.some((feature) => feature.properties.inside)).toBe(true);
+    expect(preview.features.some((feature) => !feature.properties.inside)).toBe(true);
   });
 });

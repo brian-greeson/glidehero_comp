@@ -128,7 +128,7 @@ describe('Arena dashboard', () => {
       [[-106, 39], [-105, 40]],
       { padding: 60, duration: 0 },
     );
-    expect(harness.map.on).not.toHaveBeenCalledWith('moveend', expect.any(Function));
+    expect(harness.map.on).toHaveBeenCalledWith('moveend', expect.any(Function));
   });
 
   it('shows a recoverable status when the Arena boundary cannot load', async () => {

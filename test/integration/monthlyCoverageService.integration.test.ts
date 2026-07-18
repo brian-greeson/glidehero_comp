@@ -6,7 +6,7 @@ import { resetAndPushTestDatabase } from './database.js';
 let database: Awaited<ReturnType<typeof resetAndPushTestDatabase>>;
 
 beforeAll(async () => { database = await resetAndPushTestDatabase(); });
-beforeEach(async () => { await database.pool.query('TRUNCATE TABLE users, launch_areas CASCADE'); });
+beforeEach(async () => { await database.pool.query('TRUNCATE TABLE users, arenas CASCADE'); });
 afterAll(async () => { if (database) await database.pool.end(); });
 
 async function createPilot(displayName: string) {
@@ -95,31 +95,29 @@ describe('MonthlyCoverageService with PostGIS', () => {
       .resolves.toEqual([{ userId: alpha.userId, displayName: 'Alpha' }, { userId: bravo.userId, displayName: 'Bravo' }]);
   });
 
-  it('restricts Arena territory and scoring to exact generated cells', async () => {
+  it('restricts Arena territory and scoring using covered cell centers', async () => {
     const pilot = await createPilot('Arena Pilot');
     await addClaim(pilot, { month: '2026-07-01', x: 0, y: 0, at: '2026-07-01T10:00:00Z' });
     await addClaim(pilot, { month: '2026-07-01', x: 1, y: 0, at: '2026-07-01T11:00:00Z' });
     const arena = await database.pool.query<{ id: string }>(`
-      INSERT INTO launch_areas (
-        source_id, name, country, state, city, location, altitude_meters, timezone, area
+      INSERT INTO arenas (
+        source_id, name, country, state, city, location, altitude_meters, timezone, definition_type, area
       ) VALUES (
         745, 'Coverage Arena', 'United States', 'Colorado', 'Boulder',
-        ST_Transform(ST_SetSRID(ST_Point(500, 500), 6933), 4326), 1000, 'America/Denver',
+        ST_Transform(ST_SetSRID(ST_Point(500, 500), 6933), 4326), 1000, 'America/Denver', 'polygon',
         ST_Multi(ST_MakeEnvelope(0, 0, 1000, 1000, 6933))
       ) RETURNING id
     `);
     const arenaId = arena.rows[0]?.id;
     if (!arenaId) throw new Error('Expected an Arena.');
-    await database.pool.query('INSERT INTO launch_area_cells (launch_area_id, cell_size, x, y) VALUES ($1, 1000, 0, 0)', [arenaId]);
-
     const service = createMonthlyCoverageService(database.db, { cellSize: 1_000 });
     const leaderboard = await service.getArenaLeaderboard({
-      competitionMonth: '2026-07', launchAreaId: arenaId, currentUserId: pilot.userId,
+      competitionMonth: '2026-07', arenaId, currentUserId: pilot.userId,
     });
     expect(leaderboard.leaders).toEqual([
       expect.objectContaining({ userId: pilot.userId, claimedCellCount: 1, exclusiveCellCount: 1 }),
     ]);
-    const territory = await service.getArenaTerritory({ competitionMonth: '2026-07', launchAreaId: arenaId });
+    const territory = await service.getArenaTerritory({ competitionMonth: '2026-07', arenaId });
     expect(territory.features.map((feature) => feature.properties.x)).toEqual([0]);
   });
 

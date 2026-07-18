@@ -135,43 +135,37 @@ export const launches = pgTable(
   ],
 );
 
-export const launchAreas = pgTable(
-  'launch_areas',
+export const arenaDefinitionType = pgEnum('arena_definition_type', ['grid', 'polygon']);
+
+export const arenas = pgTable(
+  'arenas',
   {
     id: uuid('id').primaryKey().defaultRandom(),
     sourceId: bigint('source_id', { mode: 'number' }).notNull(),
     name: text('name').notNull(),
     country: text('country').notNull(),
-    state: text('state').notNull(),
-    city: text('city').notNull(),
-    location: geometryPoint4326('location').notNull(),
-    altitudeMeters: integer('altitude_meters').notNull(),
-    timezone: text('timezone').notNull(),
-    area: geometryMultiPolygon6933('area'),
+    state: text('state'),
+    city: text('city'),
+    location: geometryPoint4326('location'),
+    altitudeMeters: integer('altitude_meters'),
+    timezone: text('timezone'),
+    definitionType: arenaDefinitionType('definition_type').notNull(),
+    area: geometryMultiPolygon6933('area').notNull(),
+    externalSource: text('external_source'),
+    externalId: text('external_id'),
   },
   (table) => [
-    unique('launch_areas_source_id_unique').on(table.sourceId),
-    index('launch_areas_area_gist_idx').using('gist', table.area).where(sql`${table.area} IS NOT NULL`),
+    unique('arenas_source_id_unique').on(table.sourceId),
+    index('arenas_area_gist_idx').using('gist', table.area),
+    uniqueIndex('arenas_external_source_external_id_unique')
+      .on(table.externalSource, table.externalId)
+      .where(sql`${table.externalSource} IS NOT NULL AND ${table.externalId} IS NOT NULL`),
   ],
 );
 
-export const customLaunchAreaSourceIdSequence = pgSequence('custom_launch_area_source_id_seq', {
+export const arenaSourceIdSequence = pgSequence('arena_source_id_seq', {
   startWith: 10_000,
 });
-
-export const launchAreaCells = pgTable(
-  'launch_area_cells',
-  {
-    launchAreaId: uuid('launch_area_id').notNull().references(() => launchAreas.id, { onDelete: 'cascade' }),
-    cellSize: integer('cell_size').notNull(),
-    x: integer('x').notNull(),
-    y: integer('y').notNull(),
-  },
-  (table) => [
-    primaryKey({ columns: [table.launchAreaId, table.cellSize, table.x, table.y] }),
-    index('launch_area_cells_cell_idx').on(table.cellSize, table.x, table.y, table.launchAreaId),
-  ],
-);
 
 export const trackPoints = pgTable(
   'track_points',

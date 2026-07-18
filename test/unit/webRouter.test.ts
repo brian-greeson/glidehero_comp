@@ -69,7 +69,7 @@ function mapGridService(): MapGridService {
       status: 'ok' as const,
       geojson: { type: 'FeatureCollection' as const, features: [] },
     })),
-    getArena: vi.fn(async () => ({ type: 'FeatureCollection' as const, features: [] })),
+    getArena: vi.fn(async () => ({ status: 'ok' as const, geojson: { type: 'FeatureCollection' as const, features: [] } })),
   };
 }
 
@@ -229,13 +229,13 @@ describe('webRouter', () => {
       });
 
       vi.mocked(arenas.getBySourceId).mockResolvedValueOnce(arena);
-      const arenaGrid = await fetch(`${baseUrl}/v1/arenas/745/grid`, {
+      const arenaGrid = await fetch(`${baseUrl}/v1/arenas/745/grid?west=-106&south=39&east=-105&north=40`, {
         headers: { cookie: 'glidehero_session=valid-token' },
       });
       expect(arenaGrid.status).toBe(200);
-      expect(mapGrid.getArena).toHaveBeenCalledWith({ launchAreaId: arena.id });
+      expect(mapGrid.getArena).toHaveBeenCalledWith({ arenaId: arena.id, west: -106, south: 39, east: -105, north: 40 });
 
-      const unknown = await fetch(`${baseUrl}/v1/arenas/999/grid`, {
+      const unknown = await fetch(`${baseUrl}/v1/arenas/999/grid?west=-106&south=39&east=-105&north=40`, {
         headers: { cookie: 'glidehero_session=valid-token' },
       });
       expect(unknown.status).toBe(404);
@@ -436,13 +436,13 @@ describe('webRouter', () => {
       expect(territory.status).toBe(200);
       expect(await territory.json()).toEqual(expectedCoverageGeoJson);
       expect(coverage.getArenaTerritory).toHaveBeenCalledWith({
-        competitionMonth: '2026-07', launchAreaId: arena.id, pilotUserId: user.userId,
+        competitionMonth: '2026-07', arenaId: arena.id, pilotUserId: user.userId,
       });
 
       const leaderboard = await fetch(`${baseUrl}/v1/arenas/745/competition-leaderboard?month=2026-07`, { headers });
       expect(leaderboard.status).toBe(200);
       expect(coverage.getArenaLeaderboard).toHaveBeenCalledWith({
-        competitionMonth: '2026-07', launchAreaId: arena.id, currentUserId: user.userId,
+        competitionMonth: '2026-07', arenaId: arena.id, currentUserId: user.userId,
       });
 
       const allTimeTerritory = await fetch(
@@ -451,7 +451,7 @@ describe('webRouter', () => {
       );
       expect(allTimeTerritory.status).toBe(200);
       expect(coverage.getArenaTerritory).toHaveBeenCalledWith({
-        period: 'all-time', launchAreaId: arena.id,
+        period: 'all-time', arenaId: arena.id,
       });
 
       const allTimeLeaderboard = await fetch(
@@ -460,7 +460,7 @@ describe('webRouter', () => {
       );
       expect(allTimeLeaderboard.status).toBe(200);
       expect(coverage.getArenaLeaderboard).toHaveBeenCalledWith({
-        period: 'all-time', launchAreaId: arena.id, currentUserId: user.userId,
+        period: 'all-time', arenaId: arena.id, currentUserId: user.userId,
       });
 
       const claimants = await fetch(

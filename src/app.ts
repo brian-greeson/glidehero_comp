@@ -32,7 +32,7 @@ export function createApp(dependencies: AppDependencies = {}) {
   const renderErrorPage = dependencies.renderErrorPage ?? createErrorPageRenderer();
   app.disable('x-powered-by');
   app.set('etag', false);
-  app.use(express.json({ limit: '64kb' }));
+  app.use(express.json({ limit: '10mb' }));
   app.use(express.urlencoded({ extended: false, limit: '16kb' }));
   app.use(requestLogger);
   app.use(healthRouter);

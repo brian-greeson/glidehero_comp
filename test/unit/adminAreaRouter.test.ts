@@ -26,6 +26,10 @@ function setup() {
     grid: vi.fn(async () => ({ type: 'FeatureCollection' as const, features: [] })),
     create: vi.fn(async () => ({ id: '00000000-0000-4000-8000-000000000011', sourceId: 10_000 })),
     update: vi.fn(async () => null),
+    getLarge: vi.fn(async () => null),
+    createLarge: vi.fn(async () => { throw new Error('not used'); }),
+    updateLarge: vi.fn(async () => null),
+    preview: vi.fn(async () => ({ type: 'FeatureCollection' as const, features: [] })),
   };
   const locations: LocationLookupService = {
     lookup: vi.fn(async () => ({

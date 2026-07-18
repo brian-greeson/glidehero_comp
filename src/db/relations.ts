@@ -42,10 +42,4 @@ export const relations = defineRelations(schema, (r) => ({
     flight: r.one.flights({ from: r.competitionGridClaims.claimFlight, to: r.flights.id }),
     user: r.one.users({ from: r.competitionGridClaims.claimUser, to: r.users.id }),
   },
-  launchAreas: {
-    cells: r.many.launchAreaCells({ from: r.launchAreas.id, to: r.launchAreaCells.launchAreaId }),
-  },
-  launchAreaCells: {
-    launchArea: r.one.launchAreas({ from: r.launchAreaCells.launchAreaId, to: r.launchAreas.id }),
-  },
 }));

@@ -15,7 +15,7 @@ import { createProfileService } from './services/profileService.js';
 import { createLocationLookupService } from './services/locationLookupService.js';
 import { createMonthlyCoverageService } from './services/monthlyCoverageService.js';
 import { createMapGridService } from './services/mapGridService.js';
-import { createAdminAreaPageRenderer, createAdminPageRenderer, createPageRenderer } from './views/renderer.js';
+import { createAdminAreaPageRenderer, createAdminLargeAreaPageRenderer, createAdminPageRenderer, createPageRenderer } from './views/renderer.js';
 import { createAdminAreaRouter } from './web/adminAreaRouter.js';
 import { createCurrentUserMiddleware } from './web/currentUserMiddleware.js';
 import { createSessionCookie } from './web/sessionCookie.js';
@@ -54,6 +54,7 @@ const webMiddleware = [
     areas: adminAreas,
     locations: locationLookup,
     renderPage: createAdminAreaPageRenderer({ mapTilerApiKey: config.mapTilerApiKey }),
+    renderLargePage: createAdminLargeAreaPageRenderer({ mapTilerApiKey: config.mapTilerApiKey }),
   }),
   createWebRouter({
     auth,

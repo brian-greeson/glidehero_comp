@@ -1,6 +1,6 @@
 import { getTableConfig } from 'drizzle-orm/pg-core';
 import { describe, expect, it } from 'vitest';
-import { competitionGridClaims, flights, launchAreaCells, launchAreas, launches, personalGridClaims } from '../../src/db/schema.js';
+import { arenas, competitionGridClaims, flights, launches, personalGridClaims } from '../../src/db/schema.js';
 
 describe('flight schema', () => {
   it('requires one globally unique content hash per flight', () => {
@@ -32,36 +32,30 @@ describe('launch schema', () => {
   });
 });
 
-describe('launch area schema', () => {
-  it('stores durable metadata and an optional projected area', () => {
-    const config = getTableConfig(launchAreas);
+describe('Arena schema', () => {
+  it('stores one required canonical polygon and nullable launch metadata', () => {
+    const config = getTableConfig(arenas);
 
     expect(config.columns.map((column) => [column.name, column.getSQLType(), column.notNull])).toEqual([
       ['id', 'uuid', true],
       ['source_id', 'bigint', true],
       ['name', 'text', true],
       ['country', 'text', true],
-      ['state', 'text', true],
-      ['city', 'text', true],
-      ['location', 'geometry(point,4326)', true],
-      ['altitude_meters', 'integer', true],
-      ['timezone', 'text', true],
-      ['area', 'geometry(multipolygon,6933)', false],
+      ['state', 'text', false],
+      ['city', 'text', false],
+      ['location', 'geometry(point,4326)', false],
+      ['altitude_meters', 'integer', false],
+      ['timezone', 'text', false],
+      ['definition_type', 'arena_definition_type', true],
+      ['area', 'geometry(multipolygon,6933)', true],
+      ['external_source', 'text', false],
+      ['external_id', 'text', false],
     ]);
-    expect(config.uniqueConstraints.map((constraint) => constraint.name)).toContain('launch_areas_source_id_unique');
+    expect(config.uniqueConstraints.map((constraint) => constraint.name)).toContain('arenas_source_id_unique');
     expect(config.indexes.map((index) => [index.config.name, index.config.method, Boolean(index.config.where)])).toEqual([
-      ['launch_areas_area_gist_idx', 'gist', true],
+      ['arenas_area_gist_idx', 'gist', false],
+      ['arenas_external_source_external_id_unique', 'btree', true],
     ]);
-  });
-
-  it('stores exact grid membership with area-first and cell-first indexes', () => {
-    const config = getTableConfig(launchAreaCells);
-
-    expect(config.primaryKeys.map((key) => key.columns.map((column) => column.name))).toEqual([
-      ['launch_area_id', 'cell_size', 'x', 'y'],
-    ]);
-    expect(config.foreignKeys.map((key) => key.onDelete)).toEqual(['cascade']);
-    expect(config.indexes.map((index) => index.config.name)).toEqual(['launch_area_cells_cell_idx']);
   });
 });
 

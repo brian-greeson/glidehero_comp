@@ -2,6 +2,7 @@ import { sql } from 'drizzle-orm';
 import type { Database } from '../db/client.js';
 import type { MapGridCellFeature, MapGridGeoJson } from '../domain/territory/mapGridGeoJson.js';
 import { viewportCtes, type ViewportBounds } from './viewportGrid.js';
+import { claimCellCenterSql } from './arenaGeometrySql.js';
 
 type StoredCell = {
   x: number;
@@ -15,7 +16,7 @@ export type ViewportGridResult =
 
 export interface MapGridService {
   getViewport(bounds: ViewportBounds): Promise<ViewportGridResult>;
-  getArena(input: { launchAreaId: string }): Promise<MapGridGeoJson>;
+  getArena(input: { arenaId: string } & ViewportBounds): Promise<ViewportGridResult>;
 }
 
 function geojson(rows: StoredCell[], cellSize: number): MapGridGeoJson {
@@ -54,24 +55,23 @@ export function createMapGridService(
       return { status: 'ok', geojson: geojson(result.rows, cellSize) };
     },
 
-    async getArena({ launchAreaId }) {
+    async getArena({ arenaId, ...bounds }) {
       const result = await database.execute<StoredCell>(sql`
-        SELECT
-          cell.x::integer AS x,
-          cell.y::integer AS y,
-          ST_AsGeoJSON(ST_Transform(ST_MakeEnvelope(
-            cell.x * cell.cell_size,
-            cell.y * cell.cell_size,
-            (cell.x + 1) * cell.cell_size,
-            (cell.y + 1) * cell.cell_size,
-            6933
-          ), 4326))::jsonb AS geometry
-        FROM launch_area_cells cell
-        WHERE cell.launch_area_id = ${launchAreaId}
-          AND cell.cell_size = ${cellSize}
-        ORDER BY cell.x, cell.y
+        WITH ${viewportCtes(bounds)},
+        cells AS (
+          SELECT DISTINCT grid.x::integer AS x, grid.y::integer AS y, grid.geom
+          FROM arenas arena
+          CROSS JOIN viewport_parts viewport
+          CROSS JOIN LATERAL ST_SquareGrid(${cellSize}, viewport.geometry) AS grid(geom, x, y)
+          WHERE arena.id = ${arenaId}
+            AND ST_Intersects(grid.geom, viewport.geometry)
+            AND ST_Covers(arena.area, ${claimCellCenterSql({ x: sql`grid.x`, y: sql`grid.y`, cellSize: sql`${cellSize}` })})
+        )
+        SELECT x, y, ST_AsGeoJSON(ST_Transform(geom, 4326))::jsonb AS geometry
+        FROM cells ORDER BY x, y LIMIT ${maxViewportCells + 1}
       `);
-      return geojson(result.rows, cellSize);
+      if (result.rows.length > maxViewportCells) return { status: 'too_large' };
+      return { status: 'ok', geojson: geojson(result.rows, cellSize) };
     },
   };
 }

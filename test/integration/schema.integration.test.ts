@@ -22,11 +22,10 @@ describe('authentication schema', () => {
     );
     expect(result.rows.map((row) => row.table_name)).toEqual([
       'app_sessions',
+      'arenas',
       'competition_grid_claims',
       'flights',
       'igc_files',
-      'launch_area_cells',
-      'launch_areas',
       'launches',
       'profiles',
       'track_points',
@@ -59,7 +58,7 @@ describe('authentication schema', () => {
     ]);
   });
 
-  it('stores launch metadata, optional area geometry, and exact cell membership', async () => {
+  it('stores canonical Arena polygons and optional launch metadata', async () => {
     const geometryColumns = await database.pool.query<{
       f_geometry_column: string;
       srid: number;
@@ -67,29 +66,19 @@ describe('authentication schema', () => {
     }>(
       `SELECT f_geometry_column, srid, type
        FROM geometry_columns
-       WHERE f_table_schema = 'public' AND f_table_name = 'launch_areas'
+       WHERE f_table_schema = 'public' AND f_table_name = 'arenas'
        ORDER BY f_geometry_column`,
     );
     const areaColumns = await database.pool.query<{ column_name: string; is_nullable: string }>(
       `SELECT column_name, is_nullable
        FROM information_schema.columns
-       WHERE table_schema = 'public' AND table_name = 'launch_areas'
+       WHERE table_schema = 'public' AND table_name = 'arenas'
        ORDER BY ordinal_position`,
-    );
-    const cellPrimaryKey = await database.pool.query<{ definition: string }>(
-      `SELECT pg_get_constraintdef(oid) AS definition
-       FROM pg_constraint
-       WHERE conrelid = 'launch_area_cells'::regclass AND contype = 'p'`,
-    );
-    const cellForeignKey = await database.pool.query<{ confdeltype: string }>(
-      `SELECT confdeltype
-       FROM pg_constraint
-       WHERE conrelid = 'launch_area_cells'::regclass AND contype = 'f'`,
     );
     const indexes = await database.pool.query<{ indexname: string; indexdef: string }>(
       `SELECT indexname, indexdef
        FROM pg_indexes
-       WHERE schemaname = 'public' AND tablename IN ('launch_areas', 'launch_area_cells')
+       WHERE schemaname = 'public' AND tablename = 'arenas'
        ORDER BY indexname`,
     );
 
@@ -98,30 +87,30 @@ describe('authentication schema', () => {
       { column_name: 'source_id', is_nullable: 'NO' },
       { column_name: 'name', is_nullable: 'NO' },
       { column_name: 'country', is_nullable: 'NO' },
-      { column_name: 'state', is_nullable: 'NO' },
-      { column_name: 'city', is_nullable: 'NO' },
-      { column_name: 'location', is_nullable: 'NO' },
-      { column_name: 'altitude_meters', is_nullable: 'NO' },
-      { column_name: 'timezone', is_nullable: 'NO' },
-      { column_name: 'area', is_nullable: 'YES' },
+      { column_name: 'state', is_nullable: 'YES' },
+      { column_name: 'city', is_nullable: 'YES' },
+      { column_name: 'location', is_nullable: 'YES' },
+      { column_name: 'altitude_meters', is_nullable: 'YES' },
+      { column_name: 'timezone', is_nullable: 'YES' },
+      { column_name: 'definition_type', is_nullable: 'NO' },
+      { column_name: 'area', is_nullable: 'NO' },
+      { column_name: 'external_source', is_nullable: 'YES' },
+      { column_name: 'external_id', is_nullable: 'YES' },
     ]);
     expect(geometryColumns.rows).toEqual([
       { f_geometry_column: 'area', srid: 6933, type: 'MULTIPOLYGON' },
       { f_geometry_column: 'location', srid: 4326, type: 'POINT' },
     ]);
-    expect(cellPrimaryKey.rows).toEqual([{
-      definition: 'PRIMARY KEY (launch_area_id, cell_size, x, y)',
-    }]);
-    expect(cellForeignKey.rows).toEqual([{ confdeltype: 'c' }]);
     expect(indexes.rows.map((row) => row.indexname)).toEqual([
-      'launch_area_cells_cell_idx',
-      'launch_area_cells_pkey',
-      'launch_areas_area_gist_idx',
-      'launch_areas_pkey',
-      'launch_areas_source_id_unique',
+      'arenas_area_gist_idx',
+      'arenas_external_source_external_id_unique',
+      'arenas_pkey',
+      'arenas_source_id_unique',
     ]);
-    expect(indexes.rows.find(({ indexname }) => indexname === 'launch_areas_area_gist_idx')?.indexdef)
-      .toContain('USING gist (area) WHERE (area IS NOT NULL)');
+    expect(indexes.rows.find(({ indexname }) => indexname === 'arenas_area_gist_idx')?.indexdef)
+      .toContain('USING gist (area)');
+    expect(indexes.rows.find(({ indexname }) => indexname === 'arenas_external_source_external_id_unique')?.indexdef)
+      .toContain('WHERE ((external_source IS NOT NULL) AND (external_id IS NOT NULL))');
   });
 
   it('stores permanent personal grid contributions with a cascading pilot and flight identity', async () => {

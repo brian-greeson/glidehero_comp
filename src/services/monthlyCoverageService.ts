@@ -9,14 +9,15 @@ import type {
 import { emptyMonthlyCoverageGeoJson } from '../domain/competition/monthlyCoverage.js';
 import { normalizeCompetitionLeaderboardMonth } from '../domain/competition/competitionLeaderboardMonth.js';
 import { viewportCtes, type ViewportBounds } from './viewportGrid.js';
+import { claimCellCenterSql } from './arenaGeometrySql.js';
 
 export type MonthlyCoveragePeriod = { competitionMonth: string } | { period: 'all-time' };
 
 export interface MonthlyCoverageService {
   getGlobalLeaderboard(input: MonthlyCoveragePeriod & ViewportBounds & { currentUserId: string }): Promise<MonthlyCoverageLeaderboard>;
-  getArenaLeaderboard(input: MonthlyCoveragePeriod & { launchAreaId: string; currentUserId: string }): Promise<MonthlyCoverageLeaderboard>;
+  getArenaLeaderboard(input: MonthlyCoveragePeriod & { arenaId: string; currentUserId: string }): Promise<MonthlyCoverageLeaderboard>;
   getGlobalTerritory(input: MonthlyCoveragePeriod & { pilotUserId?: string }): Promise<MonthlyCoverageGeoJson>;
-  getArenaTerritory(input: MonthlyCoveragePeriod & { launchAreaId: string; pilotUserId?: string }): Promise<MonthlyCoverageGeoJson>;
+  getArenaTerritory(input: MonthlyCoveragePeriod & { arenaId: string; pilotUserId?: string }): Promise<MonthlyCoverageGeoJson>;
   getCellClaimants(input: MonthlyCoveragePeriod & { x: number; y: number }): Promise<MonthlyCoverageCellClaimant[]>;
 }
 
@@ -224,8 +225,8 @@ export function createMonthlyCoverageService(
             SELECT pilot.*, claimant.claimant_count
             FROM pilot_cells pilot
             INNER JOIN cell_claimants claimant USING (cell_size, x, y)
-            INNER JOIN launch_area_cells arena ON arena.launch_area_id = ${input.launchAreaId}
-              AND arena.cell_size = pilot.cell_size AND arena.x = pilot.x AND arena.y = pilot.y
+            INNER JOIN arenas arena ON arena.id = ${input.arenaId}
+              AND ST_Covers(arena.area, ${claimCellCenterSql({ x: sql`pilot.x`, y: sql`pilot.y`, cellSize: sql`pilot.cell_size` })})
           `,
         })}
       `);
@@ -259,8 +260,8 @@ export function createMonthlyCoverageService(
             FROM ${input.pilotUserId
               ? sql`(SELECT pilot.x, pilot.y, claimant.claimant_count, pilot.cell_size, pilot.claim_user AS pilot_user_id FROM pilot_cells pilot INNER JOIN cell_claimants claimant USING (cell_size, x, y) WHERE pilot.claim_user = ${input.pilotUserId})`
               : sql`cell_claimants`} source
-            INNER JOIN launch_area_cells arena ON arena.launch_area_id = ${input.launchAreaId}
-              AND arena.cell_size = ${cellSize} AND arena.x = source.x AND arena.y = source.y
+            INNER JOIN arenas arena ON arena.id = ${input.arenaId}
+              AND ST_Covers(arena.area, ${claimCellCenterSql({ x: sql`source.x`, y: sql`source.y`, cellSize: sql`${cellSize}` })})
           `,
         })}
       `);

@@ -5,7 +5,7 @@ import { resetAndPushTestDatabase } from './database.js';
 let database: Awaited<ReturnType<typeof resetAndPushTestDatabase>>;
 
 beforeAll(async () => { database = await resetAndPushTestDatabase(); });
-beforeEach(async () => { await database.pool.query('TRUNCATE TABLE launch_areas CASCADE'); });
+beforeEach(async () => { await database.pool.query('TRUNCATE TABLE arenas CASCADE'); });
 afterAll(async () => { if (database) await database.pool.end(); });
 
 describe('MapGridService with PostGIS', () => {
@@ -36,27 +36,25 @@ describe('MapGridService with PostGIS', () => {
     expect(new Set(ids).size).toBe(ids.length);
   });
 
-  it('returns only stored cells for the requested Arena and configured size', async () => {
+  it('returns viewport cells whose centers are covered by the Arena polygon', async () => {
     const arena = await database.pool.query<{ id: string }>(`
-      INSERT INTO launch_areas (
-        source_id, name, country, state, city, location, altitude_meters, timezone, area
+      INSERT INTO arenas (
+        source_id, name, country, state, city, location, altitude_meters, timezone, definition_type, area
       ) VALUES (
         745, 'Flight Aid Arena', 'United States', 'Colorado', 'Boulder',
-        ST_Transform(ST_SetSRID(ST_Point(500, 500), 6933), 4326), 1000, 'America/Denver',
+        ST_Transform(ST_SetSRID(ST_Point(500, 500), 6933), 4326), 1000, 'America/Denver', 'polygon',
         ST_Multi(ST_MakeEnvelope(0, 0, 2000, 1000, 6933))
       ) RETURNING id
     `);
-    const launchAreaId = arena.rows[0]?.id;
-    if (!launchAreaId) throw new Error('Expected an Arena.');
-    await database.pool.query(`
-      INSERT INTO launch_area_cells (launch_area_id, cell_size, x, y) VALUES
-        ($1, 1000, 0, 0), ($1, 1000, 1, 0), ($1, 500, 99, 99)
-    `, [launchAreaId]);
+    const arenaId = arena.rows[0]?.id;
+    if (!arenaId) throw new Error('Expected an Arena.');
 
     const result = await createMapGridService(database.db, { cellSize: 1_000 })
-      .getArena({ launchAreaId });
+      .getArena({ arenaId, west: 0, south: 0, east: 0.03, north: 0.02 });
 
-    expect(result.features.map(({ properties }) => [properties.x, properties.y]))
+    expect(result.status).toBe('ok');
+    if (result.status !== 'ok') throw new Error('Expected an Arena grid.');
+    expect(result.geojson.features.map(({ properties }) => [properties.x, properties.y]))
       .toEqual([[0, 0], [1, 0]]);
   });
 });

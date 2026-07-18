@@ -398,8 +398,9 @@ export function createWebRouter(dependencies: {
       return;
     }
     const sourceId = arenaSourceIdSchema.safeParse(req.params.sourceId);
-    if (!sourceId.success) {
-      res.status(404).json({ error: { code: 'not_found', message: 'Arena not found.' } });
+    const viewport = viewportBoundsSchema.safeParse(req.query);
+    if (!sourceId.success || !viewport.success) {
+      res.status(400).json({ error: { code: 'invalid_request', message: 'Arena grid requires a valid Arena and viewport bounds.' } });
       return;
     }
     try {
@@ -408,8 +409,12 @@ export function createWebRouter(dependencies: {
         res.status(404).json({ error: { code: 'not_found', message: 'Arena not found.' } });
         return;
       }
-      const grid = await dependencies.mapGrid.getArena({ launchAreaId: arena.id });
-      res.status(200).type('application/geo+json').send(grid);
+      const grid = await dependencies.mapGrid.getArena({ arenaId: arena.id, ...viewport.data });
+      if (grid.status === 'too_large') {
+        res.status(422).json({ error: { code: 'grid_viewport_too_large', message: 'Zoom in to view grid.' } });
+        return;
+      }
+      res.status(200).type('application/geo+json').send(grid.geojson);
     } catch (error) {
       next(error);
     }
@@ -434,7 +439,7 @@ export function createWebRouter(dependencies: {
       }
       const territory = await dependencies.coverage.getArenaTerritory({
         ...coveragePeriod(input.data.month),
-        launchAreaId: arena.id,
+        arenaId: arena.id,
         ...(input.data.pilot ? { pilotUserId: input.data.pilot } : {}),
       });
       res.status(200).json(territory);
@@ -463,7 +468,7 @@ export function createWebRouter(dependencies: {
       }
       res.status(200).json(await dependencies.coverage.getArenaLeaderboard({
         ...coveragePeriod(period.data.month),
-        launchAreaId: arena.id,
+        arenaId: arena.id,
         currentUserId: currentUser.userId,
       }));
     } catch (error) {

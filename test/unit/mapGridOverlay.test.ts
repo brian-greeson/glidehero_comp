@@ -63,7 +63,11 @@ describe('map grid overlay', () => {
   it('builds canonical viewport and Arena URLs', () => {
     const bounds = { getWest: () => -107, getSouth: () => 39, getEast: () => -105, getNorth: () => 41 };
     expect(viewportGridUrl(bounds)).toBe('/v1/grid?west=-107&south=39&east=-105&north=41');
-    expect(arenaGridUrl('745')).toBe('/v1/arenas/745/grid');
+    expect(arenaGridUrl('745', bounds)).toBe('/v1/arenas/745/grid?west=-107&south=39&east=-105&north=41');
+
+    const shiftedBounds = { getWest: () => 172, getSouth: () => 51, getEast: () => 230, getNorth: () => 72 };
+    expect(arenaGridUrl('10022', shiftedBounds))
+      .toBe('/v1/arenas/10022/grid?west=172&south=51&east=-130&north=72');
   });
 
   it('creates an accessible toggle control', () => {
@@ -97,8 +101,8 @@ describe('map grid overlay', () => {
     expect(harness.map.setLayoutProperty).toHaveBeenLastCalledWith(MAP_GRID_LAYER_ID, 'visibility', 'none');
   });
 
-  it('caches a finite Arena grid across toggles', async () => {
-    const harness = mapHarness(7);
+  it('loads viewport-limited Arena grids on each enable', async () => {
+    const harness = mapHarness(11);
     const fetchImpl = vi.fn(async () => new Response(JSON.stringify(emptyGrid), { status: 200 }));
     const overlay = initializeMapGridOverlay({
       map: harness.map, documentRef: documentHarness(), fetchImpl, arenaSourceId: '745',
@@ -106,8 +110,8 @@ describe('map grid overlay', () => {
     await overlay.toggle();
     await overlay.toggle();
     await overlay.toggle();
-    expect(fetchImpl).toHaveBeenCalledTimes(1);
-    expect(fetchImpl).toHaveBeenCalledWith('/v1/arenas/745/grid', expect.any(Object));
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    expect(fetchImpl).toHaveBeenCalledWith('/v1/arenas/745/grid?west=-107&south=39&east=-105&north=41', expect.any(Object));
   });
 
   it('ignores an older viewport response', async () => {

@@ -71,30 +71,33 @@ function detail(row: StoredArenaDetail): ArenaDetail {
   };
 }
 
-export function createArenaService(database: Database, options: { cellSize: number }): ArenaService {
-  const { cellSize } = options;
+export function createArenaService(database: Database, _options?: { cellSize: number }): ArenaService {
   async function getBySourceId(sourceId: number): Promise<ArenaDetail | null> {
     const result = await database.execute<StoredArenaDetail>(sql`
+      WITH selected AS (
+        SELECT area.*, ST_Transform(area.area, 4326) AS wgs84
+        FROM arenas area
+        WHERE area.source_id = ${sourceId}
+          AND NOT ST_IsEmpty(area.area)
+          AND ST_IsValid(area.area)
+        LIMIT 1
+      ), display AS (
+        SELECT selected.*, CASE
+          WHEN ST_XMax(ST_Envelope(wgs84)) - ST_XMin(ST_Envelope(wgs84))
+            <= ST_XMax(ST_Envelope(ST_ShiftLongitude(wgs84))) - ST_XMin(ST_Envelope(ST_ShiftLongitude(wgs84)))
+          THEN wgs84 ELSE ST_ShiftLongitude(wgs84)
+        END AS display_geometry
+        FROM selected
+      )
       SELECT
-        area.id,
-        area.source_id::integer AS "sourceId",
-        area.name,
-        area.city,
-        area.state,
-        area.country,
-        ST_AsGeoJSON(ST_Transform(area.area, 4326))::jsonb AS geometry,
-        ST_XMin(ST_Envelope(ST_Transform(area.area, 4326)))::double precision AS west,
-        ST_YMin(ST_Envelope(ST_Transform(area.area, 4326)))::double precision AS south,
-        ST_XMax(ST_Envelope(ST_Transform(area.area, 4326)))::double precision AS east,
-        ST_YMax(ST_Envelope(ST_Transform(area.area, 4326)))::double precision AS north
-      FROM launch_areas area
-      WHERE area.source_id = ${sourceId}
-        AND area.area IS NOT NULL
-        AND EXISTS (
-          SELECT 1 FROM launch_area_cells cell
-          WHERE cell.launch_area_id = area.id AND cell.cell_size = ${cellSize}
-        )
-      LIMIT 1
+        id, source_id::integer AS "sourceId", name,
+        COALESCE(city, '') AS city, COALESCE(state, '') AS state, country,
+        ST_AsGeoJSON(display_geometry)::jsonb AS geometry,
+        ST_XMin(ST_Envelope(display_geometry))::double precision AS west,
+        ST_YMin(ST_Envelope(display_geometry))::double precision AS south,
+        ST_XMax(ST_Envelope(display_geometry))::double precision AS east,
+        ST_YMax(ST_Envelope(display_geometry))::double precision AS north
+      FROM display
     `);
     const row = result.rows[0];
     return row ? detail(row) : null;
@@ -110,15 +113,12 @@ export function createArenaService(database: Database, options: { cellSize: numb
           area.id,
           area.source_id::integer AS "sourceId",
           area.name,
-          area.city,
-          area.state,
+          COALESCE(area.city, '') AS city,
+          COALESCE(area.state, '') AS state,
           area.country
-        FROM launch_areas area
-        WHERE area.area IS NOT NULL
-          AND EXISTS (
-            SELECT 1 FROM launch_area_cells cell
-            WHERE cell.launch_area_id = area.id AND cell.cell_size = ${cellSize}
-          )
+        FROM arenas area
+        WHERE NOT ST_IsEmpty(area.area)
+          AND ST_IsValid(area.area)
           AND (
             area.name ILIKE ${contains} ESCAPE E'\\\\'
             OR area.city ILIKE ${contains} ESCAPE E'\\\\'

@@ -4,6 +4,7 @@ import { AppError } from '../domain/errors.js';
 import type { AdminAreaService } from '../services/adminAreaService.js';
 import type { LocationLookupService } from '../services/locationLookupService.js';
 import type { AdminAreaPageRenderer } from '../views/renderer.js';
+import { extractPolygonGeometries } from '../domain/arena/geoJson.js';
 
 const uuid = z.string().uuid();
 const coordinate = z.coerce.number().finite();
@@ -47,12 +48,26 @@ const saveSchema = z.object({
     }
   }),
 });
+const largeSaveSchema = z.object({
+  name: z.string().trim().min(1).max(160),
+  country: z.string().trim().min(1).max(120),
+  state: z.string().trim().max(120).optional(),
+  geojson: z.unknown(),
+});
+const previewSchema = z.object({
+  west: z.number().finite().min(-180).max(180),
+  south: z.number().finite().min(-90).max(90),
+  east: z.number().finite().min(-180).max(180),
+  north: z.number().finite().min(-90).max(90),
+  geojson: z.unknown(),
+}).refine(({ south, north }) => south < north);
 
 export function createAdminAreaRouter(dependencies: {
   adminEmails: readonly string[];
   areas: AdminAreaService;
   locations: LocationLookupService;
   renderPage: AdminAreaPageRenderer;
+  renderLargePage?: AdminAreaPageRenderer;
 }) {
   const router = Router();
   const adminEmails = new Set(dependencies.adminEmails.map((email) => email.trim().toLowerCase()));
@@ -76,6 +91,64 @@ export function createAdminAreaRouter(dependencies: {
     } catch (error) {
       next(error);
     }
+  });
+
+  router.get('/admin/areas/large', async (_req, res, next) => {
+    try {
+      if (!dependencies.renderLargePage) throw new Error('Large Arena renderer is not configured.');
+      res.status(200).type('html').send(await dependencies.renderLargePage({ currentUser: res.locals.currentUser! }));
+    } catch (error) { next(error); }
+  });
+
+  router.get('/admin/api/areas/large', async (_req, res, next) => {
+    try { res.json({ areas: await dependencies.areas.list('polygon') }); } catch (error) { next(error); }
+  });
+
+  router.post('/admin/api/areas/large/preview', async (req, res, next) => {
+    const parsed = previewSchema.safeParse(req.body);
+    if (!parsed.success) { next(new AppError(422, 'invalid_request', 'Enter valid viewport bounds and polygon geometry.')); return; }
+    try {
+      const geometries = extractPolygonGeometries(parsed.data.geojson);
+      if (!geometries.length) throw new TypeError('Add at least one polygon.');
+      const { west, south, east, north } = parsed.data;
+      res.type('application/geo+json').send(await dependencies.areas.preview({ west, south, east, north }, geometries));
+    } catch (error) {
+      if (error instanceof TypeError || error instanceof RangeError) { next(new AppError(422, 'invalid_request', error.message)); return; }
+      next(error);
+    }
+  });
+
+  router.get('/admin/api/areas/large/:areaId', async (req, res, next) => {
+    const areaId = uuid.safeParse(req.params.areaId);
+    if (!areaId.success) { next(new AppError(422, 'invalid_request', 'Enter a valid Arena ID.')); return; }
+    try {
+      const area = await dependencies.areas.getLarge(areaId.data);
+      if (!area) { next(new AppError(404, 'invalid_request', 'Large Arena not found.')); return; }
+      res.json({ area });
+    } catch (error) { next(error); }
+  });
+
+  async function saveLarge(req: Request, res: Response, next: NextFunction, id?: string) {
+    const parsed = largeSaveSchema.safeParse(req.body);
+    if (!parsed.success) { next(new AppError(422, 'invalid_request', 'Enter a name, country, and polygon geometry.')); return; }
+    try {
+      const geometries = extractPolygonGeometries(parsed.data.geojson);
+      if (!geometries.length) throw new TypeError('Add at least one polygon.');
+      const input = { name: parsed.data.name, country: parsed.data.country, state: parsed.data.state, geometries };
+      const area = id ? await dependencies.areas.updateLarge(id, input) : await dependencies.areas.createLarge(input);
+      if (!area) { next(new AppError(404, 'invalid_request', 'Large Arena not found.')); return; }
+      res.status(id ? 200 : 201).json({ area });
+    } catch (error) {
+      if (error instanceof TypeError || error instanceof RangeError) { next(new AppError(422, 'invalid_request', error.message)); return; }
+      next(error);
+    }
+  }
+
+  router.post('/admin/api/areas/large', (req, res, next) => { void saveLarge(req, res, next); });
+  router.put('/admin/api/areas/large/:areaId', (req, res, next) => {
+    const areaId = uuid.safeParse(req.params.areaId);
+    if (!areaId.success) { next(new AppError(422, 'invalid_request', 'Enter a valid Arena ID.')); return; }
+    void saveLarge(req, res, next, areaId.data);
   });
 
   router.get('/admin/api/areas', async (_req, res, next) => {

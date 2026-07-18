@@ -243,6 +243,35 @@ This project uses Drizzle ORM and Drizzle Kit 1.0 release candidates. Use docume
 
 PostgreSQL has the PostGIS extension installed. Keep geometry types and operations consistent with the existing schema and Drizzle configuration.
 
+### Arena geometry and scoring
+
+`arenas.area` is the sole Arena-membership source of truth. It is a required,
+valid `geometry(MultiPolygon,6933)`. `definition_type` is either `grid` or
+`polygon` and selects only the admin authoring experience; search, canonical
+routes, boundaries, leaderboards, territory, and monthly/all-time behavior are
+shared.
+
+Competition claims remain global and Arena-independent. For Arena reads,
+`MonthlyCoverageService` constructs each claim-cell center as
+`((x + 0.5) * cell_size, (y + 0.5) * cell_size)` in EPSG:6933 and uses
+`ST_Covers(arena.area, center)`. Boundary centers therefore count. Adding or
+editing an Arena immediately changes the view over historical claims without
+flight reprocessing.
+
+The grid editor reconstructs visible selected cells from the stored polygon and
+turns submitted cells into envelopes followed by `ST_UnaryUnion`, polygon
+extraction, and `ST_Multi`. The Large Arenas editor accepts drawn or imported
+WGS84 Polygon/MultiPolygon inputs, applies two-dimensional make-valid,
+transformation, collection, union, and MultiPolygon normalization. Disconnected
+components and islands remain; overlaps and edge-adjacent components merge;
+imported holes may remain.
+
+Public Arena grids and Large Arena draft previews are generated only for the
+visible viewport using `viewportCtes`, the configured result limit, and the same
+center-point `ST_Covers` rule. The draft preview is admin-only and evaluates the
+unsaved geometry. The state importer uses the same save normalization, upserts
+the 50 states by stable Census FIPS identity, and excludes D.C. and territories.
+
 ## 8. External resources and adapters
 
 Location: `src/resources/`
@@ -345,7 +374,7 @@ The reusable flight-aid modules in `public/scripts/` are composed by
 and the Personal dashboard. They keep three concerns separate:
 
 - `mapGridOverlay.js` fetches and renders neutral grid outlines. Viewport maps
-  use `/v1/grid`; Arena maps use `/v1/arenas/:sourceId/grid`.
+  use `/v1/grid`; Arena maps use the viewport-bounded `/v1/arenas/:sourceId/grid`.
 - `mapLocationTracker.js` owns the foreground geolocation watch, follow/pan
   state, accuracy filtering, and trail segmentation.
 - `mapTrailStore.js` owns the single browser-local trail. `mapTrailLayer.js`
@@ -356,7 +385,8 @@ and visually consistent. `mapFlightAidStatus.vto` is the reusable page contract
 for transient status and error messages.
 
 Grid geometry remains server-owned. `MapGridService` in `src/services/` uses
-PostGIS to return viewport grid cells or exact persisted Arena membership, while
+PostGIS to generate viewport grid cells. Arena grid requests retain cells whose
+centers are covered by the canonical Arena polygon, while
 `mapGridGeoJson.ts` in `src/domain/territory/` builds the response shape. The
 browser controls only presentation and request timing; API routes remain
 authenticated and enforce viewport validation and result limits.
@@ -388,7 +418,7 @@ When changing an interactive component, inspect its Vento markup, browser module
 
 Location: `src/scripts/`
 
-Scripts are executable operational or data-management entry points, such as importing launch metadata or generating launch areas.
+Scripts are executable operational or data-management entry points, such as importing launch metadata or the Census state Arenas.
 
 Scripts may compose existing services and domain functions, but reusable behavior should live in those layers rather than only in the script.
 

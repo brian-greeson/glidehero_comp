@@ -77,14 +77,14 @@ the browser-selected local month, using each flight's stored competition month.
 
 The Global competition lives at `/global`. Its additive coverage leaderboard is
 based on the current map viewport and refreshes after the map moves. An Arena is a
-filtered view of the same coverage data for its exact generated cells. Arena
+filtered view of the same coverage data using one canonical EPSG:6933 MultiPolygon. Arena
 rankings cover the complete Arena and do not change when its map moves.
 
 Competition pages encode the Current Month selection as `?month=YYYY-MM`; when
 the parameter is absent they show All Time. Global and Arena navigation carries
 the month parameter between pages.
 
-Launch areas with generated grid geometry are also available as Arenas. Arena
+Grid-painted and polygon-authored Arenas use the same public routes and scoring. Arena
 routes use a lowercase ISO country code, a name slug, and the launch source ID,
 for example `/arena/us/boulder-745`. The search box on Global and Arena pages is
 used exclusively to find Arenas by launch name, city, state, or country. The
@@ -92,11 +92,11 @@ Personal page does not display Arena search.
 
 Any
 flight that claims a cell in the Arena counts, regardless of its launch
-location. The Arena map hides claims outside its exact cell membership, and its
+location, when the cell center is inside or on the polygon boundary (`ST_Covers`). The Arena map hides claims outside this polygon membership, and its
 leaderboard always covers the complete Arena. Panning and zooming an Arena never
 change scoring.
 
-Opening an Arena fits the map to its generated boundary and draws an outline
+Opening an Arena fits the map to its polygon boundary and draws an outline
 around it. A breadcrumb below the main navigation shows `Global >> Arena Name`;
 selecting `Global` returns to the viewport-based Global competition. Arena
 leaderboards use the same additive coverage rules as Global, but their scoring
@@ -110,7 +110,7 @@ scope is the Arena instead of the visible map.
 - `/personal` displays the signed-in pilot's permanent Personal Map and
   viewport Stats.
 - `/arena/{country-code}/{name}-{source-id}` displays a fixed-area additive
-  coverage competition backed by a generated launch area.
+  coverage competition backed by a canonical Arena polygon.
 - Signed-out requests to Global, Personal, and Arena pages redirect to `/`.
 - Invalid or unavailable Arena routes display an Arena 404 page.
 
@@ -124,7 +124,8 @@ Every Global, Personal, and Arena map includes optional grid and location
 controls. The grid control draws neutral cell outlines over the existing map
 without changing claims, scoring, or the selected coverage. Global and Personal
 maps request cells for the visible viewport once the map is zoomed in far
-enough; Arena maps draw the Arena's exact generated cells at any zoom level.
+enough. Arena maps use the same zoom gate and request only visible cells whose
+centers are covered by the Arena polygon. Boundaries remain visible at every zoom.
 
 The location control uses the browser's foreground geolocation support to show
 the pilot's current-position dot and one temporary trail. Manual
@@ -151,7 +152,7 @@ Included features:
 - Personal territory map.
 - Monthly competitive territory map.
 - Dynamic viewport-based leaderboard.
-- Launch-area Arena search and fixed-area leaderboards.
+- Unified grid- and polygon-authored Arena search and fixed-area leaderboards.
 - Optional grid overlay and foreground live-position trail on every map.
 - Flight statistics after upload.
 
@@ -192,23 +193,32 @@ npm run dev
 ```
 
 `GRID_CLAIM_CELL_SIZE` is required and specifies the grid-cell size in meters;
-the example environment uses `1000`. Arena generation uses this same value so
-Arena membership can be joined directly to competition claims by cell size and
-grid coordinates.
+the example environment uses `1000`. Arena scoring constructs each claim-cell
+center from that claim's stored size and applies `ST_Covers` to `arenas.area`.
 
-To populate launch-backed Arenas, import launch data and metadata, then generate
-the exact Arena cells using the same configured competition cell size:
+Administrators author small Arenas at **Areas → Arenas** by painting cells; save
+converts those cells into the canonical MultiPolygon. **Areas → Large Arenas**
+supports multiple drawn polygons, reshape/delete controls, GeoJSON import, and a
+zoomed-in draft cell preview. Overlapping or edge-adjacent inputs are unioned on
+save while disconnected components and imported holes remain.
+
+Refresh launch metadata for existing grid Arenas without changing their polygon:
 
 ```bash
 npm run import:launches
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f injest/importLaunchAreas.sql
-npm run generate:launch-areas
 ```
 
-Only launch areas with generated geometry and cell membership appear in Arena
-search results. `generate:launch-areas` accepts an optional positive odd grid
-count and defaults to a `5x5` area centered on each launch. Rerunning it replaces
-the previously generated launch-area cells and boundaries.
+Import the 50 U.S. state Arenas from an official Census boundary GeoJSON file:
+
+```bash
+npm run import:state-arenas -- path/to/states.geojson
+```
+
+The importer excludes D.C. and territories, upserts by Census FIPS identity,
+preserves UUID/source IDs on rerun, and uses the same geometry normalization as
+the Large Arena editor. New or edited Arenas immediately include matching
+historical global claims; flight parsing never assigns claims to Arenas.
 
 Open <http://localhost:3000>. Create an account, log out, and log back in.
 The process health endpoint is <http://localhost:3000/v1/up>.
