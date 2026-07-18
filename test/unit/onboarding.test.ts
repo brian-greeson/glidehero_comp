@@ -81,16 +81,24 @@ class FakeDocument {
   }
 }
 
-function createFixture(headingCount = 3) {
+function createFixture({
+  stepCount = 6,
+  headingCount = stepCount,
+  progressCount = stepCount,
+}: {
+  stepCount?: number;
+  headingCount?: number;
+  progressCount?: number;
+} = {}) {
   const trigger = new FakeElement();
   const dialog = new FakeDialog();
   const close = new FakeElement();
   const back = new FakeElement();
   const next = new FakeElement();
   const done = new FakeElement();
-  const steps = [new FakeElement(), new FakeElement(), new FakeElement()];
+  const steps = Array.from({ length: stepCount }, () => new FakeElement());
   const headings = Array.from({ length: headingCount }, () => new FakeElement());
-  const progress = [new FakeElement(), new FakeElement(), new FakeElement()];
+  const progress = Array.from({ length: progressCount }, () => new FakeElement());
   const documentRef = new FakeDocument({
     '[data-onboarding-trigger]': trigger,
     '[data-onboarding-dialog]': dialog,
@@ -119,9 +127,9 @@ describe('Glide Hero onboarding controller', () => {
 
     expect(Object.keys(controller ?? {})).toEqual(['open', 'close']);
     expect(fixture.dialog.showModal).toHaveBeenCalledOnce();
-    expect(fixture.steps.map((step) => step.hidden)).toEqual([false, true, true]);
-    expect(fixture.steps.map((step) => step.hasAttribute('data-active'))).toEqual([true, false, false]);
-    expect(fixture.progress.map((item) => item.getAttribute('aria-current'))).toEqual(['step', null, null]);
+    expect(fixture.steps.map((step) => step.hidden)).toEqual([false, true, true, true, true, true]);
+    expect(fixture.steps.map((step) => step.hasAttribute('data-active'))).toEqual([true, false, false, false, false, false]);
+    expect(fixture.progress.map((item) => item.getAttribute('aria-current'))).toEqual(['step', null, null, null, null, null]);
     expect(fixture.back.hidden).toBe(true);
     expect(fixture.next.hidden).toBe(false);
     expect(fixture.done.hidden).toBe(true);
@@ -131,12 +139,10 @@ describe('Glide Hero onboarding controller', () => {
 
   it('focuses the final heading when Next hides itself', () => {
     const fixture = createFixture();
-    const finalHeading = fixture.headings[2]!;
+    const finalHeading = fixture.headings[5]!;
     initializeOnboarding({ documentRef: fixture.documentRef });
     fixture.trigger.dispatch('click');
-    fixture.next.dispatch('click');
-
-    fixture.next.dispatch('click');
+    for (let index = 0; index < 5; index += 1) fixture.next.dispatch('click');
 
     expect(fixture.next.hidden).toBe(true);
     expect(finalHeading.focus).toHaveBeenCalledOnce();
@@ -163,16 +169,16 @@ describe('Glide Hero onboarding controller', () => {
     fixture.trigger.dispatch('click');
 
     fixture.next.dispatch('click');
-    expect(fixture.steps.map((step) => step.hasAttribute('data-active'))).toEqual([false, true, false]);
+    expect(fixture.steps.map((step) => step.hasAttribute('data-active'))).toEqual([false, true, false, false, false, false]);
     expect(fixture.back.hidden).toBe(false);
 
-    fixture.next.dispatch('click');
-    expect(fixture.steps.map((step) => step.hasAttribute('data-active'))).toEqual([false, false, true]);
+    for (let index = 0; index < 4; index += 1) fixture.next.dispatch('click');
+    expect(fixture.steps.map((step) => step.hasAttribute('data-active'))).toEqual([false, false, false, false, false, true]);
     expect(fixture.next.hidden).toBe(true);
     expect(fixture.done.hidden).toBe(false);
 
     fixture.back.dispatch('click');
-    expect(fixture.steps.map((step) => step.hasAttribute('data-active'))).toEqual([false, true, false]);
+    expect(fixture.steps.map((step) => step.hasAttribute('data-active'))).toEqual([false, false, false, false, true, false]);
     expect(fixture.next.hidden).toBe(false);
     expect(fixture.done.hidden).toBe(true);
   });
@@ -181,14 +187,13 @@ describe('Glide Hero onboarding controller', () => {
     const fixture = createFixture();
     initializeOnboarding({ documentRef: fixture.documentRef });
     fixture.trigger.dispatch('click');
-    fixture.next.dispatch('click');
-    fixture.next.dispatch('click');
+    for (let index = 0; index < 5; index += 1) fixture.next.dispatch('click');
     fixture.done.dispatch('click');
 
     fixture.trigger.dispatch('click');
 
-    expect(fixture.steps.map((step) => step.hasAttribute('data-active'))).toEqual([true, false, false]);
-    expect(fixture.steps.map((step) => step.hidden)).toEqual([false, true, true]);
+    expect(fixture.steps.map((step) => step.hasAttribute('data-active'))).toEqual([true, false, false, false, false, false]);
+    expect(fixture.steps.map((step) => step.hidden)).toEqual([false, true, true, true, true, true]);
     expect(fixture.close.focus).toHaveBeenCalledTimes(2);
     expect(fixture.headings[0]!.focus).not.toHaveBeenCalled();
   });
@@ -207,7 +212,7 @@ describe('Glide Hero onboarding controller', () => {
     });
 
     expect(fixture.dialog.showModal).toHaveBeenCalledOnce();
-    expect(fixture.steps.map((step) => step.hidden)).toEqual([false, true, true]);
+    expect(fixture.steps.map((step) => step.hidden)).toEqual([false, true, true, true, true, true]);
     expect(fixture.close.focus).toHaveBeenCalledOnce();
     expect(historyRef.replaceState).toHaveBeenCalledWith(
       historyRef.state,
@@ -287,7 +292,13 @@ describe('Glide Hero onboarding controller', () => {
   });
 
   it('returns a safe no-op when the step heading hooks are incomplete', () => {
-    const fixture = createFixture(2);
+    const fixture = createFixture({ headingCount: 5 });
+
+    expect(initializeOnboarding({ documentRef: fixture.documentRef })).toBeUndefined();
+  });
+
+  it('returns a safe no-op when the progress hooks are incomplete', () => {
+    const fixture = createFixture({ progressCount: 5 });
 
     expect(initializeOnboarding({ documentRef: fixture.documentRef })).toBeUndefined();
   });

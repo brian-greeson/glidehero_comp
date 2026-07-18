@@ -9,9 +9,9 @@
           <span>GLIDE HERO</span>
         </div>
         <div class="onboarding-copy">
-          <p class="onboarding-eyebrow">How to play · 1 of 3</p>
+          <p class="onboarding-eyebrow">How to play · 1 of 6</p>
           <h2 id="onboarding-title" data-onboarding-heading tabindex="-1">Welcome to Glide Hero!</h2>
-          <p>Every flight is a chance to paint the map. Here’s how your track turns into territory.</p>
+          <p>Every flight is a chance to grow your personal territory and compete for territory with other pilots.</p>
         </div>
       </section>
 
@@ -36,9 +36,9 @@
           </svg>
         </div>
         <div class="onboarding-copy">
-          <p class="onboarding-eyebrow">How to play · 2 of 3</p>
+          <p class="onboarding-eyebrow">How to play · 2 of 6</p>
           <h2 data-onboarding-heading tabindex="-1">Claim cells as you fly</h2>
-          <p>Your flight track claims every new cell it crosses. Explore new lines and watch the sky fill with your color.</p>
+          <p>Your flight claims every grid cell its track crosses. Explore new lines and watch the sky fill with your color.</p>
         </div>
       </section>
 
@@ -83,9 +83,111 @@
           </svg>
         </div>
         <div class="onboarding-copy">
-          <p class="onboarding-eyebrow">How to play · 3 of 3</p>
+          <p class="onboarding-eyebrow">How to play · 3 of 6</p>
           <h2 data-onboarding-heading tabindex="-1">Close the loop</h2>
-          <p>When your flight path forms a closed loop, every grid cell inside it becomes yours.</p>
+          <p>Close an edge-connected ring to claim every grid cell inside it. Cells touching only at a corner do not close a ring.</p>
+        </div>
+      </section>
+
+      <section class="onboarding-step" data-onboarding-step hidden aria-hidden="true">
+        <div class="onboarding-visual" aria-hidden="true">
+          <div class="onboarding-competition-demo">
+            <svg class="onboarding-competition-grid" viewBox="0 0 270 170" focusable="false">
+              <defs>
+                <pattern id="onboarding-shared-stripes" width="10" height="10" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+                  <rect width="5" height="10" fill="#f36b35" />
+                  <rect x="5" width="5" height="10" fill="#1769aa" />
+                </pattern>
+                <mask id="onboarding-orange-claim-mask">
+                  <path class="onboarding-square-mask onboarding-orange-square" pathLength="1" d="M75 45H135V105H75Z" />
+                </mask>
+                <mask id="onboarding-blue-claim-mask">
+                  <path class="onboarding-square-mask onboarding-blue-square" pathLength="1" d="M135 75H195V135H135Z" />
+                </mask>
+              </defs>
+              <g class="onboarding-competition-grid-lines">
+                <path d="M30 15H240M30 45H240M30 75H240M30 105H240M30 135H240M30 165H240" />
+                <path d="M30 15V165M60 15V165M90 15V165M120 15V165M150 15V165M180 15V165M210 15V165M240 15V165" />
+              </g>
+              <g class="onboarding-orange-claims" mask="url(#onboarding-orange-claim-mask)">
+                <rect x="61" y="31" width="28" height="28" /><rect x="91" y="31" width="28" height="28" /><rect x="121" y="31" width="28" height="28" />
+                <rect x="121" y="61" width="28" height="28" /><rect x="121" y="91" width="28" height="28" /><rect x="91" y="91" width="28" height="28" />
+                <rect x="61" y="91" width="28" height="28" /><rect x="61" y="61" width="28" height="28" />
+              </g>
+              <rect class="onboarding-orange-interior" x="91" y="61" width="28" height="28" />
+              <g class="onboarding-blue-claims" mask="url(#onboarding-blue-claim-mask)">
+                <rect x="151" y="61" width="28" height="28" /><rect x="181" y="61" width="28" height="28" />
+                <rect x="181" y="91" width="28" height="28" /><rect x="181" y="121" width="28" height="28" /><rect x="151" y="121" width="28" height="28" />
+                <rect x="121" y="121" width="28" height="28" />
+              </g>
+              <rect class="onboarding-blue-interior" x="151" y="91" width="28" height="28" />
+              <g class="onboarding-shared-claims" mask="url(#onboarding-blue-claim-mask)">
+                <rect x="121" y="61" width="28" height="28" /><rect x="121" y="91" width="28" height="28" />
+              </g>
+              <path class="onboarding-square-track onboarding-orange-square" pathLength="1" d="M75 45H135V105H75Z" />
+              <path class="onboarding-square-track onboarding-blue-square" pathLength="1" d="M135 75H195V135H135Z" />
+              <path class="onboarding-square-glider onboarding-orange-glider" d="M-6-5L7 0-6 5-3 0Z" />
+              <path class="onboarding-square-glider onboarding-blue-glider" d="M-6-5L7 0-6 5-3 0Z" />
+            </svg>
+            <div class="onboarding-scoreboard" aria-hidden="true">
+              <div class="onboarding-score-row onboarding-orange-score"><span class="onboarding-score-swatch"></span><span>Orange</span><strong></strong></div>
+              <div class="onboarding-score-row onboarding-blue-score"><span class="onboarding-score-swatch"></span><span>Blue</span><strong></strong></div>
+            </div>
+          </div>
+        </div>
+        <div class="onboarding-copy">
+          <p class="onboarding-eyebrow">How to play · 4 of 6</p>
+          <h2 data-onboarding-heading tabindex="-1">Build competitive territory</h2>
+          <p>Claim territory on a shared competitive map. Each cell is worth 1 point, and multiple pilots can claim the same cell.</p>
+        </div>
+      </section>
+
+      <section class="onboarding-step" data-onboarding-step hidden aria-hidden="true">
+        <div class="onboarding-visual" aria-hidden="true">
+          <svg class="onboarding-world-visual" viewBox="0 0 300 220" focusable="false">
+            <rect class="onboarding-world-background" x="0" y="0" width="300" height="220" rx="14" />
+            <g class="onboarding-globe-scene">
+              <circle class="onboarding-globe-ocean" cx="150" cy="110" r="78" />
+              <g class="onboarding-globe-grid">
+                <ellipse cx="150" cy="110" rx="48" ry="78" /><ellipse cx="150" cy="110" rx="18" ry="78" />
+                <path d="M72 110H228M83 73H217M83 147H217" />
+              </g>
+              <g class="onboarding-globe-land">
+                <path d="M91 62l25-18 31 10 7 19-18 10-11 24-24-6-15-19z" />
+                <path d="M161 55l30 5 23 22-7 22-19 3-5 31-25 24-15-12 8-26-13-20 12-14z" />
+              </g>
+            </g>
+            <g class="onboarding-local-scene">
+              <g class="onboarding-local-contours"><path d="M-15 45C55 5 100 65 162 38S260 15 325 55" /><path d="M-20 172C44 128 96 198 164 161S260 139 326 183" /></g>
+              <g class="onboarding-local-grid"><path d="M0 35H300M0 75H300M0 115H300M0 155H300M0 195H300" /><path d="M20 0V220M60 0V220M100 0V220M140 0V220M180 0V220M220 0V220M260 0V220" /></g>
+              <path class="onboarding-final-arena-boundary" d="M82 48l109-19 54 52-21 93-105 18-63-61z" />
+              <g class="onboarding-arena-claims">
+                <rect class="onboarding-outside-claim" x="21" y="96" width="38" height="38" /><rect class="onboarding-outside-claim" x="61" y="96" width="38" height="38" />
+                <rect class="onboarding-inside-claim" x="101" y="96" width="38" height="38" /><rect class="onboarding-inside-claim" x="141" y="96" width="38" height="38" />
+                <rect class="onboarding-inside-claim" x="181" y="96" width="38" height="38" /><rect class="onboarding-outside-claim" x="221" y="96" width="38" height="38" /><rect class="onboarding-outside-claim" x="261" y="96" width="38" height="38" />
+              </g>
+              <path class="onboarding-arena-flight-track" pathLength="1" d="M7 126C58 94 94 126 137 112S216 86 293 122" />
+              <path class="onboarding-arena-glider" d="M-6-5L7 0-6 5-3 0Z" />
+            </g>
+          </svg>
+        </div>
+        <div class="onboarding-copy">
+          <p class="onboarding-eyebrow">How to play · 5 of 6</p>
+          <h2 data-onboarding-heading tabindex="-1">Explore Global and Arenas</h2>
+          <div class="onboarding-sequenced-copy" aria-hidden="true">
+            <p class="onboarding-global-copy">All flights are submitted to the Global competition.</p>
+            <p class="onboarding-arena-copy">Arenas are predefined areas of competition.</p>
+            <p class="onboarding-arena-points-copy">Only cells inside the boundary count toward Arena points.</p>
+          </div>
+          <p class="sr-only">All flights are submitted to the Global competition. Arenas are predefined areas of competition. Only cells inside the boundary count toward Arena points.</p>
+        </div>
+      </section>
+
+      <section class="onboarding-step onboarding-step-text-only" data-onboarding-step hidden aria-hidden="true">
+        <div class="onboarding-copy">
+          <p class="onboarding-eyebrow">How to play · 6 of 6</p>
+          <h2 data-onboarding-heading tabindex="-1">Competition periods</h2>
+          <p>Arena competitions reset every month. In the Global competition, you can view claims by month or All Time.</p>
         </div>
       </section>
     </div>
@@ -95,6 +197,9 @@
         <li><span data-onboarding-progress aria-current="step"><span class="sr-only">Welcome</span></span></li>
         <li><span data-onboarding-progress><span class="sr-only">Claim cells</span></span></li>
         <li><span data-onboarding-progress><span class="sr-only">Close the loop</span></span></li>
+        <li><span data-onboarding-progress><span class="sr-only">Build competitive territory</span></span></li>
+        <li><span data-onboarding-progress><span class="sr-only">Explore Global and Arenas</span></span></li>
+        <li><span data-onboarding-progress><span class="sr-only">Competition periods</span></span></li>
       </ol>
       <div class="onboarding-actions">
         <button type="button" class="onboarding-button onboarding-back" data-onboarding-back hidden>Back</button>

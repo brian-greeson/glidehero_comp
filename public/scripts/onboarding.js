@@ -14,7 +14,15 @@ export function initializeOnboarding({
   const steps = Array.from(documentRef.querySelectorAll('[data-onboarding-step]'));
   const headings = Array.from(documentRef.querySelectorAll('[data-onboarding-heading]'));
   const progress = Array.from(documentRef.querySelectorAll('[data-onboarding-progress]'));
-  if (!closeButton || !backButton || !nextButton || !doneButton || steps.length !== 3 || headings.length !== steps.length) return undefined;
+  if (
+    !closeButton
+    || !backButton
+    || !nextButton
+    || !doneButton
+    || steps.length === 0
+    || headings.length !== steps.length
+    || progress.length !== steps.length
+  ) return undefined;
 
   let activeStep = 0;
   let restoreFocus = null;
