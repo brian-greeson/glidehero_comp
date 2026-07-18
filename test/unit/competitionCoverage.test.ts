@@ -1,20 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
 
 // @ts-expect-error Browser assets remain JavaScript.
-import {
-  arenaCoverageLeaderboardUrl,
-  coverageCellClaimantsUrl,
-  coverageTerritoryUrl,
-  globalCoverageLeaderboardUrl,
-} from '../../public/scripts/competitionCoverageApi.js';
+import { arenaCoverageLeaderboardUrl, coverageCellClaimantsUrl, coverageTerritoryUrl, globalCoverageLeaderboardUrl } from '../../public/scripts/competitionCoverageApi.js';
 // @ts-expect-error Browser assets remain JavaScript.
 import { createCompetitionColorRegistry } from '../../public/scripts/competitionColors.js';
 // @ts-expect-error Browser assets remain JavaScript.
-import {
-  colorCoverageTerritory,
-  coverageCellFeatureAtPoint,
-  positionCoverageCellPopup,
-} from '../../public/scripts/competitionCoverageMap.js';
+import { colorCoverageTerritory, coverageCellFeatureAtPoint, positionCoverageCellPopup } from '../../public/scripts/competitionCoverageMap.js';
 // @ts-expect-error Browser assets remain JavaScript.
 import { renderCoverageLeaderboard } from '../../public/scripts/competitionCoverageLeaderboard.js';
 
