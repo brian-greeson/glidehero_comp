@@ -11,6 +11,7 @@
     "db:push": "drizzle-kit push",
     "dev": "tsx watch --env-file=.env src/index.ts",
     "start": "node dist/src/index.js",
+    "worker": "node dist/src/worker.js",
     "test": "vitest run test/unit",
     "test:integration": "vitest run test/integration",
     "typecheck": "tsc -p tsconfig.json --noEmit",
@@ -27,6 +28,7 @@
   "type": "module",
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1085.0",
+    "@aws-sdk/s3-request-presigner": "^3.1089.0",
     "@photostructure/tz-lookup": "^11.6.0",
     "@valkey/valkey-glide": "^2.4.2",
     "drizzle-orm": "^1.0.0-rc.4-5d5b77c",

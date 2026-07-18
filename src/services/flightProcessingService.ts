@@ -1,5 +1,5 @@
 import { GetObjectCommand, type S3 } from '@aws-sdk/client-s3';
-import { DrizzleQueryError, eq } from 'drizzle-orm';
+import { and, DrizzleQueryError, eq } from 'drizzle-orm';
 import type { Database } from '../db/client.js';
 import { flights, trackPoints } from '../db/schema.js';
 import { resolveLaunchTimeZone } from '../domain/competition/launchTimeZone.js';
@@ -9,14 +9,16 @@ import { createGridClaimService } from './gridClaimService.js';
 
 const TRACK_POINT_INSERT_BATCH_SIZE = 1_000;
 export const duplicateFlightMessage = 'This flight has already been uploaded.';
+class ProcessingFenceLostError extends Error {}
 
 export type FlightProcessingOutcome =
   | { status: 'completed'; flightId: string }
   | { status: 'failed'; flightId: string; message: string }
+  | { status: 'superseded'; flightId: string }
   | { status: 'duplicate'; message: typeof duplicateFlightMessage };
 
 export interface FlightProcessingService {
-  process(input: { ownerUserId: string; igcFileId: string; bucketKey: string; contentHash: string }): Promise<FlightProcessingOutcome>;
+  process(input: { ownerUserId: string; igcFileId: string; bucketKey: string; contentHash: string; processingToken: string; source?: string }): Promise<FlightProcessingOutcome>;
 }
 
 function isContentHashConflict(error: unknown): boolean {
@@ -47,11 +49,13 @@ export function createFlightProcessingService(
 ): FlightProcessingService {
   const gridClaim = createGridClaimService(database, { cellSize: options.gridClaimCellSize });
 
-  async function fail(flightId: string, message: string): Promise<FlightProcessingOutcome> {
-    await database
+  async function fail(flightId: string, processingToken: string, message: string): Promise<FlightProcessingOutcome> {
+    const updated = await database
       .update(flights)
-      .set({ processingStatus: 'failed', processingError: message })
-      .where(eq(flights.id, flightId));
+      .set({ processingStatus: 'failed', processingToken: null, processingError: message })
+      .where(and(eq(flights.id, flightId), eq(flights.processingStatus, 'processing'), eq(flights.processingToken, processingToken)))
+      .returning({ id: flights.id });
+    if (!updated.length) return { status: 'superseded', flightId };
     return { status: 'failed', flightId, message };
   }
 
@@ -61,7 +65,7 @@ export function createFlightProcessingService(
       try {
         [flight] = await database
           .insert(flights)
-          .values({ userId: input.ownerUserId, igcFileId: input.igcFileId, contentHash: input.contentHash })
+          .values({ userId: input.ownerUserId, igcFileId: input.igcFileId, contentHash: input.contentHash, processingToken: input.processingToken })
           .returning({ id: flights.id });
       } catch (error) {
         if (isContentHashConflict(error)) return { status: 'duplicate', message: duplicateFlightMessage };
@@ -69,18 +73,20 @@ export function createFlightProcessingService(
       }
       if (!flight) throw new Error('Flight insert returned no row.');
 
-      let source: string;
-      try {
-        const object = await options.s3Client.send(
-          new GetObjectCommand({ Bucket: options.bucketName, Key: input.bucketKey }),
-        );
-        if (!object.Body) {
-          return fail(flight.id, 'We could not read your uploaded IGC file. Please upload it again.');
+      let source = input.source;
+      if (source === undefined) {
+        try {
+          const object = await options.s3Client.send(
+            new GetObjectCommand({ Bucket: options.bucketName, Key: input.bucketKey }),
+          );
+          if (!object.Body) {
+            return fail(flight.id, input.processingToken, 'We could not read your uploaded IGC file. Please upload it again.');
+          }
+          source = await object.Body.transformToString();
+        } catch (error) {
+          console.error('Unable to read uploaded IGC file', error);
+          return fail(flight.id, input.processingToken, 'We could not read your uploaded IGC file. Please upload it again.');
         }
-        source = await object.Body.transformToString();
-      } catch (error) {
-        console.error('Unable to read uploaded IGC file', error);
-        return fail(flight.id, 'We could not read your uploaded IGC file. Please upload it again.');
       }
 
       let parsed;
@@ -89,6 +95,7 @@ export function createFlightProcessingService(
       } catch (error) {
         return fail(
           flight.id,
+          input.processingToken,
           error instanceof IgcParseError ? parserMessage(error) : 'This IGC file is not a valid flight track.',
         );
       }
@@ -98,27 +105,39 @@ export function createFlightProcessingService(
         longitude: parsed.launchLongitude,
       });
 
-      await database.transaction(async (tx) => {
-        for (let start = 0; start < parsed.points.length; start += TRACK_POINT_INSERT_BATCH_SIZE) {
-          await tx
-            .insert(trackPoints)
-            .values(parsed.points.slice(start, start + TRACK_POINT_INSERT_BATCH_SIZE).map((point) => ({ flightId: flight.id, ...point })));
-        }
-        await tx
-          .update(flights)
-          .set({
-            processingStatus: 'completed',
-            processingError: null,
-            startedAt: parsed.startedAt,
-            endedAt: parsed.endedAt,
-            durationSeconds: parsed.durationSeconds,
-            distanceMeters: parsed.distanceMeters,
-            launchLatitude: parsed.launchLatitude,
-            launchLongitude: parsed.launchLongitude,
-            launchTimezone,
-          })
-          .where(eq(flights.id, flight.id));
-      });
+      try {
+        await database.transaction(async (tx) => {
+          const updated = await tx
+            .update(flights)
+            .set({
+              processingStatus: 'completed',
+              processingToken: null,
+              processingError: null,
+              startedAt: parsed.startedAt,
+              endedAt: parsed.endedAt,
+              durationSeconds: parsed.durationSeconds,
+              distanceMeters: parsed.distanceMeters,
+              launchLatitude: parsed.launchLatitude,
+              launchLongitude: parsed.launchLongitude,
+              launchTimezone,
+            })
+            .where(and(
+              eq(flights.id, flight.id),
+              eq(flights.processingStatus, 'processing'),
+              eq(flights.processingToken, input.processingToken),
+            ))
+            .returning({ id: flights.id });
+          if (!updated.length) throw new ProcessingFenceLostError();
+          for (let start = 0; start < parsed.points.length; start += TRACK_POINT_INSERT_BATCH_SIZE) {
+            await tx
+              .insert(trackPoints)
+              .values(parsed.points.slice(start, start + TRACK_POINT_INSERT_BATCH_SIZE).map((point) => ({ flightId: flight.id, ...point })));
+          }
+        });
+      } catch (error) {
+        if (error instanceof ProcessingFenceLostError) return { status: 'superseded', flightId: flight.id };
+        throw error;
+      }
 
       await gridClaim.process({ flightId: flight.id, userId: input.ownerUserId, launchTimezone });
 

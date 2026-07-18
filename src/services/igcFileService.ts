@@ -74,6 +74,7 @@ export function createIgcFileService(
         igcFileId: stored.id,
         bucketKey: stored.bucketKey,
         contentHash,
+        processingToken: randomUUID(),
       });
       if (outcome.status !== 'duplicate') return outcome;
 

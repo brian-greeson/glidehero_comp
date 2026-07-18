@@ -16,6 +16,8 @@ import type { MonthlyCoverageService } from '../../src/services/monthlyCoverageS
 import type { AdminFlightService } from '../../src/services/adminFlightService.js';
 import type { ArenaService } from '../../src/services/arenaService.js';
 import type { MapGridService } from '../../src/services/mapGridService.js';
+import type { FlightUploadQueueService } from '../../src/services/flightUploadQueueService.js';
+import type { FailedFlightCleanupService } from '../../src/services/failedFlightCleanupService.js';
 import { createPageRenderer } from '../../src/views/renderer.js';
 import { createCurrentUserMiddleware } from '../../src/web/currentUserMiddleware.js';
 import { createSessionCookie } from '../../src/web/sessionCookie.js';
@@ -237,6 +239,66 @@ describe('webRouter', () => {
         headers: { cookie: 'glidehero_session=valid-token' },
       });
       expect(unknown.status).toBe(404);
+    });
+  });
+
+  it('creates, completes, reports, and clears authenticated queued uploads', async () => {
+    const base = dependencies();
+    const uploadQueue = {
+      createIntent: vi.fn(async () => ({ id: '00000000-0000-4000-8000-000000000030', uploadUrl: 'https://objects.example.test/signed' })),
+      complete: vi.fn(async () => undefined),
+      cancel: vi.fn(async () => true),
+      progress: vi.fn(async () => ({
+        total: 2, finished: 1, queued: 1, processing: 0, failed: 1,
+      })),
+      listJobs: vi.fn(async () => ({
+        total: 2, page: 1, pageSize: 100,
+        jobs: [{ id: 'job-1', originalFilename: 'flight.igc', status: 'failed' as const, error: 'bad track' }],
+      })),
+      queueSummary: vi.fn(async () => ({ queued: 1, processing: 0, failed: 1, oldestQueuedAgeSeconds: 12 })),
+    } as unknown as FlightUploadQueueService;
+    const failedFlightCleanup: FailedFlightCleanupService = { clearForUser: vi.fn(async () => 1) };
+    const router = createWebRouter({
+      auth: base.auth,
+      cookie: base.cookie,
+      uploadQueue,
+      failedFlightCleanup,
+      profiles: base.profiles,
+      gridClaim: base.gridClaim,
+      mapGrid: base.mapGrid,
+      coverage: base.coverage,
+      arenas: base.arenas,
+      renderPage: base.renderPage,
+    });
+    const app = createApp({ webMiddleware: [createCurrentUserMiddleware(base.auth, base.cookie), router] });
+
+    await withServer(app, async (baseUrl) => {
+      const anonymous = await fetch(`${baseUrl}/v1/igc-upload-progress`);
+      expect(anonymous.status).toBe(401);
+
+      const headers = { cookie: 'glidehero_session=valid-token', 'content-type': 'application/json' };
+      const intent = await fetch(`${baseUrl}/v1/igc-uploads/intents`, {
+        method: 'POST', headers, body: JSON.stringify({ originalFilename: 'flight.igc', contentType: 'text/plain', byteSize: 100 }),
+      });
+      expect(intent.status).toBe(201);
+      expect(uploadQueue.createIntent).toHaveBeenCalledWith({ userId: user.userId, originalFilename: 'flight.igc', contentType: 'text/plain', byteSize: 100 });
+
+      const completed = await fetch(`${baseUrl}/v1/igc-uploads/00000000-0000-4000-8000-000000000030/complete`, { method: 'POST', headers, body: '{}' });
+      expect(completed.status).toBe(202);
+      expect(uploadQueue.complete).toHaveBeenCalledWith({ userId: user.userId, id: '00000000-0000-4000-8000-000000000030' });
+
+      const cancelled = await fetch(`${baseUrl}/v1/igc-uploads/00000000-0000-4000-8000-000000000030`, { method: 'DELETE', headers });
+      expect(cancelled.status).toBe(200);
+      expect(await cancelled.json()).toEqual({ removed: true });
+      expect(uploadQueue.cancel).toHaveBeenCalledWith({ userId: user.userId, id: '00000000-0000-4000-8000-000000000030' });
+
+      expect((await fetch(`${baseUrl}/v1/igc-upload-progress`, { headers })).status).toBe(200);
+      const details = await fetch(`${baseUrl}/v1/igc-upload-jobs?page=1`, { headers });
+      expect((await details.json() as { jobs: unknown[] }).jobs).toHaveLength(1);
+      expect(uploadQueue.listJobs).toHaveBeenCalledWith(user.userId, { page: 1, pageSize: 100 });
+      const cleared = await fetch(`${baseUrl}/v1/igc-upload-failures`, { method: 'DELETE', headers });
+      expect(await cleared.json()).toEqual({ cleared: 1 });
+      expect(failedFlightCleanup.clearForUser).toHaveBeenCalledWith(user.userId);
     });
   });
 

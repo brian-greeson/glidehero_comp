@@ -32,6 +32,7 @@ export async function resetAndPushTestDatabase(): Promise<ReturnType<typeof test
         env: {
           ...process.env,
           DATABASE_URL: connectionString,
+          VALKEY_URL: 'redis://localhost:6379',
           BUCKET_SECRET: 'test-secret',
           BUCKET_ID: 'test-id',
           BUCKET_NAME: 'glidehero-test-files',

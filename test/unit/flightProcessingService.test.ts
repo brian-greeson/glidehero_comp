@@ -17,6 +17,7 @@ const ownerUserId = '00000000-0000-4000-8000-000000000001';
 const igcFileId = '00000000-0000-4000-8000-000000000010';
 const flightId = '00000000-0000-4000-8000-000000000020';
 const bucketKey = 'glidehero/flight.igc';
+const processingToken = 'processing-token-1';
 const validIgc = [
   'AXXXGLIDEHERO',
   'HFDTE120726',
@@ -24,7 +25,7 @@ const validIgc = [
   'B1200044000060N10500060WA0123501235',
 ].join('\n');
 
-function databaseDouble(options: { events?: string[]; transactionError?: Error; flightInsertError?: unknown } = {}) {
+function databaseDouble(options: { events?: string[]; transactionError?: Error; flightInsertError?: unknown; fenceLost?: boolean } = {}) {
   const insertedPoints: unknown[] = [];
   const flightUpdates: Record<string, unknown>[] = [];
   const returning = vi.fn(async () => {
@@ -32,7 +33,8 @@ function databaseDouble(options: { events?: string[]; transactionError?: Error; 
     return [{ id: flightId }];
   });
   const insertFlightValues = vi.fn(() => ({ returning }));
-  const updateWhere = vi.fn(async () => undefined);
+  const updateReturning = vi.fn(async () => [{ id: flightId }]);
+  const updateWhere = vi.fn(() => ({ returning: updateReturning }));
   const updateSet = vi.fn((update: Record<string, unknown>) => {
     flightUpdates.push(update);
     return { where: updateWhere };
@@ -41,7 +43,8 @@ function databaseDouble(options: { events?: string[]; transactionError?: Error; 
     if (options.transactionError) throw options.transactionError;
     insertedPoints.push(...points);
   });
-  const txUpdateWhere = vi.fn(async () => undefined);
+  const txUpdateReturning = vi.fn(async () => options.fenceLost ? [] : [{ id: flightId }]);
+  const txUpdateWhere = vi.fn(() => ({ returning: txUpdateReturning }));
   const txUpdateSet = vi.fn((update: Record<string, unknown>) => {
     flightUpdates.push(update);
     return { where: txUpdateWhere };
@@ -83,9 +86,9 @@ describe('FlightProcessingService', () => {
     });
 
     expect(createGridClaimService).toHaveBeenCalledWith(database, { cellSize: 1000 });
-    await expect(service.process({ ownerUserId, igcFileId, bucketKey, contentHash: 'a'.repeat(64) })).resolves.toEqual({ status: 'completed', flightId });
+    await expect(service.process({ ownerUserId, igcFileId, bucketKey, contentHash: 'a'.repeat(64), processingToken })).resolves.toEqual({ status: 'completed', flightId });
 
-    expect(insertFlightValues).toHaveBeenCalledWith({ userId: ownerUserId, igcFileId, contentHash: 'a'.repeat(64) });
+    expect(insertFlightValues).toHaveBeenCalledWith({ userId: ownerUserId, igcFileId, contentHash: 'a'.repeat(64), processingToken });
     expect(send).toHaveBeenCalledWith(
       expect.objectContaining({ input: expect.objectContaining({ Bucket: 'glidehero-files', Key: bucketKey }) }),
     );
@@ -123,7 +126,7 @@ describe('FlightProcessingService', () => {
       gridClaimCellSize: 1000,
     });
 
-    await expect(service.process({ ownerUserId, igcFileId, bucketKey, contentHash: 'a'.repeat(64) })).resolves.toEqual({
+    await expect(service.process({ ownerUserId, igcFileId, bucketKey, contentHash: 'a'.repeat(64), processingToken })).resolves.toEqual({
       status: 'failed',
       flightId,
       message: 'This IGC file has no valid GPS fixes to process.',
@@ -131,6 +134,7 @@ describe('FlightProcessingService', () => {
 
     expect(flightUpdates).toContainEqual({
       processingStatus: 'failed',
+      processingToken: null,
       processingError: 'This IGC file has no valid GPS fixes to process.',
     });
     expect(insertedPoints).toEqual([]);
@@ -146,13 +150,14 @@ describe('FlightProcessingService', () => {
       gridClaimCellSize: 1000,
     });
 
-    await expect(service.process({ ownerUserId, igcFileId, bucketKey, contentHash: 'a'.repeat(64) })).resolves.toEqual({
+    await expect(service.process({ ownerUserId, igcFileId, bucketKey, contentHash: 'a'.repeat(64), processingToken })).resolves.toEqual({
       status: 'failed',
       flightId,
       message: 'We could not read your uploaded IGC file. Please upload it again.',
     });
     expect(flightUpdates).toContainEqual({
       processingStatus: 'failed',
+      processingToken: null,
       processingError: 'We could not read your uploaded IGC file. Please upload it again.',
     });
     expect(insertedPoints).toEqual([]);
@@ -169,8 +174,23 @@ describe('FlightProcessingService', () => {
       gridClaimCellSize: 1000,
     });
 
-    await expect(service.process({ ownerUserId, igcFileId, bucketKey, contentHash: 'a'.repeat(64) })).rejects.toBe(persistenceError);
+    await expect(service.process({ ownerUserId, igcFileId, bucketKey, contentHash: 'a'.repeat(64), processingToken })).rejects.toBe(persistenceError);
     expect(flightUpdates).not.toContainEqual(expect.objectContaining({ processingStatus: 'failed' }));
+  });
+
+  it('rolls back track work when stale failure wins the database processing fence', async () => {
+    const { database, insertedPoints, transaction } = databaseDouble({ fenceLost: true });
+    const service = createFlightProcessingService(database as never, {
+      bucketName: 'glidehero-files', s3Client: { send: vi.fn() } as never, gridClaimCellSize: 1000,
+    });
+
+    await expect(service.process({
+      ownerUserId, igcFileId, bucketKey, contentHash: 'a'.repeat(64), processingToken, source: validIgc,
+    })).resolves.toEqual({ status: 'superseded', flightId });
+
+    expect(transaction).toHaveBeenCalledOnce();
+    expect(insertedPoints).toEqual([]);
+    expect(gridClaim.process).not.toHaveBeenCalled();
   });
 
   it('keeps the committed flight when GridClaim fails for a later retry', async () => {
@@ -184,7 +204,7 @@ describe('FlightProcessingService', () => {
       gridClaimCellSize: 1000,
     });
 
-    await expect(service.process({ ownerUserId, igcFileId, bucketKey, contentHash: 'a'.repeat(64) })).rejects.toBe(claimError);
+    await expect(service.process({ ownerUserId, igcFileId, bucketKey, contentHash: 'a'.repeat(64), processingToken })).rejects.toBe(claimError);
 
     expect(transaction).toHaveBeenCalledOnce();
     expect(gridClaim.process).toHaveBeenCalledWith({
@@ -207,7 +227,7 @@ describe('FlightProcessingService', () => {
       gridClaimCellSize: 1000,
     });
 
-    await expect(service.process({ ownerUserId, igcFileId, bucketKey, contentHash: 'a'.repeat(64) }))
+    await expect(service.process({ ownerUserId, igcFileId, bucketKey, contentHash: 'a'.repeat(64), processingToken }))
       .resolves.toEqual({ status: 'duplicate', message: 'This flight has already been uploaded.' });
     expect(send).not.toHaveBeenCalled();
   });
@@ -226,7 +246,7 @@ describe('FlightProcessingService', () => {
       gridClaimCellSize: 1000,
     });
 
-    await expect(service.process({ ownerUserId, igcFileId, bucketKey, contentHash: 'a'.repeat(64) }))
+    await expect(service.process({ ownerUserId, igcFileId, bucketKey, contentHash: 'a'.repeat(64), processingToken }))
       .resolves.toEqual({ status: 'duplicate', message: duplicateFlightMessage });
     expect(send).not.toHaveBeenCalled();
   });

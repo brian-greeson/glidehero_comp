@@ -52,6 +52,7 @@ describe('authentication schema', () => {
       { column_name: 'launch_timezone', is_nullable: 'YES' },
       { column_name: 'processing_error', is_nullable: 'YES' },
       { column_name: 'processing_status', is_nullable: 'NO' },
+      { column_name: 'processing_token', is_nullable: 'YES' },
       { column_name: 'started_at', is_nullable: 'YES' },
       { column_name: 'updated_at', is_nullable: 'NO' },
       { column_name: 'user_id', is_nullable: 'NO' },

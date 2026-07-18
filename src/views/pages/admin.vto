@@ -10,6 +10,14 @@
       </div>
       {{ if reprocessSuccess }}<p class="success" role="status">Flight cells were reprocessed.</p>{{ /if }}
       {{ if reprocessError }}<p class="error" role="alert">We could not reprocess that flight. Its existing cells were left unchanged.</p>{{ /if }}
+      {{ if queueSummary }}
+        <dl class="admin-queue-summary">
+          <div><dt>Queued</dt><dd>{{ queueSummary.queued }}</dd></div>
+          <div><dt>Processing</dt><dd>{{ queueSummary.processing }}</dd></div>
+          <div><dt>Failed</dt><dd>{{ queueSummary.failed }}</dd></div>
+          <div><dt>Oldest queued</dt><dd>{{ if queueSummary.oldestQueuedAgeSeconds !== null }}{{ queueSummary.oldestQueuedAgeSeconds }}s{{ else }}—{{ /if }}</dd></div>
+        </dl>
+      {{ /if }}
       <div class="admin-table-wrap">
         <table class="admin-flight-table">
           <thead><tr><th scope="col">Flight date</th><th scope="col">Pilot</th><th scope="col">File</th><th scope="col">Status</th><th scope="col"><span class="sr-only">Action</span></th></tr></thead>

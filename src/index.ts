@@ -3,13 +3,14 @@ import { createApp } from './app.js';
 import { parseConfig } from './config.js';
 import { createDatabase } from './db/client.js';
 import { createBucketClient } from './resources/bucketClient.js';
+import { createValkeyClient } from './resources/valkeyClient.js';
 import { createAuthService } from './services/authService.js';
 import { createAdminFlightService } from './services/adminFlightService.js';
 import { createAdminAreaService } from './services/adminAreaService.js';
 import { createArenaService } from './services/arenaService.js';
-import { createFlightProcessingService } from './services/flightProcessingService.js';
 import { createGridClaimService } from './services/gridClaimService.js';
-import { createIgcFileService } from './services/igcFileService.js';
+import { createFlightUploadQueueService } from './services/flightUploadQueueService.js';
+import { createFailedFlightCleanupService } from './services/failedFlightCleanupService.js';
 import { createProfileService } from './services/profileService.js';
 import { createLocationLookupService } from './services/locationLookupService.js';
 import { createMonthlyCoverageService } from './services/monthlyCoverageService.js';
@@ -24,6 +25,7 @@ const config = parseConfig(process.env);
 const { db } = createDatabase(config.databaseUrl);
 const auth = createAuthService(db, { sessionTtlSeconds: config.sessionTtlSeconds });
 const s3Client = createBucketClient(config);
+const valkey = await createValkeyClient(config.valkeyUrl);
 const gridClaim = createGridClaimService(db, { cellSize: config.gridClaimCellSize });
 const adminFlights = createAdminFlightService(db, gridClaim);
 const adminAreas = createAdminAreaService(db, { cellSize: config.gridClaimCellSize });
@@ -31,16 +33,15 @@ const locationLookup = createLocationLookupService();
 const arenas = createArenaService(db, { cellSize: config.gridClaimCellSize });
 const monthlyCoverage = createMonthlyCoverageService(db, { cellSize: config.gridClaimCellSize });
 const mapGrid = createMapGridService(db, { cellSize: config.gridClaimCellSize });
-const flightProcessing = createFlightProcessingService(db, {
-  s3Client,
-  bucketName: config.bucket.bucketName,
-  gridClaimCellSize: config.gridClaimCellSize,
-});
 const profiles = createProfileService(db);
-const igcFiles = createIgcFileService(db, {
+const uploadQueue = createFlightUploadQueueService(valkey, {
   s3Client,
   bucketName: config.bucket.bucketName,
-}, flightProcessing);
+});
+const failedFlightCleanup = createFailedFlightCleanupService(db, uploadQueue, {
+  s3Client,
+  bucketName: config.bucket.bucketName,
+});
 const cookie = createSessionCookie({
   name: config.sessionCookieName,
   secure: config.isProduction,
@@ -57,7 +58,8 @@ const webMiddleware = [
   createWebRouter({
     auth,
     cookie,
-    igcFiles,
+    uploadQueue,
+    failedFlightCleanup,
     profiles,
     gridClaim,
     mapGrid,

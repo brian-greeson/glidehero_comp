@@ -78,6 +78,7 @@ export const flights = pgTable(
     igcFileId: uuid('igc_file_id').notNull().references(() => igcFiles.id, { onDelete: 'cascade' }),
     contentHash: text('content_hash').notNull(),
     processingStatus: flightProcessingStatus('processing_status').notNull().default('processing'),
+    processingToken: text('processing_token'),
     processingError: text('processing_error'),
     startedAt: timestamp('started_at', { withTimezone: true, mode: 'date' }),
     endedAt: timestamp('ended_at', { withTimezone: true, mode: 'date' }),

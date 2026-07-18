@@ -68,6 +68,7 @@ describe('IgcFileService', () => {
       igcFileId: stored.id,
       bucketKey: stored.bucketKey,
       contentHash: 'ff1869d081d2815322d62f0c4e23864966de47b4bf9ee8ae7b0c7a99eff18c8e',
+      processingToken: expect.any(String),
     });
   });
 

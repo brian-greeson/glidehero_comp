@@ -1,0 +1,1 @@
+ALTER TABLE "flights" ADD COLUMN "processing_token" text;

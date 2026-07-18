@@ -2,6 +2,7 @@ import { z } from 'zod';
 
 const envSchema = z.object({
   DATABASE_URL: z.string().min(1),
+  VALKEY_URL: z.string().url(),
   ENVIRONMENT: z.enum(['development', 'test', 'production']).default('development'),
   PORT: z.coerce.number().int().min(0).max(65535).default(3000),
   SESSION_COOKIE_NAME: z
@@ -24,6 +25,7 @@ const envSchema = z.object({
 
 export type AppConfig = {
   databaseUrl: string;
+  valkeyUrl: string;
   environment: 'development' | 'test' | 'production';
   isProduction: boolean;
   port: number;
@@ -44,6 +46,7 @@ export function parseConfig(env: NodeJS.ProcessEnv): AppConfig {
   const parsed = envSchema.parse(env);
   return {
     databaseUrl: parsed.DATABASE_URL,
+    valkeyUrl: parsed.VALKEY_URL,
     environment: parsed.ENVIRONMENT,
     isProduction: parsed.ENVIRONMENT === 'production',
     port: parsed.PORT,

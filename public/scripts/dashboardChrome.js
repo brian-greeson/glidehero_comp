@@ -1,3 +1,5 @@
+import { initializeFlightUploads } from './flightUploads.js';
+
 export function initializeDashboardChrome({ documentRef = document } = {}) {
   const accountTrigger = documentRef.querySelector('[data-account-trigger]');
   const accountPopover = documentRef.querySelector('[data-account-popover]');
@@ -14,11 +16,5 @@ export function initializeDashboardChrome({ documentRef = document } = {}) {
     });
   }
 
-  const uploadForm = documentRef.querySelector('[data-upload-form]');
-  const uploadInput = uploadForm?.querySelector('input[type="file"]');
-  if (uploadForm && uploadInput) {
-    uploadInput.addEventListener('change', () => {
-      if (uploadInput.files?.length) uploadForm.requestSubmit();
-    });
-  }
+  initializeFlightUploads(documentRef);
 }

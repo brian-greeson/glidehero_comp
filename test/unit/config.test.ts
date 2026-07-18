@@ -5,6 +5,7 @@ describe('parseConfig', () => {
   it('accepts the minimal local environment', () => {
     expect(parseConfig({
       DATABASE_URL: 'postgres://localhost/glidehero',
+      VALKEY_URL: 'redis://localhost:6379',
       BUCKET_SECRET: 'secret',
       BUCKET_ID: 'id',
       BUCKET_NAME: 'glidehero-files',
@@ -13,6 +14,7 @@ describe('parseConfig', () => {
       GRID_CLAIM_CELL_SIZE: '1000',
     })).toEqual({
       databaseUrl: 'postgres://localhost/glidehero',
+      valkeyUrl: 'redis://localhost:6379',
       environment: 'development',
       isProduction: false,
       port: 3000,
@@ -37,6 +39,7 @@ describe('parseConfig', () => {
   it('requires a MapTiler API key', () => {
     expect(() => parseConfig({
       DATABASE_URL: 'postgres://localhost/glidehero',
+      VALKEY_URL: 'redis://localhost:6379',
       BUCKET_SECRET: 'secret',
       BUCKET_ID: 'id',
       BUCKET_NAME: 'glidehero-files',
@@ -48,6 +51,7 @@ describe('parseConfig', () => {
   it('requires a positive integer grid claim cell size', () => {
     const env = {
       DATABASE_URL: 'postgres://localhost/glidehero',
+      VALKEY_URL: 'redis://localhost:6379',
       BUCKET_SECRET: 'secret',
       BUCKET_ID: 'id',
       BUCKET_NAME: 'glidehero-files',
@@ -65,6 +69,7 @@ describe('parseConfig', () => {
     expect(
       parseConfig({
         DATABASE_URL: 'postgres://db/glidehero',
+        VALKEY_URL: 'rediss://default:secret@valkey.example.test:25061',
         ENVIRONMENT: 'production',
         BUCKET_SECRET: 'secret',
         BUCKET_ID: 'id',
@@ -79,6 +84,7 @@ describe('parseConfig', () => {
   it('accepts optional comma-separated admin emails', () => {
     const config = parseConfig({
       DATABASE_URL: 'postgres://localhost/glidehero',
+      VALKEY_URL: 'redis://localhost:6379',
       BUCKET_SECRET: 'secret',
       BUCKET_ID: 'id',
       BUCKET_NAME: 'glidehero-files',

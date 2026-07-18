@@ -13,6 +13,8 @@ import type { ArenaService } from '../services/arenaService.js';
 import type { PageModel, PageRenderer } from '../views/renderer.js';
 import type { AdminPageRenderer } from '../views/renderer.js';
 import type { IgcFileService } from '../services/igcFileService.js';
+import type { FlightUploadQueueService } from '../services/flightUploadQueueService.js';
+import type { FailedFlightCleanupService } from '../services/failedFlightCleanupService.js';
 import type { SessionCookie } from './sessionCookie.js';
 
 const email = z.string().trim().toLowerCase().pipe(z.email());
@@ -60,6 +62,12 @@ function coveragePeriod(month?: string): MonthlyCoveragePeriod {
   return month ? { competitionMonth: month } : { period: 'all-time' };
 }
 
+const uploadIntentSchema = z.object({
+  originalFilename: z.string().min(1).max(255),
+  contentType: z.string().max(255).default('application/octet-stream'),
+  byteSize: z.number().int().positive(),
+}).strict();
+
 function formBody(body: unknown): Record<string, unknown> {
   if (typeof body !== 'object' || body === null || Array.isArray(body)) return {};
   return body as Record<string, unknown>;
@@ -78,7 +86,9 @@ function isIgcFilename(filename: string): boolean {
 export function createWebRouter(dependencies: {
   auth: AuthService;
   cookie: SessionCookie;
-  igcFiles: IgcFileService;
+  igcFiles?: IgcFileService;
+  uploadQueue?: FlightUploadQueueService;
+  failedFlightCleanup?: FailedFlightCleanupService;
   profiles: ProfileService;
   gridClaim: GridClaimService;
   mapGrid: MapGridService;
@@ -120,6 +130,106 @@ export function createWebRouter(dependencies: {
   function hasAdminAccess(currentUser: AuthenticatedUser | null): boolean {
     return Boolean(currentUser && isAdmin(currentUser.email));
   }
+
+  router.post('/v1/igc-uploads/intents', async (req, res, next) => {
+    const currentUser = res.locals.currentUser;
+    if (!currentUser) {
+      next(new AppError(401, 'unauthorized', 'Sign in before uploading an IGC file.'));
+      return;
+    }
+    if (!dependencies.uploadQueue) throw new Error('Upload queue is not configured.');
+    const input = uploadIntentSchema.safeParse(req.body);
+    if (!input.success) {
+      next(new AppError(422, 'invalid_request', 'Choose a valid IGC file of 10 MB or less.'));
+      return;
+    }
+    try {
+      res.status(201).json(await dependencies.uploadQueue.createIntent({ userId: currentUser.userId, ...input.data }));
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.post('/v1/igc-uploads/:uploadId/complete', async (req, res, next) => {
+    const currentUser = res.locals.currentUser;
+    if (!currentUser) {
+      next(new AppError(401, 'unauthorized', 'Sign in before uploading an IGC file.'));
+      return;
+    }
+    if (!dependencies.uploadQueue) throw new Error('Upload queue is not configured.');
+    if (!z.string().uuid().safeParse(req.params.uploadId).success) {
+      next(new AppError(400, 'invalid_request', 'Upload ID is invalid.'));
+      return;
+    }
+    try {
+      await dependencies.uploadQueue.complete({ userId: currentUser.userId, id: req.params.uploadId });
+      res.status(202).json({ status: 'queued' });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.delete('/v1/igc-uploads/:uploadId', async (req, res, next) => {
+    const currentUser = res.locals.currentUser;
+    if (!currentUser) {
+      next(new AppError(401, 'unauthorized', 'Sign in before managing an IGC upload.'));
+      return;
+    }
+    if (!dependencies.uploadQueue) throw new Error('Upload queue is not configured.');
+    if (!z.string().uuid().safeParse(req.params.uploadId).success) {
+      next(new AppError(400, 'invalid_request', 'Upload ID is invalid.'));
+      return;
+    }
+    try {
+      const removed = await dependencies.uploadQueue.cancel({ userId: currentUser.userId, id: req.params.uploadId });
+      res.status(200).json({ removed });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.get('/v1/igc-upload-progress', async (_req, res, next) => {
+    const currentUser = res.locals.currentUser;
+    if (!currentUser) {
+      next(new AppError(401, 'unauthorized', 'Sign in to view upload progress.'));
+      return;
+    }
+    if (!dependencies.uploadQueue) throw new Error('Upload queue is not configured.');
+    try {
+      res.status(200).json(await dependencies.uploadQueue.progress(currentUser.userId));
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.get('/v1/igc-upload-jobs', async (req, res, next) => {
+    const currentUser = res.locals.currentUser;
+    if (!currentUser) {
+      next(new AppError(401, 'unauthorized', 'Sign in to view upload details.'));
+      return;
+    }
+    if (!dependencies.uploadQueue) throw new Error('Upload queue is not configured.');
+    const page = z.coerce.number().int().min(1).catch(1).parse(req.query.page);
+    try {
+      res.status(200).json(await dependencies.uploadQueue.listJobs(currentUser.userId, { page, pageSize: 100 }));
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.delete('/v1/igc-upload-failures', async (_req, res, next) => {
+    const currentUser = res.locals.currentUser;
+    if (!currentUser) {
+      next(new AppError(401, 'unauthorized', 'Sign in to clear failed uploads.'));
+      return;
+    }
+    if (!dependencies.failedFlightCleanup) throw new Error('Failed-flight cleanup is not configured.');
+    try {
+      res.status(200).json({ cleared: await dependencies.failedFlightCleanup.clearForUser(currentUser.userId) });
+    } catch (error) {
+      next(error);
+    }
+  });
 
   router.get('/v1/personal-territory', async (req, res, next) => {
     const currentUser = res.locals.currentUser;
@@ -462,9 +572,14 @@ export function createWebRouter(dependencies: {
     }
 
     try {
+      const [flightRows, queueSummary] = await Promise.all([
+        dependencies.adminFlights.listRecentFlights(),
+        dependencies.uploadQueue?.queueSummary(),
+      ]);
       res.status(200).type('html').send(await dependencies.renderAdminPage({
         currentUser,
-        flights: await dependencies.adminFlights.listRecentFlights(),
+        flights: flightRows,
+        queueSummary,
         reprocessSuccess: req.query.reprocess === 'success',
         reprocessError: req.query.reprocess === 'error',
       }));
@@ -589,6 +704,11 @@ export function createWebRouter(dependencies: {
   });
 
   router.post('/igc-files', async (req, res, next) => {
+    const igcFiles = dependencies.igcFiles;
+    if (!igcFiles) {
+      next();
+      return;
+    }
     const currentUser = res.locals.currentUser;
     if (!currentUser) {
       await render(res, dependencies.renderPage, 401, {
@@ -622,14 +742,17 @@ export function createWebRouter(dependencies: {
           return;
         }
 
-        const outcome = await dependencies.igcFiles.upload({
+        const outcome = await igcFiles.upload({
           ownerUserId: currentUser.userId,
           originalFilename: file.originalname,
           contentType: file.mimetype || 'application/octet-stream',
           bytes: file.buffer,
         });
         if (outcome.status !== 'completed') {
-          await render(res, dependencies.renderPage, 422, { currentUser, uploadError: outcome.message });
+          const uploadError = outcome.status === 'superseded'
+            ? 'This flight could not finish processing. Please upload it again.'
+            : outcome.message;
+          await render(res, dependencies.renderPage, 422, { currentUser, uploadError });
           return;
         }
         res.redirect(303, dashboardSuccessRedirect(formBody(req.body).returnTo, 'igcUpload'));

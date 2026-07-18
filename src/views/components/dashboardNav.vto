@@ -5,12 +5,15 @@
     <a href="/personal" class="mode-tab{{ if activeMode === 'personal' }} is-active{{ /if }}"{{ if activeMode === 'personal' }} aria-current="page"{{ /if }}>Personal</a>
   </nav>
   <div class="nav-actions">
-    <form class="upload-form" data-upload-form method="post" action="/igc-files" enctype="multipart/form-data">
-      <input type="hidden" name="returnTo" value="{{ currentPath }}" data-competition-return-to>
-      <label class="upload-button">Upload<input name="igcFile" type="file" accept=".igc" required></label>
-    </form>
+    <button class="flight-progress-trigger" type="button" data-flight-progress-trigger hidden>
+      <span data-flight-progress-label>Processing flights</span>
+      <progress max="1" value="0" data-flight-progress-bar></progress>
+      <span data-flight-progress-count>0/0</span>
+    </button>
+    <div class="upload-form">
+      <label class="upload-button">Upload<input data-upload-input type="file" accept=".igc" multiple></label>
+    </div>
     {{ if uploadSuccess }}<p class="toast success" role="status">IGC flight processed successfully.</p>{{ /if }}
-    {{ if uploadError }}<p class="toast error" role="alert">{{ uploadError }}</p>{{ /if }}
     <div class="account-menu">
       <button type="button" class="account-trigger" data-account-trigger aria-expanded="false" aria-controls="account-popover">
         <span class="avatar" aria-hidden="true">{{ currentUser.displayName.slice(0, 1) }}</span>
@@ -32,3 +35,18 @@
     </div>
   </div>
 </header>
+<dialog class="flight-upload-dialog" data-upload-dialog>
+  <section class="flight-upload-panel">
+    <header><div><p class="admin-eyebrow">Flight upload</p><h2>Uploading flights</h2></div><strong data-upload-overall>0/0</strong></header>
+    <div class="flight-upload-list" data-upload-list></div>
+    <footer><label class="secondary-button">Upload more<input data-upload-more-input type="file" accept=".igc" multiple></label></footer>
+  </section>
+</dialog>
+<dialog class="flight-progress-dialog" data-flight-progress-dialog>
+  <section class="flight-progress-panel">
+    <header><h2>Processing flights</h2><button type="button" class="secondary-button" data-flight-progress-close>Close</button></header>
+    <div class="flight-progress-list" data-flight-progress-list></div>
+    <footer class="flight-progress-pages"><button type="button" class="secondary-button" data-flight-progress-previous>Previous</button><span data-flight-progress-page></span><button type="button" class="secondary-button" data-flight-progress-next>Next</button></footer>
+    <button type="button" class="secondary-button" data-clear-failed hidden>Clear failed</button>
+  </section>
+</dialog>

@@ -34,6 +34,9 @@ services:
   - key: DATABASE_URL
     scope: RUN_AND_BUILD_TIME
     value: ${apps-db-sfo.DATABASE_PRIVATE_URL}
+  - key: VALKEY_URL
+    scope: RUN_TIME
+    value: ${app-valkey-sfo.DATABASE_PRIVATE_URL}
   - key: DATABASE_PORT
     scope: RUN_AND_BUILD_TIME
     type: SECRET
@@ -109,6 +112,47 @@ services:
   instance_size_slug: apps-s-1vcpu-1gb-fixed
   name: glidehero-comp
   run_command: npm start
+  source_dir: /
+workers:
+- environment_slug: node-js
+  envs:
+  - key: DATABASE_URL
+    scope: RUN_TIME
+    value: ${apps-db-sfo.DATABASE_PRIVATE_URL}
+  - key: VALKEY_URL
+    scope: RUN_TIME
+    value: ${app-valkey-sfo.DATABASE_PRIVATE_URL}
+  - key: BUCKET_SECRET
+    scope: RUN_TIME
+    type: SECRET
+    value: EV[1:YsZLdS/N3i2P/tZ9BiOfc4NYyV0Xrl7G:MObDGbgH1PI3FGTGRQhCIN5EUKeJqjzscTfxJNEk2R7NECnepCtyaSKlxe5uDpQBUtskcWvP2XPYuUM=]
+  - key: BUCKET_ID
+    scope: RUN_TIME
+    type: SECRET
+    value: EV[1:FFUjbYHfGFWD22UWiXC9sq9O+t/PEWp8:BTmdY9JySMB0OXXmx48mEFJ/aIjQJsE8y8tb2q9AZjnAnkXd]
+  - key: BUCKET_NAME
+    scope: RUN_TIME
+    type: SECRET
+    value: EV[1:vK9ABFyHGTwtaKudUojRvV2MCunsDbmw:omI/dwe4QqSu9mMUpdZZuq8EG+YEsrTQ9AY=]
+  - key: BUCKET_URL
+    scope: RUN_TIME
+    type: SECRET
+    value: EV[1:Wl+evdt6N9kt64O9gW680p9o3xGqomOk:P2wUD3D+mwRJp9ZxJUEIGz5L6hDXBZjrlIQg+N+hIlUDSIdkycpLExNtd/DA5M3VUiCg]
+  - key: MAPTILER_API_KEY
+    scope: RUN_TIME
+    type: SECRET
+    value: EV[1:i9/zwAR5NzAx/WuAhDLhpBs3DTe1xmyK:zMEzhxMimxgF5GXGCGTbfvIuUYR7yrsNsNgjRQv/QkEKzQ0i]
+  - key: GRID_CLAIM_CELL_SIZE
+    scope: RUN_TIME
+    value: "500"
+  github:
+    branch: main
+    deploy_on_push: true
+    repo: brian-greeson/glidehero_comp
+  instance_count: 1
+  instance_size_slug: apps-s-1vcpu-1gb-fixed
+  name: flight-worker
+  run_command: npm run worker
   source_dir: /
 vpc:
   id: c7425901-ed0d-4b21-9683-375cc81cdade

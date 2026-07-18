@@ -29,6 +29,7 @@ export type ErrorPageRenderer = (model: {
 export type AdminPageRenderer = (model: {
   currentUser: AuthenticatedUser;
   flights: AdminFlight[];
+  queueSummary?: { queued: number; processing: number; failed: number; oldestQueuedAgeSeconds: number | null };
   reprocessSuccess?: boolean;
   reprocessError?: boolean;
 }) => Promise<string>;
@@ -113,6 +114,7 @@ export function createAdminPageRenderer(): AdminPageRenderer {
       isDashboard: false,
       isErrorPage: false,
       dashboardScript: '',
+      queueSummary: undefined,
       ...model,
     })
   ).content;
