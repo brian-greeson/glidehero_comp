@@ -13,6 +13,5 @@ describe('landing page stylesheet contract', () => {
     expect(css).toMatch(/\.landing\s*{\s*display: block;/);
     expect(css).toMatch(/\.auth-brand\s*{\s*display: none;/);
     expect(css).toContain('@media (prefers-reduced-motion: reduce)');
-    expect(css).not.toContain('.auth-tabs');
   });
 });

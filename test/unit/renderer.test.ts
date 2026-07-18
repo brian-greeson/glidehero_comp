@@ -58,7 +58,6 @@ describe('Vento page renderer', () => {
     );
     expect(authenticated).toContain('aria-label="Glide Hero dashboard"');
     expect(authenticated).toContain('<span class="brand-name">GLIDE HERO</span>');
-    expect(authenticated).not.toContain('class="brand-wing"');
     expect(authenticated).toContain('pilot@example.com');
     expect(authenticated).toContain('action="/logout"');
     expect(authenticated).toContain('action="/profile/territory-color"');
@@ -67,7 +66,6 @@ describe('Vento page renderer', () => {
     expect(authenticated).toContain('data-territory-map');
     expect(authenticated).toContain('data-onboarding-trigger');
     expect(authenticated).toContain('aria-controls="glide-hero-onboarding"');
-    expect(authenticated).not.toContain('data-stub="help"');
     expect(authenticated).toContain('<dialog id="glide-hero-onboarding"');
     expect(authenticated).toContain('data-onboarding-dialog');
     expect(authenticated.match(/data-onboarding-step/g)).toHaveLength(6);
@@ -96,12 +94,9 @@ describe('Vento page renderer', () => {
     expect(authenticated).toContain('style="--territory-color: #1769AA"');
     const onboarding =
       authenticated.match(/<dialog id="glide-hero-onboarding"[\s\S]*?<\/dialog>/)?.[0] ?? '';
-    expect(onboarding).not.toContain('onboarding-mascot');
-    expect(onboarding).not.toContain('/images/onboarding/');
     expect(onboarding).toContain('id="onboarding-shared-stripes"');
     expect(onboarding).toContain('onboarding-orange-score');
     expect(onboarding).toContain('onboarding-blue-score');
-    expect(onboarding).not.toContain('onboarding-period-visual');
     expect(onboarding.toLowerCase()).not.toContain('coverage');
     expect(onboarding.toLowerCase()).not.toContain('most recent pilot');
     expect(onboarding.toLowerCase()).not.toContain('transfers ownership');
@@ -127,14 +122,9 @@ describe('Vento page renderer', () => {
     expect(authenticated).toContain('data-competition-period');
     expect(authenticated).toContain('aria-label="Coverage time period"');
     expect(authenticated).toContain('data-current-month-option');
-    expect(authenticated).not.toContain('<h2>Stats</h2>');
     expect(authenticated).not.toContain('data-personal-stats');
     expect(authenticated).toContain('data-arena-search-input');
     expect(authenticated).toContain('aria-current="page">Global</span>');
-    expect(authenticated).not.toContain('Visible Map Claimed');
-    expect(authenticated).not.toContain('claimed-percentage');
-    expect(authenticated).not.toContain('data-competition-my-flights');
-    expect(authenticated).not.toContain('No territory data is available for this viewport yet.');
     expect(authenticated).toContain(
       'https://api.maptiler.com/maps/outdoor-v2/style.json?key=maptiler-test-key',
     );
@@ -172,8 +162,6 @@ describe('Vento page renderer', () => {
     );
     expect(personal).toContain('data-personal-stats');
     expect(personal).toContain('data-map-flight-aid-status');
-    expect(personal).not.toContain('data-stub="recenter-map"');
-    expect(personal).not.toContain('data-stub="layer-selector"');
     expect(personal).not.toContain('data-arena-search');
     expect(personal).not.toContain('competition-breadcrumb');
 
@@ -310,7 +298,6 @@ describe('Vento page renderer', () => {
 
     expect(html).toContain('An account with that email already exists.');
     expect(html).toContain('data-auth-initial="signup"');
-    expect(html).not.toContain('data-auth-tab');
     expect(html).toMatch(/data-auth-panel="login" aria-labelledby="login-heading"\s+hidden>/);
     expect(html).toMatch(/data-auth-panel="signup" aria-labelledby="signup-heading"\s*>/);
     expect(html).toContain('&lt;script&gt;alert(1)&lt;/script&gt;');

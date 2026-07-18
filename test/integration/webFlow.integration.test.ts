@@ -45,7 +45,6 @@ describe('GlideHero browser authentication flow', () => {
         createWebRouter({
           auth,
           cookie,
-          igcFiles: { upload: async () => ({ status: 'completed', flightId: '00000000-0000-4000-8000-000000000020' }) },
           profiles,
           gridClaim,
           mapGrid,

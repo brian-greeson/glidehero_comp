@@ -8,7 +8,6 @@
     <div class="upload-form">
       <label class="upload-button">Upload<input data-upload-input type="file" accept=".igc" multiple></label>
     </div>
-    {{ if uploadSuccess }}<p class="toast success" role="status">IGC flight processed successfully.</p>{{ /if }}
     <div class="account-menu">
       <button type="button" class="account-trigger" data-account-trigger aria-expanded="false" aria-controls="account-popover">
         <span class="avatar" aria-hidden="true">{{ currentUser.displayName.slice(0, 1) }}</span>

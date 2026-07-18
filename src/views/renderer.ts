@@ -13,8 +13,6 @@ export type PageModel = {
   loginEmail?: string;
   signupEmail?: string;
   signupDisplayName?: string;
-  uploadError?: string;
-  uploadSuccess?: boolean;
   territoryColorError?: string;
   territoryColorSuccess?: boolean;
   isAdmin?: boolean;
@@ -66,8 +64,6 @@ export function createPageRenderer(options: { mapTilerApiKey: string }): PageRen
         loginEmail: '',
         signupEmail: '',
         signupDisplayName: '',
-        uploadError: undefined,
-        uploadSuccess: false,
         territoryColorError: undefined,
         territoryColorSuccess: false,
         isAdmin: false,

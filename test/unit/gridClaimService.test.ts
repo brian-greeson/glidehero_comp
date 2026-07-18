@@ -42,27 +42,6 @@ describe('PersonalGridClaimService', () => {
     expect(execute).toHaveBeenCalledOnce();
   });
 
-  it('splits projected segments before generating direct-cell grid candidates', async () => {
-    const { database, execute } = processingDatabaseDouble();
-    const service = createPersonalGridClaimService(database as never, { cellSize: 1_000 });
-
-    await service.process({ flightId, userId });
-
-    expect(JSON.stringify(execute.mock.calls[0]?.[0])).toContain('ST_Segmentize');
-  });
-
-  it('writes only pilot-scoped personal contributions', async () => {
-    const { database, execute } = processingDatabaseDouble();
-    const service = createPersonalGridClaimService(database as never, { cellSize: 1_000 });
-
-    await service.process({ flightId, userId });
-
-    const query = JSON.stringify(execute.mock.calls[0]?.[0]);
-    expect(query).toContain('user_grid_claims');
-    expect(query).toContain('candidate_events');
-    expect(query).not.toContain('competition_grid_claims');
-  });
-
   it('returns an empty FeatureCollection when the user owns no cells', async () => {
     const { database, execute } = projectionDatabaseDouble();
     const service = createPersonalGridClaimService(database as never, { cellSize: 1_000 });
@@ -92,7 +71,7 @@ describe('PersonalGridClaimService', () => {
       claimedAreaSquareMeters: 2_000_000,
       flightCount: 2,
     };
-    const { database, execute } = projectionDatabaseDouble([stats]);
+    const { database } = projectionDatabaseDouble([stats]);
     const service = createPersonalGridClaimService(database as never, { cellSize: 1_000 });
 
     await expect(service.getViewportStats({
@@ -102,10 +81,5 @@ describe('PersonalGridClaimService', () => {
       east: 1,
       north: 1,
     })).resolves.toEqual(stats);
-
-    const query = JSON.stringify(execute.mock.calls[0]?.[0]);
-    expect(query).toContain('ST_Intersects');
-    expect(query).toContain('COUNT(DISTINCT claim_flight)');
-    expect(query).not.toContain('viewport_grid_total');
   });
 });

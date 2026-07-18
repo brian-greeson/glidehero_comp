@@ -1,5 +1,4 @@
-import { Router, type Request, type Response } from 'express';
-import multer from 'multer';
+import { Router, type Response } from 'express';
 import { z } from 'zod';
 import { normalizeCompetitionLeaderboardMonth } from '../domain/competition/competitionLeaderboardMonth.js';
 import { AppError } from '../domain/errors.js';
@@ -12,7 +11,6 @@ import type { AdminFlightService } from '../services/adminFlightService.js';
 import type { ArenaService } from '../services/arenaService.js';
 import type { PageModel, PageRenderer } from '../views/renderer.js';
 import type { AdminPageRenderer } from '../views/renderer.js';
-import type { IgcFileService } from '../services/igcFileService.js';
 import type { FlightUploadQueueService } from '../services/flightUploadQueueService.js';
 import type { FailedFlightCleanupService } from '../services/failedFlightCleanupService.js';
 import type { SessionCookie } from './sessionCookie.js';
@@ -77,16 +75,9 @@ async function render(res: Response, renderPage: PageRenderer, status: number, m
   res.status(status).type('html').send(await renderPage(model));
 }
 
-const igcUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024, files: 1 } });
-
-function isIgcFilename(filename: string): boolean {
-  return filename.toLowerCase().endsWith('.igc');
-}
-
 export function createWebRouter(dependencies: {
   auth: AuthService;
   cookie: SessionCookie;
-  igcFiles?: IgcFileService;
   uploadQueue?: FlightUploadQueueService;
   failedFlightCleanup?: FailedFlightCleanupService;
   profiles: ProfileService;
@@ -521,7 +512,6 @@ export function createWebRouter(dependencies: {
       currentUser,
       page: 'global',
       isAdmin: isAdmin(currentUser.email),
-      uploadSuccess: req.query.igcUpload === 'success',
       territoryColorSuccess: req.query.territoryColor === 'success',
     });
   });
@@ -536,7 +526,6 @@ export function createWebRouter(dependencies: {
       currentUser,
       page: 'personal',
       isAdmin: isAdmin(currentUser.email),
-      uploadSuccess: req.query.igcUpload === 'success',
       territoryColorSuccess: req.query.territoryColor === 'success',
     });
   });
@@ -558,7 +547,6 @@ export function createWebRouter(dependencies: {
         page: 'arena',
         arena,
         isAdmin: isAdmin(currentUser.email),
-        uploadSuccess: req.query.igcUpload === 'success',
         territoryColorSuccess: req.query.territoryColor === 'success',
       });
     } catch (error) {
@@ -706,65 +694,6 @@ export function createWebRouter(dependencies: {
 
     await dependencies.profiles.updateTerritoryColor({ userId: currentUser.userId, territoryColor });
     res.redirect(303, dashboardSuccessRedirect(formBody(req.body).returnTo, 'territoryColor'));
-  });
-
-  router.post('/igc-files', async (req, res, next) => {
-    const igcFiles = dependencies.igcFiles;
-    if (!igcFiles) {
-      next();
-      return;
-    }
-    const currentUser = res.locals.currentUser;
-    if (!currentUser) {
-      await render(res, dependencies.renderPage, 401, {
-        currentUser: null,
-        uploadError: 'Sign in before uploading an IGC file.',
-      });
-      return;
-    }
-
-    igcUpload.single('igcFile')(req, res, async (error: unknown) => {
-      try {
-        if (error instanceof multer.MulterError) {
-          const uploadError = error.code === 'LIMIT_FILE_SIZE'
-            ? 'IGC files must be 10 MB or smaller.'
-            : 'Upload one IGC file at a time.';
-          await render(res, dependencies.renderPage, 422, { currentUser, uploadError });
-          return;
-        }
-        if (error) throw error;
-
-        const file = (req as Request & { file?: Express.Multer.File }).file;
-        if (!file) {
-          await render(res, dependencies.renderPage, 422, { currentUser, uploadError: 'Choose an IGC file to upload.' });
-          return;
-        }
-        if (!isIgcFilename(file.originalname)) {
-          await render(res, dependencies.renderPage, 422, {
-            currentUser,
-            uploadError: 'Choose an IGC file with a .igc filename.',
-          });
-          return;
-        }
-
-        const outcome = await igcFiles.upload({
-          ownerUserId: currentUser.userId,
-          originalFilename: file.originalname,
-          contentType: file.mimetype || 'application/octet-stream',
-          bytes: file.buffer,
-        });
-        if (outcome.status !== 'completed') {
-          const uploadError = outcome.status === 'superseded'
-            ? 'This flight could not finish processing. Please upload it again.'
-            : outcome.message;
-          await render(res, dependencies.renderPage, 422, { currentUser, uploadError });
-          return;
-        }
-        res.redirect(303, dashboardSuccessRedirect(formBody(req.body).returnTo, 'igcUpload'));
-      } catch (uploadError) {
-        next(uploadError);
-      }
-    });
   });
 
   return router;

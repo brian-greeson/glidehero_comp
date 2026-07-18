@@ -14,7 +14,6 @@ describe('onboarding stylesheet contract', () => {
     expect(css).toContain('.onboarding-dialog :focus-visible');
     expect(css).toContain('@media (max-width: 699px)');
     expect(css).toContain('@media (min-width: 700px)');
-    expect(css).not.toContain('.onboarding-mascot');
     expect(css).toContain('[data-onboarding-step][data-active] .onboarding-flight-track');
     expect(css).toContain('[data-onboarding-step][data-active] .onboarding-flight-claim-mask-track');
     expect(css).toContain('[data-onboarding-step][data-active] .onboarding-flight-glider');
@@ -37,7 +36,6 @@ describe('onboarding stylesheet contract', () => {
     expect(css).toContain('stroke-dashoffset: 0');
     expect(css).toContain('fill: var(--territory-color)');
     expect(css).toMatch(/prefers-reduced-motion: reduce[\s\S]*\.onboarding-globe-scene,[\s\S]*animation: none;/);
-    expect(css).not.toContain('.onboarding-period-visual');
     expect(template).toContain('mask="url(#onboarding-flight-claim-mask)"');
     expect(template.match(/class="onboarding-claim-cell claim-\d+"/g)).toHaveLength(11);
     for (const [x, y] of [

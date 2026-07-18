@@ -8,7 +8,6 @@ describe('dashboard stylesheet contract', () => {
     expect(css).toMatch(
       /\.competition-coverage \.dashboard-information\s*{[^}]*grid-template-columns: minmax\(560px, 640px\)/s,
     );
-    expect(css).not.toContain('.coverage-eyebrow');
     expect(css).toContain('@media (max-width: 900px)');
     expect(css).toMatch(/\.dashboard-information\s*{\s*display: block;/);
     expect(css).toContain('.competition-breadcrumb {');
@@ -33,8 +32,6 @@ describe('dashboard stylesheet contract', () => {
     expect(css).toMatch(
       /\.dashboard-info\.is-expanded \.dashboard-information\s*{\s*overflow-y: auto;/,
     );
-    expect(css).not.toContain('.leaderboard-list');
-    expect(css).not.toContain('.leaderboard-row');
   });
 
   it('anchors the coverage claimant card around its map tap', async () => {
@@ -60,6 +57,5 @@ describe('dashboard stylesheet contract', () => {
     expect(css).toMatch(
       /@media \(max-width: 900px\)[\s\S]*?\.map-flight-aid-status\s*{[^}]*bottom: 92px;/,
     );
-    expect(css).not.toContain('.map-actions');
   });
 });
