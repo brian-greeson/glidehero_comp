@@ -3,7 +3,7 @@ import { extractIgcFilesFromZip } from './zipIgcFiles.js';
 const MAX_ACTIVE_FILES = 1000;
 const MAX_FILE_BYTES = 10 * 1024 * 1024;
 const CONCURRENCY = 4;
-const PROGRESS_POLL_INTERVAL_MS = 10_000;
+const PROGRESS_POLL_INTERVAL_MS = 5_000;
 
 function putFile(url, file, onProgress) {
   return new Promise((resolve, reject) => {
@@ -155,6 +155,10 @@ export function initializeFlightUploads(documentRef = document, windowRef = glob
 
   function scheduleProgressPoll() {
     if (progressPollTimer !== null) windowRef.clearTimeout?.(progressPollTimer);
+    if (!uploadDialog.open) {
+      progressPollTimer = null;
+      return;
+    }
     progressPollTimer = windowRef.setTimeout(() => {
       progressPollTimer = null;
       void refreshProgress();
@@ -204,12 +208,17 @@ export function initializeFlightUploads(documentRef = document, windowRef = glob
     } catch (error) {
       console.error('Unable to load flight progress', error);
     }
-    if (requestId === progressRequestId) scheduleProgressPoll();
+    if (requestId === progressRequestId && uploadDialog.open) scheduleProgressPoll();
   }
 
   function openUploadDialog() {
     if (!uploadDialog.open) uploadDialog.showModal();
     void refreshProgress();
+  }
+
+  function stopProgressPolling() {
+    if (progressPollTimer !== null) windowRef.clearTimeout?.(progressPollTimer);
+    progressPollTimer = null;
   }
 
   function closeUploadDialog() {
@@ -247,6 +256,7 @@ export function initializeFlightUploads(documentRef = document, windowRef = glob
 
   uploadTrigger.addEventListener('click', openUploadDialog);
   uploadClose?.addEventListener('click', closeUploadDialog);
+  uploadDialog.addEventListener('close', stopProgressPolling);
   uploadDialog.addEventListener('cancel', (event) => {
     event.preventDefault();
     closeUploadDialog();
@@ -267,5 +277,4 @@ export function initializeFlightUploads(documentRef = document, windowRef = glob
       addFiles(prepared);
     });
   });
-  void refreshProgress();
 }

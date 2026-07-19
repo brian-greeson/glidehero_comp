@@ -94,12 +94,12 @@ function uploadHarness(initialTotal, fetchImplementation) {
 describe('flight upload progress UI', () => {
   afterEach(() => vi.unstubAllGlobals());
 
-  it('loads aggregate processing status while the upload modal is closed', async () => {
+  it('does not poll for processing status while the upload modal is closed', () => {
     const harness = uploadHarness(0);
 
     expect(harness.selectors.get('[data-upload-dialog]').open).toBe(false);
-    await vi.waitFor(() => expect(fetch.mock.calls.filter(([url]) => String(url) === '/v1/igc-upload-progress')).toHaveLength(1));
-    await vi.waitFor(() => expect(harness.timers.some((timer) => timer.delay === 10_000)).toBe(true));
+    expect(fetch).not.toHaveBeenCalledWith('/v1/igc-upload-progress', expect.anything());
+    expect(harness.timers).toHaveLength(0);
   });
 
   it('opens status without activating the file picker and refreshes progress', async () => {
@@ -118,17 +118,18 @@ describe('flight upload progress UI', () => {
     expect(harness.selectors.get('[data-flight-progress-bar]').max).toBe(4);
     expect(harness.selectors.get('[data-flight-progress-bar]').value).toBe(1);
     expect(harness.selectors.get('[data-upload-trigger]').textContent).toBe('Upload Status');
+    await vi.waitFor(() => expect(harness.timers.some((timer) => timer.delay === 10_000)).toBe(true));
   });
 
-  it('keeps aggregate polling active when the upload modal closes', async () => {
+  it('stops aggregate polling when the upload modal closes', async () => {
     const harness = uploadHarness(2);
-    await vi.waitFor(() => expect(harness.timers.some((timer) => timer.delay === 10_000)).toBe(true));
     harness.selectors.get('[data-upload-trigger]').dispatch('click');
+    await vi.waitFor(() => expect(harness.timers.some((timer) => timer.delay === 10_000)).toBe(true));
 
     harness.selectors.get('[data-upload-close]').dispatch('click');
 
     expect(harness.selectors.get('[data-upload-dialog]').open).toBe(false);
-    await vi.waitFor(() => expect(harness.timers.filter((timer) => timer.delay === 10_000)).toHaveLength(1));
+    expect(harness.timers.some((timer) => timer.delay === 10_000)).toBe(false);
   });
 
   it('dismisses on Escape and backdrop clicks but ignores panel clicks', async () => {
@@ -150,6 +151,7 @@ describe('flight upload progress UI', () => {
 
   it('changes the trigger text as server work starts and finishes', async () => {
     const harness = uploadHarness(3);
+    harness.selectors.get('[data-upload-trigger]').dispatch('click');
     await vi.waitFor(() => expect(harness.selectors.get('[data-upload-trigger]').textContent).toBe('Upload Status'));
 
     harness.setProgressTotal(0);
@@ -173,6 +175,7 @@ describe('flight upload progress UI', () => {
     resolveProgress({ ok: true, json: async () => ({ total: 0, finished: 0, queued: 0, processing: 0, failed: 0 }) });
     await vi.waitFor(() => expect(harness.xhr.instances).toHaveLength(1));
     expect(dialog.open).toBe(false);
+    expect(harness.timers.some((timer) => timer.delay === 10_000)).toBe(false);
     expect(harness.selectors.get('[data-upload-trigger]').textContent).toBe('Upload Status');
 
     harness.xhr.instances[0].succeed();
@@ -190,7 +193,7 @@ describe('flight upload active-file capacity', () => {
     const harness = uploadHarness(0, async (url, options, fallback) => {
       if (String(url) === '/v1/igc-upload-progress') {
         progressAttempts += 1;
-        if (progressAttempts <= 2) return { ok: false, json: async () => ({ error: { message: 'Unavailable.' } }) };
+        if (progressAttempts === 1) return { ok: false, json: async () => ({ error: { message: 'Unavailable.' } }) };
       }
       return fallback(url, options);
     });
@@ -203,7 +206,7 @@ describe('flight upload active-file capacity', () => {
     harness.timers.shift()();
     await vi.waitFor(() => expect(harness.selectors.get('[data-upload-list]').append).toHaveBeenCalledOnce());
     await vi.waitFor(() => expect(fetch).toHaveBeenCalledWith('/v1/igc-uploads/intents', expect.objectContaining({ method: 'POST' })));
-    expect(progressAttempts).toBe(3);
+    expect(progressAttempts).toBe(2);
   });
 
   it('waits for the first authoritative total before admitting a selection', async () => {
