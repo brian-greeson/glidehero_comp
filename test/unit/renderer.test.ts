@@ -277,6 +277,7 @@ describe('Vento page renderer', () => {
     });
 
     expect(html).toContain('data-admin-area-editor');
+    expect(html).toContain('<link rel="stylesheet" href="/styles/color-palette.css">');
     expect(html).toContain(
       'data-map-style-url="https://api.maptiler.com/maps/outdoor-v2/style.json?key=maptiler-test-key"',
     );

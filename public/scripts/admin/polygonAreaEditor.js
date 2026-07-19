@@ -18,6 +18,13 @@ export function filterAndSortAreas(areas, query, sortColumn = 'name', sortDirect
     });
 }
 
+export function nextAreaSort(column, currentColumn = 'name', currentDirection = 'asc') {
+  return {
+    sortColumn: column,
+    sortDirection: column === currentColumn && currentDirection === 'asc' ? 'desc' : 'asc',
+  };
+}
+
 async function requestJson(url, options = {}, fetchImpl = fetch) {
   const response = await fetchImpl(url, { credentials: 'same-origin', headers: {
     accept: 'application/json', ...(options.body ? { 'content-type': 'application/json' } : {}),
@@ -114,7 +121,7 @@ export function initializePolygonAreaEditor({ documentRef = document, maplibre =
   const map = new maplibre.Map({ container: mapNode, style: mapNode.dataset.mapStyleUrl, center: [-105.5, 39], zoom: 4 });
   const draw = new Draw({ displayControlsDefault: false, controls: { polygon: true, trash: true } });
   map.addControl(draw, 'top-left');
-  const state = { areas: [], selectedId: null, isNew: false, original: '', dirty: false };
+  const state = { areas: [], selectedId: null, isNew: false, original: '', dirty: false, sortColumn: 'name', sortDirection: 'asc' };
   const previewRequest = createLatestRequest(async ({ signal, isCurrent }, payload) => {
     const data = await requestJson('/admin/api/areas/preview', { method: 'POST', body: JSON.stringify(payload), signal }, fetchImpl);
     if (isCurrent()) map.getSource(PREVIEW_SOURCE)?.setData(data);
@@ -129,8 +136,19 @@ export function initializePolygonAreaEditor({ documentRef = document, maplibre =
     cancelButton.disabled = !state.dirty;
   };
   function renderList() {
-    const areas = filterAndSortAreas(state.areas, search.value);
+    const areas = filterAndSortAreas(state.areas, search.value, state.sortColumn, state.sortDirection);
     total.textContent = `${areas.length} of ${state.areas.length}`; list.replaceChildren();
+    for (const button of root.querySelectorAll('[data-sort]')) {
+      const active = button.dataset.sort === state.sortColumn;
+      button.setAttribute('aria-sort', active ? (state.sortDirection === 'asc' ? 'ascending' : 'descending') : 'none');
+      const indicator = button.querySelector('[data-sort-indicator]');
+      if (indicator) indicator.textContent = active ? (state.sortDirection === 'asc' ? '↑' : '↓') : '';
+    }
+    if (!areas.length) {
+      const empty = documentRef.createElement('p'); empty.className = 'muted admin-area-list-empty';
+      empty.textContent = state.areas.length ? 'No Arenas match this search.' : 'No Arenas found.';
+      list.append(empty); return;
+    }
     for (const area of areas) {
       const button = documentRef.createElement('button'); button.type = 'button';
       button.className = `admin-area-list-row${area.id === state.selectedId ? ' is-selected' : ''}`; button.dataset.areaId = area.id;
@@ -197,6 +215,12 @@ export function initializePolygonAreaEditor({ documentRef = document, maplibre =
   search.addEventListener('input', renderList); list.addEventListener('click', (event) => {
     const row = event.target.closest('[data-area-id]');
     if (row && row.dataset.areaId !== state.selectedId) void actionGate.request(() => select(row.dataset.areaId));
+  });
+  root.querySelector('.admin-area-list-columns').addEventListener('click', (event) => {
+    const button = event.target.closest('[data-sort]');
+    if (!button) return;
+    Object.assign(state, nextAreaSort(button.dataset.sort, state.sortColumn, state.sortDirection));
+    renderList();
   });
   dialog.addEventListener('click', (event) => {
     const action = event.target.dataset.dialogAction;

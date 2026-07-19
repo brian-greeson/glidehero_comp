@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 // @ts-expect-error Browser assets remain JavaScript.
-import { areaPreviewPayload, createAreaSelection, createUnsavedActionGate, extractImportedPolygonFeatures, filterAndSortAreas, polygonComponentCount } from '../../public/scripts/admin/polygonAreaEditor.js';
+import { areaPreviewPayload, createAreaSelection, createUnsavedActionGate, extractImportedPolygonFeatures, filterAndSortAreas, nextAreaSort, polygonComponentCount } from '../../public/scripts/admin/polygonAreaEditor.js';
 
 describe('Arena GeoJSON import', () => {
   const polygon = { type: 'Polygon', coordinates: [[[0, 0], [0, 1], [1, 1], [0, 0]]] };
@@ -93,5 +93,11 @@ describe('Arena GeoJSON import', () => {
     ];
     expect(filterAndSortAreas(areas, 'golden').map((area: { name: string }) => area.name)).toEqual(['Zulu']);
     expect(filterAndSortAreas(areas, '').map((area: { name: string }) => area.name)).toEqual(['Alpha', 'Zulu']);
+  });
+
+  it('toggles the active sort direction and resets direction for a new column', () => {
+    expect(nextAreaSort('country')).toEqual({ sortColumn: 'country', sortDirection: 'asc' });
+    expect(nextAreaSort('name', 'name', 'asc')).toEqual({ sortColumn: 'name', sortDirection: 'desc' });
+    expect(nextAreaSort('country', 'name', 'desc')).toEqual({ sortColumn: 'country', sortDirection: 'asc' });
   });
 });
