@@ -281,15 +281,17 @@ describe('Vento page renderer', () => {
       'data-map-style-url="https://api.maptiler.com/maps/outdoor-v2/style.json?key=maptiler-test-key"',
     );
     expect(html).toContain('/styles/adminAreaEditor.css');
-    expect(html).toContain('/scripts/admin/areaEditor.js');
-    expect(html).toContain('data-map-tool="paint"');
-    expect(html).toContain('data-map-tool="erase"');
+    expect(html).toContain('maplibre-gl@5.24.0');
+    expect(html).toContain('/scripts/admin/polygonAreaEditor.js');
+    expect(html).toContain('data-geojson-import');
+    expect(html).toContain('data-field="city"');
     expect(html).toContain('data-cancel-area');
     expect(html).toContain(
       'href="/admin/areas" class="admin-tab is-active" aria-current="page">Areas</a>',
     );
     expect(html).not.toContain('/scripts/dashboard.js');
     expect(html).not.toContain('/scripts/arena.js');
+    expect(html).not.toContain('/admin/areas/large');
   });
 
   it('autoescapes user-controlled values and never renders passwords', async () => {

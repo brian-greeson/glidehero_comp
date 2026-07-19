@@ -246,10 +246,9 @@ PostgreSQL has the PostGIS extension installed. Keep geometry types and operatio
 ### Arena geometry and scoring
 
 `arenas.area` is the sole Arena-membership source of truth. It is a required,
-valid `geometry(MultiPolygon,6933)`. `definition_type` is either `grid` or
-`polygon` and selects only the admin authoring experience; search, canonical
-routes, boundaries, leaderboards, territory, and monthly/all-time behavior are
-shared.
+valid `geometry(MultiPolygon,6933)`. All Arenas use the same polygon authoring
+experience and the same search, canonical routes, boundaries, leaderboards,
+territory, and monthly/all-time behavior.
 
 Competition claims remain global and Arena-independent. For Arena reads,
 `MonthlyCoverageService` constructs each claim-cell center as
@@ -258,15 +257,13 @@ Competition claims remain global and Arena-independent. For Arena reads,
 editing an Arena immediately changes the view over historical claims without
 flight reprocessing.
 
-The grid editor reconstructs visible selected cells from the stored polygon and
-turns submitted cells into envelopes followed by `ST_UnaryUnion`, polygon
-extraction, and `ST_Multi`. The Large Arenas editor accepts drawn or imported
-WGS84 Polygon/MultiPolygon inputs, applies two-dimensional make-valid,
+The Arena editor accepts drawn or imported WGS84 Polygon/MultiPolygon inputs,
+applies two-dimensional make-valid,
 transformation, collection, union, and MultiPolygon normalization. Disconnected
 components and islands remain; overlaps and edge-adjacent components merge;
 imported holes may remain.
 
-Public Arena grids and Large Arena draft previews are generated only for the
+Public Arena grids and Arena draft previews are generated only for the
 visible viewport using `viewportCtes`, the configured result limit, and the same
 center-point `ST_Covers` rule. The draft preview is admin-only and evaluates the
 unsaved geometry. The state importer uses the same save normalization, upserts

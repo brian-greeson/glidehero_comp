@@ -36,7 +36,9 @@ function text(value: GlideString): string {
   return Buffer.isBuffer(value) ? value.toString() : String(value);
 }
 
-function streamJobs(result: Awaited<ReturnType<GlideClient['xreadgroup']>>): Array<{ streamId: string; jobId: string }> {
+function streamJobs(
+  result: Awaited<ReturnType<GlideClient['xreadgroup']>>,
+): Array<{ streamId: string; jobId: string }> {
   if (!result) return [];
   const stream = result.find((entry) => text(entry.key) === FLIGHT_JOB_STREAM);
   if (!stream?.value) return [];
@@ -76,9 +78,12 @@ export function createFlightWorkerService(
   async function acknowledge(streamId: string) {
     try {
       if (typeof valkey.exec === 'function') {
-        const result = await valkey.exec(new Batch(true)
-          .xack(FLIGHT_JOB_STREAM, FLIGHT_JOB_GROUP, [streamId])
-          .zadd(acknowledgedDeletionKey, { [streamId]: Date.now() }), true);
+        const result = await valkey.exec(
+          new Batch(true)
+            .xack(FLIGHT_JOB_STREAM, FLIGHT_JOB_GROUP, [streamId])
+            .zadd(acknowledgedDeletionKey, { [streamId]: Date.now() }),
+          true,
+        );
         if (result === null) throw new Error('Unable to atomically acknowledge flight job.');
       } else {
         // Compatibility for narrow test doubles. Real clients always use the atomic path above.
@@ -97,16 +102,17 @@ export function createFlightWorkerService(
   }
 
   async function removeLateDatabaseWork(job: UploadJob, igcFileId?: string): Promise<void> {
-    await database.delete(igcFiles).where(
-      igcFileId ? eq(igcFiles.id, igcFileId) : eq(igcFiles.bucketKey, job.bucketKey),
-    );
+    await database
+      .delete(igcFiles)
+      .where(igcFileId ? eq(igcFiles.id, igcFileId) : eq(igcFiles.bucketKey, job.bucketKey));
   }
 
   async function stillOwnsClaim(job: UploadJob, igcFileId?: string): Promise<boolean> {
     if (typeof queue.ownsClaim !== 'function') return true;
     const owned = await queue.ownsClaim(job);
     if (owned) return true;
-    if (await queue.getDisposition(job.id) === 'cleared') await removeLateDatabaseWork(job, igcFileId);
+    if ((await queue.getDisposition(job.id)) === 'cleared')
+      await removeLateDatabaseWork(job, igcFileId);
     return false;
   }
 
@@ -128,14 +134,18 @@ export function createFlightWorkerService(
 
   async function reconcileFailedFlight(job: UploadJob, message = job.error ?? genericFailure) {
     const existing = await existingFlight(job);
-    if (!existing?.flightId || existing.status === 'completed' || existing.status === 'failed') return;
-    await database.update(flights)
+    if (!existing?.flightId || existing.status === 'completed' || existing.status === 'failed')
+      return;
+    await database
+      .update(flights)
       .set({ processingStatus: 'failed', processingToken: null, processingError: message })
-      .where(and(
-        eq(flights.id, existing.flightId),
-        eq(flights.processingStatus, 'processing'),
-        eq(flights.processingToken, job.processingToken ?? ''),
-      ));
+      .where(
+        and(
+          eq(flights.id, existing.flightId),
+          eq(flights.processingStatus, 'processing'),
+          eq(flights.processingToken, job.processingToken ?? ''),
+        ),
+      );
   }
 
   async function reconcileQueueFromDatabase(job: UploadJob): Promise<boolean> {
@@ -169,15 +179,33 @@ export function createFlightWorkerService(
     igcFileId: string,
     outcome: Exclude<FlightProcessingOutcome, { status: 'duplicate' }>,
   ) {
-    if (outcome.status === 'completed' && await queue.reconcileTerminalJob({
-      ...job, flightId: outcome.flightId, status: 'completed', error: undefined, updatedAt: Date.now(),
-    })) return;
-    if (outcome.status === 'failed' && await queue.reconcileTerminalJob({
-      ...job, flightId: outcome.flightId, status: 'failed', error: outcome.message, updatedAt: Date.now(),
-    })) return;
+    console.log(`Processed Flight: ${outcome.flightId} with status ${outcome.status}`);
+
+    if (
+      outcome.status === 'completed' &&
+      (await queue.reconcileTerminalJob({
+        ...job,
+        flightId: outcome.flightId,
+        status: 'completed',
+        error: undefined,
+        updatedAt: Date.now(),
+      }))
+    )
+      return;
+    if (
+      outcome.status === 'failed' &&
+      (await queue.reconcileTerminalJob({
+        ...job,
+        flightId: outcome.flightId,
+        status: 'failed',
+        error: outcome.message,
+        updatedAt: Date.now(),
+      }))
+    )
+      return;
     if (await reconcileQueueFromDatabase(job)) return;
     const currentJob = await queue.getJob(job.id);
-    if (!currentJob && await queue.getDisposition(job.id) === 'cleared') {
+    if (!currentJob && (await queue.getDisposition(job.id)) === 'cleared') {
       await database.delete(igcFiles).where(eq(igcFiles.id, igcFileId));
     }
   }
@@ -209,7 +237,10 @@ export function createFlightWorkerService(
     });
   }
 
-  async function withLease(key: string, work: (ownsLease: () => boolean) => Promise<void>): Promise<boolean> {
+  async function withLease(
+    key: string,
+    work: (ownsLease: () => boolean) => Promise<void>,
+  ): Promise<boolean> {
     if (typeof valkey.set !== 'function' || typeof valkey.invokeScript !== 'function') {
       await work(() => true);
       return true;
@@ -237,7 +268,8 @@ export function createFlightWorkerService(
         if (stopped) break;
         try {
           const renewed = await valkey.invokeScript(renewLeaseScript, {
-            keys: [key], args: [token, String(MAINTENANCE_LEASE_MS)],
+            keys: [key],
+            args: [token, String(MAINTENANCE_LEASE_MS)],
           });
           if (Number(text(renewed as GlideString)) !== 1) {
             ownsLease = false;
@@ -266,7 +298,9 @@ export function createFlightWorkerService(
     return true;
   }
 
-  async function releaseUnreadJobs(messages: Array<{ streamId: string; jobId: string }>): Promise<void> {
+  async function releaseUnreadJobs(
+    messages: Array<{ streamId: string; jobId: string }>,
+  ): Promise<void> {
     if (messages.length === 0 || typeof valkey.exec !== 'function') return;
     const transaction = new Batch(true);
     for (const message of messages) {
@@ -278,7 +312,7 @@ export function createFlightWorkerService(
         .xack(FLIGHT_JOB_STREAM, FLIGHT_JOB_GROUP, [message.streamId])
         .xdel(FLIGHT_JOB_STREAM, [message.streamId]);
     }
-    if (await valkey.exec(transaction, true) === null) {
+    if ((await valkey.exec(transaction, true)) === null) {
       throw new Error('Unable to return unread flight jobs to the stream.');
     }
   }
@@ -296,9 +330,10 @@ export function createFlightWorkerService(
       error: message,
       updatedAt: Date.now(),
     };
-    const transitioned = staleCutoff === undefined
-      ? await queue.saveClaimedJob(failed)
-      : await queue.failStaleJob(failed, staleCutoff);
+    const transitioned =
+      staleCutoff === undefined
+        ? await queue.saveClaimedJob(failed)
+        : await queue.failStaleJob(failed, staleCutoff);
     if (!transitioned) return false;
     await reconcileFailedFlight(failed, message);
     return reconcileQueueFromDatabase(failed) || !existing?.flightId;
@@ -346,37 +381,45 @@ export function createFlightWorkerService(
       let heartbeatWrite: Promise<void> = Promise.resolve();
       const heartbeat = setInterval(() => {
         current = { ...current, heartbeatAt: Date.now(), updatedAt: Date.now() };
-        heartbeatWrite = queue.saveClaimedJob(current)
-          .then((saved) => { if (!saved) clearInterval(heartbeat); })
+        heartbeatWrite = queue
+          .saveClaimedJob(current)
+          .then((saved) => {
+            if (!saved) clearInterval(heartbeat);
+          })
           .catch((error) => console.error('Unable to heartbeat flight job', error));
       }, HEARTBEAT_MS);
 
       try {
-        const object = await options.s3Client.send(new GetObjectCommand({ Bucket: options.bucketName, Key: job.bucketKey }));
+        const object = await options.s3Client.send(
+          new GetObjectCommand({ Bucket: options.bucketName, Key: job.bucketKey }),
+        );
         if (!object.Body) throw new Error('Queued IGC object has no body.');
         const bytes = Buffer.from(await object.Body.transformToByteArray());
         const contentHash = createHash('sha256').update(bytes).digest('hex');
 
         let igcFileId = previous?.igcFileId;
-        if (!await stillOwnsClaim(current, igcFileId)) {
+        if (!(await stillOwnsClaim(current, igcFileId))) {
           clearInterval(heartbeat);
           await heartbeatWrite;
           await acknowledge(streamId);
           return;
         }
         if (!igcFileId) {
-          const [stored] = await database.insert(igcFiles).values({
-            userId: job.userId,
-            originalFilename: job.originalFilename,
-            contentType: job.contentType,
-            byteSize: job.byteSize,
-            bucketKey: job.bucketKey,
-          }).returning({ id: igcFiles.id });
+          const [stored] = await database
+            .insert(igcFiles)
+            .values({
+              userId: job.userId,
+              originalFilename: job.originalFilename,
+              contentType: job.contentType,
+              byteSize: job.byteSize,
+              bucketKey: job.bucketKey,
+            })
+            .returning({ id: igcFiles.id });
           if (!stored) throw new Error('IGC file insert returned no row.');
           igcFileId = stored.id;
         }
         current = { ...current, igcFileId };
-        if (!await stillOwnsClaim(current, igcFileId)) {
+        if (!(await stillOwnsClaim(current, igcFileId))) {
           clearInterval(heartbeat);
           await heartbeatWrite;
           await acknowledge(streamId);
@@ -395,9 +438,16 @@ export function createFlightWorkerService(
         await heartbeatWrite;
         if (outcome.status === 'duplicate') {
           await database.delete(igcFiles).where(eq(igcFiles.id, igcFileId));
-          await options.s3Client.send(new DeleteObjectCommand({ Bucket: options.bucketName, Key: job.bucketKey }));
-          const saved = await queue.saveClaimedJob({ ...current, status: 'duplicate', updatedAt: Date.now() });
-          if (!saved && !await queue.getJob(job.id)) await database.delete(igcFiles).where(eq(igcFiles.id, igcFileId));
+          await options.s3Client.send(
+            new DeleteObjectCommand({ Bucket: options.bucketName, Key: job.bucketKey }),
+          );
+          const saved = await queue.saveClaimedJob({
+            ...current,
+            status: 'duplicate',
+            updatedAt: Date.now(),
+          });
+          if (!saved && !(await queue.getJob(job.id)))
+            await database.delete(igcFiles).where(eq(igcFiles.id, igcFileId));
         } else {
           await settleProcessedFlight(current, igcFileId, outcome);
         }
@@ -414,7 +464,12 @@ export function createFlightWorkerService(
 
     async recoverStale(shouldContinue = () => true) {
       const [, entries] = await valkey.xautoclaim(
-        FLIGHT_JOB_STREAM, FLIGHT_JOB_GROUP, options.consumerName, STALE_JOB_MS, '0-0', { count: 25 },
+        FLIGHT_JOB_STREAM,
+        FLIGHT_JOB_GROUP,
+        options.consumerName,
+        STALE_JOB_MS,
+        '0-0',
+        { count: 25 },
       );
       for (const [streamId, fields] of Object.entries(entries)) {
         if (!shouldContinue()) break;
@@ -459,7 +514,11 @@ export function createFlightWorkerService(
               continue;
             }
             if (!shouldContinue()) break;
-            const settled = await fail(job, 'Processing stopped before this flight finished. Clear it and upload it again.', Date.now() - STALE_JOB_MS);
+            const settled = await fail(
+              job,
+              'Processing stopped before this flight finished. Clear it and upload it again.',
+              Date.now() - STALE_JOB_MS,
+            );
             if (!shouldContinue()) break;
             if (settled) await acknowledge(streamId);
           }
@@ -500,15 +559,21 @@ export function createFlightWorkerService(
         let databaseCleared = false;
         let objectCleared = false;
         try {
-          await database.delete(igcFiles).where(
-            failed.igcFileId ? eq(igcFiles.id, failed.igcFileId) : eq(igcFiles.bucketKey, failed.bucketKey),
-          );
+          await database
+            .delete(igcFiles)
+            .where(
+              failed.igcFileId
+                ? eq(igcFiles.id, failed.igcFileId)
+                : eq(igcFiles.bucketKey, failed.bucketKey),
+            );
           databaseCleared = true;
         } catch (error) {
           console.error('Unable to retry failed flight database cleanup', error);
         }
         try {
-          await options.s3Client.send(new DeleteObjectCommand({ Bucket: options.bucketName, Key: failed.bucketKey }));
+          await options.s3Client.send(
+            new DeleteObjectCommand({ Bucket: options.bucketName, Key: failed.bucketKey }),
+          );
           objectCleared = true;
         } catch (error) {
           console.error('Unable to retry failed flight object cleanup', error);
@@ -524,7 +589,8 @@ export function createFlightWorkerService(
       if (!shouldContinue()) return;
       let retainedClearedJobs: UploadJob[] = [];
       try {
-        retainedClearedJobs = typeof queue.retainedClearedJobs === 'function' ? await queue.retainedClearedJobs() : [];
+        retainedClearedJobs =
+          typeof queue.retainedClearedJobs === 'function' ? await queue.retainedClearedJobs() : [];
       } catch (error) {
         console.error('Unable to discover retained cleared flights', error);
       }
@@ -548,7 +614,9 @@ export function createFlightWorkerService(
       for (const removal of pendingRemovals) {
         if (!shouldContinue()) break;
         try {
-          await options.s3Client.send(new DeleteObjectCommand({ Bucket: options.bucketName, Key: removal.bucketKey }));
+          await options.s3Client.send(
+            new DeleteObjectCommand({ Bucket: options.bucketName, Key: removal.bucketKey }),
+          );
           await queue.finalizeRemoval(removal.id);
         } catch (error) {
           console.error('Unable to retry upload object removal', error);
@@ -569,9 +637,11 @@ export function createFlightWorkerService(
             await queue.pruneExpiredIntent(id);
             continue;
           }
-          if (!await queue.removeIntent(job)) continue;
+          if (!(await queue.removeIntent(job))) continue;
           try {
-            await options.s3Client.send(new DeleteObjectCommand({ Bucket: options.bucketName, Key: job.bucketKey }));
+            await options.s3Client.send(
+              new DeleteObjectCommand({ Bucket: options.bucketName, Key: job.bucketKey }),
+            );
             await queue.finalizeRemoval(job.id);
           } catch (error) {
             console.error('Unable to remove abandoned upload object', error);
@@ -635,38 +705,38 @@ export function createFlightWorkerService(
       const cleanupLoop = service.runCleanupLoop(signal);
       try {
         while (!signal?.aborted) {
-        let result: Awaited<ReturnType<GlideClient['xreadgroup']>>;
-        try {
-          result = await streamReader.xreadgroup(
-            FLIGHT_JOB_GROUP,
-            options.consumerName,
-            { [FLIGHT_JOB_STREAM]: '>' },
-            { count: 1, block: 5_000 },
-          );
-        } catch (error) {
-          console.error('Unable to read flight job stream', error);
-          await waitAfterReadFailure(signal);
-          continue;
-        }
-        const messages = streamJobs(result);
-        // A signal received while XREADGROUP was blocked must not allow the
-        // returned message to become newly claimed work during shutdown. The
-        // stream read itself makes it pending, so put it back before exiting.
-        if (signal?.aborted) {
+          let result: Awaited<ReturnType<GlideClient['xreadgroup']>>;
           try {
-            await releaseUnreadJobs(messages);
+            result = await streamReader.xreadgroup(
+              FLIGHT_JOB_GROUP,
+              options.consumerName,
+              { [FLIGHT_JOB_STREAM]: '>' },
+              { count: 1, block: 5_000 },
+            );
           } catch (error) {
-            console.error('Unable to return unread flight jobs during shutdown', error);
+            console.error('Unable to read flight job stream', error);
+            await waitAfterReadFailure(signal);
+            continue;
           }
-          break;
-        }
-        for (const message of messages) {
-          try {
-            await service.processJob(message.streamId, message.jobId);
-          } catch (error) {
-            console.error('Unable to handle flight job message', error);
+          const messages = streamJobs(result);
+          // A signal received while XREADGROUP was blocked must not allow the
+          // returned message to become newly claimed work during shutdown. The
+          // stream read itself makes it pending, so put it back before exiting.
+          if (signal?.aborted) {
+            try {
+              await releaseUnreadJobs(messages);
+            } catch (error) {
+              console.error('Unable to return unread flight jobs during shutdown', error);
+            }
+            break;
           }
-        }
+          for (const message of messages) {
+            try {
+              await service.processJob(message.streamId, message.jobId);
+            } catch (error) {
+              console.error('Unable to handle flight job message', error);
+            }
+          }
           // Finish the active job; the abort-aware maintenance loops stop independently.
           if (signal?.aborted) break;
         }

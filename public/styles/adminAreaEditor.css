@@ -3,11 +3,8 @@
 }
 * { box-sizing: border-box; }
 .admin-area-body { min-width: 1080px; margin: 0; overflow: hidden; background: #eef6ff; }
-.admin-area-page { display: grid; min-height: 100vh; grid-template: 76px auto minmax(0, 1fr) / 410px minmax(0, 1fr); }
+.admin-area-page { display: grid; min-height: 100vh; grid-template: 76px minmax(0, 1fr) / 410px minmax(0, 1fr); }
 .admin-area-page > .admin-nav { grid-column: 1 / -1; }
-.admin-area-subtabs { grid-column: 1 / -1; display: flex; gap: .35rem; padding: .45rem 1rem; border-bottom: 1px solid #d8e0e8; background: #fff; }
-.admin-area-subtabs a { padding: .45rem .8rem; border-radius: .45rem; color: #334155; text-decoration: none; }
-.admin-area-subtabs a.is-active { color: #0b4d82; background: #dbeafe; font-weight: 700; }
 .admin-area-import input { display: block; margin-top: .35rem; max-width: 100%; }
 .admin-area-sidebar { z-index: 4; display: grid; min-height: 0; grid-template-rows: minmax(350px, 1.15fr) minmax(200px, .85fr); gap: 1rem; overflow: hidden; padding: 1rem; border-right: 1px solid #cad7e4; background: #eef6ff; box-shadow: 6px 0 20px rgb(15 23 42 / .08); }
 .admin-area-card { min-height: 0; overflow-y: auto; padding: 1rem; border: 1px solid #d7e2ed; border-radius: .85rem; background: #fff; box-shadow: 0 6px 18px rgb(20 33 61 / .07); }
@@ -41,12 +38,7 @@
 .admin-area-list-row:hover, .admin-area-list-row.is-selected { background: #e6f1fb; }
 .admin-area-map-stage { position: relative; min-width: 0; min-height: 0; background: #dae8cf; }
 .admin-area-map { width: 100%; height: 100%; }
-.admin-area-toolbar { position: absolute; z-index: 3; top: 1rem; left: 1rem; display: flex; overflow: hidden; border: 1px solid #aab9c8; border-radius: .6rem; box-shadow: 0 4px 14px rgb(15 23 42 / .18); }
-.admin-area-toolbar button { width: auto; min-width: 72px; padding: .55rem .7rem; border: 0; border-right: 1px solid #c3cfda; border-radius: 0; color: #1c2e45; background: #fff; }
-.admin-area-toolbar button:last-child { border-right: 0; }
-.admin-area-toolbar button[aria-pressed="true"] { color: #fff; background: #1769aa; }
 .admin-area-map-help { position: absolute; z-index: 3; top: 1rem; left: 50%; margin: 0; padding: .5rem .75rem; transform: translateX(-50%); border-radius: .5rem; color: #24374d; background: rgb(255 255 255 / .92); box-shadow: 0 3px 12px rgb(15 23 42 / .14); font-size: .78rem; }
-.admin-area-attribution { position: absolute; z-index: 3; right: .5rem; bottom: .25rem; margin: 0; padding: .15rem .3rem; background: rgb(255 255 255 / .85); font-size: .62rem; }
 .admin-area-dialog { width: min(420px, 90vw); padding: 1.25rem; border: 0; border-radius: .8rem; box-shadow: 0 16px 48px rgb(15 23 42 / .3); }
 .admin-area-dialog::backdrop { background: rgb(3 11 21 / .52); }
 .admin-area-dialog h2 { margin-top: 0; }

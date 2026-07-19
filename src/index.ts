@@ -12,10 +12,9 @@ import { createGridClaimService } from './services/gridClaimService.js';
 import { createFlightUploadQueueService } from './services/flightUploadQueueService.js';
 import { createFailedFlightCleanupService } from './services/failedFlightCleanupService.js';
 import { createProfileService } from './services/profileService.js';
-import { createLocationLookupService } from './services/locationLookupService.js';
 import { createMonthlyCoverageService } from './services/monthlyCoverageService.js';
 import { createMapGridService } from './services/mapGridService.js';
-import { createAdminAreaPageRenderer, createAdminLargeAreaPageRenderer, createAdminPageRenderer, createPageRenderer } from './views/renderer.js';
+import { createAdminAreaPageRenderer, createAdminPageRenderer, createPageRenderer } from './views/renderer.js';
 import { createAdminAreaRouter } from './web/adminAreaRouter.js';
 import { createCurrentUserMiddleware } from './web/currentUserMiddleware.js';
 import { createSessionCookie } from './web/sessionCookie.js';
@@ -29,7 +28,6 @@ const valkey = await createValkeyClient(config.valkeyUrl);
 const gridClaim = createGridClaimService(db, { cellSize: config.gridClaimCellSize });
 const adminFlights = createAdminFlightService(db, gridClaim);
 const adminAreas = createAdminAreaService(db, { cellSize: config.gridClaimCellSize });
-const locationLookup = createLocationLookupService();
 const arenas = createArenaService(db, { cellSize: config.gridClaimCellSize });
 const monthlyCoverage = createMonthlyCoverageService(db, { cellSize: config.gridClaimCellSize });
 const mapGrid = createMapGridService(db, { cellSize: config.gridClaimCellSize });
@@ -52,9 +50,7 @@ const webMiddleware = [
   createAdminAreaRouter({
     adminEmails: config.adminEmails,
     areas: adminAreas,
-    locations: locationLookup,
     renderPage: createAdminAreaPageRenderer({ mapTilerApiKey: config.mapTilerApiKey }),
-    renderLargePage: createAdminLargeAreaPageRenderer({ mapTilerApiKey: config.mapTilerApiKey }),
   }),
   createWebRouter({
     auth,

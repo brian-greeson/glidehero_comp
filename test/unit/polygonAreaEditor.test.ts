@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 // @ts-expect-error Browser assets remain JavaScript.
-import { createLargeAreaSelection, createUnsavedActionGate, extractImportedPolygonFeatures, largeAreaPreviewPayload, polygonComponentCount } from '../../public/scripts/admin/polygonAreaEditor.js';
+import { areaPreviewPayload, createAreaSelection, createUnsavedActionGate, extractImportedPolygonFeatures, filterAndSortAreas, polygonComponentCount } from '../../public/scripts/admin/polygonAreaEditor.js';
 
-describe('Large Arena GeoJSON import', () => {
+describe('Arena GeoJSON import', () => {
   const polygon = { type: 'Polygon', coordinates: [[[0, 0], [0, 1], [1, 1], [0, 0]]] };
 
   it('adds Polygon, MultiPolygon, Feature, and mixed FeatureCollection inputs to one draft', () => {
@@ -27,7 +27,7 @@ describe('Large Arena GeoJSON import', () => {
 
   it('normalizes shifted antimeridian bounds for cell previews', () => {
     const bounds = { getWest: () => 172, getSouth: () => 51, getEast: () => 230, getNorth: () => 72 };
-    expect(largeAreaPreviewPayload(bounds, { type: 'FeatureCollection', features: [] })).toEqual({
+    expect(areaPreviewPayload(bounds, { type: 'FeatureCollection', features: [] })).toEqual({
       west: 172, south: 51, east: -130, north: 72,
       geojson: { type: 'FeatureCollection', features: [] },
     });
@@ -73,7 +73,7 @@ describe('Large Arena GeoJSON import', () => {
     const load = vi.fn()
       .mockImplementationOnce(() => first.promise)
       .mockImplementationOnce(() => second.promise);
-    const selection = createLargeAreaSelection({ load, apply });
+    const selection = createAreaSelection({ load, apply });
 
     const firstRun = selection.run('first');
     const secondRun = selection.run('second');
@@ -84,5 +84,14 @@ describe('Large Arena GeoJSON import', () => {
 
     expect(apply).toHaveBeenCalledOnce();
     expect(apply).toHaveBeenCalledWith({ id: 'second' });
+  });
+
+  it('filters by optional city and sorts the unified Arena list', () => {
+    const areas = [
+      { name: 'Zulu', country: 'United States', state: 'Colorado', city: 'Golden' },
+      { name: 'Alpha', country: 'Switzerland', state: 'Bern', city: '' },
+    ];
+    expect(filterAndSortAreas(areas, 'golden').map((area: { name: string }) => area.name)).toEqual(['Zulu']);
+    expect(filterAndSortAreas(areas, '').map((area: { name: string }) => area.name)).toEqual(['Alpha', 'Zulu']);
   });
 });

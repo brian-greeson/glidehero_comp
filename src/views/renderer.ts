@@ -34,7 +34,6 @@ export type AdminPageRenderer = (model: {
 export type AdminAreaPageRenderer = (model: {
   currentUser: AuthenticatedUser;
 }) => Promise<string>;
-export type AdminLargeAreaPageRenderer = AdminAreaPageRenderer;
 
 function createEnvironment() {
   return vento({
@@ -121,16 +120,6 @@ export function createAdminAreaPageRenderer(options: { mapTilerApiKey: string })
   const environment = createEnvironment();
   return async (model) => (
     await environment.run('pages/adminAreas.vto', {
-      mapTilerStyleUrl: `https://api.maptiler.com/maps/outdoor-v2/style.json?key=${options.mapTilerApiKey}`,
-      ...model,
-    })
-  ).content;
-}
-
-export function createAdminLargeAreaPageRenderer(options: { mapTilerApiKey: string }): AdminLargeAreaPageRenderer {
-  const environment = createEnvironment();
-  return async (model) => (
-    await environment.run('pages/adminLargeAreas.vto', {
       mapTilerStyleUrl: `https://api.maptiler.com/maps/outdoor-v2/style.json?key=${options.mapTilerApiKey}`,
       ...model,
     })

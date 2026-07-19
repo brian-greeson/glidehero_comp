@@ -4,7 +4,7 @@ import { launches } from '../../src/db/schema.js';
 import { resetAndPushTestDatabase } from './database.js';
 
 let database: Awaited<ReturnType<typeof resetAndPushTestDatabase>>;
-const importSql = await readFile(new URL('../../injest/importLaunchAreas.sql', import.meta.url), 'utf8');
+const importSql = await readFile(new URL('../../ingest/importLaunchAreas.sql', import.meta.url), 'utf8');
 const sourceLaunch = (name: string) => ({
   id: 745, name, longitude: -123.003, latitude: 42.2319, country: 'United States', state: 'Oregon', city: 'Ruch',
   description: '', xcByMonth: '', timezoneOffset: 0, xcByYear: '', rank: 0, elevation: 1234,
@@ -17,21 +17,21 @@ beforeEach(async () => { await database.pool.query('TRUNCATE TABLE launches, are
 afterAll(async () => { await database.pool.end(); });
 
 describe('Arena launch metadata refresh', () => {
-  it('updates existing grid metadata without changing identity, polygon, or definition type', async () => {
+  it('updates existing launch metadata without changing identity or polygon', async () => {
     await database.db.insert(launches).values(sourceLaunch('Woodrat Mountain'));
     const inserted = await database.pool.query<{ id: string }>(`
-      INSERT INTO arenas (source_id, name, country, state, definition_type, area)
-      VALUES (745, 'Old name', 'United States', 'Oregon', 'grid',
+      INSERT INTO arenas (source_id, name, country, state, area)
+      VALUES (745, 'Old name', 'United States', 'Oregon',
         ST_GeomFromText('MULTIPOLYGON(((0 0,0 1000,1000 1000,1000 0,0 0)))', 6933))
       RETURNING id
     `);
     await database.pool.query(importSql);
     const result = await database.pool.query(`
-      SELECT id, name, city, timezone, definition_type, ST_AsText(area) AS area FROM arenas WHERE source_id = 745
+      SELECT id, name, city, timezone, ST_AsText(area) AS area FROM arenas WHERE source_id = 745
     `);
     expect(result.rows).toEqual([{
       id: inserted.rows[0]?.id, name: 'Woodrat Mountain', city: 'Ruch', timezone: 'America/Los_Angeles',
-      definition_type: 'grid', area: 'MULTIPOLYGON(((0 0,0 1000,1000 1000,1000 0,0 0)))',
+      area: 'MULTIPOLYGON(((0 0,0 1000,1000 1000,1000 0,0 0)))',
     }]);
   });
 

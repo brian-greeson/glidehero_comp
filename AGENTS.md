@@ -18,6 +18,15 @@ This project uses the Drizzle ORM and Drizzle Kit 1.0 release candidates. When w
 
 The db is postgresql with the postgis extension installed.
 
+## Local admin authentication
+
+Use these development-only credentials when an authenticated admin UI flow must be reproduced or verified locally:
+
+- Email: `dev@example.com`
+- Password: `abc123`
+
+These credentials are for the local development environment only and must not be used for production.
+
 ## Implementation guidelines
 
 - Understand the existing implementation before changing architecture.

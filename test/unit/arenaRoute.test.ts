@@ -29,7 +29,7 @@ describe('arena routes', () => {
   });
 
   it('maps every country in the current launch import', async () => {
-    const rows = parseMysqlLaunchDump(await readFile('injest/launches.sql', 'utf8'));
+    const rows = parseMysqlLaunchDump(await readFile('ingest/launches.sql', 'utf8'));
     const countries = [...new Set(rows.map((row) => row.country))];
     expect(countries.map(arenaCountryCode).every((code) => /^[a-z]{2}$/.test(code))).toBe(true);
   });

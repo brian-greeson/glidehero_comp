@@ -44,20 +44,19 @@ export async function importStateArenas(database: Database, states: StateArenaDe
     for (const state of states) {
       const result = await transaction.execute<{ action: 'created' | 'updated' | 'unchanged' }>(sql`
         WITH incoming AS (SELECT ${normalizedArenaGeometrySql(state.geometries)} AS area), existing AS (
-          SELECT id, name, country, state, definition_type, area FROM arenas
+          SELECT id, name, country, state, area FROM arenas
           WHERE external_source = ${CENSUS_STATE_ARENA_SOURCE} AND external_id = ${state.fips}
         ), updated AS (
           UPDATE arenas arena SET name = ${state.name}, country = 'United States', state = ${state.name},
-            definition_type = 'polygon', area = incoming.area
+            area = incoming.area
           FROM incoming, existing
           WHERE arena.id = existing.id AND incoming.area IS NOT NULL AND NOT ST_IsEmpty(incoming.area)
             AND (existing.name IS DISTINCT FROM ${state.name} OR existing.country IS DISTINCT FROM 'United States'
-              OR existing.state IS DISTINCT FROM ${state.name} OR existing.definition_type <> 'polygon'
-              OR NOT ST_Equals(existing.area, incoming.area))
+              OR existing.state IS DISTINCT FROM ${state.name} OR NOT ST_Equals(existing.area, incoming.area))
           RETURNING 'updated'::text AS action
         ), inserted AS (
-          INSERT INTO arenas (source_id, name, country, state, definition_type, area, external_source, external_id)
-          SELECT nextval('arena_source_id_seq'), ${state.name}, 'United States', ${state.name}, 'polygon', incoming.area,
+          INSERT INTO arenas (source_id, name, country, state, area, external_source, external_id)
+          SELECT nextval('arena_source_id_seq'), ${state.name}, 'United States', ${state.name}, incoming.area,
             ${CENSUS_STATE_ARENA_SOURCE}, ${state.fips}
           FROM incoming WHERE incoming.area IS NOT NULL AND NOT ST_IsEmpty(incoming.area)
             AND NOT EXISTS (SELECT 1 FROM existing)

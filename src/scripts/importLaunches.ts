@@ -11,7 +11,7 @@ async function main() {
   const databaseUrl = process.env.DATABASE_URL;
   if (!databaseUrl) throw new Error('DATABASE_URL is required.');
 
-  const sourcePath = resolve(process.argv[2] ?? 'injest/launches.sql');
+  const sourcePath = resolve(process.argv[2] ?? 'ingest/launches.sql');
   const sourceSql = await readFile(sourcePath, 'utf8');
   const rows = parseMysqlLaunchDump(sourceSql);
   const { db, pool } = createDatabase(databaseUrl);

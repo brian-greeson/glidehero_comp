@@ -101,10 +101,10 @@ describe('MonthlyCoverageService with PostGIS', () => {
     await addClaim(pilot, { month: '2026-07-01', x: 1, y: 0, at: '2026-07-01T11:00:00Z' });
     const arena = await database.pool.query<{ id: string }>(`
       INSERT INTO arenas (
-        source_id, name, country, state, city, location, altitude_meters, timezone, definition_type, area
+        source_id, name, country, state, city, location, altitude_meters, timezone, area
       ) VALUES (
         745, 'Coverage Arena', 'United States', 'Colorado', 'Boulder',
-        ST_Transform(ST_SetSRID(ST_Point(500, 500), 6933), 4326), 1000, 'America/Denver', 'polygon',
+        ST_Transform(ST_SetSRID(ST_Point(500, 500), 6933), 4326), 1000, 'America/Denver',
         ST_Multi(ST_MakeEnvelope(0, 0, 1000, 1000, 6933))
       ) RETURNING id
     `);

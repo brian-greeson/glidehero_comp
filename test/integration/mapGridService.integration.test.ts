@@ -39,10 +39,10 @@ describe('MapGridService with PostGIS', () => {
   it('returns viewport cells whose centers are covered by the Arena polygon', async () => {
     const arena = await database.pool.query<{ id: string }>(`
       INSERT INTO arenas (
-        source_id, name, country, state, city, location, altitude_meters, timezone, definition_type, area
+        source_id, name, country, state, city, location, altitude_meters, timezone, area
       ) VALUES (
         745, 'Flight Aid Arena', 'United States', 'Colorado', 'Boulder',
-        ST_Transform(ST_SetSRID(ST_Point(500, 500), 6933), 4326), 1000, 'America/Denver', 'polygon',
+        ST_Transform(ST_SetSRID(ST_Point(500, 500), 6933), 4326), 1000, 'America/Denver',
         ST_Multi(ST_MakeEnvelope(0, 0, 2000, 1000, 6933))
       ) RETURNING id
     `);

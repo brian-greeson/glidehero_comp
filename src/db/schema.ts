@@ -135,8 +135,6 @@ export const launches = pgTable(
   ],
 );
 
-export const arenaDefinitionType = pgEnum('arena_definition_type', ['grid', 'polygon']);
-
 export const arenas = pgTable(
   'arenas',
   {
@@ -149,7 +147,6 @@ export const arenas = pgTable(
     location: geometryPoint4326('location'),
     altitudeMeters: integer('altitude_meters'),
     timezone: text('timezone'),
-    definitionType: arenaDefinitionType('definition_type').notNull(),
     area: geometryMultiPolygon6933('area').notNull(),
     externalSource: text('external_source'),
     externalId: text('external_id'),

@@ -1,6 +1,6 @@
--- Rerunnable launch-metadata refresh for existing grid-authored arenas.
--- It intentionally does not create Arenas or touch area/definition_type.
---   psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f injest/importLaunchAreas.sql
+-- Rerunnable launch-metadata refresh for existing launch-backed Arenas.
+-- It intentionally does not create Arenas or touch area.
+--   psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f ingest/importLaunchAreas.sql
 
 BEGIN;
 
@@ -2054,7 +2054,6 @@ SET
   timezone = mapping.timezone
 FROM launches launch
 INNER JOIN launch_timezone_import mapping ON mapping.source_id = launch.id
-WHERE arena.source_id = launch.id
-  AND arena.definition_type = 'grid';
+WHERE arena.source_id = launch.id;
 
 COMMIT;

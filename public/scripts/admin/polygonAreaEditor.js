@@ -1,10 +1,22 @@
 import { createLatestRequest } from '../latestRequest.js';
 import { normalizeViewportBounds } from '../viewportQuery.js';
-import { filterAndSortAreas } from './areaEditor.js';
 
 const EMPTY = { type: 'FeatureCollection', features: [] };
-const PREVIEW_SOURCE = 'large-arena-cell-preview';
+const PREVIEW_SOURCE = 'arena-cell-preview';
 const PREVIEW_ZOOM = 11;
+
+export function filterAndSortAreas(areas, query, sortColumn = 'name', sortDirection = 'asc') {
+  const needle = query.trim().toLocaleLowerCase();
+  const direction = sortDirection === 'desc' ? -1 : 1;
+  return areas
+    .filter((area) => !needle || [area.name, area.country, area.state, area.city]
+      .some((value) => value?.toLocaleLowerCase().includes(needle)))
+    .toSorted((left, right) => {
+      const primary = left[sortColumn].localeCompare(right[sortColumn], undefined, { sensitivity: 'base' });
+      if (primary) return primary * direction;
+      return left.name.localeCompare(right.name, undefined, { sensitivity: 'base' });
+    });
+}
 
 async function requestJson(url, options = {}, fetchImpl = fetch) {
   const response = await fetchImpl(url, { credentials: 'same-origin', headers: {
@@ -38,7 +50,7 @@ export function polygonComponentCount(featureCollection) {
   }, 0);
 }
 
-export function largeAreaPreviewPayload(bounds, geojson) {
+export function areaPreviewPayload(bounds, geojson) {
   return { ...normalizeViewportBounds(bounds), geojson };
 }
 
@@ -68,7 +80,7 @@ export function createUnsavedActionGate({ isDirty, dialog, save }) {
   };
 }
 
-export function createLargeAreaSelection({ load, apply }) {
+export function createAreaSelection({ load, apply }) {
   return createLatestRequest(async ({ signal, isCurrent }, id) => {
     let area;
     try {
@@ -84,9 +96,9 @@ export function createLargeAreaSelection({ load, apply }) {
 }
 
 export function initializePolygonAreaEditor({ documentRef = document, maplibre = window.maplibregl, Draw = window.MapboxDraw, fetchImpl = window.fetch.bind(window) } = {}) {
-  const root = documentRef.querySelector('[data-admin-large-area-editor]');
+  const root = documentRef.querySelector('[data-admin-area-editor]');
   if (!root || !maplibre || !Draw) return;
-  const form = root.querySelector('[data-large-area-form]');
+  const form = root.querySelector('[data-area-form]');
   const fields = Object.fromEntries([...form.querySelectorAll('[data-field]')].map((field) => [field.dataset.field, field]));
   const status = root.querySelector('[data-form-status]');
   const list = root.querySelector('[data-area-list]');
@@ -104,12 +116,12 @@ export function initializePolygonAreaEditor({ documentRef = document, maplibre =
   map.addControl(draw, 'top-left');
   const state = { areas: [], selectedId: null, isNew: false, original: '', dirty: false };
   const previewRequest = createLatestRequest(async ({ signal, isCurrent }, payload) => {
-    const data = await requestJson('/admin/api/areas/large/preview', { method: 'POST', body: JSON.stringify(payload), signal }, fetchImpl);
+    const data = await requestJson('/admin/api/areas/preview', { method: 'POST', body: JSON.stringify(payload), signal }, fetchImpl);
     if (isCurrent()) map.getSource(PREVIEW_SOURCE)?.setData(data);
   });
   const setStatus = (message = '', error = false) => { status.textContent = message; status.classList.toggle('is-error', error); };
   const geojson = () => draw.getAll();
-  const snapshot = () => JSON.stringify({ name: fields.name.value, country: fields.country.value, state: fields.state.value, geojson: geojson() });
+  const snapshot = () => JSON.stringify({ name: fields.name.value, country: fields.country.value, state: fields.state.value, city: fields.city.value, geojson: geojson() });
   const update = () => {
     state.dirty = Boolean(state.selectedId || state.isNew) && snapshot() !== state.original;
     fields.componentCount.value = String(polygonComponentCount(geojson()));
@@ -126,25 +138,25 @@ export function initializePolygonAreaEditor({ documentRef = document, maplibre =
       list.append(button);
     }
   }
-  function setEnabled(enabled) { for (const name of ['name', 'country', 'state']) fields[name].disabled = !enabled; importInput.disabled = !enabled; }
+  function setEnabled(enabled) { for (const name of ['name', 'country', 'state', 'city']) fields[name].disabled = !enabled; importInput.disabled = !enabled; }
   async function refreshPreview() {
     if (map.getZoom() < PREVIEW_ZOOM || !geojson().features.length) {
       previewRequest.cancel(); map.getSource(PREVIEW_SOURCE)?.setData(EMPTY); help.textContent = 'Zoom in to preview Arena cells.'; return;
     }
     try {
-      await previewRequest.run(largeAreaPreviewPayload(map.getBounds(), geojson()));
+      await previewRequest.run(areaPreviewPayload(map.getBounds(), geojson()));
       help.textContent = 'Highlighted cells have centers covered by the current draft.';
     } catch (error) { if (error.name !== 'AbortError') { map.getSource(PREVIEW_SOURCE)?.setData(EMPTY); help.textContent = error.message; } }
   }
   function loadGeometry(geometry) { draw.deleteAll(); if (geometry) draw.add({ type: 'Feature', properties: {}, geometry }); }
   function applySelection(area) {
     state.selectedId = area.id; state.isNew = false; heading.textContent = area.name;
-    for (const name of ['id', 'sourceId', 'name', 'country', 'state']) fields[name].value = String(area[name] ?? '');
+    for (const name of ['id', 'sourceId', 'name', 'country', 'state', 'city']) fields[name].value = String(area[name] ?? '');
     loadGeometry(area.geometry); setEnabled(true); state.original = snapshot(); update(); renderList(); setStatus();
     map.fitBounds([[area.bbox[0], area.bbox[1]], [area.bbox[2], area.bbox[3]]], { padding: 70, maxZoom: 12, duration: 0 }); void refreshPreview();
   }
-  const selectionRequest = createLargeAreaSelection({
-    load: async (id, signal) => (await requestJson(`/admin/api/areas/large/${encodeURIComponent(id)}`, { signal }, fetchImpl)).area,
+  const selectionRequest = createAreaSelection({
+    load: async (id, signal) => (await requestJson(`/admin/api/areas/${encodeURIComponent(id)}`, { signal }, fetchImpl)).area,
     apply: applySelection,
   });
   async function select(id) {
@@ -157,13 +169,13 @@ export function initializePolygonAreaEditor({ documentRef = document, maplibre =
   }
   function startNew() {
     selectionRequest.cancel();
-    state.selectedId = null; state.isNew = true; heading.textContent = 'New Large Arena'; draw.deleteAll();
-    fields.id.value = 'Assigned on save'; fields.sourceId.value = 'Assigned on save'; fields.name.value = ''; fields.country.value = ''; fields.state.value = '';
+    state.selectedId = null; state.isNew = true; heading.textContent = 'New Arena'; draw.deleteAll();
+    fields.id.value = 'Assigned on save'; fields.sourceId.value = 'Assigned on save'; fields.name.value = ''; fields.country.value = ''; fields.state.value = ''; fields.city.value = '';
     setEnabled(true); state.original = snapshot(); update(); renderList(); setStatus('Draw or import one or more polygons.');
   }
   async function save() {
-    const payload = { name: fields.name.value, country: fields.country.value, state: fields.state.value, geojson: geojson() };
-    const url = state.isNew ? '/admin/api/areas/large' : `/admin/api/areas/large/${encodeURIComponent(state.selectedId)}`;
+    const payload = { name: fields.name.value, country: fields.country.value, state: fields.state.value, city: fields.city.value, geojson: geojson() };
+    const url = state.isNew ? '/admin/api/areas' : `/admin/api/areas/${encodeURIComponent(state.selectedId)}`;
     try {
       const { area } = await requestJson(url, { method: state.isNew ? 'POST' : 'PUT', body: JSON.stringify(payload) }, fetchImpl);
       if (!state.areas.some((item) => item.id === area.id)) state.areas.push(area);
@@ -197,7 +209,7 @@ export function initializePolygonAreaEditor({ documentRef = document, maplibre =
     importInput.value = '';
   });
   window.addEventListener('beforeunload', (event) => { if (state.dirty) { event.preventDefault(); event.returnValue = ''; } });
-  void requestJson('/admin/api/areas/large', {}, fetchImpl).then(({ areas }) => { state.areas = areas; renderList(); }).catch((error) => setStatus(error.message, true));
+  void requestJson('/admin/api/areas', {}, fetchImpl).then(({ areas }) => { state.areas = areas; renderList(); }).catch((error) => setStatus(error.message, true));
   return { map, draw, refreshPreview };
 }
 

@@ -196,17 +196,16 @@ npm run dev
 the example environment uses `1000`. Arena scoring constructs each claim-cell
 center from that claim's stored size and applies `ST_Covers` to `arenas.area`.
 
-Administrators author small Arenas at **Areas → Arenas** by painting cells; save
-converts those cells into the canonical MultiPolygon. **Areas → Large Arenas**
-supports multiple drawn polygons, reshape/delete controls, GeoJSON import, and a
+Administrators author every Arena at **Areas** using multiple drawn polygons,
+reshape/delete controls, GeoJSON import, and a
 zoomed-in draft cell preview. Overlapping or edge-adjacent inputs are unioned on
 save while disconnected components and imported holes remain.
 
-Refresh launch metadata for existing grid Arenas without changing their polygon:
+Refresh launch metadata for existing launch-backed Arenas without changing their polygon:
 
 ```bash
 npm run import:launches
-psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f injest/importLaunchAreas.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f ingest/importLaunchAreas.sql
 ```
 
 Import the 50 U.S. state Arenas from an official Census boundary GeoJSON file:
@@ -217,7 +216,7 @@ npm run import:state-arenas -- path/to/states.geojson
 
 The importer excludes D.C. and territories, upserts by Census FIPS identity,
 preserves UUID/source IDs on rerun, and uses the same geometry normalization as
-the Large Arena editor. New or edited Arenas immediately include matching
+the Arena editor. New or edited Arenas immediately include matching
 historical global claims; flight parsing never assigns claims to Arenas.
 
 Open <http://localhost:3000>. Create an account, log out, and log back in.

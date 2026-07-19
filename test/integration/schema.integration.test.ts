@@ -92,7 +92,6 @@ describe('authentication schema', () => {
       { column_name: 'location', is_nullable: 'YES' },
       { column_name: 'altitude_meters', is_nullable: 'YES' },
       { column_name: 'timezone', is_nullable: 'YES' },
-      { column_name: 'definition_type', is_nullable: 'NO' },
       { column_name: 'area', is_nullable: 'NO' },
       { column_name: 'external_source', is_nullable: 'YES' },
       { column_name: 'external_id', is_nullable: 'YES' },

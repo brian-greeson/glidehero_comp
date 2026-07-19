@@ -4,129 +4,97 @@ import { resetAndPushTestDatabase } from './database.js';
 
 let database: Awaited<ReturnType<typeof resetAndPushTestDatabase>>;
 
-beforeAll(async () => {
-  database = await resetAndPushTestDatabase();
-});
-
+beforeAll(async () => { database = await resetAndPushTestDatabase(); });
 beforeEach(async () => {
   await database.pool.query('TRUNCATE TABLE arenas CASCADE');
   await database.pool.query('ALTER SEQUENCE arena_source_id_seq RESTART WITH 10000');
 });
+afterAll(async () => { await database?.pool.end(); });
 
-afterAll(async () => {
-  await database?.pool.end();
-});
-
+const polygon = {
+  type: 'Polygon' as const,
+  coordinates: [[[0, 0], [0, 0.02], [0.02, 0.02], [0.02, 0], [0, 0]]],
+};
 const baseArea: AdminAreaSaveInput = {
   name: 'Custom Ridge',
   country: 'United States',
   state: 'Colorado',
   city: 'Golden',
-  latitude: 0,
-  longitude: 0,
-  altitudeMeters: 1800,
-  timezone: 'America/Denver',
-  cells: [{ x: 0, y: 0 }, { x: 2, y: 0 }],
+  geometries: [polygon],
 };
 
-describe('admin area service with PostGIS', () => {
-  it('creates incrementing custom IDs and preserves disconnected cell groups', async () => {
+describe('admin Arena service with PostGIS', () => {
+  it('creates incrementing source IDs and lists every Arena', async () => {
     const service = createAdminAreaService(database.db, { cellSize: 1_000 });
     const first = await service.create(baseArea);
-    const second = await service.create({ ...baseArea, name: 'Second Ridge', cells: [{ x: 0, y: 0 }] });
+    const second = await service.create({ ...baseArea, name: 'State Arena', state: '', city: '' });
 
     expect(first.sourceId).toBe(10_000);
     expect(second.sourceId).toBe(10_001);
     await expect(service.list()).resolves.toEqual([
-      expect.objectContaining({ sourceId: 10_000, name: 'Custom Ridge' }),
-      expect.objectContaining({ sourceId: 10_001, name: 'Second Ridge' }),
+      expect.objectContaining({ sourceId: 10_000, name: 'Custom Ridge', city: 'Golden' }),
+      expect.objectContaining({ sourceId: 10_001, name: 'State Arena', state: '', city: '' }),
     ]);
-    const detail = await service.get(first.id);
-    expect(detail).toMatchObject({
-      sourceId: 10_000,
-      cellCount: 2,
-      latitude: 0,
-      longitude: 0,
-    });
-    expect(detail?.cells.features.map(({ properties }) => properties)).toEqual([{ x: 0, y: 0 }, { x: 2, y: 0 }]);
-    expect(detail?.bbox).not.toBeNull();
-
-    const geometry = await database.pool.query<{ parts: number; valid: boolean }>(
-      'SELECT ST_NumGeometries(area)::integer AS parts, ST_IsValid(area) AS valid FROM arenas WHERE id = $1',
-      [first.id],
-    );
-    expect(geometry.rows[0]).toEqual({ parts: 2, valid: true });
+    expect(first.geometry.type).toBe('MultiPolygon');
+    expect(first.bbox).toHaveLength(4);
   });
 
-  it('replaces only the selected area cells and permits overlaps with another area', async () => {
+  it('normalizes polygons and preserves disconnected parts and holes', async () => {
     const service = createAdminAreaService(database.db, { cellSize: 1_000 });
-    const first = await service.create(baseArea);
-    const second = await service.create({ ...baseArea, name: 'Overlapping Ridge', cells: [{ x: 0, y: 0 }] });
-
-    await expect(service.update(first.id, {
+    const area = await service.create({
       ...baseArea,
-      name: 'Updated Ridge',
-      cells: [{ x: 5, y: 6 }],
-    })).resolves.toMatchObject({ id: first.id, sourceId: 10_000 });
-
-    await expect(service.get(first.id)).resolves.toMatchObject({ name: 'Updated Ridge', cellCount: 1 });
-    await expect(service.get(second.id)).resolves.toMatchObject({ name: 'Overlapping Ridge', cellCount: 1 });
-    expect((await service.get(first.id))?.cells.features[0]?.properties).toEqual({ x: 5, y: 6 });
-    expect((await service.get(second.id))?.cells.features[0]?.properties).toEqual({ x: 0, y: 0 });
-  });
-
-  it('rolls back metadata and cells when a replacement cannot be inserted', async () => {
-    const service = createAdminAreaService(database.db, { cellSize: 1_000 });
-    const area = await service.create({ ...baseArea, cells: [{ x: 0, y: 0 }] });
-
-    await expect(service.update(area.id, {
-      ...baseArea,
-      name: 'Should Roll Back',
-      cells: [{ x: 1, y: 1 }, { x: 1, y: 1 }],
-    })).rejects.toThrow();
-
-    await expect(service.get(area.id)).resolves.toMatchObject({ name: 'Custom Ridge', cellCount: 1 });
-  });
-
-  it('rejects empty areas and returns aligned editable grid features for a viewport', async () => {
-    const service = createAdminAreaService(database.db, { cellSize: 1_000 });
-    await expect(service.create({ ...baseArea, cells: [] })).rejects.toThrow('at least one cell');
-    const count = await database.pool.query<{ count: number }>('SELECT COUNT(*)::integer AS count FROM arenas');
-    expect(count.rows[0]?.count).toBe(0);
-
-    const grid = await service.grid({ west: -0.02, south: -0.02, east: 0.02, north: 0.02 });
-    expect(grid.features.length).toBeGreaterThan(0);
-    expect(grid.features[0]).toMatchObject({
-      type: 'Feature',
-      properties: { x: expect.any(Number), y: expect.any(Number) },
-      geometry: { type: 'Polygon' },
-    });
-    const westernGrid = await service.grid({ west: -106.21, south: 38.99, east: -106.19, north: 39 });
-    expect(westernGrid.features.length).toBeGreaterThan(0);
-    expect(westernGrid.features.length).toBeLessThan(100);
-    await expect(service.grid({ west: -120, south: 30, east: -100, north: 50 }))
-      .rejects.toThrow('Zoom in');
-  });
-
-  it('normalizes Large Arena polygons, preserves disconnected parts and holes, and previews center membership', async () => {
-    const service = createAdminAreaService(database.db, { cellSize: 1_000 });
-    const area = await service.createLarge({
-      name: 'Large Test', country: 'United States', state: 'Test State', geometries: [
-        { type: 'Polygon', coordinates: [[[0, 0], [0, 0.02], [0.02, 0.02], [0.02, 0], [0, 0]]] },
+      geometries: [
+        polygon,
         { type: 'Polygon', coordinates: [[[0.01, 0], [0.01, 0.02], [0.03, 0.02], [0.03, 0], [0.01, 0]]] },
-        { type: 'Polygon', coordinates: [[[1, 1], [1, 1.02], [1.02, 1.02], [1.02, 1], [1, 1]], [[1.005, 1.005], [1.015, 1.005], [1.015, 1.015], [1.005, 1.015], [1.005, 1.005]]] },
+        { type: 'Polygon', coordinates: [
+          [[1, 1], [1, 1.02], [1.02, 1.02], [1.02, 1], [1, 1]],
+          [[1.005, 1.005], [1.015, 1.005], [1.015, 1.015], [1.005, 1.015], [1.005, 1.005]],
+        ] },
       ],
     });
-    expect(area.componentCount).toBe(2);
-    expect(area.geometry.type).toBe('MultiPolygon');
-    expect(area.geometry.coordinates.some((component) => component.length === 2)).toBe(true);
-    await expect(service.list('polygon')).resolves.toEqual([expect.objectContaining({ id: area.id, name: 'Large Test' })]);
 
-    const preview = await service.preview(
-      { west: 0, south: 0, east: 0.03, north: 0.02 },
-      [{ type: 'Polygon', coordinates: [[[0, 0], [0, 0.02], [0.02, 0.02], [0.02, 0], [0, 0]]] }],
-    );
+    expect(area.componentCount).toBe(2);
+    expect(area.geometry.coordinates.some((component) => component.length === 2)).toBe(true);
+  });
+
+  it('updates editable fields while preserving hidden launch and import metadata', async () => {
+    const inserted = await database.pool.query<{ id: string }>(`
+      INSERT INTO arenas (
+        source_id, name, country, state, city, location, altitude_meters, timezone,
+        area, external_source, external_id
+      ) VALUES (
+        745, 'Old name', 'United States', 'Colorado', 'Old city',
+        ST_SetSRID(ST_MakePoint(-105, 39), 4326), 1800, 'America/Denver',
+        ST_Multi(ST_Transform(ST_MakeEnvelope(0, 0, 0.01, 0.01, 4326), 6933)),
+        'test-source', 'external-745'
+      ) RETURNING id
+    `);
+    const id = inserted.rows[0]?.id;
+    if (!id) throw new Error('Expected an Arena.');
+
+    const service = createAdminAreaService(database.db, { cellSize: 1_000 });
+    await expect(service.update(id, { ...baseArea, name: 'Updated', city: '' }))
+      .resolves.toMatchObject({ id, name: 'Updated', city: '' });
+    const metadata = await database.pool.query(`
+      SELECT ST_X(location)::double precision AS longitude, altitude_meters, timezone,
+        external_source, external_id
+      FROM arenas WHERE id = $1
+    `, [id]);
+    expect(metadata.rows[0]).toEqual({
+      longitude: -105,
+      altitude_meters: 1800,
+      timezone: 'America/Denver',
+      external_source: 'test-source',
+      external_id: 'external-745',
+    });
+  });
+
+  it('previews cell-center membership and limits oversized viewports', async () => {
+    const service = createAdminAreaService(database.db, { cellSize: 1_000 });
+    const preview = await service.preview({ west: 0, south: 0, east: 0.03, north: 0.02 }, [polygon]);
     expect(preview.features.some((feature) => feature.properties.inside)).toBe(true);
     expect(preview.features.some((feature) => !feature.properties.inside)).toBe(true);
+    await expect(service.preview({ west: -120, south: 30, east: -100, north: 50 }, [polygon]))
+      .rejects.toThrow('Zoom in');
   });
 });

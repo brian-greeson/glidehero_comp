@@ -1,63 +1,35 @@
 {{ layout "layouts/adminAreaEditorLayout.vto" }}
   <main class="admin-area-page" data-admin-area-editor>
     {{ include "components/adminNav.vto" { activeAdminPage: "areas" } }}
-    {{ include "components/adminAreaTabs.vto" { activeAreaPage: "arenas" } }}
-
-    <aside class="admin-area-sidebar" aria-label="Area editor controls">
+    <aside class="admin-area-sidebar" aria-label="Arena editor controls">
       <form class="admin-area-card" data-area-form>
-        <div class="admin-area-card-heading"><div><p class="admin-eyebrow">Selected area</p><h1 data-area-heading>No area selected</h1></div><button type="button" class="admin-area-new" data-new-area>New</button></div>
+        <div class="admin-area-card-heading"><div><p class="admin-eyebrow">Selected Arena</p><h1 data-area-heading>No Arena selected</h1></div><button type="button" class="admin-area-new" data-new-area>New</button></div>
         <div class="admin-area-system-fields">
           <label>ID<input data-field="id" readonly value="—"></label>
           <label>Source ID<input data-field="sourceId" readonly value="—"></label>
-          <label>Cells<input data-field="cellCount" readonly value="0"></label>
+          <label>Components<input data-field="componentCount" readonly value="0"></label>
         </div>
         <label>Name<input data-field="name" maxlength="160" required disabled></label>
-        <div class="admin-area-field-row">
-          <label>Country<input data-field="country" maxlength="120" required disabled></label>
-          <label>State<input data-field="state" maxlength="120" required disabled></label>
-        </div>
-        <label>City<input data-field="city" maxlength="120" required disabled></label>
-        <div class="admin-area-field-row">
-          <label>Latitude<input data-field="latitude" type="number" min="-90" max="90" step="any" required disabled></label>
-          <label>Longitude<input data-field="longitude" type="number" min="-180" max="180" step="any" required disabled></label>
-        </div>
-        <div class="admin-area-field-row">
-          <label>Altitude (m)<input data-field="altitudeMeters" type="number" min="-500" max="10000" step="1" required disabled></label>
-          <label>Timezone<select data-field="timezone" required disabled><option value="">Select timezone</option></select></label>
-        </div>
+        <label>Country<input data-field="country" maxlength="120" required disabled></label>
+        <label>State or region<input data-field="state" maxlength="120" disabled></label>
+        <label>City<input data-field="city" maxlength="120" disabled></label>
+        <label class="admin-area-import">Import GeoJSON<input type="file" accept=".geojson,.json,application/geo+json,application/json" data-geojson-import disabled></label>
         <p class="admin-area-form-status" data-form-status role="status"></p>
-        <div class="admin-area-form-actions"><button type="submit" data-save-area disabled>Save area</button><button type="button" class="secondary" data-cancel-area disabled>Cancel</button></div>
+        <div class="admin-area-form-actions"><button type="submit" data-save-area disabled>Save Arena</button><button type="button" class="secondary" data-cancel-area disabled>Cancel</button></div>
       </form>
-
       <section class="admin-area-list-section">
         <div class="admin-area-list-heading"><h2>Arenas</h2><span data-area-total>0</span></div>
-        <label class="admin-area-search"><span class="sr-only">Search areas</span><input type="search" placeholder="Search name or location" data-area-search></label>
-        <div class="admin-area-list-table" role="table" aria-label="Existing areas">
-          <div class="admin-area-list-columns" role="row">
-            <button type="button" data-sort="name" role="columnheader">Name <span aria-hidden="true">▲</span></button>
-            <button type="button" data-sort="country" role="columnheader">Country</button>
-            <button type="button" data-sort="state" role="columnheader">State</button>
-          </div>
-          <div data-area-list role="rowgroup"><p class="muted">Loading areas…</p></div>
+        <label class="admin-area-search"><span class="sr-only">Search Arenas</span><input type="search" placeholder="Search name or location" data-area-search></label>
+        <div class="admin-area-list-table" role="table" aria-label="Existing Arenas">
+          <div class="admin-area-list-columns" role="row"><button type="button" data-sort="name" role="columnheader">Name</button><button type="button" data-sort="country" role="columnheader">Country</button><button type="button" data-sort="state" role="columnheader">State</button></div>
+          <div data-area-list role="rowgroup"><p class="muted">Loading Arenas…</p></div>
         </div>
       </section>
     </aside>
-
-    <section class="admin-area-map-stage" aria-label="Area cell map">
-      <div class="admin-area-toolbar" role="toolbar" aria-label="Map tools">
-        <button type="button" data-map-tool="pan" aria-pressed="true">Pan</button>
-        <button type="button" data-map-tool="paint" aria-pressed="false">Paint</button>
-        <button type="button" data-map-tool="erase" aria-pressed="false">Erase</button>
-      </div>
-      <p class="admin-area-map-help" data-map-help>Select an area or create a new one.</p>
+    <section class="admin-area-map-stage" aria-label="Arena polygon map">
+      <p class="admin-area-map-help" data-map-help>Select an Arena or create a new one. Draw, reshape, or delete polygons with the map controls.</p>
       <div class="admin-area-map" data-area-map data-map-style-url="{{ mapTilerStyleUrl }}"></div>
-      <p class="admin-area-attribution">Location data © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap contributors</a></p>
     </section>
-
-    <dialog class="admin-area-dialog" data-unsaved-dialog>
-      <h2>Unsaved changes</h2>
-      <p>Save this area before continuing?</p>
-      <div><button type="button" data-dialog-action="cancel" class="secondary">Cancel</button><button type="button" data-dialog-action="discard" class="secondary">Discard</button><button type="button" data-dialog-action="save">Save</button></div>
-    </dialog>
+    <dialog class="admin-area-dialog" data-unsaved-dialog><h2>Unsaved changes</h2><p>Save this Arena before continuing?</p><div><button type="button" data-dialog-action="cancel" class="secondary">Cancel</button><button type="button" data-dialog-action="discard" class="secondary">Discard</button><button type="button" data-dialog-action="save">Save</button></div></dialog>
   </main>
 {{ /layout }}

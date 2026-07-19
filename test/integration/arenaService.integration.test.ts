@@ -16,16 +16,16 @@ afterAll(async () => {
   await database.pool.end();
 });
 
-async function insertArena(input: { sourceId: number; name: string; city: string; definitionType?: 'grid' | 'polygon' }) {
+async function insertArena(input: { sourceId: number; name: string; city: string }) {
   const inserted = await database.pool.query<{ id: string }>(`
     INSERT INTO arenas (
-      source_id, name, country, state, city, location, altitude_meters, timezone, definition_type, area
+      source_id, name, country, state, city, location, altitude_meters, timezone, area
     ) VALUES (
       $1, $2, 'United States', 'Colorado', $3,
-      ST_Transform(ST_SetSRID(ST_Point(500, 500), 6933), 4326), 1000, 'America/Denver', $4,
+      ST_Transform(ST_SetSRID(ST_Point(500, 500), 6933), 4326), 1000, 'America/Denver',
       ST_Multi(ST_MakeEnvelope(0, 0, 1000, 1000, 6933))
     ) RETURNING id
-  `, [input.sourceId, input.name, input.city, input.definitionType ?? 'grid']);
+  `, [input.sourceId, input.name, input.city]);
   const id = inserted.rows[0]?.id;
   if (!id) throw new Error('Expected Arena id.');
   return id;
@@ -34,7 +34,7 @@ async function insertArena(input: { sourceId: number; name: string; city: string
 describe('ArenaService with PostGIS', () => {
   it('searches generated Arenas by name and location and returns canonical routes', async () => {
     await insertArena({ sourceId: 745, name: 'Boulder Ridge', city: 'Boulder' });
-    await insertArena({ sourceId: 746, name: 'Other Launch', city: 'Boulder', definitionType: 'polygon' });
+    await insertArena({ sourceId: 746, name: 'Other Launch', city: 'Boulder' });
     await insertArena({ sourceId: 747, name: 'Boulder Without Membership Rows', city: 'Boulder' });
 
     const arenas = await createArenaService(database.db, { cellSize: 1_000 }).search('Boulder');
@@ -83,8 +83,8 @@ describe('ArenaService with PostGIS', () => {
 
   it('preserves disconnected components and returns narrow antimeridian display bounds', async () => {
     await database.pool.query(`
-      INSERT INTO arenas (source_id, name, country, state, definition_type, area)
-      VALUES (900, 'Date Line Arena', 'United States', 'Alaska', 'polygon', ST_Multi(ST_Collect(
+      INSERT INTO arenas (source_id, name, country, state, area)
+      VALUES (900, 'Date Line Arena', 'United States', 'Alaska', ST_Multi(ST_Collect(
         ST_Transform(ST_MakeEnvelope(170, 50, 179, 60, 4326), 6933),
         ST_Transform(ST_MakeEnvelope(-179, 50, -170, 60, 4326), 6933)
       )))
