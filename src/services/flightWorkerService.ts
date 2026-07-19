@@ -436,6 +436,8 @@ export function createFlightWorkerService(
         });
         clearInterval(heartbeat);
         await heartbeatWrite;
+          console.log(`Flight: ${job.flightId} processed. Outcome: ${outcome.status}`);
+
         if (outcome.status === 'duplicate') {
           await database.delete(igcFiles).where(eq(igcFiles.id, igcFileId));
           await options.s3Client.send(
