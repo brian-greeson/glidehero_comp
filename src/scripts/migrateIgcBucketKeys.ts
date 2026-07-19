@@ -274,11 +274,11 @@ async function inspectLegacyRow(
   bucketName: string,
   row: IgcFileRow,
   newKey: string,
-): Promise<'migration-needed' | 'existing-destination' | 'collision'> {
+): Promise<'migration-needed' | 'existing-destination' | 'missing-source' | 'collision'> {
   const sourceHead = await headObjectOrNull(s3Client, bucketName, row.bucketKey);
   const destinationHead = await headObjectOrNull(s3Client, bucketName, newKey);
+  if (!sourceHead) return 'missing-source';
   if (!destinationHead) return 'migration-needed';
-  if (!sourceHead) return 'existing-destination';
   const matches = await verifyObjectsMatch(
     s3Client,
     bucketName,
@@ -296,11 +296,11 @@ async function inspectCanonicalDuplicate(
   bucketName: string,
   row: IgcFileRow,
   legacyKey: string,
-): Promise<'none' | 'duplicate' | 'collision'> {
+): Promise<'none' | 'duplicate' | 'missing-canonical' | 'collision'> {
   const legacyHead = await headObjectOrNull(s3Client, bucketName, legacyKey);
   if (!legacyHead) return 'none';
   const canonicalHead = await headObjectOrNull(s3Client, bucketName, row.bucketKey);
-  if (!canonicalHead) return 'duplicate';
+  if (!canonicalHead) return 'missing-canonical';
   const matches = await verifyObjectsMatch(
     s3Client,
     bucketName,
@@ -330,10 +330,9 @@ function summarizeDatabaseRows(rows: IgcFileRow[], bucketFolder: string): Databa
   const unexpectedKeys: string[] = [];
 
   for (const row of rows) {
-    const canonicalPrefix = flightUploadPrefix(bucketFolder, row.userId);
     if (migrationKey(bucketFolder, row.userId, row.bucketKey)) {
       legacyRows.push(row);
-    } else if (row.bucketKey.startsWith(canonicalPrefix)) {
+    } else if (legacyKeyForCanonical(bucketFolder, row.userId, row.bucketKey)) {
       canonicalRows.push(row);
     } else {
       unexpectedKeys.push(row.bucketKey);
@@ -480,8 +479,8 @@ async function run(args: string[]): Promise<void> {
     let collisions = 0;
 
     for (const row of rows) {
-      const canonicalPrefix = flightUploadPrefix(config.bucket.bucketFolder, row.userId);
       const newKey = migrationKey(config.bucket.bucketFolder, row.userId, row.bucketKey);
+      const legacyKey = legacyKeyForCanonical(config.bucket.bucketFolder, row.userId, row.bucketKey);
 
       if (newKey) {
         legacyCount += 1;
@@ -499,14 +498,15 @@ async function run(args: string[]): Promise<void> {
             migrationsNeeded += 1;
           } else if (state === 'existing-destination') {
             existingDestinations += 1;
+          } else if (state === 'missing-source') {
+            collisions += 1;
+            console.log(`Conflict: legacy source is missing for database key ${row.bucketKey}.`);
           } else {
             collisions += 1;
           }
         }
-      } else if (row.bucketKey.startsWith(canonicalPrefix)) {
+      } else if (legacyKey) {
         canonicalCount += 1;
-        const legacyKey = legacyKeyForCanonical(config.bucket.bucketFolder, row.userId, row.bucketKey);
-        if (!legacyKey) continue;
 
         if (apply) {
           try {
@@ -522,6 +522,9 @@ async function run(args: string[]): Promise<void> {
           const state = await inspectCanonicalDuplicate(s3Client, config.bucket.bucketName, row, legacyKey);
           if (state === 'duplicate') {
             canonicalDuplicates += 1;
+          } else if (state === 'missing-canonical') {
+            collisions += 1;
+            console.log(`Conflict: canonical object is missing for database key ${row.bucketKey}.`);
           } else if (state === 'collision') {
             canonicalDuplicates += 1;
             collisions += 1;
