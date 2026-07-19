@@ -12,7 +12,11 @@ function element() {
     className: '',
     classList: { add: vi.fn() },
     addEventListener(type, listener) { listeners.set(type, listener); },
-    dispatch(type) { listeners.get(type)?.(); },
+    dispatch(type, event = {}) {
+      const dispatchedEvent = { target: this, preventDefault: vi.fn(), ...event };
+      listeners.get(type)?.(dispatchedEvent);
+      return dispatchedEvent;
+    },
     showModal() { this.open = true; },
     close() { this.open = false; this.dispatch('close'); },
     append: vi.fn(),
@@ -29,15 +33,15 @@ function files(count, prefix = 'flight') {
 }
 
 function uploadHarness(initialTotal, fetchImplementation) {
-  const uploadInput = element();
   const uploadMoreInput = element();
   const selectors = new Map([
+    ['[data-upload-trigger]', element()], ['[data-upload-close]', element()],
     ['[data-upload-dialog]', element()], ['[data-upload-list]', element()], ['[data-upload-overall]', element()],
     ['[data-flight-progress-bar]', element()], ['[data-flight-progress-count]', element()],
   ]);
   const documentRef = {
     querySelector: (selector) => selectors.get(selector) ?? null,
-    querySelectorAll: () => [uploadInput, uploadMoreInput],
+    querySelectorAll: () => [uploadMoreInput],
     createElement: () => element(),
   };
   const timers = [];
@@ -79,7 +83,7 @@ function uploadHarness(initialTotal, fetchImplementation) {
   initializeFlightUploads(documentRef, windowRef);
 
   return {
-    selectors, uploadInput, uploadMoreInput, timers, windowRef,
+    selectors, uploadInput: uploadMoreInput, uploadMoreInput, timers, windowRef,
     xhr: PendingXMLHttpRequest,
     setProgressTotal(total) { progressTotal = total; },
     select(input, selectedFiles) { input.files = selectedFiles; input.dispatch('change'); },
@@ -89,15 +93,15 @@ function uploadHarness(initialTotal, fetchImplementation) {
 describe('flight upload progress UI', () => {
   afterEach(() => vi.unstubAllGlobals());
 
-  it('does not poll for processing status while the upload modal is closed', () => {
+  it('loads aggregate processing status while the upload modal is closed', async () => {
     const harness = uploadHarness(0);
 
     expect(harness.selectors.get('[data-upload-dialog]').open).toBe(false);
-    expect(fetch).not.toHaveBeenCalledWith('/v1/igc-upload-progress', expect.anything());
-    expect(harness.timers).toHaveLength(0);
+    await vi.waitFor(() => expect(fetch.mock.calls.filter(([url]) => String(url) === '/v1/igc-upload-progress')).toHaveLength(1));
+    await vi.waitFor(() => expect(harness.timers.some((timer) => timer.delay === 10_000)).toBe(true));
   });
 
-  it('loads progress when the upload modal opens and polls again after ten seconds', async () => {
+  it('opens status without activating the file picker and refreshes progress', async () => {
     const harness = uploadHarness(0, async (url, options, fallback) => {
       if (String(url) === '/v1/igc-upload-progress') {
         return { ok: true, json: async () => ({ total: 4, finished: 1, queued: 2, processing: 1, failed: 0 }) };
@@ -105,41 +109,74 @@ describe('flight upload progress UI', () => {
       return fallback(url, options);
     });
 
-    harness.select(harness.uploadInput, files(1, 'progress'));
+    harness.selectors.get('[data-upload-trigger]').dispatch('click');
 
     expect(harness.selectors.get('[data-upload-dialog]').open).toBe(true);
     await vi.waitFor(() => expect(harness.selectors.get('[data-flight-progress-count]').textContent).toBe('1/4'));
+    expect(harness.uploadMoreInput.files).toBeUndefined();
     expect(harness.selectors.get('[data-flight-progress-bar]').max).toBe(4);
     expect(harness.selectors.get('[data-flight-progress-bar]').value).toBe(1);
-    await vi.waitFor(() => expect(harness.timers.some((timer) => timer.delay === 10_000)).toBe(true));
-
-    harness.timers.find((timer) => timer.delay === 10_000)();
-    await vi.waitFor(() => expect(fetch).toHaveBeenCalledTimes(3));
-    expect(fetch.mock.calls.filter(([url]) => String(url) === '/v1/igc-upload-progress')).toHaveLength(2);
+    expect(harness.selectors.get('[data-upload-trigger]').textContent).toBe('Upload Status');
   });
 
-  it('stops polling when the upload modal closes', async () => {
-    const harness = uploadHarness(0);
-    harness.select(harness.uploadInput, files(1, 'closing'));
+  it('keeps aggregate polling active when the upload modal closes', async () => {
+    const harness = uploadHarness(2);
     await vi.waitFor(() => expect(harness.timers.some((timer) => timer.delay === 10_000)).toBe(true));
+    harness.selectors.get('[data-upload-trigger]').dispatch('click');
 
-    harness.selectors.get('[data-upload-dialog]').close();
+    harness.selectors.get('[data-upload-close]').dispatch('click');
 
-    expect(harness.timers.some((timer) => timer.delay === 10_000)).toBe(false);
-    expect(fetch.mock.calls.filter(([url]) => String(url) === '/v1/igc-upload-progress')).toHaveLength(1);
-  });
-
-  it('starts a fresh status request when the upload modal reopens', async () => {
-    const harness = uploadHarness(0);
-    harness.select(harness.uploadInput, files(1, 'first-open'));
-    await vi.waitFor(() => expect(harness.timers.some((timer) => timer.delay === 10_000)).toBe(true));
-    harness.selectors.get('[data-upload-dialog]').close();
-
-    harness.select(harness.uploadMoreInput, files(1, 'second-open'));
-
-    await vi.waitFor(() => expect(fetch.mock.calls.filter(([url]) => String(url) === '/v1/igc-upload-progress')).toHaveLength(2));
-    expect(harness.selectors.get('[data-upload-dialog]').open).toBe(true);
+    expect(harness.selectors.get('[data-upload-dialog]').open).toBe(false);
     await vi.waitFor(() => expect(harness.timers.filter((timer) => timer.delay === 10_000)).toHaveLength(1));
+  });
+
+  it('dismisses on Escape and backdrop clicks but ignores panel clicks', async () => {
+    const harness = uploadHarness(0);
+    const dialog = harness.selectors.get('[data-upload-dialog]');
+    harness.selectors.get('[data-upload-trigger]').dispatch('click');
+
+    dialog.dispatch('click', { target: element() });
+    expect(dialog.open).toBe(true);
+
+    const cancelEvent = dialog.dispatch('cancel');
+    expect(cancelEvent.preventDefault).toHaveBeenCalledOnce();
+    expect(dialog.open).toBe(false);
+
+    harness.selectors.get('[data-upload-trigger]').dispatch('click');
+    dialog.dispatch('click');
+    expect(dialog.open).toBe(false);
+  });
+
+  it('changes the trigger text as server work starts and finishes', async () => {
+    const harness = uploadHarness(3);
+    await vi.waitFor(() => expect(harness.selectors.get('[data-upload-trigger]').textContent).toBe('Upload Status'));
+
+    harness.setProgressTotal(0);
+    harness.timers.find((timer) => timer.delay === 10_000)();
+    await vi.waitFor(() => expect(harness.selectors.get('[data-upload-trigger]').textContent).toBe('Upload'));
+  });
+
+  it('does not strand a selection when the modal closes before initial progress resolves', async () => {
+    let resolveProgress;
+    const progressResponse = new Promise((resolve) => { resolveProgress = resolve; });
+    const harness = uploadHarness(0, (url, options, fallback) => (
+      String(url) === '/v1/igc-upload-progress' ? progressResponse : fallback(url, options)
+    ));
+    const dialog = harness.selectors.get('[data-upload-dialog]');
+
+    harness.selectors.get('[data-upload-trigger]').dispatch('click');
+    harness.select(harness.uploadMoreInput, files(1, 'dismissed'));
+    harness.selectors.get('[data-upload-close]').dispatch('click');
+    expect(dialog.open).toBe(false);
+
+    resolveProgress({ ok: true, json: async () => ({ total: 0, finished: 0, queued: 0, processing: 0, failed: 0 }) });
+    await vi.waitFor(() => expect(harness.xhr.instances).toHaveLength(1));
+    expect(dialog.open).toBe(false);
+    expect(harness.selectors.get('[data-upload-trigger]').textContent).toBe('Upload Status');
+
+    harness.xhr.instances[0].succeed();
+    await vi.waitFor(() => expect(fetch).toHaveBeenCalledWith('/v1/igc-uploads/intent-1/complete', expect.objectContaining({ method: 'POST' })));
+    await vi.waitFor(() => expect(harness.timers.some((timer) => timer.delay === 500)).toBe(true));
   });
 });
 
@@ -151,7 +188,7 @@ describe('flight upload active-file capacity', () => {
     const harness = uploadHarness(0, async (url, options, fallback) => {
       if (String(url) === '/v1/igc-upload-progress') {
         progressAttempts += 1;
-        if (progressAttempts === 1) return { ok: false, json: async () => ({ error: { message: 'Unavailable.' } }) };
+        if (progressAttempts <= 2) return { ok: false, json: async () => ({ error: { message: 'Unavailable.' } }) };
       }
       return fallback(url, options);
     });
@@ -164,7 +201,7 @@ describe('flight upload active-file capacity', () => {
     harness.timers.shift()();
     await vi.waitFor(() => expect(harness.selectors.get('[data-upload-list]').append).toHaveBeenCalledOnce());
     await vi.waitFor(() => expect(fetch).toHaveBeenCalledWith('/v1/igc-uploads/intents', expect.objectContaining({ method: 'POST' })));
-    expect(progressAttempts).toBe(2);
+    expect(progressAttempts).toBe(3);
   });
 
   it('waits for the first authoritative total before admitting a selection', async () => {

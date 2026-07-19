@@ -6,7 +6,7 @@
   </nav>
   <div class="nav-actions">
     <div class="upload-form">
-      <label class="upload-button">Upload<input data-upload-input type="file" accept=".igc" multiple></label>
+      <button type="button" class="upload-button" data-upload-trigger aria-controls="flight-upload-dialog">Upload</button>
     </div>
     <div class="account-menu">
       <button type="button" class="account-trigger" data-account-trigger aria-expanded="false" aria-controls="account-popover">
@@ -29,14 +29,17 @@
     </div>
   </div>
 </header>
-<dialog class="flight-upload-dialog" data-upload-dialog>
+<dialog id="flight-upload-dialog" class="flight-upload-dialog" data-upload-dialog aria-labelledby="flight-upload-title">
   <section class="flight-upload-panel">
-    <header><div><p class="admin-eyebrow">Flight upload</p><h2>Uploading flights</h2></div><strong data-upload-overall>0/0</strong></header>
+    <header>
+      <div><p class="admin-eyebrow">Flight upload</p><h2 id="flight-upload-title">Uploading flights</h2></div>
+      <div class="flight-upload-header-actions"><strong data-upload-overall>0/0</strong><button type="button" class="flight-upload-close" data-upload-close aria-label="Close upload status">&times;</button></div>
+    </header>
     <div class="flight-processing-progress">
       <div><strong>Processing flights</strong><span data-flight-progress-count>0/0</span></div>
       <progress max="1" value="0" data-flight-progress-bar></progress>
     </div>
     <div class="flight-upload-list" data-upload-list></div>
-    <footer><label class="secondary-button">Upload more<input data-upload-more-input type="file" accept=".igc" multiple></label></footer>
+    <footer><label class="secondary-button">Choose flights<input data-upload-more-input type="file" accept=".igc" multiple></label></footer>
   </section>
 </dialog>

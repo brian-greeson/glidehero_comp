@@ -28,13 +28,15 @@ async function jsonRequest(url, options = {}) {
 }
 
 export function initializeFlightUploads(documentRef = document, windowRef = globalThis.window) {
+  const uploadTrigger = documentRef.querySelector('[data-upload-trigger]');
   const uploadDialog = documentRef.querySelector('[data-upload-dialog]');
+  const uploadClose = documentRef.querySelector('[data-upload-close]');
   const uploadList = documentRef.querySelector('[data-upload-list]');
   const overall = documentRef.querySelector('[data-upload-overall]');
   const progressBar = documentRef.querySelector('[data-flight-progress-bar]');
   const progressCount = documentRef.querySelector('[data-flight-progress-count]');
-  if (!windowRef || !uploadDialog || !uploadList || !overall || !progressBar || !progressCount) return;
-  const inputs = [...documentRef.querySelectorAll('[data-upload-input], [data-upload-more-input]')];
+  if (!windowRef || !uploadTrigger || !uploadDialog || !uploadList || !overall || !progressBar || !progressCount) return;
+  const inputs = [...documentRef.querySelectorAll('[data-upload-more-input]')];
 
   const pending = [];
   let running = 0;
@@ -42,6 +44,7 @@ export function initializeFlightUploads(documentRef = document, windowRef = glob
   let selected = 0;
   let failed = 0;
   let serverTotal = 0;
+  let serverFinished = 0;
   let modalServerBaseline = null;
   let observedExternalGrowth = 0;
   const currentReservations = new Set();
@@ -49,11 +52,16 @@ export function initializeFlightUploads(documentRef = document, windowRef = glob
   const representedIntentIds = new Set();
   let reloadScheduled = false;
   let reloadTimer = null;
-  let initialProgressResolved = false;
   let resolveInitialProgress;
-  let initialProgress = new Promise((resolve) => { resolveInitialProgress = resolve; });
+  const initialProgress = new Promise((resolve) => { resolveInitialProgress = resolve; });
+  let initialProgressResolved = false;
   let progressPollTimer = null;
-  let progressPollCycle = 0;
+  let progressRequestId = 0;
+
+  function updateUploadTrigger() {
+    const localWorkActive = selected > settled || reloadScheduled;
+    uploadTrigger.textContent = localWorkActive || serverTotal > serverFinished ? 'Upload Status' : 'Upload';
+  }
 
   function updateOverall() {
     overall.textContent = `${settled}/${selected}`;
@@ -64,6 +72,7 @@ export function initializeFlightUploads(documentRef = document, windowRef = glob
         windowRef.location.reload();
       }, 500);
     }
+    updateUploadTrigger();
   }
 
   function makeRow(file) {
@@ -158,12 +167,22 @@ export function initializeFlightUploads(documentRef = document, windowRef = glob
     pump();
   }
 
-  async function pollProgress(cycle) {
+  function scheduleProgressPoll() {
+    if (progressPollTimer !== null) windowRef.clearTimeout?.(progressPollTimer);
+    progressPollTimer = windowRef.setTimeout(() => {
+      progressPollTimer = null;
+      void refreshProgress();
+    }, PROGRESS_POLL_INTERVAL_MS);
+  }
+
+  async function refreshProgress() {
+    const requestId = ++progressRequestId;
     const intentIdsBeforeRequest = new Set(currentIntentIds);
     try {
       const progress = await jsonRequest('/v1/igc-upload-progress');
-      if (cycle !== progressPollCycle || !uploadDialog.open) return;
+      if (requestId !== progressRequestId) return;
       serverTotal = progress.total;
+      serverFinished = progress.finished;
       for (const id of intentIdsBeforeRequest) {
         if (currentIntentIds.has(id)) representedIntentIds.add(id);
       }
@@ -176,6 +195,7 @@ export function initializeFlightUploads(documentRef = document, windowRef = glob
       progressBar.max = Math.max(progress.total, 1);
       progressBar.value = progress.finished;
       progressCount.textContent = `${progress.finished}/${progress.total}`;
+      updateUploadTrigger();
       if (!initialProgressResolved) {
         initialProgressResolved = true;
         resolveInitialProgress();
@@ -183,30 +203,27 @@ export function initializeFlightUploads(documentRef = document, windowRef = glob
     } catch (error) {
       console.error('Unable to load flight progress', error);
     }
-    if (cycle === progressPollCycle && uploadDialog.open) {
-      progressPollTimer = windowRef.setTimeout(() => {
-        progressPollTimer = null;
-        void pollProgress(cycle);
-      }, PROGRESS_POLL_INTERVAL_MS);
-    }
+    if (requestId === progressRequestId) scheduleProgressPoll();
   }
 
-  function startProgressPolling() {
-    if (progressPollTimer !== null) windowRef.clearTimeout?.(progressPollTimer);
-    progressPollTimer = null;
-    progressPollCycle += 1;
-    if (initialProgressResolved) {
-      initialProgressResolved = false;
-      initialProgress = new Promise((resolve) => { resolveInitialProgress = resolve; });
-    }
-    void pollProgress(progressPollCycle);
+  function openUploadDialog() {
+    if (!uploadDialog.open) uploadDialog.showModal();
+    void refreshProgress();
   }
 
-  function stopProgressPolling() {
-    progressPollCycle += 1;
-    if (progressPollTimer !== null) windowRef.clearTimeout?.(progressPollTimer);
-    progressPollTimer = null;
+  function closeUploadDialog() {
+    if (uploadDialog.open) uploadDialog.close();
   }
+
+  uploadTrigger.addEventListener('click', openUploadDialog);
+  uploadClose?.addEventListener('click', closeUploadDialog);
+  uploadDialog.addEventListener('cancel', (event) => {
+    event.preventDefault();
+    closeUploadDialog();
+  });
+  uploadDialog.addEventListener('click', (event) => {
+    if (event.target === uploadDialog) closeUploadDialog();
+  });
 
   for (const input of inputs) input.addEventListener('change', () => {
     const files = [...input.files];
@@ -215,11 +232,8 @@ export function initializeFlightUploads(documentRef = document, windowRef = glob
     const valid = files.filter((file) => file.name.toLowerCase().endsWith('.igc') && file.size > 0 && file.size <= MAX_FILE_BYTES);
     if (valid.length !== files.length) windowRef.alert('Only non-empty .igc files of 10 MB or less can be uploaded.');
     if (!valid.length) return;
-    if (!uploadDialog.open) {
-      uploadDialog.showModal();
-      startProgressPolling();
-    }
+    if (!uploadDialog.open) openUploadDialog();
     void initialProgress.then(() => addFiles(valid));
   });
-  uploadDialog.addEventListener('close', stopProgressPolling);
+  void refreshProgress();
 }
