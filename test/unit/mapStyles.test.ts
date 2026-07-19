@@ -10,10 +10,14 @@ describe('territory map styles', () => {
       id: 'personal-fill',
       source: 'personal-source',
       color: '#1769AA',
+      minzoom: 4,
+      sourceLayer: 'personal-territory',
     })).toEqual({
       id: 'personal-fill',
       type: 'fill',
       source: 'personal-source',
+      'source-layer': 'personal-territory',
+      minzoom: 4,
       paint: { 'fill-color': '#1769AA', 'fill-opacity': 0.42 },
     });
   });
@@ -23,10 +27,14 @@ describe('territory map styles', () => {
       id: 'personal-boundary',
       source: 'personal-source',
       color: '#1769AA',
+      minzoom: 4,
+      sourceLayer: 'personal-territory',
     })).toEqual({
       id: 'personal-boundary',
       type: 'line',
       source: 'personal-source',
+      'source-layer': 'personal-territory',
+      minzoom: 4,
       paint: { 'line-color': '#1769AA', 'line-width': 2 },
     });
   });

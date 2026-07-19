@@ -1,0 +1,246 @@
+import { sql } from 'drizzle-orm';
+import type { Database } from '../db/client.js';
+import { normalizeCompetitionLeaderboardMonth } from '../domain/competition/competitionLeaderboardMonth.js';
+import type { MonthlyCoveragePeriod } from './monthlyCoverageService.js';
+
+export type TerritoryTileResult = {
+  data: Buffer;
+  featureCount: number;
+};
+
+export interface TerritoryTileService {
+  getPersonalTile(input: { z: number; x: number; y: number; userId: string }): Promise<TerritoryTileResult>;
+  getGlobalCompetitionTile(input: {
+    z: number;
+    x: number;
+    y: number;
+    period: MonthlyCoveragePeriod;
+    pilotUserId?: string;
+  }): Promise<TerritoryTileResult>;
+  getArenaCompetitionTile(input: {
+    z: number;
+    x: number;
+    y: number;
+    arenaId: string;
+    period: MonthlyCoveragePeriod;
+    pilotUserId?: string;
+  }): Promise<TerritoryTileResult>;
+}
+
+type StoredTile = { data: Buffer; featureCount: number };
+
+function tileBoundsCtes(input: {
+  z: number;
+  x: number;
+  y: number;
+  cellSize: number;
+  extent: number;
+  buffer: number;
+}) {
+  return sql`
+    tile_bounds AS (
+      SELECT
+        ST_TileEnvelope(${input.z}, ${input.x}, ${input.y}) AS geometry,
+        ST_TileEnvelope(
+          ${input.z}, ${input.x}, ${input.y},
+          margin => ${input.buffer}::double precision / ${input.extent}::double precision
+        ) AS expanded_geometry
+    ),
+    grid_bounds AS (
+      SELECT ST_Transform(expanded_geometry, 6933) AS geometry
+      FROM tile_bounds
+    ),
+    cell_ranges AS (
+      SELECT
+        floor(ST_XMin(geometry) / ${input.cellSize})::integer AS min_x,
+        (ceil(ST_XMax(geometry) / ${input.cellSize}) - 1)::integer AS max_x,
+        floor(ST_YMin(geometry) / ${input.cellSize})::integer AS min_y,
+        (ceil(ST_YMax(geometry) / ${input.cellSize}) - 1)::integer AS max_y
+      FROM grid_bounds
+    )
+  `;
+}
+
+function normalizePeriod(period: MonthlyCoveragePeriod): string | undefined {
+  return 'competitionMonth' in period
+    ? normalizeCompetitionLeaderboardMonth(period.competitionMonth)
+    : undefined;
+}
+
+function tileResult(row?: StoredTile): TerritoryTileResult {
+  return {
+    data: row?.data ?? Buffer.alloc(0),
+    featureCount: row?.featureCount ?? 0,
+  };
+}
+
+export function createTerritoryTileService(
+  database: Pick<Database, 'execute'>,
+  options: { cellSize: number; extent?: number; buffer?: number },
+): TerritoryTileService {
+  const cellSize = options.cellSize;
+  const extent = options.extent ?? 4096;
+  const buffer = options.buffer ?? 64;
+
+  async function getCompetitionTile(input: {
+    z: number;
+    x: number;
+    y: number;
+    period: MonthlyCoveragePeriod;
+    arenaId?: string;
+    pilotUserId?: string;
+  }): Promise<TerritoryTileResult> {
+    const competitionMonth = normalizePeriod(input.period);
+    const result = await database.execute<StoredTile>(sql`
+      WITH ${tileBoundsCtes({ ...input, cellSize, extent, buffer })},
+      pilot_cells AS (
+        SELECT DISTINCT claim.cell_size, claim.x, claim.y, claim.claim_user
+        FROM competition_grid_claims claim
+        CROSS JOIN cell_ranges range
+        WHERE claim.cell_size = ${cellSize}
+          AND claim.x BETWEEN range.min_x AND range.max_x
+          AND claim.y BETWEEN range.min_y AND range.max_y
+          ${competitionMonth
+            ? sql`AND claim.competition_month = ${competitionMonth}::date`
+            : sql``}
+      ),
+      cell_claimants AS (
+        SELECT
+          cell_size,
+          x,
+          y,
+          COUNT(*)::integer AS claimant_count,
+          CASE WHEN COUNT(*) = 1 THEN MIN(claim_user::text)::uuid END AS pilot_user_id
+        FROM pilot_cells
+        GROUP BY cell_size, x, y
+      ),
+      selected_cells AS (
+        SELECT
+          claimant.cell_size,
+          claimant.x,
+          claimant.y,
+          claimant.claimant_count,
+          ${input.pilotUserId
+            ? sql`${input.pilotUserId}::uuid`
+            : sql`claimant.pilot_user_id`} AS pilot_user_id
+        FROM cell_claimants claimant
+        ${input.pilotUserId
+          ? sql`INNER JOIN pilot_cells pilot USING (cell_size, x, y)`
+          : sql``}
+        WHERE true
+          ${input.pilotUserId ? sql`AND pilot.claim_user = ${input.pilotUserId}` : sql``}
+      ),
+      scoped_cells AS (
+        SELECT selected.*
+        FROM selected_cells selected
+        ${input.arenaId
+          ? sql`INNER JOIN arenas arena ON arena.id = ${input.arenaId}
+              AND ST_Covers(
+                arena.area,
+                ST_SetSRID(ST_MakePoint(
+                  (selected.x + 0.5) * selected.cell_size,
+                  (selected.y + 0.5) * selected.cell_size
+                ), 6933)
+              )`
+          : sql``}
+      ),
+      clipped_features AS (
+        SELECT
+          concat(cell_size, ':', x, ':', y) AS "cellId",
+          cell_size::integer AS "cellSize",
+          x::integer AS x,
+          y::integer AS y,
+          claimant_count::integer AS "claimantCount",
+          claimant_count > 1 AS "isShared",
+          pilot_user_id::text AS "pilotUserId",
+          ST_AsMVTGeom(
+            ST_Transform(ST_MakeEnvelope(
+              x * cell_size,
+              y * cell_size,
+              (x + 1) * cell_size,
+              (y + 1) * cell_size,
+              6933
+            ), 3857),
+            tile_bounds.geometry,
+            ${extent},
+            ${buffer},
+            true
+          ) AS geom
+        FROM scoped_cells
+        CROSS JOIN tile_bounds
+      ),
+      mvt_features AS (
+        SELECT * FROM clipped_features WHERE geom IS NOT NULL AND NOT ST_IsEmpty(geom)
+      )
+      SELECT
+        COALESCE(ST_AsMVT(mvt_features.*, 'competition-coverage', ${extent}, 'geom'), ''::bytea) AS data,
+        COUNT(*)::integer AS "featureCount"
+      FROM mvt_features
+    `);
+    return tileResult(result.rows[0]);
+  }
+
+  return {
+    async getPersonalTile(input) {
+      const result = await database.execute<StoredTile>(sql`
+        WITH ${tileBoundsCtes({ ...input, cellSize, extent, buffer })},
+        claimed_cells AS (
+          SELECT DISTINCT claim.x, claim.y
+          FROM user_grid_claims claim
+          CROSS JOIN cell_ranges range
+          WHERE claim.claim_user = ${input.userId}
+            AND claim.cell_size = ${cellSize}
+            AND claim.x BETWEEN range.min_x AND range.max_x
+            AND claim.y BETWEEN range.min_y AND range.max_y
+        ),
+        cell_geometries AS (
+          SELECT ST_MakeEnvelope(
+            x * ${cellSize},
+            y * ${cellSize},
+            (x + 1) * ${cellSize},
+            (y + 1) * ${cellSize},
+            6933
+          ) AS geometry
+          FROM claimed_cells
+        ),
+        dissolved AS (
+          SELECT ST_UnaryUnion(ST_Collect(geometry)) AS geometry
+          FROM cell_geometries
+        ),
+        connected_regions AS (
+          SELECT region.geom AS geometry
+          FROM dissolved
+          CROSS JOIN LATERAL ST_Dump(ST_CollectionExtract(dissolved.geometry, 3)) region
+          WHERE dissolved.geometry IS NOT NULL AND NOT ST_IsEmpty(dissolved.geometry)
+        ),
+        clipped_features AS (
+          SELECT ST_AsMVTGeom(
+            ST_Transform(region.geometry, 3857),
+            tile_bounds.geometry,
+            ${extent},
+            ${buffer},
+            true
+          ) AS geom
+          FROM connected_regions region
+          CROSS JOIN tile_bounds
+        ),
+        mvt_features AS (
+          SELECT * FROM clipped_features WHERE geom IS NOT NULL AND NOT ST_IsEmpty(geom)
+        )
+        SELECT
+          COALESCE(ST_AsMVT(mvt_features.*, 'personal-territory', ${extent}, 'geom'), ''::bytea) AS data,
+          COUNT(*)::integer AS "featureCount"
+        FROM mvt_features
+      `);
+      return tileResult(result.rows[0]);
+    },
+
+    getGlobalCompetitionTile(input) {
+      return getCompetitionTile(input);
+    },
+
+    getArenaCompetitionTile(input) {
+      return getCompetitionTile(input);
+    },
+  };
+}

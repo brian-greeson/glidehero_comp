@@ -1,8 +1,15 @@
-import { createTerritoryBoundaryLayer } from './mapStyles.js';
+import {
+  createTerritoryBoundaryLayer,
+  MAXIMUM_TERRITORY_TILE_ZOOM,
+  MINIMUM_COMPETITION_TERRITORY_ZOOM,
+} from './mapStyles.js';
 
 export const COVERAGE_SOURCE_ID = 'competition-coverage';
 export const COVERAGE_FILL_LAYER_ID = 'competition-territory-fill';
 export const COVERAGE_OUTLINE_LAYER_ID = 'competition-territory-outline';
+export const COVERAGE_HOVER_LAYER_ID = 'competition-territory-hover';
+export const COVERAGE_HOVER_OUTLINE_LAYER_ID = 'competition-territory-hover-outline';
+export const COVERAGE_SOURCE_LAYER = 'competition-coverage';
 
 const COVERAGE_COLOR = [
   'case',
@@ -82,4 +89,91 @@ export function setCoverageData(map, geojson) {
       color: COVERAGE_COLOR,
     }),
   );
+}
+
+function coveragePaintColor(pilotColors = []) {
+  const pilotColor = pilotColors.length > 0
+    ? ['match', ['get', 'pilotUserId'], ...pilotColors.flat(), '#94a3b8']
+    : '#94a3b8';
+  return [
+    'case',
+    ['has', 'pilotUserId'],
+    pilotColor,
+    ['>', ['get', 'claimantCount'], 1],
+    '#475569',
+    '#94a3b8',
+  ];
+}
+
+export function installCoverageSource(map, tileUrl) {
+  if (map.getSource?.(COVERAGE_SOURCE_ID)) return;
+  map.addSource(COVERAGE_SOURCE_ID, {
+    type: 'vector',
+    tiles: [tileUrl],
+    minzoom: MINIMUM_COMPETITION_TERRITORY_ZOOM,
+    maxzoom: MAXIMUM_TERRITORY_TILE_ZOOM,
+  });
+  const color = coveragePaintColor();
+  map.addLayer({
+    id: COVERAGE_FILL_LAYER_ID,
+    type: 'fill',
+    source: COVERAGE_SOURCE_ID,
+    'source-layer': COVERAGE_SOURCE_LAYER,
+    minzoom: MINIMUM_COMPETITION_TERRITORY_ZOOM,
+    paint: { 'fill-color': color, 'fill-opacity': COVERAGE_OPACITY },
+  });
+  map.addLayer(createTerritoryBoundaryLayer({
+    id: COVERAGE_OUTLINE_LAYER_ID,
+    source: COVERAGE_SOURCE_ID,
+    sourceLayer: COVERAGE_SOURCE_LAYER,
+    color,
+    minzoom: MINIMUM_COMPETITION_TERRITORY_ZOOM,
+  }));
+  const emptyHoverFilter = ['==', ['get', 'cellId'], ''];
+  map.addLayer({
+    id: COVERAGE_HOVER_LAYER_ID,
+    type: 'fill',
+    source: COVERAGE_SOURCE_ID,
+    'source-layer': COVERAGE_SOURCE_LAYER,
+    minzoom: MINIMUM_COMPETITION_TERRITORY_ZOOM,
+    filter: emptyHoverFilter,
+    paint: { 'fill-color': '#ffffff', 'fill-opacity': 0.12 },
+  });
+  map.addLayer({
+    id: COVERAGE_HOVER_OUTLINE_LAYER_ID,
+    type: 'line',
+    source: COVERAGE_SOURCE_ID,
+    'source-layer': COVERAGE_SOURCE_LAYER,
+    minzoom: MINIMUM_COMPETITION_TERRITORY_ZOOM,
+    filter: emptyHoverFilter,
+    paint: { 'line-color': '#ffffff', 'line-width': 3 },
+  });
+}
+
+export function updateCoverageTiles(map, tileUrl) {
+  map.getSource?.(COVERAGE_SOURCE_ID)?.setTiles?.([tileUrl]);
+}
+
+export function assignLoadedCoverageColors(map, colorRegistry) {
+  const pilotIds = new Set(
+    (map.querySourceFeatures?.(COVERAGE_SOURCE_ID, { sourceLayer: COVERAGE_SOURCE_LAYER }) ?? [])
+      .map((feature) => feature.properties?.pilotUserId)
+      .filter(Boolean),
+  );
+  const expression = coveragePaintColor(
+    [...pilotIds].map((pilotUserId) => [pilotUserId, colorRegistry.colorFor(pilotUserId)]),
+  );
+  map.setPaintProperty?.(COVERAGE_FILL_LAYER_ID, 'fill-color', expression);
+  map.setPaintProperty?.(COVERAGE_OUTLINE_LAYER_ID, 'line-color', expression);
+}
+
+export function setCoverageHoveredCell(map, cellId = null) {
+  const filter = ['==', ['get', 'cellId'], cellId ?? ''];
+  map.setFilter?.(COVERAGE_HOVER_LAYER_ID, filter);
+  map.setFilter?.(COVERAGE_HOVER_OUTLINE_LAYER_ID, filter);
+}
+
+export function visibleCoverageFeatureCount(map) {
+  if (!map.getLayer?.(COVERAGE_FILL_LAYER_ID)) return 0;
+  return map.queryRenderedFeatures?.({ layers: [COVERAGE_FILL_LAYER_ID] })?.length ?? 0;
 }

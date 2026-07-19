@@ -31,10 +31,11 @@ function element(): any {
 
 function arenaHarness() {
   let loadHandler: (() => Promise<void>) | undefined;
+  const sources = new Map<string, any>();
   const map = {
     addControl: vi.fn(),
     addLayer: vi.fn(),
-    addSource: vi.fn(),
+    addSource: vi.fn((id: string, source: any) => sources.set(id, { ...source, setTiles: vi.fn() })),
     fitBounds: vi.fn(),
     getBounds: vi.fn(() => ({
       getWest: () => -107,
@@ -42,7 +43,7 @@ function arenaHarness() {
       getEast: () => -105,
       getNorth: () => 41,
     })),
-    getSource: vi.fn(),
+    getSource: vi.fn((id: string) => sources.get(id)),
     once: vi.fn((event: string, handler: () => Promise<void>) => {
       if (event === 'load') loadHandler = handler;
     }),
@@ -123,9 +124,13 @@ describe('Arena dashboard', () => {
     expect(fetchImpl.mock.calls.map(([url]) => url)).toEqual([
       '/v1/arenas/745/boundary',
       '/v1/arenas/745/competition-leaderboard?month=2026-07',
-      '/v1/arenas/745/competition-territory?month=2026-07&west=-107&south=39&east=-105&north=41',
-      '/v1/arenas/745/competition-territory?month=2026-07&west=-108&south=38&east=-104&north=42',
     ]);
+    expect(harness.map.addSource).toHaveBeenCalledWith('competition-coverage', {
+      type: 'vector',
+      tiles: ['/v1/arenas/745/competition-territory/tiles/{z}/{x}/{y}.mvt?month=2026-07'],
+      minzoom: 7,
+      maxzoom: 14,
+    });
     expect(harness.map.addSource).toHaveBeenCalledWith('competition-arena-boundary', {
       type: 'geojson',
       data: boundary,

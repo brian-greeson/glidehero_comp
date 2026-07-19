@@ -12,6 +12,7 @@ import {
 import type { ProfileService } from '../../src/services/profileService.js';
 import type { GridClaimService } from '../../src/services/gridClaimService.js';
 import type { MonthlyCoverageService } from '../../src/services/monthlyCoverageService.js';
+import type { TerritoryTileService } from '../../src/services/territoryTileService.js';
 import type { AdminFlightService } from '../../src/services/adminFlightService.js';
 import type { ArenaService } from '../../src/services/arenaService.js';
 import type { MapGridService } from '../../src/services/mapGridService.js';
@@ -164,6 +165,11 @@ function dependencies() {
     })),
     getCellClaimants: vi.fn(async () => [{ userId: user.userId, displayName: user.displayName }]),
   };
+  const territoryTiles: TerritoryTileService = {
+    getPersonalTile: vi.fn(async () => ({ data: Buffer.alloc(0), featureCount: 0 })),
+    getGlobalCompetitionTile: vi.fn(async () => ({ data: Buffer.alloc(0), featureCount: 0 })),
+    getArenaCompetitionTile: vi.fn(async () => ({ data: Buffer.alloc(0), featureCount: 0 })),
+  };
   const arenas = arenaService();
   const mapGrid = mapGridService();
   const router = createWebRouter({
@@ -173,6 +179,7 @@ function dependencies() {
     gridClaim,
     mapGrid,
     coverage,
+    territoryTiles,
     arenas,
     renderPage,
   });
@@ -182,6 +189,7 @@ function dependencies() {
     gridClaim,
     mapGrid,
     coverage,
+    territoryTiles,
     arenas,
     expectedGridGeoJson,
     expectedCoverageGeoJson,
@@ -258,6 +266,7 @@ describe('webRouter', () => {
       gridClaim: base.gridClaim,
       mapGrid: base.mapGrid,
       coverage: base.coverage,
+      territoryTiles: base.territoryTiles,
       arenas: base.arenas,
       renderPage: base.renderPage,
     });
@@ -320,6 +329,7 @@ describe('webRouter', () => {
       gridClaim,
       mapGrid,
       coverage,
+      territoryTiles: dependencies().territoryTiles,
       arenas,
       renderPage,
       adminEmails: ['PILOT@example.com'],
@@ -625,6 +635,7 @@ describe('webRouter', () => {
         getArenaLeaderboard: vi.fn(async () => ({ leaders: [], currentPilot: null })),
         getCellClaimants: vi.fn(async () => []),
       },
+      territoryTiles: dependencies().territoryTiles,
       arenas: arenaService(),
       renderPage: createPageRenderer({ mapTilerApiKey: 'maptiler-test-key' }),
     });
@@ -893,6 +904,84 @@ describe('webRouter', () => {
       });
       expect(coverage.getGlobalTerritory).not.toHaveBeenCalled();
     });
+  });
+
+  it('serves authenticated Personal and Competition MVT tiles with private one-minute caching', async () => {
+    const { app, territoryTiles, arenas } = dependencies();
+    vi.mocked(arenas.getBySourceId).mockResolvedValueOnce(arena);
+    vi.mocked(territoryTiles.getPersonalTile).mockResolvedValueOnce({
+      data: Buffer.from([1, 2, 3]), featureCount: 1,
+    });
+    vi.mocked(territoryTiles.getGlobalCompetitionTile).mockResolvedValueOnce({
+      data: Buffer.alloc(0), featureCount: 0,
+    });
+    vi.mocked(territoryTiles.getArenaCompetitionTile).mockResolvedValueOnce({
+      data: Buffer.from([4]), featureCount: 1,
+    });
+    await withServer(app, async (baseUrl) => {
+      const headers = { cookie: 'glidehero_session=valid-token' };
+      const personal = await fetch(`${baseUrl}/v1/personal-territory/tiles/4/8/7.mvt`, { headers });
+      expect(personal.status).toBe(200);
+      expect(personal.headers.get('content-type')).toContain('application/vnd.mapbox-vector-tile');
+      expect(personal.headers.get('cache-control')).toBe('private, max-age=60');
+      expect(Buffer.from(await personal.arrayBuffer())).toEqual(Buffer.from([1, 2, 3]));
+      expect(territoryTiles.getPersonalTile).toHaveBeenCalledWith({
+        z: 4, x: 8, y: 7, userId: user.userId,
+      });
+
+      const global = await fetch(
+        `${baseUrl}/v1/competition-territory/tiles/7/64/63.mvt?month=2026-07&pilot=${user.userId}`,
+        { headers },
+      );
+      expect(global.status).toBe(200);
+      expect(global.headers.get('cache-control')).toBe('private, max-age=60');
+      expect((await global.arrayBuffer()).byteLength).toBe(0);
+      expect(territoryTiles.getGlobalCompetitionTile).toHaveBeenCalledWith({
+        z: 7, x: 64, y: 63,
+        period: { competitionMonth: '2026-07' },
+        pilotUserId: user.userId,
+      });
+
+      const arenaResponse = await fetch(`${baseUrl}/v1/arenas/745/competition-territory/tiles/14/8192/8191.mvt`, { headers });
+      expect(arenaResponse.status).toBe(200);
+      expect(territoryTiles.getArenaCompetitionTile).toHaveBeenCalledWith({
+        z: 14, x: 8192, y: 8191,
+        arenaId: arena.id,
+        period: { period: 'all-time' },
+      });
+    });
+  });
+
+  it('validates authentication, route-specific zooms, XYZ ranges, tile query values, and Arenas', async () => {
+    const { app, territoryTiles } = dependencies();
+    await withServer(app, async (baseUrl) => {
+      const headers = { cookie: 'glidehero_session=valid-token' };
+      for (const path of [
+        '/v1/personal-territory/tiles/4/8/7.mvt',
+        '/v1/competition-territory/tiles/7/64/63.mvt',
+        '/v1/arenas/745/competition-territory/tiles/7/64/63.mvt',
+      ]) {
+        expect((await fetch(`${baseUrl}${path}`)).status).toBe(401);
+      }
+      for (const path of [
+        '/v1/personal-territory/tiles/3/0/0.mvt',
+        '/v1/personal-territory/tiles/4/16/0.mvt',
+        `/v1/personal-territory/tiles/4/8/7.mvt?user=${user.userId}`,
+        '/v1/competition-territory/tiles/6/0/0.mvt',
+        '/v1/competition-territory/tiles/7/128/0.mvt',
+        '/v1/competition-territory/tiles/7/64/63.mvt?month=2026-13',
+        '/v1/competition-territory/tiles/7/64/63.mvt?pilot=not-a-uuid',
+      ]) {
+        expect((await fetch(`${baseUrl}${path}`, { headers })).status).toBe(400);
+      }
+      expect((await fetch(
+        `${baseUrl}/v1/arenas/999/competition-territory/tiles/7/64/63.mvt`,
+        { headers },
+      )).status).toBe(404);
+    });
+    expect(territoryTiles.getPersonalTile).not.toHaveBeenCalled();
+    expect(territoryTiles.getGlobalCompetitionTile).not.toHaveBeenCalled();
+    expect(territoryTiles.getArenaCompetitionTile).not.toHaveBeenCalled();
   });
 
   it('returns the leaderboard for an authenticated YYYY-MM viewport request', async () => {

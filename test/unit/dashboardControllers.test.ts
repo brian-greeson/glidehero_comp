@@ -69,18 +69,25 @@ function mapHarness() {
   let clickHandler: ((event: any) => Promise<void>) | undefined;
   let mousemoveHandler: ((event: any) => Promise<void>) | undefined;
   let mouseleaveHandler: (() => void) | undefined;
+  let idleHandler: (() => void) | undefined;
   const layers = new Set<string>();
   let viewport = { west: -107, east: -105 };
   let renderedFeatures: any[] = [];
   const sources = new Map<string, any>();
   const map = {
-    addSource: vi.fn((id: string, source: any) => sources.set(id, { ...source, setData: vi.fn() })),
+    addSource: vi.fn((id: string, source: any) => sources.set(id, {
+      ...source,
+      setData: vi.fn(),
+      setTiles: vi.fn(),
+    })),
     addLayer: vi.fn((layer: { id: string }) => layers.add(layer.id)),
     addControl: vi.fn(),
     getSource: vi.fn((id: string) => sources.get(id)),
     getLayer: vi.fn((id: string) => (layers.has(id) ? { id } : undefined)),
     setFilter: vi.fn(),
     setLayoutProperty: vi.fn(),
+    setPaintProperty: vi.fn(),
+    querySourceFeatures: vi.fn(() => []),
     getCanvas: vi.fn(() => ({ style: { cursor: '' } })),
     queryRenderedFeatures: vi.fn(() => renderedFeatures),
     getBounds: () => ({
@@ -98,6 +105,7 @@ function mapHarness() {
       if (event === 'click') clickHandler = handler;
       if (event === 'mousemove') mousemoveHandler = handler;
       if (event === 'mouseleave') mouseleaveHandler = handler;
+      if (event === 'idle') idleHandler = handler;
     }),
   };
   return {
@@ -124,6 +132,9 @@ function mapHarness() {
     },
     leave() {
       mouseleaveHandler?.();
+    },
+    idle() {
+      idleHandler?.();
     },
     setRenderedFeatures(features: any[]) {
       renderedFeatures = features;
@@ -247,15 +258,19 @@ describe('Personal dashboard controller', () => {
     expect(fetchImpl).not.toHaveBeenCalled();
     await harness.load();
     expect(fetchImpl.mock.calls.map(([url]) => url)).toEqual([
-      '/v1/personal-territory?west=-106&south=39&east=-104&north=41',
-      '/v1/personal-territory?west=-107&south=38&east=-103&north=42',
       '/v1/personal-stats?west=-106&south=39&east=-104&north=41',
     ]);
+    expect(harness.map.addSource).toHaveBeenCalledWith('personal-territory', {
+      type: 'vector',
+      tiles: ['/v1/personal-territory/tiles/{z}/{x}/{y}.mvt'],
+      minzoom: 4,
+      maxzoom: 14,
+    });
     expect(claimedArea.textContent).toBe('1 km²');
 
     harness.move({ west: -105, east: -103 });
-    await vi.waitFor(() => expect(fetchImpl).toHaveBeenCalledTimes(4));
-    expect(fetchImpl.mock.calls[3]?.[0]).toContain('/v1/personal-stats?west=-105');
+    await vi.waitFor(() => expect(fetchImpl).toHaveBeenCalledTimes(2));
+    expect(fetchImpl.mock.calls[1]?.[0]).toContain('/v1/personal-stats?west=-105');
   });
 });
 
@@ -307,27 +322,26 @@ describe('Global dashboard controller', () => {
       historyRef: { replaceState: vi.fn() },
     });
     await harness.load();
-    expect(fetchImpl.mock.calls.slice(0, 2).map(([url]) => url)).toEqual(
-      expect.arrayContaining([
-        '/v1/competition-territory?west=-107&south=39&east=-105&north=41',
-        expect.stringContaining('/v1/competition-leaderboard?west=-107'),
-      ]),
-    );
+    expect(fetchImpl.mock.calls.map(([url]) => url)).toEqual([
+      expect.stringContaining('/v1/competition-leaderboard?west=-107'),
+    ]);
+    expect(harness.map.addSource).toHaveBeenCalledWith('competition-coverage', {
+      type: 'vector',
+      tiles: ['/v1/competition-territory/tiles/{z}/{x}/{y}.mvt'],
+      minzoom: 7,
+      maxzoom: 14,
+    });
+    harness.idle();
     expect(emptyState.hidden).toBe(false);
     expect(emptyState.textContent).toBe('No coverage for this selection.');
 
     harness.move({ west: -106, east: -104 });
-    await vi.waitFor(() => expect(fetchImpl).toHaveBeenCalledTimes(4));
-    expect(fetchImpl.mock.calls[3]?.[0]).toContain('/v1/competition-leaderboard?west=-106');
+    await vi.waitFor(() => expect(fetchImpl).toHaveBeenCalledTimes(2));
+    expect(fetchImpl.mock.calls[1]?.[0]).toContain('/v1/competition-leaderboard?west=-106');
   });
 
   it('selects a pilot and returns to the overview', async () => {
-    const territoryUrls: string[] = [];
     const fetchImpl = vi.fn(async (url: string) => {
-      if (url.startsWith('/v1/competition-territory')) {
-        territoryUrls.push(url);
-        return jsonResponse({ type: 'FeatureCollection', features: [] });
-      }
       return jsonResponse({ leaders: [pilot('pilot-one', 'Pilot One')], currentPilot: null });
     });
     const harness = globalDashboardHarness(fetchImpl);
@@ -335,16 +349,19 @@ describe('Global dashboard controller', () => {
 
     const list = harness.elements.get('[data-territory-list]');
     const overview = harness.elements.get('[data-territory-allpilots]');
+    const source = harness.map.getSource('competition-coverage');
+    source.setTiles.mockClear();
     await list.children[0].click();
-    await vi.waitFor(() => expect(territoryUrls).toHaveLength(4));
-    expect(territoryUrls[2]).toBe('/v1/competition-territory?west=-107&south=39&east=-105&north=41&pilot=pilot-one');
-    expect(territoryUrls[3]).toBe('/v1/competition-territory?west=-108&south=38&east=-104&north=42&pilot=pilot-one');
+    expect(source.setTiles).toHaveBeenCalledWith([
+      '/v1/competition-territory/tiles/{z}/{x}/{y}.mvt?pilot=pilot-one',
+    ]);
     expect(list.children[0].getAttribute('aria-pressed')).toBe('true');
     expect(overview.getAttribute('aria-pressed')).toBe('false');
 
     await overview.click();
-    await vi.waitFor(() => expect(territoryUrls).toHaveLength(6));
-    expect(territoryUrls[4]).toBe('/v1/competition-territory?west=-107&south=39&east=-105&north=41');
+    expect(source.setTiles).toHaveBeenLastCalledWith([
+      '/v1/competition-territory/tiles/{z}/{x}/{y}.mvt',
+    ]);
     expect(list.children[0].getAttribute('aria-pressed')).toBe('false');
     expect(overview.getAttribute('aria-pressed')).toBe('true');
   });
@@ -360,46 +377,48 @@ describe('Global dashboard controller', () => {
     });
     const harness = globalDashboardHarness(fetchImpl);
     await harness.load();
+    const source = harness.map.getSource('competition-coverage');
+    source.setTiles.mockClear();
     const list = harness.elements.get('[data-territory-list]');
     const overview = harness.elements.get('[data-territory-allpilots]');
     await list.children[0].click();
-    await vi.waitFor(() =>
-      expect(requestedUrls.some((url) => url.includes('pilot=pilot-one'))).toBe(true),
-    );
+    expect(source.setTiles).toHaveBeenCalledWith([
+      '/v1/competition-territory/tiles/{z}/{x}/{y}.mvt?pilot=pilot-one',
+    ]);
 
     await harness.currentMonth.click();
 
     expect(harness.historyRef.replaceState).toHaveBeenCalledWith(null, '', '/global?month=2026-07');
     expect(overview.getAttribute('aria-pressed')).toBe('true');
-    expect(requestedUrls).toContain(
-      '/v1/competition-territory?month=2026-07&west=-107&south=39&east=-105&north=41',
-    );
+    expect(source.setTiles).toHaveBeenLastCalledWith([
+      '/v1/competition-territory/tiles/{z}/{x}/{y}.mvt?month=2026-07',
+    ]);
     expect(requestedUrls).toContain(
       '/v1/competition-leaderboard?month=2026-07&west=-107&south=39&east=-105&north=41',
     );
-    expect(requestedUrls.at(-1)).not.toContain('pilot=pilot-one');
+    expect(source.setTiles.mock.calls.at(-1)?.[0]?.[0]).not.toContain('pilot=pilot-one');
   });
 
   it('returns to overview when the selected pilot leaves the refreshed leaderboard', async () => {
     let leaderboard = { leaders: [pilot('pilot-one')], currentPilot: null };
-    const territoryUrls: string[] = [];
     const fetchImpl = vi.fn(async (url: string) => {
-      if (url.startsWith('/v1/competition-territory')) {
-        territoryUrls.push(url);
-        return jsonResponse({ type: 'FeatureCollection', features: [] });
-      }
       return jsonResponse(leaderboard);
     });
     const harness = globalDashboardHarness(fetchImpl);
     await harness.load();
+    const source = harness.map.getSource('competition-coverage');
+    source.setTiles.mockClear();
     await harness.elements.get('[data-territory-list]').children[0].click();
-    await vi.waitFor(() => expect(territoryUrls.at(-1)).toContain('pilot=pilot-one'));
+    expect(source.setTiles).toHaveBeenLastCalledWith([
+      '/v1/competition-territory/tiles/{z}/{x}/{y}.mvt?pilot=pilot-one',
+    ]);
 
     leaderboard = { leaders: [], currentPilot: null };
     harness.move({ west: -106, east: -104 });
 
-    await vi.waitFor(() => expect(territoryUrls.some((url) =>
-      url === '/v1/competition-territory?west=-106&south=39&east=-104&north=41')).toBe(true));
+    await vi.waitFor(() => expect(source.setTiles).toHaveBeenLastCalledWith([
+      '/v1/competition-territory/tiles/{z}/{x}/{y}.mvt',
+    ]));
     expect(harness.elements.get('[data-territory-allpilots]').getAttribute('aria-pressed')).toBe(
       'true',
     );
@@ -423,7 +442,9 @@ describe('Global dashboard controller', () => {
     const harness = globalDashboardHarness(fetchImpl);
     await harness.load();
     const popup = harness.elements.get('[data-territory-cell-popup]');
-    harness.setRenderedFeatures([{ properties: { x: 12, y: -3 } }]);
+    harness.setRenderedFeatures([{ properties: {
+      cellId: '500:12:-3', x: 12, y: -3, claimantCount: 1, isShared: false, pilotUserId: 'pilot-one',
+    } }]);
     const staleClick = harness.click({ x: 50, y: 80 });
     await vi.waitFor(() => expect(claimantRequestCount).toBe(1));
 
@@ -436,7 +457,9 @@ describe('Global dashboard controller', () => {
     expect(popup.hidden).toBe(true);
     expect(popup.children).toHaveLength(0);
 
-    harness.setRenderedFeatures([{ properties: { x: 12, y: -3 } }]);
+    harness.setRenderedFeatures([{ properties: {
+      cellId: '500:12:-3', x: 12, y: -3, claimantCount: 1, isShared: false, pilotUserId: 'pilot-one',
+    } }]);
     await harness.click({ x: 50, y: 80 });
     expect(fetchImpl).toHaveBeenCalledWith(
       '/v1/competition-cells/12/-3/claimants',
@@ -481,7 +504,10 @@ describe('Global dashboard controller', () => {
     ]);
 
     await harness.hover({ x: 50, y: 80 });
-    expect(harness.map.setFilter).not.toHaveBeenCalled();
+    expect(harness.map.setFilter).toHaveBeenCalledWith(
+      'competition-territory-hover-outline',
+      ['==', ['get', 'cellId'], '500:12:-3'],
+    );
     expect(harness.elements.get('[data-territory-cell-popup]').children[1].children[0].textContent)
       .toBe('Pilot One');
 
@@ -489,7 +515,10 @@ describe('Global dashboard controller', () => {
     expect(claimantRequestCount).toBe(1);
     harness.leave();
     expect(harness.elements.get('[data-territory-cell-popup]').hidden).toBe(true);
-    expect(harness.map.setFilter).not.toHaveBeenCalled();
+    expect(harness.map.setFilter).toHaveBeenLastCalledWith(
+      'competition-territory-hover-outline',
+      ['==', ['get', 'cellId'], ''],
+    );
   });
 
   it('does not add hover interaction to shared cells', async () => {
@@ -520,7 +549,10 @@ describe('Global dashboard controller', () => {
       false,
     );
     expect(harness.elements.get('[data-territory-cell-popup]').hidden).toBe(true);
-    expect(harness.map.setFilter).not.toHaveBeenCalled();
+    expect(harness.map.setFilter).toHaveBeenLastCalledWith(
+      'competition-territory-hover-outline',
+      ['==', ['get', 'cellId'], ''],
+    );
   });
 
   it('ignores an exclusive-cell response after the pointer moves onto a shared cell', async () => {
@@ -574,16 +606,12 @@ describe('Global dashboard controller', () => {
     expect(harness.elements.get('[data-territory-cell-popup]').children).toHaveLength(0);
   });
 
-  it('shows distinct territory, ranking, and map error states', async () => {
-    const fetchImpl = vi.fn(async (url: string) =>
-      jsonResponse({}, url.startsWith('/v1/competition-territory') ? 503 : 502),
-    );
+  it('shows distinct ranking and map error states without fetching GeoJSON territory', async () => {
+    const fetchImpl = vi.fn(async (_url: string) => jsonResponse({}, 502));
     const harness = globalDashboardHarness(fetchImpl);
     await harness.load();
 
-    expect(harness.elements.get('[data-map-empty-state]').textContent).toBe(
-      'Unable to load coverage. Try again.',
-    );
+    expect(fetchImpl.mock.calls.some(([url]) => url.includes('competition-territory'))).toBe(false);
     expect(harness.elements.get('[data-territory-status]').textContent).toBe(
       'Unable to update coverage rankings.',
     );

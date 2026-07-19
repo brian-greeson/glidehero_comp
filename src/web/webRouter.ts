@@ -13,6 +13,7 @@ import type { PageModel, PageRenderer } from '../views/renderer.js';
 import type { AdminPageRenderer } from '../views/renderer.js';
 import type { FlightUploadQueueService } from '../services/flightUploadQueueService.js';
 import type { FailedFlightCleanupService } from '../services/failedFlightCleanupService.js';
+import type { TerritoryTileService } from '../services/territoryTileService.js';
 import type { SessionCookie } from './sessionCookie.js';
 
 const email = z.string().trim().toLowerCase().pipe(z.email());
@@ -56,6 +57,21 @@ const competitionLeaderboardSchema = z.object({
 const arenaSearchSchema = z.object({ q: z.string().trim().min(1).max(100) }).strict();
 const arenaSourceIdSchema = z.coerce.number().int().positive().safe();
 const cellCoordinateSchema = z.coerce.number().int().safe();
+const tileQuerySchema = z.object({
+  month: competitionMonthValue.optional(),
+  pilot: z.string().uuid().optional(),
+}).strict();
+
+function territoryTileCoordinates(minimumZoom: number, params: Record<string, string>) {
+  const parsed = z.object({
+    z: z.coerce.number().int().min(minimumZoom).max(14),
+    x: z.coerce.number().int().min(0),
+    y: z.coerce.number().int().min(0),
+  }).safeParse(params);
+  if (!parsed.success) return null;
+  const tileCount = 2 ** parsed.data.z;
+  return parsed.data.x < tileCount && parsed.data.y < tileCount ? parsed.data : null;
+}
 
 function coveragePeriod(month?: string): MonthlyCoveragePeriod {
   return month ? { competitionMonth: month } : { period: 'all-time' };
@@ -85,6 +101,7 @@ export function createWebRouter(dependencies: {
   gridClaim: GridClaimService;
   mapGrid: MapGridService;
   coverage: MonthlyCoverageService;
+  territoryTiles: TerritoryTileService;
   arenas: ArenaService;
   renderPage: PageRenderer;
   adminEmails?: readonly string[];
@@ -94,6 +111,13 @@ export function createWebRouter(dependencies: {
   const router = Router();
   const adminEmails = new Set((dependencies.adminEmails ?? []).map((email) => email.trim().toLowerCase()));
   const isAdmin = (email: string) => adminEmails.has(email.trim().toLowerCase());
+
+  function sendTerritoryTile(res: Response, tile: { data: Buffer }) {
+    res.status(200)
+      .type('application/vnd.mapbox-vector-tile')
+      .set('Cache-Control', 'private, max-age=60')
+      .send(tile.data);
+  }
 
   function dashboardReturnTo(value: unknown): string {
     if (typeof value !== 'string') return '/global';
@@ -245,6 +269,27 @@ export function createWebRouter(dependencies: {
     }
   });
 
+  router.get('/v1/personal-territory/tiles/:z/:x/:y.mvt', async (req, res, next) => {
+    const currentUser = res.locals.currentUser;
+    if (!currentUser) {
+      next(new AppError(401, 'unauthorized', 'Sign in to view your personal territory.'));
+      return;
+    }
+    const coordinates = territoryTileCoordinates(4, req.params);
+    if (!coordinates || Object.keys(req.query).length > 0) {
+      res.status(400).json({ error: { code: 'invalid_request', message: 'Personal territory tile coordinates are invalid.' } });
+      return;
+    }
+    try {
+      sendTerritoryTile(res, await dependencies.territoryTiles.getPersonalTile({
+        ...coordinates,
+        userId: currentUser.userId,
+      }));
+    } catch (error) {
+      next(error);
+    }
+  });
+
   router.get('/v1/personal-stats', async (req, res, next) => {
     const currentUser = res.locals.currentUser;
     if (!currentUser) {
@@ -321,6 +366,28 @@ export function createWebRouter(dependencies: {
         north: input.data.north,
       });
       res.status(200).json(territory);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.get('/v1/competition-territory/tiles/:z/:x/:y.mvt', async (req, res, next) => {
+    if (!res.locals.currentUser) {
+      next(new AppError(401, 'unauthorized', 'Sign in to view competition territory.'));
+      return;
+    }
+    const coordinates = territoryTileCoordinates(7, req.params);
+    const query = tileQuerySchema.safeParse(req.query);
+    if (!coordinates || !query.success) {
+      res.status(400).json({ error: { code: 'invalid_request', message: 'Competition territory tile request is invalid.' } });
+      return;
+    }
+    try {
+      sendTerritoryTile(res, await dependencies.territoryTiles.getGlobalCompetitionTile({
+        ...coordinates,
+        period: coveragePeriod(query.data.month),
+        ...(query.data.pilot ? { pilotUserId: query.data.pilot } : {}),
+      }));
     } catch (error) {
       next(error);
     }
@@ -450,6 +517,35 @@ export function createWebRouter(dependencies: {
         north: input.data.north,
       });
       res.status(200).json(territory);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.get('/v1/arenas/:sourceId/competition-territory/tiles/:z/:x/:y.mvt', async (req, res, next) => {
+    if (!res.locals.currentUser) {
+      next(new AppError(401, 'unauthorized', 'Sign in to view Arena territory.'));
+      return;
+    }
+    const sourceId = arenaSourceIdSchema.safeParse(req.params.sourceId);
+    const coordinates = territoryTileCoordinates(7, req.params);
+    const query = tileQuerySchema.safeParse(req.query);
+    if (!sourceId.success || !coordinates || !query.success) {
+      res.status(400).json({ error: { code: 'invalid_request', message: 'Arena territory tile request is invalid.' } });
+      return;
+    }
+    try {
+      const arena = await dependencies.arenas.getBySourceId(sourceId.data);
+      if (!arena) {
+        res.status(404).json({ error: { code: 'not_found', message: 'Arena not found.' } });
+        return;
+      }
+      sendTerritoryTile(res, await dependencies.territoryTiles.getArenaCompetitionTile({
+        ...coordinates,
+        arenaId: arena.id,
+        period: coveragePeriod(query.data.month),
+        ...(query.data.pilot ? { pilotUserId: query.data.pilot } : {}),
+      }));
     } catch (error) {
       next(error);
     }

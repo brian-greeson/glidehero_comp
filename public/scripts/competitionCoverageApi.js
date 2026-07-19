@@ -18,6 +18,19 @@ export function coverageTerritoryUrl({ arenaSourceId, bounds, month = null, pilo
   return `${path}${query ? `?${query}` : ''}`;
 }
 
+export function coverageTerritoryTileUrl(
+  { arenaSourceId = null, month = null, pilotUserId = null },
+  origin = globalThis.location?.origin ?? '',
+) {
+  const params = new URLSearchParams(periodValues(month));
+  if (pilotUserId) params.set('pilot', pilotUserId);
+  const path = arenaSourceId
+    ? `/v1/arenas/${encodeURIComponent(arenaSourceId)}/competition-territory/tiles/{z}/{x}/{y}.mvt`
+    : '/v1/competition-territory/tiles/{z}/{x}/{y}.mvt';
+  const query = params.toString();
+  return `${origin}${path}${query ? `?${query}` : ''}`;
+}
+
 export function arenaCoverageLeaderboardUrl(arenaSourceId, month = null) {
   const params = new URLSearchParams(periodValues(month));
   const query = params.toString();

@@ -1,11 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
 
 // @ts-expect-error Browser assets remain JavaScript.
-import { arenaCoverageLeaderboardUrl, coverageCellClaimantsUrl, coverageTerritoryUrl, globalCoverageLeaderboardUrl } from '../../public/scripts/competitionCoverageApi.js';
+import { arenaCoverageLeaderboardUrl, coverageCellClaimantsUrl, coverageTerritoryTileUrl, coverageTerritoryUrl, globalCoverageLeaderboardUrl } from '../../public/scripts/competitionCoverageApi.js';
 // @ts-expect-error Browser assets remain JavaScript.
 import { createCompetitionColorRegistry } from '../../public/scripts/competitionColors.js';
 // @ts-expect-error Browser assets remain JavaScript.
-import { colorCoverageTerritory, coverageCellFeatureAtPoint, isExclusiveCoverageFeature, positionCoverageCellPopup, setCoverageData } from '../../public/scripts/competitionCoverageMap.js';
+import { assignLoadedCoverageColors, colorCoverageTerritory, coverageCellFeatureAtPoint, installCoverageSource, isExclusiveCoverageFeature, positionCoverageCellPopup, setCoverageData, updateCoverageTiles } from '../../public/scripts/competitionCoverageMap.js';
 // @ts-expect-error Browser assets remain JavaScript.
 import { renderCoverageLeaderboard } from '../../public/scripts/competitionCoverageLeaderboard.js';
 
@@ -29,6 +29,15 @@ describe('competition coverage browser contracts', () => {
     ).toBe('/v1/arenas/745/competition-territory?month=2026-07&west=-107&south=39&east=-105&north=41&pilot=pilot');
     expect(coverageCellClaimantsUrl(1, 2, '2026-07')).toBe(
       '/v1/competition-cells/1/2/claimants?month=2026-07',
+    );
+    expect(coverageTerritoryTileUrl({ month: '2026-07', pilotUserId: 'pilot' })).toBe(
+      '/v1/competition-territory/tiles/{z}/{x}/{y}.mvt?month=2026-07&pilot=pilot',
+    );
+    expect(coverageTerritoryTileUrl({ arenaSourceId: '745' })).toBe(
+      '/v1/arenas/745/competition-territory/tiles/{z}/{x}/{y}.mvt',
+    );
+    expect(coverageTerritoryTileUrl({}, 'https://glidehero.test')).toBe(
+      'https://glidehero.test/v1/competition-territory/tiles/{z}/{x}/{y}.mvt',
     );
   });
 
@@ -166,5 +175,44 @@ describe('competition coverage browser contracts', () => {
         },
       }),
     ).toBe(false);
+  });
+
+  it('installs zoom 7-14 vector layers and changes tiles without changing paint', () => {
+    const sources = new Map<string, any>();
+    const layers: any[] = [];
+    const map = {
+      getSource: vi.fn((id: string) => sources.get(id)),
+      addSource: vi.fn((id: string, source: any) => sources.set(id, { ...source, setTiles: vi.fn() })),
+      addLayer: vi.fn((layer: any) => layers.push(layer)),
+      setPaintProperty: vi.fn(),
+      querySourceFeatures: vi.fn(() => [
+        { properties: { pilotUserId: 'pilot-one' } },
+        { properties: { pilotUserId: 'pilot-one' } },
+      ]),
+    };
+    installCoverageSource(map, '/tiles/{z}/{x}/{y}.mvt');
+    expect(map.addSource).toHaveBeenCalledWith('competition-coverage', {
+      type: 'vector', tiles: ['/tiles/{z}/{x}/{y}.mvt'], minzoom: 7, maxzoom: 14,
+    });
+    expect(layers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: 'competition-territory-fill', source: 'competition-coverage',
+        'source-layer': 'competition-coverage', minzoom: 7,
+      }),
+      expect.objectContaining({
+        id: 'competition-territory-outline', source: 'competition-coverage',
+        'source-layer': 'competition-coverage', minzoom: 7,
+      }),
+    ]));
+    expect(JSON.stringify(layers.find((layer) => layer.id === 'competition-territory-outline')))
+      .not.toContain('["match",["get","pilotUserId"],"#94a3b8"]');
+
+    updateCoverageTiles(map, '/next/{z}/{x}/{y}.mvt');
+    expect(sources.get('competition-coverage').setTiles).toHaveBeenCalledWith([
+      '/next/{z}/{x}/{y}.mvt',
+    ]);
+    assignLoadedCoverageColors(map, { colorFor: () => '#1769AA' });
+    expect(map.setPaintProperty).toHaveBeenCalledTimes(2);
+    expect(JSON.stringify(map.setPaintProperty.mock.calls[0]?.[2])).toContain('#1769AA');
   });
 });

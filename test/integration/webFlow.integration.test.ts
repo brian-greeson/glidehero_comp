@@ -6,6 +6,7 @@ import { createMonthlyCoverageService } from '../../src/services/monthlyCoverage
 import { createGridClaimService } from '../../src/services/gridClaimService.js';
 import { createMapGridService } from '../../src/services/mapGridService.js';
 import { createProfileService } from '../../src/services/profileService.js';
+import { createTerritoryTileService } from '../../src/services/territoryTileService.js';
 import { createPageRenderer } from '../../src/views/renderer.js';
 import { createCurrentUserMiddleware } from '../../src/web/currentUserMiddleware.js';
 import { createSessionCookie } from '../../src/web/sessionCookie.js';
@@ -34,6 +35,7 @@ describe('GlideHero browser authentication flow', () => {
     const mapGrid = createMapGridService(testDatabase.db, { cellSize: 1_000 });
     const coverage = createMonthlyCoverageService(testDatabase.db, { cellSize: 1_000 });
     const arenas = createArenaService(testDatabase.db, { cellSize: 1_000 });
+    const territoryTiles = createTerritoryTileService(testDatabase.db, { cellSize: 1_000 });
     const cookie = createSessionCookie({
       name: 'glidehero_session',
       secure: false,
@@ -49,6 +51,7 @@ describe('GlideHero browser authentication flow', () => {
           gridClaim,
           mapGrid,
           coverage,
+          territoryTiles,
           arenas,
           renderPage: createPageRenderer({ mapTilerApiKey: 'maptiler-test-key' }),
         }),
