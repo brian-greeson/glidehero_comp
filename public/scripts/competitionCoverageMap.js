@@ -3,6 +3,7 @@ import { createTerritoryBoundaryLayer } from './mapStyles.js';
 export const COVERAGE_SOURCE_ID = 'competition-coverage';
 export const COVERAGE_FILL_LAYER_ID = 'competition-territory-fill';
 export const COVERAGE_HOVER_LAYER_ID = 'competition-territory-hover';
+export const COVERAGE_HOVER_OUTLINE_LAYER_ID = 'competition-territory-hover-outline';
 export const COVERAGE_OUTLINE_LAYER_ID = 'competition-territory-outline';
 
 const EMPTY_HOVER_FILTER = ['==', ['get', 'cellId'], ''];
@@ -53,11 +54,11 @@ export function isExclusiveCoverageFeature(feature) {
 }
 
 export function setCoverageHoveredCell(map, cellId = null) {
-  if (!map.getLayer?.(COVERAGE_HOVER_LAYER_ID) || !map.setFilter) return;
-  map.setFilter(
-    COVERAGE_HOVER_LAYER_ID,
-    cellId ? ['==', ['get', 'cellId'], cellId] : EMPTY_HOVER_FILTER,
-  );
+  if (!map.setFilter) return;
+  const filter = cellId ? ['==', ['get', 'cellId'], cellId] : EMPTY_HOVER_FILTER;
+  for (const layerId of [COVERAGE_HOVER_LAYER_ID, COVERAGE_HOVER_OUTLINE_LAYER_ID]) {
+    if (map.getLayer?.(layerId)) map.setFilter(layerId, filter);
+  }
 }
 
 export function positionCoverageCellPopup(popup, point, containerWidth) {
@@ -99,4 +100,11 @@ export function setCoverageData(map, geojson) {
       color: COVERAGE_COLOR,
     }),
   );
+  map.addLayer({
+    id: COVERAGE_HOVER_OUTLINE_LAYER_ID,
+    type: 'line',
+    source: COVERAGE_SOURCE_ID,
+    filter: EMPTY_HOVER_FILTER,
+    paint: { 'line-color': '#ffffff', 'line-width': 3 },
+  });
 }

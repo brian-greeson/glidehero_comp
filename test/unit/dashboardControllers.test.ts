@@ -486,6 +486,11 @@ describe('Global dashboard controller', () => {
       ['get', 'cellId'],
       '500:12:-3',
     ]);
+    expect(harness.map.setFilter).toHaveBeenCalledWith('competition-territory-hover-outline', [
+      '==',
+      ['get', 'cellId'],
+      '500:12:-3',
+    ]);
     expect(harness.elements.get('[data-territory-cell-popup]').children[1].children[0].textContent)
       .toBe('Pilot One');
 
@@ -493,7 +498,12 @@ describe('Global dashboard controller', () => {
     expect(claimantRequestCount).toBe(1);
     harness.leave();
     expect(harness.elements.get('[data-territory-cell-popup]').hidden).toBe(true);
-    expect(harness.map.setFilter).toHaveBeenLastCalledWith('competition-territory-hover', [
+    expect(harness.map.setFilter).toHaveBeenCalledWith('competition-territory-hover', [
+      '==',
+      ['get', 'cellId'],
+      '',
+    ]);
+    expect(harness.map.setFilter).toHaveBeenCalledWith('competition-territory-hover-outline', [
       '==',
       ['get', 'cellId'],
       '',

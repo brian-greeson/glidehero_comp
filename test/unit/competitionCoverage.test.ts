@@ -124,7 +124,7 @@ describe('competition coverage browser contracts', () => {
     );
   });
 
-  it('adds a subtle hover layer and filters it to an exclusive coverage cell', () => {
+  it('adds hover fill and outline layers and filters them to an exclusive coverage cell', () => {
     const layers = new Map<string, any>();
     const map = {
       addSource: vi.fn(),
@@ -140,19 +140,26 @@ describe('competition coverage browser contracts', () => {
       source: 'competition-coverage',
       paint: { 'fill-color': '#ffffff', 'fill-opacity': 0.18 },
     });
+    expect(layers.get('competition-territory-hover-outline')).toMatchObject({
+      type: 'line',
+      source: 'competition-coverage',
+      paint: { 'line-color': '#ffffff', 'line-width': 3 },
+    });
 
     setCoverageHoveredCell(map, '500:12:-3');
-    expect(map.setFilter).toHaveBeenLastCalledWith('competition-territory-hover', [
-      '==',
-      ['get', 'cellId'],
-      '500:12:-3',
-    ]);
+    const hoveredFilter = ['==', ['get', 'cellId'], '500:12:-3'];
+    expect(map.setFilter).toHaveBeenCalledWith('competition-territory-hover', hoveredFilter);
+    expect(map.setFilter).toHaveBeenCalledWith(
+      'competition-territory-hover-outline',
+      hoveredFilter,
+    );
     setCoverageHoveredCell(map);
-    expect(map.setFilter).toHaveBeenLastCalledWith('competition-territory-hover', [
-      '==',
-      ['get', 'cellId'],
-      '',
-    ]);
+    const emptyFilter = ['==', ['get', 'cellId'], ''];
+    expect(map.setFilter).toHaveBeenCalledWith('competition-territory-hover', emptyFilter);
+    expect(map.setFilter).toHaveBeenCalledWith(
+      'competition-territory-hover-outline',
+      emptyFilter,
+    );
   });
 
   it('only treats exclusively claimed cells as hoverable', () => {
