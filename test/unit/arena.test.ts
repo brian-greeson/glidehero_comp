@@ -101,14 +101,11 @@ describe('Arena dashboard', () => {
       geometry: { type: 'Polygon', coordinates: [] },
       bbox: [-106, 39, -105, 40],
     };
-    const territory = { type: 'FeatureCollection', features: [] };
     const leaderboard = { leaders: [], currentPilot: null };
     const fetchImpl = vi.fn(async (url: string) => {
       const payload = url.endsWith('/boundary')
         ? boundary
-        : url.includes('competition-territory')
-          ? territory
-          : leaderboard;
+        : leaderboard;
       return new Response(JSON.stringify(payload), { status: 200 });
     });
 

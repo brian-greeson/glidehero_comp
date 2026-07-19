@@ -4,8 +4,6 @@ import { createMonthlyCoverageService } from '../../src/services/monthlyCoverage
 import { resetAndPushTestDatabase } from './database.js';
 
 let database: Awaited<ReturnType<typeof resetAndPushTestDatabase>>;
-const viewport = { west: -180, south: -89, east: 180, north: 89 };
-
 beforeAll(async () => { database = await resetAndPushTestDatabase(); });
 beforeEach(async () => { await database.pool.query('TRUNCATE TABLE users, arenas CASCADE'); });
 afterAll(async () => { if (database) await database.pool.end(); });
@@ -83,20 +81,6 @@ describe('MonthlyCoverageService with PostGIS', () => {
       expect.objectContaining({ userId: bravo.userId, claimedCellCount: 2, exclusiveCellCount: 0, sharedCellCount: 2 }),
     ]);
 
-    const selected = await service.getGlobalTerritory({ competitionMonth: '2026-07', pilotUserId: alpha.userId, ...viewport });
-    expect(selected.features).toHaveLength(2);
-    expect(selected.features.find((feature) => feature.properties.x === 0)?.properties).toMatchObject({
-      claimantCount: 2, isShared: true, pilotUserId: alpha.userId,
-    });
-    const overview = await service.getGlobalTerritory({ competitionMonth: '2026-07', ...viewport });
-    expect(overview.features).toHaveLength(2);
-    expect(overview.features.find((feature) => feature.properties.x === 0)?.properties.pilotUserId).toBeUndefined();
-    expect(overview.features.find((feature) => feature.properties.x === 1)?.properties.pilotUserId).toBe(alpha.userId);
-    const visible = await service.getGlobalTerritory({
-      competitionMonth: '2026-07', west: -0.01, south: -0.01, east: 0.009, north: 0.02,
-    });
-    expect(visible.features.map((feature) => feature.properties.x)).toEqual([0]);
-    expect(visible.features[0]?.properties).toMatchObject({ claimantCount: 2, isShared: true });
     await expect(service.getCellClaimants({ competitionMonth: '2026-07', x: 0, y: 0 }))
       .resolves.toEqual([{ userId: alpha.userId, displayName: 'Alpha' }, { userId: bravo.userId, displayName: 'Bravo' }]);
   });
@@ -123,10 +107,6 @@ describe('MonthlyCoverageService with PostGIS', () => {
     expect(leaderboard.leaders).toEqual([
       expect.objectContaining({ userId: pilot.userId, claimedCellCount: 2, exclusiveCellCount: 2 }),
     ]);
-    const territory = await service.getArenaTerritory({
-      competitionMonth: '2026-07', arenaId, west: -0.01, south: -0.01, east: 0.009, north: 0.02,
-    });
-    expect(territory.features.map((feature) => feature.properties.x)).toEqual([0]);
   });
 
   it('shares ranks, orders ties alphabetically, caps leaders at ten, and reports signed-in pilots outside the leaders', async () => {
@@ -210,30 +190,4 @@ describe('MonthlyCoverageService with PostGIS', () => {
     expect(result.currentPilot).toBeNull();
   });
 
-  it('isolates configured cell sizes and returns deterministic polygons or an empty collection', async () => {
-    const pilot = await createPilot('Geometry Pilot');
-    await addClaim(pilot, { month: '2026-07-01', x: 1, y: 0, at: '2026-07-10T12:00:00Z' });
-    await addClaim(pilot, { month: '2026-07-01', x: 0, y: 0, at: '2026-07-10T13:00:00Z' });
-    await addClaim(pilot, {
-      month: '2026-07-01',
-      x: 2,
-      y: 0,
-      at: '2026-07-10T14:00:00Z',
-      cellSize: 2_000,
-    });
-    const service = createMonthlyCoverageService(database.db, { cellSize: 1_000 });
-
-    const july = await service.getGlobalTerritory({ competitionMonth: '2026-07', ...viewport });
-    const august = await service.getGlobalTerritory({ competitionMonth: '2026-08', ...viewport });
-
-    expect(july.features).toHaveLength(2);
-    expect(july.features.map((feature) => feature.properties.cellId)).toEqual([
-      '1000:0:0',
-      '1000:1:0',
-    ]);
-    expect(july.features.every((feature) => feature.geometry.type === 'Polygon')).toBe(true);
-    expect(july.features.flatMap((feature) => feature.geometry.coordinates).flat(2)
-      .every((coordinate) => Math.abs(coordinate) <= 180)).toBe(true);
-    expect(august).toEqual({ type: 'FeatureCollection', features: [] });
-  });
 });

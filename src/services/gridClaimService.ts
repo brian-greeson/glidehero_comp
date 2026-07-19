@@ -1,10 +1,6 @@
 import { and, eq, sql } from 'drizzle-orm';
 import type { Database } from '../db/client.js';
 import { competitionGridClaims, flights, personalGridClaims } from '../db/schema.js';
-import {
-  emptyGridClaimGeoJson,
-  type GridClaimGeoJson,
-} from '../domain/territory/gridClaimGeoJson.js';
 import { emptyViewportStats, type ViewportStats } from '../domain/territory/viewportStats.js';
 import { createCompetitionGridClaimService, rebuildCompetitionGridClaims } from './competitionGridClaimService.js';
 import { gridClaimCandidateCtes } from './gridClaimCandidates.js';
@@ -19,7 +15,6 @@ export type GridClaimProcessResult = {
 
 export interface PersonalGridClaimService {
   process(input: { flightId: string; userId: string }): Promise<GridClaimProcessResult>;
-  get(input: ViewportBounds & { userId: string }): Promise<GridClaimGeoJson>;
   getViewportStats(input: ViewportBounds & { userId: string }): Promise<ViewportStats>;
 }
 
@@ -30,7 +25,6 @@ export interface GridClaimService {
     | { status: 'not_found' }
     | { status: 'not_completed' }
   >;
-  get(input: ViewportBounds & { userId: string }): Promise<GridClaimGeoJson>;
   getViewportStats(input: ViewportBounds & { userId: string }): Promise<ViewportStats>;
 }
 
@@ -39,7 +33,6 @@ type ProcessCounts = {
   enclosedCellCount: number;
 };
 
-type StoredProjection = { geojson: GridClaimGeoJson };
 type StoredViewportStats = ViewportStats;
 type ClaimDatabase = Pick<Database, 'delete' | 'execute'>;
 
@@ -103,58 +96,6 @@ export function createPersonalGridClaimService(
       });
     },
 
-    async get({ userId, west, south, east, north }) {
-      const result = await database.execute<StoredProjection>(sql`
-        WITH ${viewportCtes({ west, south, east, north })},
-        claimed_cells AS (
-          SELECT ST_MakeEnvelope(
-            x * ${cellSize}, y * ${cellSize},
-            (x + 1) * ${cellSize}, (y + 1) * ${cellSize},
-            6933
-          ) AS geometry
-          FROM user_grid_claims claims
-          INNER JOIN viewport_parts viewport ON ST_Intersects(
-            ST_MakeEnvelope(
-              claims.x * ${cellSize}, claims.y * ${cellSize},
-              (claims.x + 1) * ${cellSize}, (claims.y + 1) * ${cellSize}, 6933
-            ), viewport.geometry
-          )
-          WHERE claim_user = ${userId}
-            AND cell_size = ${cellSize}
-        ),
-        dissolved AS (
-          SELECT ST_UnaryUnion(ST_Collect(geometry)) AS geometry
-          FROM claimed_cells
-        ),
-        connected_regions AS (
-          SELECT region.geom AS geometry
-          FROM dissolved
-          CROSS JOIN LATERAL ST_Dump(ST_CollectionExtract(dissolved.geometry, 3)) AS region
-          WHERE dissolved.geometry IS NOT NULL
-            AND NOT ST_IsEmpty(dissolved.geometry)
-        )
-        SELECT jsonb_build_object(
-          'type', 'FeatureCollection',
-          'features', COALESCE(
-            jsonb_agg(
-              jsonb_build_object(
-                'type', 'Feature',
-                'properties', '{}'::jsonb,
-                'geometry', ST_AsGeoJSON(
-                  ST_Transform(geometry, 4326)
-                )::jsonb
-              )
-              ORDER BY ST_XMin(geometry), ST_YMin(geometry)
-            ),
-            '[]'::jsonb
-          )
-        ) AS geojson
-        FROM connected_regions
-      `);
-
-      return result.rows[0]?.geojson ?? emptyGridClaimGeoJson();
-    },
-
     async getViewportStats({ userId, west, south, east, north }) {
       const result = await database.execute<StoredViewportStats>(sql`
         WITH ${viewportCtes({ west, south, east, north })},
@@ -197,7 +138,6 @@ export function createGridClaimService(
   const competitionGridClaim = createCompetitionGridClaimService(database, options);
 
   return {
-    get: personalGridClaim.get,
     getViewportStats: personalGridClaim.getViewportStats,
     async process(input) {
       const result = await personalGridClaim.process({

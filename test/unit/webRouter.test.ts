@@ -1,14 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createApp } from '../../src/app.js';
 import { AuthFailure, type AuthService } from '../../src/services/authService.js';
-import {
-  emptyGridClaimGeoJson,
-  type GridClaimGeoJson,
-} from '../../src/domain/territory/gridClaimGeoJson.js';
-import {
-  emptyMonthlyCoverageGeoJson,
-  type MonthlyCoverageGeoJson,
-} from '../../src/domain/competition/monthlyCoverage.js';
 import type { ProfileService } from '../../src/services/profileService.js';
 import type { GridClaimService } from '../../src/services/gridClaimService.js';
 import type { MonthlyCoverageService } from '../../src/services/monthlyCoverageService.js';
@@ -92,25 +84,7 @@ function dependencies() {
   );
   const middleware = createCurrentUserMiddleware(auth, cookie);
   const profiles: ProfileService = { updateTerritoryColor: vi.fn(async () => undefined) };
-  const expectedGridGeoJson: GridClaimGeoJson = {
-    type: 'FeatureCollection',
-    features: [{
-      type: 'Feature',
-      properties: {},
-      geometry: {
-        type: 'Polygon',
-        coordinates: [[
-          [-105, 40],
-          [-104.99, 40],
-          [-104.99, 40.01],
-          [-105, 40.01],
-          [-105, 40],
-        ]],
-      },
-    }],
-  };
   const gridClaim: GridClaimService = {
-    get: vi.fn(async (): Promise<GridClaimGeoJson> => expectedGridGeoJson),
     getViewportStats: vi.fn(async () => viewportStats),
     process: vi.fn(async () => ({
       flightId: '00000000-0000-4000-8000-000000000020',
@@ -120,34 +94,7 @@ function dependencies() {
     })),
     reprocess: vi.fn(async () => ({ status: 'not_found' as const })),
   };
-  const expectedCoverageGeoJson: MonthlyCoverageGeoJson = {
-    type: 'FeatureCollection',
-    features: [{
-      type: 'Feature',
-      properties: {
-        cellId: '1000:0:0',
-        cellSize: 1_000,
-        x: 0,
-        y: 0,
-        claimantCount: 1,
-        isShared: false,
-        pilotUserId: user.userId,
-      },
-      geometry: {
-        type: 'Polygon',
-        coordinates: [[
-          [-105, 40],
-          [-104.99, 40],
-          [-104.99, 40.01],
-          [-105, 40.01],
-          [-105, 40],
-        ]],
-      },
-    }],
-  };
   const coverage: MonthlyCoverageService = {
-    getGlobalTerritory: vi.fn(async () => expectedCoverageGeoJson),
-    getArenaTerritory: vi.fn(async () => expectedCoverageGeoJson),
     getGlobalLeaderboard: vi.fn(async () => ({
       leaders: [{
         userId: user.userId,
@@ -191,8 +138,6 @@ function dependencies() {
     coverage,
     territoryTiles,
     arenas,
-    expectedGridGeoJson,
-    expectedCoverageGeoJson,
     renderPage,
     cookie,
     app: createApp({ webMiddleware: [middleware, router] }),
@@ -416,8 +361,8 @@ describe('webRouter', () => {
     });
   });
 
-  it('searches Arenas and returns fixed-area territory and leaderboard data', async () => {
-    const { app, arenas, coverage, expectedCoverageGeoJson } = dependencies();
+  it('searches Arenas and returns fixed-area leaderboard and claimant data', async () => {
+    const { app, arenas, coverage } = dependencies();
     vi.mocked(arenas.search).mockResolvedValueOnce([arena]);
     vi.mocked(arenas.getBySourceId).mockResolvedValue(arena);
     await withServer(app, async (baseUrl) => {
@@ -426,27 +371,10 @@ describe('webRouter', () => {
       expect(search.status).toBe(200);
       expect(await search.json()).toEqual({ arenas: [arena] });
 
-      const territory = await fetch(`${baseUrl}/v1/arenas/745/competition-territory?month=2026-07&pilot=${user.userId}&west=-107&south=39&east=-105&north=41`, { headers });
-      expect(territory.status).toBe(200);
-      expect(await territory.json()).toEqual(expectedCoverageGeoJson);
-      expect(coverage.getArenaTerritory).toHaveBeenCalledWith({
-        competitionMonth: '2026-07', arenaId: arena.id, pilotUserId: user.userId,
-        west: -107, south: 39, east: -105, north: 41,
-      });
-
       const leaderboard = await fetch(`${baseUrl}/v1/arenas/745/competition-leaderboard?month=2026-07`, { headers });
       expect(leaderboard.status).toBe(200);
       expect(coverage.getArenaLeaderboard).toHaveBeenCalledWith({
         competitionMonth: '2026-07', arenaId: arena.id, currentUserId: user.userId,
-      });
-
-      const allTimeTerritory = await fetch(
-        `${baseUrl}/v1/arenas/745/competition-territory?west=-107&south=39&east=-105&north=41`,
-        { headers },
-      );
-      expect(allTimeTerritory.status).toBe(200);
-      expect(coverage.getArenaTerritory).toHaveBeenCalledWith({
-        period: 'all-time', arenaId: arena.id, west: -107, south: 39, east: -105, north: 41,
       });
 
       const allTimeLeaderboard = await fetch(
@@ -620,7 +548,6 @@ describe('webRouter', () => {
       cookie,
       profiles: { updateTerritoryColor: vi.fn(async () => undefined) },
       gridClaim: {
-        get: vi.fn(async () => emptyGridClaimGeoJson()),
         getViewportStats: vi.fn(async () => viewportStats),
         process: vi.fn(async () => ({
           flightId: 'flight-id', cellSize: 1_000, directCellCount: 0, enclosedCellCount: 0,
@@ -629,8 +556,6 @@ describe('webRouter', () => {
       },
       mapGrid: mapGridService(),
       coverage: {
-        getGlobalTerritory: vi.fn(async () => emptyMonthlyCoverageGeoJson()),
-        getArenaTerritory: vi.fn(async () => emptyMonthlyCoverageGeoJson()),
         getGlobalLeaderboard: vi.fn(async () => ({ leaders: [], currentPilot: null })),
         getArenaLeaderboard: vi.fn(async () => ({ leaders: [], currentPilot: null })),
         getCellClaimants: vi.fn(async () => []),
@@ -739,49 +664,6 @@ describe('webRouter', () => {
     });
   });
 
-  it('returns the grid territory', async () => {
-    const { app, expectedGridGeoJson, gridClaim } = dependencies();
-    await withServer(app, async (baseUrl) => {
-      const response = await fetch(`${baseUrl}/v1/personal-territory?west=-107&south=39&east=-105&north=41`, {
-        headers: { cookie: 'glidehero_session=valid-token' },
-      });
-
-      expect(response.status).toBe(200);
-      expect(response.headers.get('content-type')).toContain('application/json');
-      expect(await response.json()).toEqual(expectedGridGeoJson);
-      expect(gridClaim.get).toHaveBeenCalledWith({
-        userId: user.userId, west: -107, south: 39, east: -105, north: 41,
-      });
-    });
-  });
-
-  it('rejects an anonymous personal-territory request without reading a projection', async () => {
-    const { app, gridClaim } = dependencies();
-    await withServer(app, async (baseUrl) => {
-      const response = await fetch(`${baseUrl}/v1/personal-territory`);
-
-      expect(response.status).toBe(401);
-      expect(await response.json()).toEqual({
-        error: { code: 'unauthorized', message: 'Sign in to view your personal territory.' },
-      });
-      expect(gridClaim.get).not.toHaveBeenCalled();
-    });
-  });
-
-  it('rejects personal territory without viewport bounds', async () => {
-    const { app, gridClaim } = dependencies();
-    await withServer(app, async (baseUrl) => {
-      const response = await fetch(`${baseUrl}/v1/personal-territory`, {
-        headers: { cookie: 'glidehero_session=valid-token' },
-      });
-      expect(response.status).toBe(400);
-      expect(await response.json()).toEqual({
-        error: { code: 'invalid_request', message: 'Personal territory requires valid viewport bounds.' },
-      });
-      expect(gridClaim.get).not.toHaveBeenCalled();
-    });
-  });
-
   it('returns personal stats for an authenticated viewport request', async () => {
     const { app, gridClaim } = dependencies();
     await withServer(app, async (baseUrl) => {
@@ -834,78 +716,6 @@ describe('webRouter', () => {
     });
   });
 
-  it('returns selected-pilot coverage for the URL month', async () => {
-    const { app, coverage, expectedCoverageGeoJson } = dependencies();
-    await withServer(app, async (baseUrl) => {
-      const response = await fetch(`${baseUrl}/v1/competition-territory?month=2026-07&pilot=${user.userId}&west=-107&south=39&east=-105&north=41`, {
-        headers: { cookie: 'glidehero_session=valid-token' },
-      });
-
-      expect(response.status).toBe(200);
-      expect(response.headers.get('content-type')).toContain('application/json');
-      expect(await response.json()).toEqual(expectedCoverageGeoJson);
-      expect(coverage.getGlobalTerritory).toHaveBeenCalledWith({
-        competitionMonth: '2026-07', pilotUserId: user.userId, west: -107, south: 39, east: -105, north: 41,
-      });
-    });
-  });
-
-  it('returns all-time competition ownership', async () => {
-    const { app, coverage } = dependencies();
-    await withServer(app, async (baseUrl) => {
-      const response = await fetch(`${baseUrl}/v1/competition-territory?west=-107&south=39&east=-105&north=41`, {
-        headers: { cookie: 'glidehero_session=valid-token' },
-      });
-
-      expect(response.status).toBe(200);
-      expect(coverage.getGlobalTerritory).toHaveBeenCalledWith({
-        period: 'all-time', west: -107, south: 39, east: -105, north: 41,
-      });
-    });
-  });
-
-  it.each(['', '2026-13', '07-2026'])('rejects invalid competition month %j', async (month) => {
-    const { app, coverage } = dependencies();
-    await withServer(app, async (baseUrl) => {
-      const response = await fetch(`${baseUrl}/v1/competition-territory?month=${encodeURIComponent(month)}&west=-107&south=39&east=-105&north=41`, {
-        headers: { cookie: 'glidehero_session=valid-token' },
-      });
-
-      expect(response.status).toBe(400);
-      expect(await response.json()).toEqual({
-        error: { code: 'invalid_request', message: 'Competition territory requires a valid YYYY-MM month and viewport bounds.' },
-      });
-      expect(coverage.getGlobalTerritory).not.toHaveBeenCalled();
-    });
-  });
-
-  it('rejects an anonymous competition-territory request without reading claims', async () => {
-    const { app, coverage } = dependencies();
-    await withServer(app, async (baseUrl) => {
-      const response = await fetch(`${baseUrl}/v1/competition-territory`);
-
-      expect(response.status).toBe(401);
-      expect(await response.json()).toEqual({
-        error: { code: 'unauthorized', message: 'Sign in to view competition territory.' },
-      });
-      expect(coverage.getGlobalTerritory).not.toHaveBeenCalled();
-    });
-  });
-
-  it('rejects competition territory without viewport bounds', async () => {
-    const { app, coverage } = dependencies();
-    await withServer(app, async (baseUrl) => {
-      const response = await fetch(`${baseUrl}/v1/competition-territory`, {
-        headers: { cookie: 'glidehero_session=valid-token' },
-      });
-      expect(response.status).toBe(400);
-      expect(await response.json()).toEqual({
-        error: { code: 'invalid_request', message: 'Competition territory requires a valid YYYY-MM month and viewport bounds.' },
-      });
-      expect(coverage.getGlobalTerritory).not.toHaveBeenCalled();
-    });
-  });
-
   it('serves authenticated Personal and Competition MVT tiles with private one-minute caching', async () => {
     const { app, territoryTiles, arenas } = dependencies();
     vi.mocked(arenas.getBySourceId).mockResolvedValueOnce(arena);
@@ -949,6 +759,20 @@ describe('webRouter', () => {
         arenaId: arena.id,
         period: { period: 'all-time' },
       });
+    });
+  });
+
+  it('does not expose the removed territory GeoJSON endpoints', async () => {
+    const { app } = dependencies();
+    await withServer(app, async (baseUrl) => {
+      const headers = { cookie: 'glidehero_session=valid-token' };
+      for (const path of [
+        '/v1/personal-territory',
+        '/v1/competition-territory',
+        '/v1/arenas/745/competition-territory',
+      ]) {
+        expect((await fetch(`${baseUrl}${path}`, { headers })).status).toBe(404);
+      }
     });
   });
 

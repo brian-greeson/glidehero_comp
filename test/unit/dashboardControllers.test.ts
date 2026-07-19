@@ -238,11 +238,6 @@ describe('Personal dashboard controller', () => {
       },
     };
     const fetchImpl = vi.fn(async (url: string) => {
-      if (url === '/v1/personal-territory') {
-        return new Response(JSON.stringify({ type: 'FeatureCollection', features: [] }), {
-          status: 200,
-        });
-      }
       return new Response(
         JSON.stringify({
           claimedCellCount: 1,
@@ -306,11 +301,6 @@ describe('Global dashboard controller', () => {
       currentPilot: null,
     };
     const fetchImpl = vi.fn(async (url: string) => {
-      if (url.startsWith('/v1/competition-territory')) {
-        return new Response(JSON.stringify({ type: 'FeatureCollection', features: [] }), {
-          status: 200,
-        });
-      }
       return new Response(JSON.stringify(leaderboard), { status: 200 });
     });
 
@@ -370,9 +360,6 @@ describe('Global dashboard controller', () => {
     const requestedUrls: string[] = [];
     const fetchImpl = vi.fn(async (url: string) => {
       requestedUrls.push(url);
-      if (url.startsWith('/v1/competition-territory')) {
-        return jsonResponse({ type: 'FeatureCollection', features: [] });
-      }
       return jsonResponse({ leaders: [pilot('pilot-one')], currentPilot: null });
     });
     const harness = globalDashboardHarness(fetchImpl);
@@ -429,9 +416,6 @@ describe('Global dashboard controller', () => {
     const firstClaimants = deferred<Response>();
     let claimantRequestCount = 0;
     const fetchImpl = vi.fn(async (url: string) => {
-      if (url.startsWith('/v1/competition-territory')) {
-        return jsonResponse({ type: 'FeatureCollection', features: [] });
-      }
       if (url.startsWith('/v1/competition-cells/')) {
         claimantRequestCount += 1;
         if (claimantRequestCount === 1) return firstClaimants.promise;
@@ -479,9 +463,6 @@ describe('Global dashboard controller', () => {
   it('shows exclusive-cell information on hover and clears it on leave', async () => {
     let claimantRequestCount = 0;
     const fetchImpl = vi.fn(async (url: string) => {
-      if (url.startsWith('/v1/competition-territory')) {
-        return jsonResponse({ type: 'FeatureCollection', features: [] });
-      }
       if (url.startsWith('/v1/competition-cells/')) {
         claimantRequestCount += 1;
         return jsonResponse({ claimants: [{ userId: 'pilot-one', displayName: 'Pilot One' }] });
@@ -523,9 +504,6 @@ describe('Global dashboard controller', () => {
 
   it('does not add hover interaction to shared cells', async () => {
     const fetchImpl = vi.fn(async (url: string) => {
-      if (url.startsWith('/v1/competition-territory')) {
-        return jsonResponse({ type: 'FeatureCollection', features: [] });
-      }
       return jsonResponse({ leaders: [], currentPilot: null });
     });
     const harness = globalDashboardHarness(fetchImpl);
@@ -558,9 +536,6 @@ describe('Global dashboard controller', () => {
   it('ignores an exclusive-cell response after the pointer moves onto a shared cell', async () => {
     const claimants = deferred<Response>();
     const fetchImpl = vi.fn(async (url: string) => {
-      if (url.startsWith('/v1/competition-territory')) {
-        return jsonResponse({ type: 'FeatureCollection', features: [] });
-      }
       if (url.startsWith('/v1/competition-cells/')) return claimants.promise;
       return jsonResponse({ leaders: [], currentPilot: null });
     });

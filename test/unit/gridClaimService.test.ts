@@ -3,7 +3,6 @@ import { createPersonalGridClaimService } from '../../src/services/gridClaimServ
 
 const flightId = '00000000-0000-4000-8000-000000000020';
 const userId = '00000000-0000-4000-8000-000000000030';
-const viewport = { west: -180, south: -89, east: 180, north: 89 };
 
 function processingDatabaseDouble(counts = { directCellCount: 3, enclosedCellCount: 0 }) {
   const where = vi.fn(async () => undefined);
@@ -41,29 +40,6 @@ describe('PersonalGridClaimService', () => {
     expect(deleteFrom).toHaveBeenCalledOnce();
     expect(where).toHaveBeenCalledOnce();
     expect(execute).toHaveBeenCalledOnce();
-  });
-
-  it('returns an empty FeatureCollection when the user owns no cells', async () => {
-    const { database, execute } = projectionDatabaseDouble();
-    const service = createPersonalGridClaimService(database as never, { cellSize: 1_000 });
-
-    await expect(service.get({ userId, ...viewport })).resolves.toEqual({ type: 'FeatureCollection', features: [] });
-    expect(execute).toHaveBeenCalledOnce();
-  });
-
-  it('returns the projected WGS84 features from the query', async () => {
-    const geojson = {
-      type: 'FeatureCollection' as const,
-      features: [{
-        type: 'Feature' as const,
-        properties: {},
-        geometry: { type: 'Polygon' as const, coordinates: [[[0, 0], [1, 0], [1, 1], [0, 0]]] },
-      }],
-    };
-    const { database } = projectionDatabaseDouble([{ geojson }]);
-    const service = createPersonalGridClaimService(database as never, { cellSize: 1_000 });
-
-    await expect(service.get({ userId, ...viewport })).resolves.toEqual(geojson);
   });
 
   it('returns full-cell viewport stats with distinct contributing flights', async () => {

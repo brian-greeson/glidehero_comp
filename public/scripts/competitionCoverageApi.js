@@ -8,16 +8,6 @@ export function globalCoverageLeaderboardUrl(bounds, month = null) {
   return `/v1/competition-leaderboard?${viewportSearchParams(bounds, periodValues(month))}`;
 }
 
-export function coverageTerritoryUrl({ arenaSourceId, bounds, month = null, pilotUserId = null }) {
-  const params = viewportSearchParams(bounds, periodValues(month));
-  if (pilotUserId) params.set('pilot', pilotUserId);
-  const path = arenaSourceId
-    ? `/v1/arenas/${encodeURIComponent(arenaSourceId)}/competition-territory`
-    : '/v1/competition-territory';
-  const query = params.toString();
-  return `${path}${query ? `?${query}` : ''}`;
-}
-
 export function coverageTerritoryTileUrl(
   { arenaSourceId = null, month = null, pilotUserId = null },
   origin = globalThis.location?.origin ?? '',

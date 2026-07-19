@@ -45,11 +45,6 @@ const viewportBoundsShape = {
 const viewportBoundsSchema = z.object(viewportBoundsShape)
   .strict()
   .refine((bounds) => bounds.south < bounds.north && bounds.west !== bounds.east);
-const competitionTerritorySchema = z.object({
-  month: competitionMonthValue.optional(),
-  pilot: z.string().uuid().optional(),
-  ...viewportBoundsShape,
-}).strict().refine((bounds) => bounds.south < bounds.north && bounds.west !== bounds.east);
 const competitionLeaderboardSchema = z.object({
   month: competitionMonthValue.optional(),
   ...viewportBoundsShape,
@@ -247,28 +242,6 @@ export function createWebRouter(dependencies: {
     }
   });
 
-  router.get('/v1/personal-territory', async (req, res, next) => {
-    const currentUser = res.locals.currentUser;
-    if (!currentUser) {
-      next(new AppError(401, 'unauthorized', 'Sign in to view your personal territory.'));
-      return;
-    }
-
-    const viewport = viewportBoundsSchema.safeParse(req.query);
-    if (!viewport.success) {
-      res.status(400).json({
-        error: { code: 'invalid_request', message: 'Personal territory requires valid viewport bounds.' },
-      });
-      return;
-    }
-    try {
-      const territory = await dependencies.gridClaim.get({ userId: currentUser.userId, ...viewport.data });
-      res.status(200).json(territory);
-    } catch (error) {
-      next(error);
-    }
-  });
-
   router.get('/v1/personal-territory/tiles/:z/:x/:y.mvt', async (req, res, next) => {
     const currentUser = res.locals.currentUser;
     if (!currentUser) {
@@ -337,35 +310,6 @@ export function createWebRouter(dependencies: {
         return;
       }
       res.status(200).type('application/geo+json').send(result.geojson);
-    } catch (error) {
-      next(error);
-    }
-  });
-
-  router.get('/v1/competition-territory', async (req, res, next) => {
-    if (!res.locals.currentUser) {
-      next(new AppError(401, 'unauthorized', 'Sign in to view competition territory.'));
-      return;
-    }
-
-    const input = competitionTerritorySchema.safeParse(req.query);
-    if (!input.success) {
-      res.status(400).json({
-        error: { code: 'invalid_request', message: 'Competition territory requires a valid YYYY-MM month and viewport bounds.' },
-      });
-      return;
-    }
-
-    try {
-      const territory = await dependencies.coverage.getGlobalTerritory({
-        ...coveragePeriod(input.data.month),
-        ...(input.data.pilot ? { pilotUserId: input.data.pilot } : {}),
-        west: input.data.west,
-        south: input.data.south,
-        east: input.data.east,
-        north: input.data.north,
-      });
-      res.status(200).json(territory);
     } catch (error) {
       next(error);
     }
@@ -485,38 +429,6 @@ export function createWebRouter(dependencies: {
         return;
       }
       res.status(200).type('application/geo+json').send(grid.geojson);
-    } catch (error) {
-      next(error);
-    }
-  });
-
-  router.get('/v1/arenas/:sourceId/competition-territory', async (req, res, next) => {
-    if (!res.locals.currentUser) {
-      next(new AppError(401, 'unauthorized', 'Sign in to view Arena territory.'));
-      return;
-    }
-    const sourceId = arenaSourceIdSchema.safeParse(req.params.sourceId);
-    const input = competitionTerritorySchema.safeParse(req.query);
-    if (!sourceId.success || !input.success) {
-      res.status(400).json({ error: { code: 'invalid_request', message: 'Arena territory requires a valid Arena, YYYY-MM month, and viewport bounds.' } });
-      return;
-    }
-    try {
-      const arena = await dependencies.arenas.getBySourceId(sourceId.data);
-      if (!arena) {
-        res.status(404).json({ error: { code: 'not_found', message: 'Arena not found.' } });
-        return;
-      }
-      const territory = await dependencies.coverage.getArenaTerritory({
-        ...coveragePeriod(input.data.month),
-        arenaId: arena.id,
-        ...(input.data.pilot ? { pilotUserId: input.data.pilot } : {}),
-        west: input.data.west,
-        south: input.data.south,
-        east: input.data.east,
-        north: input.data.north,
-      });
-      res.status(200).json(territory);
     } catch (error) {
       next(error);
     }
