@@ -16,16 +16,17 @@ export type MonthlyCoveragePeriod = { competitionMonth: string } | { period: 'al
 export interface MonthlyCoverageService {
   getGlobalLeaderboard(input: MonthlyCoveragePeriod & ViewportBounds & { currentUserId: string }): Promise<MonthlyCoverageLeaderboard>;
   getArenaLeaderboard(input: MonthlyCoveragePeriod & { arenaId: string; currentUserId: string }): Promise<MonthlyCoverageLeaderboard>;
-  getGlobalTerritory(input: MonthlyCoveragePeriod & { pilotUserId?: string }): Promise<MonthlyCoverageGeoJson>;
-  getArenaTerritory(input: MonthlyCoveragePeriod & { arenaId: string; pilotUserId?: string }): Promise<MonthlyCoverageGeoJson>;
+  getGlobalTerritory(input: MonthlyCoveragePeriod & ViewportBounds & { pilotUserId?: string }): Promise<MonthlyCoverageGeoJson>;
+  getArenaTerritory(input: MonthlyCoveragePeriod & ViewportBounds & { arenaId: string; pilotUserId?: string }): Promise<MonthlyCoverageGeoJson>;
   getCellClaimants(input: MonthlyCoveragePeriod & { x: number; y: number }): Promise<MonthlyCoverageCellClaimant[]>;
 }
 
 type StoredPilot = MonthlyCoveragePilot & { isCurrentPilotOnly: boolean; displayPosition: number };
 type StoredProjection = { geojson: MonthlyCoverageGeoJson };
 
-function coverageClaimsCtes(input: { competitionMonth?: string; cellSize: number }) {
+function coverageClaimsCtes(input: { competitionMonth?: string; cellSize: number; viewport?: ViewportBounds }) {
   return sql`
+    ${input.viewport ? sql`${viewportCtes(input.viewport)},` : sql``}
     pilot_cells AS (
       SELECT DISTINCT c.cell_size, c.x, c.y, c.claim_user
       FROM competition_grid_claims c
@@ -33,6 +34,15 @@ function coverageClaimsCtes(input: { competitionMonth?: string; cellSize: number
         ${input.competitionMonth
           ? sql`AND c.competition_month = ${input.competitionMonth}::date`
           : sql``}
+        ${input.viewport ? sql`AND EXISTS (
+          SELECT 1 FROM viewport_parts viewport
+          WHERE ST_Intersects(
+            ST_MakeEnvelope(
+              c.x * ${input.cellSize}, c.y * ${input.cellSize},
+              (c.x + 1) * ${input.cellSize}, (c.y + 1) * ${input.cellSize}, 6933
+            ), viewport.geometry
+          )
+        )` : sql``}
     ),
     cell_claimants AS (
       SELECT
@@ -236,7 +246,7 @@ export function createMonthlyCoverageService(
     async getGlobalTerritory(input) {
       const competitionMonth = normalizePeriod(input);
       const result = await database.execute<StoredProjection>(sql`
-        WITH ${coverageClaimsCtes({ competitionMonth, cellSize })},
+        WITH ${coverageClaimsCtes({ competitionMonth, cellSize, viewport: input })},
         ${territoryQuery({
           cellSize,
           pilotUserId: input.pilotUserId,
@@ -251,7 +261,7 @@ export function createMonthlyCoverageService(
     async getArenaTerritory(input) {
       const competitionMonth = normalizePeriod(input);
       const result = await database.execute<StoredProjection>(sql`
-        WITH ${coverageClaimsCtes({ competitionMonth, cellSize })},
+        WITH ${coverageClaimsCtes({ competitionMonth, cellSize, viewport: input })},
         ${territoryQuery({
           cellSize,
           pilotUserId: input.pilotUserId,

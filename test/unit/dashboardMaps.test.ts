@@ -10,7 +10,13 @@ describe('Dashboard territory maps', () => {
       type: 'FeatureCollection', features: [],
     }), { status: 200 }));
 
-    await loadPersonalTerritory(map, '#1769AA', fetchImpl);
+    await loadPersonalTerritory(map, '#1769AA', {
+      getWest: () => -107, getSouth: () => 39, getEast: () => -105, getNorth: () => 41,
+    }, fetchImpl);
+    expect(fetchImpl).toHaveBeenCalledWith(
+      '/v1/personal-territory?west=-107&south=39&east=-105&north=41',
+      expect.objectContaining({ credentials: 'same-origin' }),
+    );
 
     expect(map.addSource).toHaveBeenCalledWith(PERSONAL_TERRITORY_SOURCE_ID, {
       type: 'geojson',

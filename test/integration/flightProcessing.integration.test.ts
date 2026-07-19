@@ -109,7 +109,10 @@ describe('FlightProcessingService with a real IGC file', () => {
     expect(persisted.rows[0]?.last_fix.getTime()).toBeGreaterThan(persisted.rows[0]?.first_fix.getTime() ?? 0);
 
     const competition = await createMonthlyCoverageService(database.db, { cellSize: 1_000 })
-      .getGlobalTerritory({ competitionMonth: '2026-05', pilotUserId: pilot.user.userId });
+      .getGlobalTerritory({
+        competitionMonth: '2026-05', pilotUserId: pilot.user.userId,
+        west: -180, south: -89, east: 180, north: 89,
+      });
     expect(competition.features.length).toBeGreaterThan(0);
     expect(competition.features.every((feature) => feature.properties.pilotUserId === pilot.user.userId)).toBe(true);
   }, 60_000);

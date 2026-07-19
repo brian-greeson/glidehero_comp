@@ -19,7 +19,7 @@ export type GridClaimProcessResult = {
 
 export interface PersonalGridClaimService {
   process(input: { flightId: string; userId: string }): Promise<GridClaimProcessResult>;
-  get(input: { userId: string }): Promise<GridClaimGeoJson>;
+  get(input: ViewportBounds & { userId: string }): Promise<GridClaimGeoJson>;
   getViewportStats(input: ViewportBounds & { userId: string }): Promise<ViewportStats>;
 }
 
@@ -30,7 +30,7 @@ export interface GridClaimService {
     | { status: 'not_found' }
     | { status: 'not_completed' }
   >;
-  get(input: { userId: string }): Promise<GridClaimGeoJson>;
+  get(input: ViewportBounds & { userId: string }): Promise<GridClaimGeoJson>;
   getViewportStats(input: ViewportBounds & { userId: string }): Promise<ViewportStats>;
 }
 
@@ -103,15 +103,22 @@ export function createPersonalGridClaimService(
       });
     },
 
-    async get({ userId }) {
+    async get({ userId, west, south, east, north }) {
       const result = await database.execute<StoredProjection>(sql`
-        WITH claimed_cells AS (
+        WITH ${viewportCtes({ west, south, east, north })},
+        claimed_cells AS (
           SELECT ST_MakeEnvelope(
             x * ${cellSize}, y * ${cellSize},
             (x + 1) * ${cellSize}, (y + 1) * ${cellSize},
             6933
           ) AS geometry
-          FROM user_grid_claims
+          FROM user_grid_claims claims
+          INNER JOIN viewport_parts viewport ON ST_Intersects(
+            ST_MakeEnvelope(
+              claims.x * ${cellSize}, claims.y * ${cellSize},
+              (claims.x + 1) * ${cellSize}, (claims.y + 1) * ${cellSize}, 6933
+            ), viewport.geometry
+          )
           WHERE claim_user = ${userId}
             AND cell_size = ${cellSize}
         ),

@@ -25,8 +25,8 @@ describe('competition coverage browser contracts', () => {
       '/v1/arenas/745/competition-leaderboard?month=2026-07',
     );
     expect(
-      coverageTerritoryUrl({ arenaSourceId: '745', pilotUserId: 'pilot', month: '2026-07' }),
-    ).toBe('/v1/arenas/745/competition-territory?month=2026-07&pilot=pilot');
+      coverageTerritoryUrl({ arenaSourceId: '745', bounds, pilotUserId: 'pilot', month: '2026-07' }),
+    ).toBe('/v1/arenas/745/competition-territory?month=2026-07&west=-107&south=39&east=-105&north=41&pilot=pilot');
     expect(coverageCellClaimantsUrl(1, 2, '2026-07')).toBe(
       '/v1/competition-cells/1/2/claimants?month=2026-07',
     );

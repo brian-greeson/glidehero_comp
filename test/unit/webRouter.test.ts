@@ -412,11 +412,12 @@ describe('webRouter', () => {
       expect(search.status).toBe(200);
       expect(await search.json()).toEqual({ arenas: [arena] });
 
-      const territory = await fetch(`${baseUrl}/v1/arenas/745/competition-territory?month=2026-07&pilot=${user.userId}`, { headers });
+      const territory = await fetch(`${baseUrl}/v1/arenas/745/competition-territory?month=2026-07&pilot=${user.userId}&west=-107&south=39&east=-105&north=41`, { headers });
       expect(territory.status).toBe(200);
       expect(await territory.json()).toEqual(expectedCoverageGeoJson);
       expect(coverage.getArenaTerritory).toHaveBeenCalledWith({
         competitionMonth: '2026-07', arenaId: arena.id, pilotUserId: user.userId,
+        west: -107, south: 39, east: -105, north: 41,
       });
 
       const leaderboard = await fetch(`${baseUrl}/v1/arenas/745/competition-leaderboard?month=2026-07`, { headers });
@@ -426,12 +427,12 @@ describe('webRouter', () => {
       });
 
       const allTimeTerritory = await fetch(
-        `${baseUrl}/v1/arenas/745/competition-territory`,
+        `${baseUrl}/v1/arenas/745/competition-territory?west=-107&south=39&east=-105&north=41`,
         { headers },
       );
       expect(allTimeTerritory.status).toBe(200);
       expect(coverage.getArenaTerritory).toHaveBeenCalledWith({
-        period: 'all-time', arenaId: arena.id,
+        period: 'all-time', arenaId: arena.id, west: -107, south: 39, east: -105, north: 41,
       });
 
       const allTimeLeaderboard = await fetch(
@@ -726,14 +727,16 @@ describe('webRouter', () => {
   it('returns the grid territory', async () => {
     const { app, expectedGridGeoJson, gridClaim } = dependencies();
     await withServer(app, async (baseUrl) => {
-      const response = await fetch(`${baseUrl}/v1/personal-territory`, {
+      const response = await fetch(`${baseUrl}/v1/personal-territory?west=-107&south=39&east=-105&north=41`, {
         headers: { cookie: 'glidehero_session=valid-token' },
       });
 
       expect(response.status).toBe(200);
       expect(response.headers.get('content-type')).toContain('application/json');
       expect(await response.json()).toEqual(expectedGridGeoJson);
-      expect(gridClaim.get).toHaveBeenCalledWith({ userId: user.userId });
+      expect(gridClaim.get).toHaveBeenCalledWith({
+        userId: user.userId, west: -107, south: 39, east: -105, north: 41,
+      });
     });
   });
 
@@ -745,6 +748,20 @@ describe('webRouter', () => {
       expect(response.status).toBe(401);
       expect(await response.json()).toEqual({
         error: { code: 'unauthorized', message: 'Sign in to view your personal territory.' },
+      });
+      expect(gridClaim.get).not.toHaveBeenCalled();
+    });
+  });
+
+  it('rejects personal territory without viewport bounds', async () => {
+    const { app, gridClaim } = dependencies();
+    await withServer(app, async (baseUrl) => {
+      const response = await fetch(`${baseUrl}/v1/personal-territory`, {
+        headers: { cookie: 'glidehero_session=valid-token' },
+      });
+      expect(response.status).toBe(400);
+      expect(await response.json()).toEqual({
+        error: { code: 'invalid_request', message: 'Personal territory requires valid viewport bounds.' },
       });
       expect(gridClaim.get).not.toHaveBeenCalled();
     });
@@ -805,7 +822,7 @@ describe('webRouter', () => {
   it('returns selected-pilot coverage for the URL month', async () => {
     const { app, coverage, expectedCoverageGeoJson } = dependencies();
     await withServer(app, async (baseUrl) => {
-      const response = await fetch(`${baseUrl}/v1/competition-territory?month=2026-07&pilot=${user.userId}`, {
+      const response = await fetch(`${baseUrl}/v1/competition-territory?month=2026-07&pilot=${user.userId}&west=-107&south=39&east=-105&north=41`, {
         headers: { cookie: 'glidehero_session=valid-token' },
       });
 
@@ -813,7 +830,7 @@ describe('webRouter', () => {
       expect(response.headers.get('content-type')).toContain('application/json');
       expect(await response.json()).toEqual(expectedCoverageGeoJson);
       expect(coverage.getGlobalTerritory).toHaveBeenCalledWith({
-        competitionMonth: '2026-07', pilotUserId: user.userId,
+        competitionMonth: '2026-07', pilotUserId: user.userId, west: -107, south: 39, east: -105, north: 41,
       });
     });
   });
@@ -821,25 +838,27 @@ describe('webRouter', () => {
   it('returns all-time competition ownership', async () => {
     const { app, coverage } = dependencies();
     await withServer(app, async (baseUrl) => {
-      const response = await fetch(`${baseUrl}/v1/competition-territory`, {
+      const response = await fetch(`${baseUrl}/v1/competition-territory?west=-107&south=39&east=-105&north=41`, {
         headers: { cookie: 'glidehero_session=valid-token' },
       });
 
       expect(response.status).toBe(200);
-      expect(coverage.getGlobalTerritory).toHaveBeenCalledWith({ period: 'all-time' });
+      expect(coverage.getGlobalTerritory).toHaveBeenCalledWith({
+        period: 'all-time', west: -107, south: 39, east: -105, north: 41,
+      });
     });
   });
 
   it.each(['', '2026-13', '07-2026'])('rejects invalid competition month %j', async (month) => {
     const { app, coverage } = dependencies();
     await withServer(app, async (baseUrl) => {
-      const response = await fetch(`${baseUrl}/v1/competition-territory?month=${encodeURIComponent(month)}`, {
+      const response = await fetch(`${baseUrl}/v1/competition-territory?month=${encodeURIComponent(month)}&west=-107&south=39&east=-105&north=41`, {
         headers: { cookie: 'glidehero_session=valid-token' },
       });
 
       expect(response.status).toBe(400);
       expect(await response.json()).toEqual({
-        error: { code: 'invalid_request', message: 'Competition month must be a valid YYYY-MM value.' },
+        error: { code: 'invalid_request', message: 'Competition territory requires a valid YYYY-MM month and viewport bounds.' },
       });
       expect(coverage.getGlobalTerritory).not.toHaveBeenCalled();
     });
@@ -853,6 +872,20 @@ describe('webRouter', () => {
       expect(response.status).toBe(401);
       expect(await response.json()).toEqual({
         error: { code: 'unauthorized', message: 'Sign in to view competition territory.' },
+      });
+      expect(coverage.getGlobalTerritory).not.toHaveBeenCalled();
+    });
+  });
+
+  it('rejects competition territory without viewport bounds', async () => {
+    const { app, coverage } = dependencies();
+    await withServer(app, async (baseUrl) => {
+      const response = await fetch(`${baseUrl}/v1/competition-territory`, {
+        headers: { cookie: 'glidehero_session=valid-token' },
+      });
+      expect(response.status).toBe(400);
+      expect(await response.json()).toEqual({
+        error: { code: 'invalid_request', message: 'Competition territory requires a valid YYYY-MM month and viewport bounds.' },
       });
       expect(coverage.getGlobalTerritory).not.toHaveBeenCalled();
     });

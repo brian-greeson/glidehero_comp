@@ -32,10 +32,6 @@ const competitionMonthValue = z.string().refine((value) => {
   }
 });
 const competitionMonthSchema = z.object({ month: competitionMonthValue.optional() }).strict();
-const competitionTerritorySchema = z.object({
-  month: competitionMonthValue.optional(),
-  pilot: z.string().uuid().optional(),
-}).strict();
 const finiteCoordinate = z.string().refine(
   (value) => value.length > 0 && value.trim() === value && Number.isFinite(Number(value)),
 ).transform(Number);
@@ -48,6 +44,11 @@ const viewportBoundsShape = {
 const viewportBoundsSchema = z.object(viewportBoundsShape)
   .strict()
   .refine((bounds) => bounds.south < bounds.north && bounds.west !== bounds.east);
+const competitionTerritorySchema = z.object({
+  month: competitionMonthValue.optional(),
+  pilot: z.string().uuid().optional(),
+  ...viewportBoundsShape,
+}).strict().refine((bounds) => bounds.south < bounds.north && bounds.west !== bounds.east);
 const competitionLeaderboardSchema = z.object({
   month: competitionMonthValue.optional(),
   ...viewportBoundsShape,
@@ -229,8 +230,15 @@ export function createWebRouter(dependencies: {
       return;
     }
 
+    const viewport = viewportBoundsSchema.safeParse(req.query);
+    if (!viewport.success) {
+      res.status(400).json({
+        error: { code: 'invalid_request', message: 'Personal territory requires valid viewport bounds.' },
+      });
+      return;
+    }
     try {
-      const territory = await dependencies.gridClaim.get({ userId: currentUser.userId });
+      const territory = await dependencies.gridClaim.get({ userId: currentUser.userId, ...viewport.data });
       res.status(200).json(territory);
     } catch (error) {
       next(error);
@@ -298,7 +306,7 @@ export function createWebRouter(dependencies: {
     const input = competitionTerritorySchema.safeParse(req.query);
     if (!input.success) {
       res.status(400).json({
-        error: { code: 'invalid_request', message: 'Competition month must be a valid YYYY-MM value.' },
+        error: { code: 'invalid_request', message: 'Competition territory requires a valid YYYY-MM month and viewport bounds.' },
       });
       return;
     }
@@ -307,6 +315,10 @@ export function createWebRouter(dependencies: {
       const territory = await dependencies.coverage.getGlobalTerritory({
         ...coveragePeriod(input.data.month),
         ...(input.data.pilot ? { pilotUserId: input.data.pilot } : {}),
+        west: input.data.west,
+        south: input.data.south,
+        east: input.data.east,
+        north: input.data.north,
       });
       res.status(200).json(territory);
     } catch (error) {
@@ -419,7 +431,7 @@ export function createWebRouter(dependencies: {
     const sourceId = arenaSourceIdSchema.safeParse(req.params.sourceId);
     const input = competitionTerritorySchema.safeParse(req.query);
     if (!sourceId.success || !input.success) {
-      res.status(400).json({ error: { code: 'invalid_request', message: 'Arena territory requires a valid Arena and YYYY-MM month.' } });
+      res.status(400).json({ error: { code: 'invalid_request', message: 'Arena territory requires a valid Arena, YYYY-MM month, and viewport bounds.' } });
       return;
     }
     try {
@@ -432,6 +444,10 @@ export function createWebRouter(dependencies: {
         ...coveragePeriod(input.data.month),
         arenaId: arena.id,
         ...(input.data.pilot ? { pilotUserId: input.data.pilot } : {}),
+        west: input.data.west,
+        south: input.data.south,
+        east: input.data.east,
+        north: input.data.north,
       });
       res.status(200).json(territory);
     } catch (error) {

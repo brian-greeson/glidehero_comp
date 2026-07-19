@@ -8,6 +8,7 @@ import { resetAndPushTestDatabase } from './database.js';
 type ProjectedCoordinate = readonly [x: number, y: number];
 
 let database: Awaited<ReturnType<typeof resetAndPushTestDatabase>>;
+const viewport = { west: -180, south: -89, east: 180, north: 89 };
 
 beforeAll(async () => {
   database = await resetAndPushTestDatabase();
@@ -282,11 +283,11 @@ describe('GridClaimService with PostGIS', () => {
       expect.objectContaining({ claimUser: previousOwner.userId, claimFlight: previousOwner.flightId }),
       expect.objectContaining({ claimUser: enclosingFlight.userId, claimFlight: enclosingFlight.flightId }),
     ]));
-    await expect(service.get({ userId: previousOwner.userId })).resolves.toMatchObject({
+    await expect(service.get({ userId: previousOwner.userId, ...viewport })).resolves.toMatchObject({
       type: 'FeatureCollection',
       features: [expect.any(Object)],
     });
-    await expect(service.get({ userId: enclosingFlight.userId })).resolves.toMatchObject({
+    await expect(service.get({ userId: enclosingFlight.userId, ...viewport })).resolves.toMatchObject({
       type: 'FeatureCollection',
       features: [expect.any(Object)],
     });
@@ -509,7 +510,7 @@ describe('GridClaimService with PostGIS', () => {
     await persistClaimCells(first, [{ x: 0, y: 0 }, { x: 1, y: 0 }]);
     await persistClaimCells(second, [{ x: 2, y: 0 }]);
 
-    const geojson = await service.get({ userId: first.userId });
+    const geojson = await service.get({ userId: first.userId, ...viewport });
 
     expect(geojson).toMatchObject({ type: 'FeatureCollection', features: [{
       type: 'Feature',
@@ -525,12 +526,25 @@ describe('GridClaimService with PostGIS', () => {
     expect(geojson.features[0]?.geometry.coordinates[0]?.flat().every((coordinate) => Math.abs(coordinate) <= 180)).toBe(true);
   });
 
+  it('dissolves only personal cells intersecting the requested viewport', async () => {
+    const claim = await persistFlight([[100, 100], [900, 100]]);
+    const service = createGridClaimService(database.db, { cellSize: 1_000 });
+    await persistClaimCells(claim, [{ x: 0, y: 0 }, { x: 100, y: 0 }]);
+    const geojson = await service.get({
+      userId: claim.userId, west: -0.01, south: -0.01, east: 0.02, north: 0.02,
+    });
+    expect(geojson.features).toHaveLength(1);
+    expect(geojson.features[0]?.geometry.coordinates[0]?.flat().every(
+      (coordinate, index) => index % 2 === 1 || coordinate < 0.1,
+    )).toBe(true);
+  });
+
   it('keeps cells that touch only at a corner as separate regions', async () => {
     const claim = await persistFlight([[100, 100], [900, 100]]);
     const service = createGridClaimService(database.db, { cellSize: 1_000 });
     await persistClaimCells(claim, [{ x: 0, y: 0 }, { x: 1, y: 1 }]);
 
-    const geojson = await service.get({ userId: claim.userId });
+    const geojson = await service.get({ userId: claim.userId, ...viewport });
 
     expect(geojson.features).toHaveLength(2);
     expect(geojson.features.every(({ geometry }) => geometry.coordinates.length === 1)).toBe(true);
@@ -545,7 +559,7 @@ describe('GridClaimService with PostGIS', () => {
       { x: 0, y: 2 }, { x: 1, y: 2 }, { x: 2, y: 2 },
     ]);
 
-    const geojson = await service.get({ userId: claim.userId });
+    const geojson = await service.get({ userId: claim.userId, ...viewport });
 
     expect(geojson.features).toHaveLength(1);
     expect(geojson.features[0]?.geometry.coordinates).toHaveLength(2);

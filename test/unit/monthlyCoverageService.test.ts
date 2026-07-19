@@ -5,7 +5,9 @@ describe('MonthlyCoverageService', () => {
   it('rejects invalid months before querying', async () => {
     const execute = vi.fn();
     const service = createMonthlyCoverageService({ execute } as never, { cellSize: 1_000 });
-    await expect(service.getGlobalTerritory({ competitionMonth: '2026-13' })).rejects.toThrow(RangeError);
+    await expect(service.getGlobalTerritory({
+      competitionMonth: '2026-13', west: -180, south: -89, east: 180, north: 89,
+    })).rejects.toThrow(RangeError);
     expect(execute).not.toHaveBeenCalled();
   });
 });

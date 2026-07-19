@@ -235,14 +235,15 @@ describe('Personal dashboard controller', () => {
     expect(fetchImpl).not.toHaveBeenCalled();
     await harness.load();
     expect(fetchImpl.mock.calls.map(([url]) => url)).toEqual([
-      '/v1/personal-territory',
+      '/v1/personal-territory?west=-106&south=39&east=-104&north=41',
+      '/v1/personal-territory?west=-107&south=38&east=-103&north=42',
       '/v1/personal-stats?west=-106&south=39&east=-104&north=41',
     ]);
     expect(claimedArea.textContent).toBe('1 km²');
 
     harness.move({ west: -105, east: -103 });
-    await vi.waitFor(() => expect(fetchImpl).toHaveBeenCalledTimes(3));
-    expect(fetchImpl.mock.calls[2]?.[0]).toContain('west=-105');
+    await vi.waitFor(() => expect(fetchImpl).toHaveBeenCalledTimes(4));
+    expect(fetchImpl.mock.calls[3]?.[0]).toContain('/v1/personal-stats?west=-105');
   });
 });
 
@@ -296,7 +297,7 @@ describe('Global dashboard controller', () => {
     await harness.load();
     expect(fetchImpl.mock.calls.slice(0, 2).map(([url]) => url)).toEqual(
       expect.arrayContaining([
-        '/v1/competition-territory',
+        '/v1/competition-territory?west=-107&south=39&east=-105&north=41',
         expect.stringContaining('/v1/competition-leaderboard?west=-107'),
       ]),
     );
@@ -304,8 +305,8 @@ describe('Global dashboard controller', () => {
     expect(emptyState.textContent).toBe('No coverage for this selection.');
 
     harness.move({ west: -106, east: -104 });
-    await vi.waitFor(() => expect(fetchImpl).toHaveBeenCalledTimes(3));
-    expect(fetchImpl.mock.calls[2]?.[0]).toContain('west=-106');
+    await vi.waitFor(() => expect(fetchImpl).toHaveBeenCalledTimes(4));
+    expect(fetchImpl.mock.calls[3]?.[0]).toContain('/v1/competition-leaderboard?west=-106');
   });
 
   it('selects a pilot and returns to the overview', async () => {
@@ -323,14 +324,15 @@ describe('Global dashboard controller', () => {
     const list = harness.elements.get('[data-territory-list]');
     const overview = harness.elements.get('[data-territory-allpilots]');
     await list.children[0].click();
-    await vi.waitFor(() => expect(territoryUrls).toHaveLength(2));
-    expect(territoryUrls[1]).toBe('/v1/competition-territory?pilot=pilot-one');
+    await vi.waitFor(() => expect(territoryUrls).toHaveLength(4));
+    expect(territoryUrls[2]).toBe('/v1/competition-territory?west=-107&south=39&east=-105&north=41&pilot=pilot-one');
+    expect(territoryUrls[3]).toBe('/v1/competition-territory?west=-108&south=38&east=-104&north=42&pilot=pilot-one');
     expect(list.children[0].getAttribute('aria-pressed')).toBe('true');
     expect(overview.getAttribute('aria-pressed')).toBe('false');
 
     await overview.click();
-    await vi.waitFor(() => expect(territoryUrls).toHaveLength(3));
-    expect(territoryUrls[2]).toBe('/v1/competition-territory');
+    await vi.waitFor(() => expect(territoryUrls).toHaveLength(6));
+    expect(territoryUrls[4]).toBe('/v1/competition-territory?west=-107&south=39&east=-105&north=41');
     expect(list.children[0].getAttribute('aria-pressed')).toBe('false');
     expect(overview.getAttribute('aria-pressed')).toBe('true');
   });
@@ -357,7 +359,9 @@ describe('Global dashboard controller', () => {
 
     expect(harness.historyRef.replaceState).toHaveBeenCalledWith(null, '', '/global?month=2026-07');
     expect(overview.getAttribute('aria-pressed')).toBe('true');
-    expect(requestedUrls).toContain('/v1/competition-territory?month=2026-07');
+    expect(requestedUrls).toContain(
+      '/v1/competition-territory?month=2026-07&west=-107&south=39&east=-105&north=41',
+    );
     expect(requestedUrls).toContain(
       '/v1/competition-leaderboard?month=2026-07&west=-107&south=39&east=-105&north=41',
     );
@@ -382,7 +386,8 @@ describe('Global dashboard controller', () => {
     leaderboard = { leaders: [], currentPilot: null };
     harness.move({ west: -106, east: -104 });
 
-    await vi.waitFor(() => expect(territoryUrls.at(-1)).toBe('/v1/competition-territory'));
+    await vi.waitFor(() => expect(territoryUrls.some((url) =>
+      url === '/v1/competition-territory?west=-106&south=39&east=-104&north=41')).toBe(true));
     expect(harness.elements.get('[data-territory-allpilots]').getAttribute('aria-pressed')).toBe(
       'true',
     );

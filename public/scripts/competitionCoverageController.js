@@ -15,6 +15,7 @@ import {
   setCoverageData,
 } from './competitionCoverageMap.js';
 import { initializeMapFlightAids } from './mapFlightAids.js';
+import { createViewportTerritoryLoader } from './viewportTerritoryLoader.js';
 
 async function jsonRequest(url, fetchImpl, signal) {
   const response = await fetchImpl(url, {
@@ -55,6 +56,7 @@ export function initializeCompetitionCoverage({
   let selectedPilotId = null;
   let leaderboard = { leaders: [], currentPilot: null };
   let cellPopupRequestId = 0;
+  let territoryLoader;
 
   function hideCellPopup() {
     cellPopupRequestId += 1;
@@ -67,26 +69,26 @@ export function initializeCompetitionCoverage({
     emptyState.hidden = !message;
   }
 
-  const territoryRequest = createLatestRequest(async ({ signal, isCurrent }) => {
-    try {
-      const territory = await jsonRequest(
+  function initializeTerritoryLoader() {
+    territoryLoader = createViewportTerritoryLoader({
+      map,
+      fetchTerritory: (bounds, signal) => jsonRequest(
         coverageTerritoryUrl({
           arenaSourceId,
+          bounds,
           month: periodControl.month,
           pilotUserId: selectedPilotId,
         }),
         fetchImpl,
         signal,
-      );
-      if (!isCurrent()) return;
-      const colored = colorCoverageTerritory(territory, colorRegistry);
-      setCoverageData(map, colored);
-      setStatus(colored.features.length === 0 ? 'No coverage for this selection.' : '');
-    } catch (error) {
-      if (error?.name !== 'AbortError' && isCurrent())
-        setStatus('Unable to load coverage. Try again.');
-    }
-  });
+      ),
+      applyTerritory: (territory) => setCoverageData(map, colorCoverageTerritory(territory, colorRegistry)),
+      onVisibleData: (territory) => setStatus(
+        territory.features.length === 0 ? 'No coverage for this selection.' : '',
+      ),
+      onVisibleError: () => setStatus('Unable to load coverage. Try again.'),
+    });
+  }
 
   function renderLeaderboard() {
     renderCoverageLeaderboard({
@@ -99,7 +101,7 @@ export function initializeCompetitionCoverage({
         selectedPilotId = pilot?.userId ?? null;
         overviewButton?.setAttribute('aria-pressed', String(!selectedPilotId));
         renderLeaderboard();
-        void territoryRequest.run();
+        void territoryLoader?.refresh({ force: true });
       },
     });
   }
@@ -121,7 +123,7 @@ export function initializeCompetitionCoverage({
       ) {
         selectedPilotId = null;
         overviewButton?.setAttribute('aria-pressed', 'true');
-        await territoryRequest.run();
+        await territoryLoader?.refresh({ force: true });
       }
       renderLeaderboard();
     } catch (error) {
@@ -138,7 +140,7 @@ export function initializeCompetitionCoverage({
     selectedPilotId = null;
     overviewButton?.setAttribute('aria-pressed', 'true');
     hideCellPopup();
-    await Promise.all([leaderboardRequest.run(), territoryRequest.run()]);
+    await Promise.all([leaderboardRequest.run(), territoryLoader?.refresh({ force: true })]);
   }
 
   const periodControl = initializeCompetitionPeriodControl({
@@ -156,7 +158,7 @@ export function initializeCompetitionCoverage({
     selectedPilotId = null;
     overviewButton.setAttribute('aria-pressed', 'true');
     renderLeaderboard();
-    void territoryRequest.run();
+    void territoryLoader?.refresh({ force: true });
   });
 
   try {
@@ -167,6 +169,7 @@ export function initializeCompetitionCoverage({
       zoom: 7,
     });
     map.addControl(new maplibre.NavigationControl(), 'top-right');
+    initializeTerritoryLoader();
     map.once('error', () => setStatus('Map unavailable. Check your connection and try again.'));
     map.once('load', async () => {
       try {
@@ -206,10 +209,11 @@ export function initializeCompetitionCoverage({
         });
       }
     });
-    if (!arenaSourceId)
-      map.on('moveend', () => {
-        if (mapReady) void leaderboardRequest.run();
-      });
+    map.on('moveend', () => {
+      if (!mapReady) return;
+      if (!arenaSourceId) void leaderboardRequest.run();
+      void territoryLoader?.refresh();
+    });
     map.on('click', async (event) => {
       if (!cellPopup) return;
       const feature = coverageCellFeatureAtPoint(map, event.point);

@@ -4,6 +4,7 @@ import { createMonthlyCoverageService } from '../../src/services/monthlyCoverage
 import { resetAndPushTestDatabase } from './database.js';
 
 let database: Awaited<ReturnType<typeof resetAndPushTestDatabase>>;
+const viewport = { west: -180, south: -89, east: 180, north: 89 };
 
 beforeAll(async () => { database = await resetAndPushTestDatabase(); });
 beforeEach(async () => { await database.pool.query('TRUNCATE TABLE users, arenas CASCADE'); });
@@ -82,15 +83,20 @@ describe('MonthlyCoverageService with PostGIS', () => {
       expect.objectContaining({ userId: bravo.userId, claimedCellCount: 2, exclusiveCellCount: 0, sharedCellCount: 2 }),
     ]);
 
-    const selected = await service.getGlobalTerritory({ competitionMonth: '2026-07', pilotUserId: alpha.userId });
+    const selected = await service.getGlobalTerritory({ competitionMonth: '2026-07', pilotUserId: alpha.userId, ...viewport });
     expect(selected.features).toHaveLength(2);
     expect(selected.features.find((feature) => feature.properties.x === 0)?.properties).toMatchObject({
       claimantCount: 2, isShared: true, pilotUserId: alpha.userId,
     });
-    const overview = await service.getGlobalTerritory({ competitionMonth: '2026-07' });
+    const overview = await service.getGlobalTerritory({ competitionMonth: '2026-07', ...viewport });
     expect(overview.features).toHaveLength(2);
     expect(overview.features.find((feature) => feature.properties.x === 0)?.properties.pilotUserId).toBeUndefined();
     expect(overview.features.find((feature) => feature.properties.x === 1)?.properties.pilotUserId).toBe(alpha.userId);
+    const visible = await service.getGlobalTerritory({
+      competitionMonth: '2026-07', west: -0.01, south: -0.01, east: 0.009, north: 0.02,
+    });
+    expect(visible.features.map((feature) => feature.properties.x)).toEqual([0]);
+    expect(visible.features[0]?.properties).toMatchObject({ claimantCount: 2, isShared: true });
     await expect(service.getCellClaimants({ competitionMonth: '2026-07', x: 0, y: 0 }))
       .resolves.toEqual([{ userId: alpha.userId, displayName: 'Alpha' }, { userId: bravo.userId, displayName: 'Bravo' }]);
   });
@@ -105,7 +111,7 @@ describe('MonthlyCoverageService with PostGIS', () => {
       ) VALUES (
         745, 'Coverage Arena', 'United States', 'Colorado', 'Boulder',
         ST_Transform(ST_SetSRID(ST_Point(500, 500), 6933), 4326), 1000, 'America/Denver',
-        ST_Multi(ST_MakeEnvelope(0, 0, 1000, 1000, 6933))
+        ST_Multi(ST_MakeEnvelope(0, 0, 2000, 1000, 6933))
       ) RETURNING id
     `);
     const arenaId = arena.rows[0]?.id;
@@ -115,9 +121,11 @@ describe('MonthlyCoverageService with PostGIS', () => {
       competitionMonth: '2026-07', arenaId, currentUserId: pilot.userId,
     });
     expect(leaderboard.leaders).toEqual([
-      expect.objectContaining({ userId: pilot.userId, claimedCellCount: 1, exclusiveCellCount: 1 }),
+      expect.objectContaining({ userId: pilot.userId, claimedCellCount: 2, exclusiveCellCount: 2 }),
     ]);
-    const territory = await service.getArenaTerritory({ competitionMonth: '2026-07', arenaId });
+    const territory = await service.getArenaTerritory({
+      competitionMonth: '2026-07', arenaId, west: -0.01, south: -0.01, east: 0.009, north: 0.02,
+    });
     expect(territory.features.map((feature) => feature.properties.x)).toEqual([0]);
   });
 
@@ -215,8 +223,8 @@ describe('MonthlyCoverageService with PostGIS', () => {
     });
     const service = createMonthlyCoverageService(database.db, { cellSize: 1_000 });
 
-    const july = await service.getGlobalTerritory({ competitionMonth: '2026-07' });
-    const august = await service.getGlobalTerritory({ competitionMonth: '2026-08' });
+    const july = await service.getGlobalTerritory({ competitionMonth: '2026-07', ...viewport });
+    const august = await service.getGlobalTerritory({ competitionMonth: '2026-08', ...viewport });
 
     expect(july.features).toHaveLength(2);
     expect(july.features.map((feature) => feature.properties.cellId)).toEqual([

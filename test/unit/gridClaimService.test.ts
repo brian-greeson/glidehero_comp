@@ -3,6 +3,7 @@ import { createPersonalGridClaimService } from '../../src/services/gridClaimServ
 
 const flightId = '00000000-0000-4000-8000-000000000020';
 const userId = '00000000-0000-4000-8000-000000000030';
+const viewport = { west: -180, south: -89, east: 180, north: 89 };
 
 function processingDatabaseDouble(counts = { directCellCount: 3, enclosedCellCount: 0 }) {
   const where = vi.fn(async () => undefined);
@@ -46,7 +47,7 @@ describe('PersonalGridClaimService', () => {
     const { database, execute } = projectionDatabaseDouble();
     const service = createPersonalGridClaimService(database as never, { cellSize: 1_000 });
 
-    await expect(service.get({ userId })).resolves.toEqual({ type: 'FeatureCollection', features: [] });
+    await expect(service.get({ userId, ...viewport })).resolves.toEqual({ type: 'FeatureCollection', features: [] });
     expect(execute).toHaveBeenCalledOnce();
   });
 
@@ -62,7 +63,7 @@ describe('PersonalGridClaimService', () => {
     const { database } = projectionDatabaseDouble([{ geojson }]);
     const service = createPersonalGridClaimService(database as never, { cellSize: 1_000 });
 
-    await expect(service.get({ userId })).resolves.toEqual(geojson);
+    await expect(service.get({ userId, ...viewport })).resolves.toEqual(geojson);
   });
 
   it('returns full-cell viewport stats with distinct contributing flights', async () => {

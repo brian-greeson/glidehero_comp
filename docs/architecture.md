@@ -257,6 +257,12 @@ Competition claims remain global and Arena-independent. For Arena reads,
 editing an Arena immediately changes the view over historical claims without
 flight reprocessing.
 
+Personal, Global competition, and Arena territory endpoints require viewport
+bounds. Their database queries apply `viewportCtes` before dissolving Personal
+regions or aggregating competition claimants, so offscreen claims do not enter
+the returned GeoJSON or the territory-query workload. Arena territory applies
+both the requested viewport and the canonical Arena center-coverage rule.
+
 The Arena editor accepts drawn or imported WGS84 Polygon/MultiPolygon inputs,
 applies two-dimensional make-valid,
 transformation, collection, union, and MultiPolygon normalization. Disconnected
@@ -363,6 +369,23 @@ Keep server-side authorization and business rules on the server. Browser validat
 Extract reusable browser behavior into a focused module instead of continually growing a page entry script.
 
 Feature-specific browser assets may use a subdirectory, as the admin area editor does.
+
+### Viewport territory loading
+
+`viewportTerritoryLoader.js` owns the shared Personal, Global, and Arena
+territory-loading lifecycle. On initial load or after leaving the currently
+loaded region, it requests the exact visible viewport first. Once that response
+has rendered, it requests a viewport expanded by 50 percent on every edge and
+replaces the source with that buffered result. Movements contained by the
+loaded buffer do not reload territory; Personal stats and the Global
+leaderboard still refresh for their visible viewport.
+
+The loader normalizes wrapped longitude bounds, supports antimeridian-crossing
+viewports, cancels stale visible and buffered requests, and invalidates its
+buffer when the competition period or selected pilot changes. A failed
+background request leaves the visible response in place. Territory endpoints
+require `west`, `south`, `east`, and `north`, preventing an accidental fallback
+to an unbounded worldwide response.
 
 ### Map flight aids
 

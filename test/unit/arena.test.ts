@@ -123,7 +123,8 @@ describe('Arena dashboard', () => {
     expect(fetchImpl.mock.calls.map(([url]) => url)).toEqual([
       '/v1/arenas/745/boundary',
       '/v1/arenas/745/competition-leaderboard?month=2026-07',
-      '/v1/arenas/745/competition-territory?month=2026-07',
+      '/v1/arenas/745/competition-territory?month=2026-07&west=-107&south=39&east=-105&north=41',
+      '/v1/arenas/745/competition-territory?month=2026-07&west=-108&south=38&east=-104&north=42',
     ]);
     expect(harness.map.addSource).toHaveBeenCalledWith('competition-arena-boundary', {
       type: 'geojson',
