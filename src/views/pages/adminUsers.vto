@@ -1,0 +1,23 @@
+{{ layout "layouts/appLayout.vto" }}
+  <section class="admin-page admin-user-page">
+    {{ include "components/adminNav.vto" { activeAdminPage: "users" } }}
+    <div class="admin-user-workspace">
+      {{ include "components/adminUserList.vto" { users, selectedUser, search, searchParam } }}
+      <main class="admin-user-detail">
+        {{ if successMessage }}<p class="success" role="status">{{ successMessage }}</p>{{ /if }}
+        {{ if errorMessage }}<p class="error" role="alert">{{ errorMessage }}</p>{{ /if }}
+        {{ if mode === 'empty' }}<section class="admin-user-card"><h2>Select a user</h2><p class="muted">Choose an account from the list or create a new user.</p></section>{{ /if }}
+        {{ include "components/adminUserForm.vto" { mode, selectedUser, currentUser, search } }}
+        {{ include "components/adminUserFlights.vto" { selectedUser, flights, search } }}
+        {{ if selectedUser }}
+          <section class="admin-user-card admin-user-delete">
+            <h2>Delete user</h2><p>Permanently removes the account, terminal flights, claims, stored IGC files, and terminal upload records.</p>
+            <form method="post" action="/admin/users/{{ selectedUser.id }}/delete" data-confirm="Delete {{ selectedUser.email }} and all terminal flight data permanently?">
+              <input type="hidden" name="q" value="{{ search }}"><button type="submit" class="admin-user-danger"{{ if selectedUser.id === currentUser.userId }} disabled{{ /if }}>Delete user</button>
+            </form>
+          </section>
+        {{ /if }}
+      </main>
+    </div>
+  </section>
+{{ /layout }}

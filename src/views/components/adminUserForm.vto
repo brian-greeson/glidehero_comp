@@ -1,0 +1,36 @@
+{{ if mode === 'create' }}
+  <section class="admin-user-card">
+    <p class="admin-eyebrow">New account</p><h2>Create user</h2>
+    <form method="post" action="/admin/users" class="admin-user-form">
+      <input type="hidden" name="q" value="{{ search }}">
+      <label>Email<input name="email" type="email" maxlength="320" required autocomplete="off"></label>
+      <label>Display name<input name="displayName" maxlength="48" required autocomplete="off"></label>
+      <label>Password<input name="password" type="password" minlength="3" maxlength="128" required autocomplete="new-password"></label>
+      <label>Confirm password<input name="passwordConfirmation" type="password" minlength="3" maxlength="128" required autocomplete="new-password"></label>
+      <button type="submit">Create user</button>
+    </form>
+  </section>
+{{ else if selectedUser }}
+  <section class="admin-user-card">
+    <p class="admin-eyebrow">Selected user</p><h2>{{ selectedUser.email }}</h2>
+    {{ if selectedUser.id === currentUser.userId }}
+      <p class="admin-user-protected">Your signed-in admin account is protected from changes here.</p>
+    {{ /if }}
+    <form method="post" action="/admin/users/{{ selectedUser.id }}" class="admin-user-form">
+      <input type="hidden" name="q" value="{{ search }}">
+      <label>Email<input name="email" type="email" maxlength="320" required value="{{ selectedUser.email }}"{{ if selectedUser.id === currentUser.userId }} disabled{{ /if }}></label>
+      <label>Display name<input name="displayName" maxlength="48" required value="{{ selectedUser.displayName ?? '' }}"{{ if selectedUser.id === currentUser.userId }} disabled{{ /if }}></label>
+      <button type="submit"{{ if selectedUser.id === currentUser.userId }} disabled{{ /if }}>Save user</button>
+    </form>
+  </section>
+  <section class="admin-user-card">
+    <h2>Set new password</h2>
+    {{ if !selectedUser.hasPassword }}<p class="error">This account is missing its password record. Saving a password will repair it.</p>{{ /if }}
+    <form method="post" action="/admin/users/{{ selectedUser.id }}/password" class="admin-user-form">
+      <input type="hidden" name="q" value="{{ search }}">
+      <label>New password<input name="password" type="password" minlength="3" maxlength="128" required autocomplete="new-password"{{ if selectedUser.id === currentUser.userId }} disabled{{ /if }}></label>
+      <label>Confirm password<input name="passwordConfirmation" type="password" minlength="3" maxlength="128" required autocomplete="new-password"{{ if selectedUser.id === currentUser.userId }} disabled{{ /if }}></label>
+      <button type="submit"{{ if selectedUser.id === currentUser.userId }} disabled{{ /if }}>Set password and sign out sessions</button>
+    </form>
+  </section>
+{{ /if }}

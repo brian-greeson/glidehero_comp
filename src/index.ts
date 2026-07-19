@@ -7,6 +7,7 @@ import { createValkeyClient } from './resources/valkeyClient.js';
 import { createAuthService } from './services/authService.js';
 import { createAdminFlightService } from './services/adminFlightService.js';
 import { createAdminAreaService } from './services/adminAreaService.js';
+import { createAdminUserService } from './services/adminUserService.js';
 import { createArenaService } from './services/arenaService.js';
 import { createGridClaimService } from './services/gridClaimService.js';
 import { createFlightUploadQueueService } from './services/flightUploadQueueService.js';
@@ -14,8 +15,9 @@ import { createFailedFlightCleanupService } from './services/failedFlightCleanup
 import { createProfileService } from './services/profileService.js';
 import { createMonthlyCoverageService } from './services/monthlyCoverageService.js';
 import { createMapGridService } from './services/mapGridService.js';
-import { createAdminAreaPageRenderer, createAdminPageRenderer, createPageRenderer } from './views/renderer.js';
+import { createAdminAreaPageRenderer, createAdminPageRenderer, createAdminUserPageRenderer, createPageRenderer } from './views/renderer.js';
 import { createAdminAreaRouter } from './web/adminAreaRouter.js';
+import { createAdminUserRouter } from './web/adminUserRouter.js';
 import { createCurrentUserMiddleware } from './web/currentUserMiddleware.js';
 import { createSessionCookie } from './web/sessionCookie.js';
 import { createWebRouter } from './web/webRouter.js';
@@ -26,13 +28,23 @@ const auth = createAuthService(db, { sessionTtlSeconds: config.sessionTtlSeconds
 const s3Client = createBucketClient(config);
 const valkey = await createValkeyClient(config.valkeyUrl);
 const gridClaim = createGridClaimService(db, { cellSize: config.gridClaimCellSize });
-const adminFlights = createAdminFlightService(db, gridClaim);
 const adminAreas = createAdminAreaService(db, { cellSize: config.gridClaimCellSize });
 const arenas = createArenaService(db, { cellSize: config.gridClaimCellSize });
 const monthlyCoverage = createMonthlyCoverageService(db, { cellSize: config.gridClaimCellSize });
 const mapGrid = createMapGridService(db, { cellSize: config.gridClaimCellSize });
 const profiles = createProfileService(db);
 const uploadQueue = createFlightUploadQueueService(valkey, {
+  s3Client,
+  bucketName: config.bucket.bucketName,
+  bucketFolder: config.bucket.bucketFolder,
+});
+const adminFlights = createAdminFlightService(db, gridClaim, {
+  s3Client,
+  bucketName: config.bucket.bucketName,
+  uploadQueue,
+});
+const adminUsers = createAdminUserService(db, {
+  uploadQueue,
   s3Client,
   bucketName: config.bucket.bucketName,
   bucketFolder: config.bucket.bucketFolder,
@@ -52,6 +64,12 @@ const webMiddleware = [
     adminEmails: config.adminEmails,
     areas: adminAreas,
     renderPage: createAdminAreaPageRenderer({ mapTilerApiKey: config.mapTilerApiKey }),
+  }),
+  createAdminUserRouter({
+    adminEmails: config.adminEmails,
+    users: adminUsers,
+    flights: adminFlights,
+    renderPage: createAdminUserPageRenderer(),
   }),
   createWebRouter({
     auth,

@@ -810,6 +810,13 @@ button {
   padding: 0.5rem 0.7rem;
   font-size: 0.85rem;
 }
+@media (max-width: 760px) {
+  .admin-nav { height: 64px; grid-template-columns: auto minmax(0, 1fr) auto; gap: .5rem; padding-inline: .75rem; }
+  .admin-brand .brand-name { display: none; }
+  .admin-tabs { justify-content: center; }
+  .admin-tab { min-width: 0; padding-inline: .5rem; font-size: .7rem; }
+  .admin-back-link { font-size: .7rem; }
+}
 
 .map-stage {
   position: absolute;

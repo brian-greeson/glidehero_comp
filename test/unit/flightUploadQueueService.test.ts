@@ -342,6 +342,30 @@ describe('FlightUploadQueueService', () => {
     expect((await service.listJobs('user-1', { page: 1, pageSize: 10, status: 'processing' })).total).toBe(1);
   });
 
+  it('reports active user work and removes matching terminal flight jobs idempotently', async () => {
+    const valkey = new FakeValkey();
+    const service = createFlightUploadQueueService(valkey as never, {
+      s3Client: { send: vi.fn(async () => ({ ContentLength: 10 })) } as never,
+      bucketName: 'flights',
+      presign: vi.fn(async () => 'signed'),
+    });
+    const intent = await service.createIntent({ userId: 'user-1', originalFilename: 'flight.igc', contentType: '', byteSize: 10 });
+    expect(await service.activeJobCountForUser('user-1')).toBe(1);
+    expect(await service.activeJobCountForUser('user-2')).toBe(0);
+    await service.complete({ userId: 'user-1', id: intent.id });
+    const claimed = await service.claimJob(intent.id);
+    expect(claimed).not.toBeNull();
+    await service.saveClaimedJob({
+      ...claimed!, status: 'completed', flightId: 'flight-1', igcFileId: 'file-1', updatedAt: Date.now(),
+    });
+    expect(await service.activeJobCountForUser('user-1')).toBe(0);
+    await service.removeTerminalJobsForFlight({
+      userId: 'user-1', flightId: 'flight-1', igcFileId: 'file-1', bucketKey: claimed!.bucketKey,
+    });
+    expect(await service.getJob(intent.id)).toBeNull();
+    await expect(service.removeTerminalJobsForUser('user-1')).resolves.toBeUndefined();
+  });
+
   it('rejects invalid file names and sizes before creating storage state', async () => {
     const service = createFlightUploadQueueService(new FakeValkey() as never, {
       s3Client: {} as never,

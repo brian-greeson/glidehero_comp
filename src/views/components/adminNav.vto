@@ -1,7 +1,8 @@
 <header class="admin-nav">
   <a class="brand admin-brand" href="/admin" aria-label="Glide Hero administration"><img class="brand-logo" src="/android-chrome-192x192.png" alt=""><span class="brand-name">GLIDE HERO</span></a>
   <nav class="admin-tabs" aria-label="Admin sections">
-    <a href="/admin" class="admin-tab{{ if activeAdminPage === 'flights' }} is-active{{ /if }}"{{ if activeAdminPage === 'flights' }} aria-current="page"{{ /if }}>Flights</a>
+    <a href="/admin" class="admin-tab{{ if activeAdminPage === 'recent' }} is-active{{ /if }}"{{ if activeAdminPage === 'recent' }} aria-current="page"{{ /if }}>Recent activity</a>
+    <a href="/admin/users" class="admin-tab{{ if activeAdminPage === 'users' }} is-active{{ /if }}"{{ if activeAdminPage === 'users' }} aria-current="page"{{ /if }}>Users</a>
     <a href="/admin/areas" class="admin-tab{{ if activeAdminPage === 'areas' }} is-active{{ /if }}"{{ if activeAdminPage === 'areas' }} aria-current="page"{{ /if }}>Areas</a>
   </nav>
   <div class="admin-nav-actions"><a class="admin-back-link" href="/global">Back to dashboard</a></div>

@@ -11,6 +11,7 @@
     <meta name="color-scheme" content="light">
     <link rel="stylesheet" href="/styles/color-palette.css">
     <link rel="stylesheet" href="/styles/app.css">
+    {{ if pageStylesheet }}<link rel="stylesheet" href="{{ pageStylesheet }}">{{ /if }}
     {{ if isDashboard }}
       <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@5.16.0/dist/maplibre-gl.css">
     {{ /if }}
@@ -26,5 +27,6 @@
     {{ else if !currentUser && !isErrorPage }}
       <script type="module" src="/scripts/landing.js"></script>
     {{ /if }}
+    {{ if pageScript }}<script type="module" src="{{ pageScript }}"></script>{{ /if }}
   </body>
 </html>

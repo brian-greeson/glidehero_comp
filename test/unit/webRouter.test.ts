@@ -307,6 +307,9 @@ describe('webRouter', () => {
         status: 'completed' as const,
         result: { flightId: '00000000-0000-4000-8000-000000000020', cellSize: 1000, directCellCount: 1, enclosedCellCount: 0 },
       })),
+      listUserFlights: vi.fn(async () => []),
+      deleteFlight: vi.fn(async () => 'deleted' as const),
+      createDownloadUrl: vi.fn(async () => null),
     };
     const renderAdminPage = vi.fn(async () => '<html><body>Admin flights</body></html>');
     const router = createWebRouter({

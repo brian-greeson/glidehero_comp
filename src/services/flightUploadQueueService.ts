@@ -48,6 +48,10 @@ export type UploadJobPage = {
   jobs: Array<Pick<UploadJob, 'id' | 'originalFilename' | 'status' | 'error'>>;
 };
 
+export function flightUploadPrefix(bucketFolder: string, userId: string): string {
+  return `${bucketFolder}/uploads/${userId}/`;
+}
+
 const jobKey = (id: string) => `glidehero:upload:${id}`;
 const userJobsKey = (userId: string) => `glidehero:user:${userId}:uploads`;
 const userJobsByStatusKey = (userId: string, status: UploadJobStatus) => `glidehero:user:${userId}:uploads:${status}`;
@@ -231,6 +235,9 @@ export interface FlightUploadQueueService {
   removeIntent(job: UploadJob): Promise<boolean>;
   pendingRemovals(): Promise<UploadJob[]>;
   finalizeRemoval(id: string): Promise<void>;
+  activeJobCountForUser(userId: string): Promise<number>;
+  removeTerminalJobsForUser(userId: string): Promise<void>;
+  removeTerminalJobsForFlight(input: { userId: string; flightId: string; igcFileId: string; bucketKey: string }): Promise<void>;
 }
 
 export function createFlightUploadQueueService(
@@ -244,7 +251,7 @@ export function createFlightUploadQueueService(
   },
 ): FlightUploadQueueService {
   const keyFactory = options.keyFactory
-    ?? ((userId) => `${options.bucketFolder}/uploads/${userId}/${randomUUID()}.igc`);
+    ?? ((userId) => `${flightUploadPrefix(options.bucketFolder, userId)}${randomUUID()}.igc`);
 
   async function getJob(id: string): Promise<UploadJob | null> {
     const raw = decode(await valkey.get(jobKey(id)));
@@ -337,6 +344,50 @@ export function createFlightUploadQueueService(
 
   async function finalizeRemoval(id: string): Promise<void> {
     await execAtomic(new Batch(true).del([removalKey(id)]).zrem(removalPendingKey, [id]), 'Unable to finalize upload object removal.');
+  }
+
+  async function jobsForUser(userId: string): Promise<UploadJob[]> {
+    const userIndexKeys = [userJobsKey(userId), ...uploadJobStatuses.map((status) => userJobsByStatusKey(userId, status))];
+    const indexedIds = await Promise.all(
+      [allJobsKey, ...userIndexKeys].map((key) => valkey.zrange(key, { start: 0, end: -1 })),
+    );
+    const ids = [...new Set(indexedIds.flat().map(String))];
+    const jobs: UploadJob[] = [];
+    for (const id of ids) {
+      let job: UploadJob | null = null;
+      try {
+        job = await getJob(id);
+      } catch {
+        // A malformed record cannot be attributed safely; prune its indexes so it
+        // does not prevent repair-oriented admin cleanup.
+      }
+      if (job?.userId === userId) jobs.push(job);
+      if (!job) {
+        await valkey.zrem(allJobsKey, [id]);
+        for (const key of userIndexKeys) await valkey.zrem(key, [id]);
+      } else if (job.userId !== userId) {
+        for (const key of userIndexKeys) await valkey.zrem(key, [id]);
+      }
+    }
+    return jobs;
+  }
+
+  async function removeTerminalJobs(jobs: UploadJob[]): Promise<void> {
+    for (const job of jobs) {
+      if (job.status === 'completed' || job.status === 'duplicate') {
+        await retireSuccessfulJob(job.userId, job.id, job.status);
+        continue;
+      }
+      if (job.status !== 'failed') continue;
+      await valkey.invokeScript(clearFailedJobScript, {
+        keys: [
+          jobKey(job.id), dispositionKey(job.id), failedCleanupKey(job.id), failedCleanupPendingKey,
+          clearedJobEvidenceKey, userJobsKey(job.userId), allJobsKey, uploadExpiryKey,
+          ...uploadJobStatuses.map((status) => userJobsByStatusKey(job.userId, status)),
+        ],
+        args: [job.id, job.userId, String(JOB_DISPOSITION_TTL_SECONDS), String(Date.now())],
+      });
+    }
   }
 
   return {
@@ -586,5 +637,24 @@ export function createFlightUploadQueueService(
     },
 
     finalizeRemoval,
+
+    async activeJobCountForUser(userId) {
+      return (await jobsForUser(userId))
+        .filter((job) => job.status === 'uploading' || job.status === 'queued' || job.status === 'processing')
+        .length;
+    },
+
+    async removeTerminalJobsForUser(userId) {
+      await removeTerminalJobs(await jobsForUser(userId));
+    },
+
+    async removeTerminalJobsForFlight(input) {
+      const jobs = (await jobsForUser(input.userId)).filter((job) =>
+        job.flightId === input.flightId
+        || job.igcFileId === input.igcFileId
+        || job.bucketKey === input.bucketKey,
+      );
+      await removeTerminalJobs(jobs);
+    },
   };
 }

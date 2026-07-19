@@ -1,0 +1,27 @@
+{{ if selectedUser }}
+  <section class="admin-user-card admin-user-flights">
+    <div><h2>Flight management</h2><span>{{ flights.length }} flights</span></div>
+    <div class="admin-table-wrap">
+      <table class="admin-flight-table">
+        <thead><tr><th scope="col">Flight date</th><th scope="col">File</th><th scope="col">Status</th><th scope="col"><span class="sr-only">Actions</span></th></tr></thead>
+        <tbody>
+          {{ for flight of flights }}
+            <tr>
+              <td>{{ flight.flightDate ?? '—' }}</td><td>{{ flight.originalFilename }}</td><td>{{ flight.processingStatus }}</td>
+              <td class="admin-flight-actions">
+                {{ if flight.processingStatus !== 'processing' }}
+                  <a href="/admin/users/{{ selectedUser.id }}/flights/{{ flight.id }}/igc">Download IGC</a>
+                  {{ if flight.processingStatus === 'completed' }}<form method="post" action="/admin/users/{{ selectedUser.id }}/flights/{{ flight.id }}/reprocess"><input type="hidden" name="q" value="{{ search }}"><button type="submit" class="admin-reprocess-button">Reprocess</button></form>{{ /if }}
+                  <form method="post" action="/admin/users/{{ selectedUser.id }}/flights/{{ flight.id }}/delete" data-confirm="Delete {{ flight.originalFilename }} permanently?"><input type="hidden" name="q" value="{{ search }}"><button type="submit" class="admin-user-danger">Delete</button></form>
+                {{ else }}
+                  <span class="muted">Processing management coming later</span>
+                {{ /if }}
+              </td>
+            </tr>
+          {{ /for }}
+          {{ if flights.length === 0 }}<tr><td colspan="4" class="muted">No flights found for this user.</td></tr>{{ /if }}
+        </tbody>
+      </table>
+    </div>
+  </section>
+{{ /if }}

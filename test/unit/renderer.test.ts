@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   createAdminAreaPageRenderer,
   createAdminPageRenderer,
+  createAdminUserPageRenderer,
   createErrorPageRenderer,
   createPageRenderer,
 } from '../../src/views/renderer.js';
@@ -261,8 +262,38 @@ describe('Vento page renderer', () => {
     expect(html).not.toContain('maplibre-gl');
     expect(html).toContain('href="/admin/areas"');
     expect(html).toContain(
-      'href="/admin" class="admin-tab is-active" aria-current="page">Flights</a>',
+      'href="/admin" class="admin-tab is-active" aria-current="page">Recent activity</a>',
     );
+    expect(html).toContain('href="/admin/users"');
+  });
+
+  it('renders user management with protected self-service and terminal flight actions', async () => {
+    const currentUser = {
+      userId: '00000000-0000-4000-8000-000000000001',
+      sessionId: '00000000-0000-4000-8000-000000000002',
+      email: 'admin@example.com', displayName: 'Admin', territoryColor: '#1769AA',
+    };
+    const html = await createAdminUserPageRenderer()({
+      currentUser,
+      users: [{ id: currentUser.userId, email: currentUser.email, displayName: currentUser.displayName }],
+      selectedUser: {
+        id: currentUser.userId, email: currentUser.email, displayName: currentUser.displayName,
+        hasPassword: true, lastLogin: new Date(), createdAt: new Date(), updatedAt: new Date(),
+      },
+      flights: [
+        { id: '00000000-0000-4000-8000-000000000020', flightDate: '2026-07-14', originalFilename: 'done.igc', processingStatus: 'completed' },
+        { id: '00000000-0000-4000-8000-000000000021', flightDate: null, originalFilename: 'active.igc', processingStatus: 'processing' },
+      ],
+      search: 'admin@', searchParam: 'admin%40', mode: 'edit',
+    });
+
+    expect(html).toContain('href="/admin/users" class="admin-tab is-active"');
+    expect(html).toContain('Your signed-in admin account is protected');
+    expect(html).toContain('/flights/00000000-0000-4000-8000-000000000020/igc');
+    expect(html).toContain('/flights/00000000-0000-4000-8000-000000000020/reprocess');
+    expect(html).not.toContain('/flights/00000000-0000-4000-8000-000000000021/delete');
+    expect(html).toContain('/styles/adminUserManagement.css');
+    expect(html).toContain('/scripts/admin/userManagement.js');
   });
 
   it('renders the area editor with only its dedicated map assets', async () => {

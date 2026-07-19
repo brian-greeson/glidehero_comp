@@ -2,6 +2,8 @@ import { resolve } from 'node:path';
 import vento from 'ventojs';
 import type { AuthenticatedUser } from '../services/authService.js';
 import type { AdminFlight } from '../services/adminFlightService.js';
+import type { AdminUserFlight } from '../services/adminFlightService.js';
+import type { AdminUserDetail, AdminUserSummary } from '../services/adminUserService.js';
 import type { ArenaDetail } from '../services/arenaService.js';
 
 export type PageModel = {
@@ -33,6 +35,17 @@ export type AdminPageRenderer = (model: {
 }) => Promise<string>;
 export type AdminAreaPageRenderer = (model: {
   currentUser: AuthenticatedUser;
+}) => Promise<string>;
+export type AdminUserPageRenderer = (model: {
+  currentUser: AuthenticatedUser;
+  users: AdminUserSummary[];
+  selectedUser?: AdminUserDetail;
+  flights: AdminUserFlight[];
+  search: string;
+  searchParam: string;
+  mode: 'empty' | 'create' | 'edit';
+  successMessage?: string;
+  errorMessage?: string;
 }) => Promise<string>;
 
 function createEnvironment() {
@@ -70,6 +83,8 @@ export function createPageRenderer(options: { mapTilerApiKey: string }): PageRen
         isDashboard: page === 'global' || page === 'personal' || page === 'arena',
         isErrorPage: false,
         dashboardScript,
+        pageStylesheet: undefined,
+        pageScript: undefined,
         mapTilerStyleUrl: `https://api.maptiler.com/maps/outdoor-v2/style.json?key=${options.mapTilerApiKey}`,
         ...model,
       })
@@ -95,6 +110,8 @@ export function createErrorPageRenderer(): ErrorPageRenderer {
         errorMessage: isNotFound
           ? 'This route seems to be tangled in a tree. Let\u2019s pack up and head home.'
           : 'Glide Hero hit an unexpected snag. Pack up, head home, and try launching again.',
+        pageStylesheet: undefined,
+        pageScript: undefined,
       })
     ).content;
   };
@@ -110,7 +127,26 @@ export function createAdminPageRenderer(): AdminPageRenderer {
       isDashboard: false,
       isErrorPage: false,
       dashboardScript: '',
+      pageStylesheet: undefined,
+      pageScript: undefined,
       queueSummary: undefined,
+      ...model,
+    })
+  ).content;
+}
+
+export function createAdminUserPageRenderer(): AdminUserPageRenderer {
+  const environment = createEnvironment();
+  return async (model) => (
+    await environment.run('pages/adminUsers.vto', {
+      selectedUser: undefined,
+      successMessage: undefined,
+      errorMessage: undefined,
+      isDashboard: false,
+      isErrorPage: false,
+      dashboardScript: '',
+      pageStylesheet: '/styles/adminUserManagement.css',
+      pageScript: '/scripts/admin/userManagement.js',
       ...model,
     })
   ).content;

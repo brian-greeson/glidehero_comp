@@ -10,4 +10,9 @@ Configure the private DigitalOcean Space with a CORS rule that allows:
 
 Uploads must use the Space origin configured by `BUCKET_URL`, not its CDN endpoint. Keep the bucket and uploaded objects private; browser access is granted only through short-lived presigned `PutObject` URLs.
 
+The application credentials also need permission to list the configured
+`BUCKET_FOLDER/uploads/<user-id>/` prefix, read objects, and delete objects.
+Admin user cleanup lists that prefix so orphaned IGC objects can still be
+removed when database or queue metadata is incomplete.
+
 The App Platform worker starts with one instance. Increase `workers[].instance_count` manually when the admin queue summary shows sustained queue growth.

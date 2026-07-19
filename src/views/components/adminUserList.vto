@@ -1,0 +1,18 @@
+<aside class="admin-user-list" aria-label="User list">
+  <div class="admin-user-list-heading"><h1>Users</h1><a class="admin-user-new" href="/admin/users/new{{ if searchParam }}?q={{ searchParam }}{{ /if }}">New user</a></div>
+  <form method="get" action="/admin/users" class="admin-user-search">
+    <label for="admin-user-search">Search by email</label>
+    <div><input id="admin-user-search" name="q" type="search" value="{{ search }}" maxlength="200"><button type="submit">Search</button></div>
+  </form>
+  <nav aria-label="Matching users" class="admin-user-results">
+    {{ if users.length === 0 }}
+      <p class="muted">No users found.</p>
+    {{ else }}
+      {{ for user of users }}
+        <a href="/admin/users/{{ user.id }}{{ if searchParam }}?q={{ searchParam }}{{ /if }}" class="admin-user-result{{ if selectedUser && selectedUser.id === user.id }} is-selected{{ /if }}">
+          <strong>{{ user.email }}</strong><span>{{ user.displayName ?? 'Missing profile' }}</span>
+        </a>
+      {{ /for }}
+    {{ /if }}
+  </nav>
+</aside>
