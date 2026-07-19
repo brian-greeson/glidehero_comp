@@ -238,11 +238,13 @@ export function createFlightUploadQueueService(
   options: {
     s3Client: S3;
     bucketName: string;
+    bucketFolder: string;
     keyFactory?: (userId: string) => string;
     presign?: (command: PutObjectCommand) => Promise<string>;
   },
 ): FlightUploadQueueService {
-  const keyFactory = options.keyFactory ?? ((userId) => `glidehero/uploads/${userId}/${randomUUID()}.igc`);
+  const keyFactory = options.keyFactory
+    ?? ((userId) => `${options.bucketFolder}/uploads/${userId}/${randomUUID()}.igc`);
 
   async function getJob(id: string): Promise<UploadJob | null> {
     const raw = decode(await valkey.get(jobKey(id)));

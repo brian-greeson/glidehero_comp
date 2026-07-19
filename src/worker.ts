@@ -19,7 +19,11 @@ const { db, pool } = createDatabase(config.databaseUrl);
 const s3Client = createBucketClient(config);
 const valkey = await createValkeyClient(config.valkeyUrl);
 const streamReader = await createValkeyClient(config.valkeyUrl, { requestTimeout: 10_000 });
-const queue = createFlightUploadQueueService(valkey, { s3Client, bucketName: config.bucket.bucketName });
+const queue = createFlightUploadQueueService(valkey, {
+  s3Client,
+  bucketName: config.bucket.bucketName,
+  bucketFolder: config.bucket.bucketFolder,
+});
 const processor = createFlightProcessingService(db, {
   s3Client,
   bucketName: config.bucket.bucketName,

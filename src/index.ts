@@ -35,6 +35,7 @@ const profiles = createProfileService(db);
 const uploadQueue = createFlightUploadQueueService(valkey, {
   s3Client,
   bucketName: config.bucket.bucketName,
+  bucketFolder: config.bucket.bucketFolder,
 });
 const failedFlightCleanup = createFailedFlightCleanupService(db, uploadQueue, {
   s3Client,

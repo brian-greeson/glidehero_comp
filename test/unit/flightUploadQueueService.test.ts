@@ -1,6 +1,7 @@
+import type { PutObjectCommand } from '@aws-sdk/client-s3';
 import { describe, expect, it, vi } from 'vitest';
 import {
-  createFlightUploadQueueService,
+  createFlightUploadQueueService as createQueueService,
   FLIGHT_JOB_STREAM,
   MAINTENANCE_BATCH_SIZE,
 } from '../../src/services/flightUploadQueueService.js';
@@ -205,6 +206,15 @@ class FakeValkey {
   }
 }
 
+type QueueOptions = Parameters<typeof createQueueService>[1];
+
+function createFlightUploadQueueService(
+  valkey: Parameters<typeof createQueueService>[0],
+  options: Omit<QueueOptions, 'bucketFolder'> & { bucketFolder?: string },
+) {
+  return createQueueService(valkey, { bucketFolder: 'glidehero-test', ...options });
+}
+
 describe('FlightUploadQueueService', () => {
   it('atomically admits at most 1,000 uploads across concurrent tabs', async () => {
     const valkey = new FakeValkey();
@@ -233,6 +243,25 @@ describe('FlightUploadQueueService', () => {
     ]);
     expect(await valkey.zcard('glidehero:user:user-1:uploads')).toBe(1_000);
     expect((await firstTab.listJobs('user-1', { page: 1, pageSize: 10, status: 'uploading' })).total).toBe(2);
+  });
+
+  it('creates upload object keys under the configured bucket folder', async () => {
+    const valkey = new FakeValkey();
+    const presign = vi.fn(async (_command: PutObjectCommand) => 'https://objects.example.test/signed');
+    const service = createFlightUploadQueueService(valkey as never, {
+      s3Client: {} as never,
+      bucketName: 'flights',
+      bucketFolder: 'glidehero-dev',
+      presign,
+    });
+
+    const intent = await service.createIntent({
+      userId: 'user-1', originalFilename: 'flight.igc', contentType: '', byteSize: 128,
+    });
+
+    const job = await service.getJob(intent.id);
+    expect(job?.bucketKey).toMatch(/^glidehero-dev\/uploads\/user-1\/[0-9a-f-]+\.igc$/);
+    expect(presign.mock.calls[0]?.[0].input.Key).toBe(job?.bucketKey);
   });
 
   it('creates a private upload intent and queues it only after object verification', async () => {

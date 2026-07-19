@@ -10,6 +10,7 @@ describe('parseConfig', () => {
       BUCKET_ID: 'id',
       BUCKET_NAME: 'glidehero-files',
       BUCKET_URL: 'https://s3.example.test',
+      BUCKET_FOLDER: '/glidehero-dev/',
       MAPTILER_API_KEY: 'maptiler-test-key',
       GRID_CLAIM_CELL_SIZE: '1000',
     })).toEqual({
@@ -28,6 +29,7 @@ describe('parseConfig', () => {
         bucketId: 'id',
         bucketName: 'glidehero-files',
         bucketURL: 'https://s3.example.test',
+        bucketFolder: 'glidehero-dev',
       },
     });
   });
@@ -44,6 +46,7 @@ describe('parseConfig', () => {
       BUCKET_ID: 'id',
       BUCKET_NAME: 'glidehero-files',
       BUCKET_URL: 'https://s3.example.test',
+      BUCKET_FOLDER: 'glidehero-dev',
       GRID_CLAIM_CELL_SIZE: '1000',
     })).toThrow();
   });
@@ -56,6 +59,7 @@ describe('parseConfig', () => {
       BUCKET_ID: 'id',
       BUCKET_NAME: 'glidehero-files',
       BUCKET_URL: 'https://s3.example.test',
+      BUCKET_FOLDER: 'glidehero-dev',
       MAPTILER_API_KEY: 'maptiler-test-key',
     };
 
@@ -75,6 +79,7 @@ describe('parseConfig', () => {
         BUCKET_ID: 'id',
         BUCKET_NAME: 'glidehero-files',
         BUCKET_URL: 'https://s3.example.test',
+        BUCKET_FOLDER: 'glidehero-production',
         MAPTILER_API_KEY: 'maptiler-test-key',
         GRID_CLAIM_CELL_SIZE: '1000',
       }),
@@ -89,6 +94,7 @@ describe('parseConfig', () => {
       BUCKET_ID: 'id',
       BUCKET_NAME: 'glidehero-files',
       BUCKET_URL: 'https://s3.example.test',
+      BUCKET_FOLDER: 'glidehero-dev',
       MAPTILER_API_KEY: 'maptiler-test-key',
       GRID_CLAIM_CELL_SIZE: '1000',
       ADMIN_EMAILS: ' Admin@example.com, ,second@example.com,ADMIN@example.com ',

@@ -18,6 +18,11 @@ const envSchema = z.object({
   BUCKET_ID: z.string(),
   BUCKET_NAME: z.string(),
   BUCKET_URL: z.string(),
+  BUCKET_FOLDER: z
+    .string()
+    .trim()
+    .transform((folder) => folder.replace(/^\/+|\/+$/g, ''))
+    .pipe(z.string().min(1)),
   MAPTILER_API_KEY: z.string().min(1),
   GRID_CLAIM_CELL_SIZE: z.coerce.number().int().min(1),
   ADMIN_EMAILS: z.string().optional(),
@@ -39,6 +44,7 @@ export type AppConfig = {
     bucketId: string;
     bucketName: string;
     bucketURL: string;
+    bucketFolder: string;
   };
 };
 
@@ -54,15 +60,20 @@ export function parseConfig(env: NodeJS.ProcessEnv): AppConfig {
     sessionTtlSeconds: parsed.SESSION_TTL_SECONDS,
     mapTilerApiKey: parsed.MAPTILER_API_KEY,
     gridClaimCellSize: parsed.GRID_CLAIM_CELL_SIZE,
-    adminEmails: [...new Set((parsed.ADMIN_EMAILS ?? '')
-      .split(',')
-      .map((email) => email.trim().toLowerCase())
-      .filter(Boolean))],
+    adminEmails: [
+      ...new Set(
+        (parsed.ADMIN_EMAILS ?? '')
+          .split(',')
+          .map((email) => email.trim().toLowerCase())
+          .filter(Boolean),
+      ),
+    ],
     bucket: {
       bucketSecret: parsed.BUCKET_SECRET,
       bucketId: parsed.BUCKET_ID,
       bucketName: parsed.BUCKET_NAME,
       bucketURL: parsed.BUCKET_URL,
+      bucketFolder: parsed.BUCKET_FOLDER,
     },
   };
 }

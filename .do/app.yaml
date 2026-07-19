@@ -92,7 +92,7 @@ services:
     scope: RUN_AND_BUILD_TIME
     type: SECRET
     value: EV[1:5FvfxRQg0+tIHNjsrr5fFNhd9bhkVWIw:SR3dtgt3emdbqLXb/Fnjtd2Whn3wZZsBaj5f7m8ognGUKqOsFgC09sqmTfmaKCHZqVz3HXuXv0EPZAwNlmg=]
-  - key: BUCKET_IGC_FOLDER
+  - key: BUCKET_FOLDER
     scope: RUN_AND_BUILD_TIME
     type: SECRET
     value: EV[1:ooZGRLZ/ZHxFtc7vYr430TjqZlaKnUGE:JGznAOS7XP1fnSVNv0rRIkGqj2GiqW/FCw==]
@@ -138,6 +138,10 @@ workers:
     scope: RUN_TIME
     type: SECRET
     value: EV[1:Wl+evdt6N9kt64O9gW680p9o3xGqomOk:P2wUD3D+mwRJp9ZxJUEIGz5L6hDXBZjrlIQg+N+hIlUDSIdkycpLExNtd/DA5M3VUiCg]
+  - key: BUCKET_FOLDER
+    scope: RUN_TIME
+    type: SECRET
+    value: EV[1:ooZGRLZ/ZHxFtc7vYr430TjqZlaKnUGE:JGznAOS7XP1fnSVNv0rRIkGqj2GiqW/FCw==]
   - key: MAPTILER_API_KEY
     scope: RUN_TIME
     type: SECRET
