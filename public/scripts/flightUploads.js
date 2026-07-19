@@ -1,3 +1,5 @@
+import { extractIgcFilesFromZip } from './zipIgcFiles.js';
+
 const MAX_ACTIVE_FILES = 1000;
 const MAX_FILE_BYTES = 10 * 1024 * 1024;
 const CONCURRENCY = 4;
@@ -42,7 +44,6 @@ export function initializeFlightUploads(documentRef = document, windowRef = glob
   let running = 0;
   let settled = 0;
   let selected = 0;
-  let failed = 0;
   let serverTotal = 0;
   let serverFinished = 0;
   let modalServerBaseline = null;
@@ -50,8 +51,6 @@ export function initializeFlightUploads(documentRef = document, windowRef = glob
   const currentReservations = new Set();
   const currentIntentIds = new Set();
   const representedIntentIds = new Set();
-  let reloadScheduled = false;
-  let reloadTimer = null;
   let resolveInitialProgress;
   const initialProgress = new Promise((resolve) => { resolveInitialProgress = resolve; });
   let initialProgressResolved = false;
@@ -59,19 +58,12 @@ export function initializeFlightUploads(documentRef = document, windowRef = glob
   let progressRequestId = 0;
 
   function updateUploadTrigger() {
-    const localWorkActive = selected > settled || reloadScheduled;
+    const localWorkActive = selected > settled || currentReservations.size > 0;
     uploadTrigger.textContent = localWorkActive || serverTotal > serverFinished ? 'Upload Status' : 'Upload';
   }
 
   function updateOverall() {
     overall.textContent = `${settled}/${selected}`;
-    if (selected > 0 && settled === selected && failed === 0 && running === 0 && pending.length === 0 && !reloadScheduled) {
-      reloadScheduled = true;
-      reloadTimer = windowRef.setTimeout(() => {
-        reloadTimer = null;
-        windowRef.location.reload();
-      }, 500);
-    }
     updateUploadTrigger();
   }
 
@@ -132,7 +124,6 @@ export function initializeFlightUploads(documentRef = document, windowRef = glob
       const item = pending.shift();
       running += 1;
       void upload(item).catch(async (error) => {
-        failed += 1;
         item.row.status.textContent = error.message;
         item.row.status.classList.add('error');
         await releaseFailedUpload(item);
@@ -151,11 +142,6 @@ export function initializeFlightUploads(documentRef = document, windowRef = glob
     if (valid.length > MAX_ACTIVE_FILES - accountedTotal) {
       windowRef.alert(`You can have at most ${MAX_ACTIVE_FILES} active flight uploads.`);
       return;
-    }
-    if (reloadScheduled) {
-      if (reloadTimer !== null) windowRef.clearTimeout?.(reloadTimer);
-      reloadTimer = null;
-      reloadScheduled = false;
     }
     for (const file of valid) {
       const item = { file, row: makeRow(file) };
@@ -192,6 +178,21 @@ export function initializeFlightUploads(documentRef = document, windowRef = glob
           serverTotal - modalServerBaseline - representedIntentIds.size,
         );
       }
+      const reservations = [...currentReservations];
+      if (
+        serverTotal === 0
+        && selected === settled
+        && running === 0
+        && pending.length === 0
+        && reservations.length > 0
+        && reservations.every((item) => item.intentId && intentIdsBeforeRequest.has(item.intentId))
+      ) {
+        currentReservations.clear();
+        currentIntentIds.clear();
+        representedIntentIds.clear();
+        modalServerBaseline = null;
+        observedExternalGrowth = 0;
+      }
       progressBar.max = Math.max(progress.total, 1);
       progressBar.value = progress.finished;
       progressCount.textContent = `${progress.finished}/${progress.total}`;
@@ -215,6 +216,35 @@ export function initializeFlightUploads(documentRef = document, windowRef = glob
     if (uploadDialog.open) uploadDialog.close();
   }
 
+  async function prepareFiles(files) {
+    const prepared = [];
+    const messages = [];
+    let invalidFiles = 0;
+    for (const file of files) {
+      const lowerName = file.name.toLowerCase();
+      if (lowerName.endsWith('.igc')) {
+        if (file.size > 0 && file.size <= MAX_FILE_BYTES) prepared.push(file);
+        else invalidFiles += 1;
+        continue;
+      }
+      if (!lowerName.endsWith('.zip')) {
+        invalidFiles += 1;
+        continue;
+      }
+      try {
+        const extracted = await extractIgcFilesFromZip(file, { maxEntryBytes: MAX_FILE_BYTES });
+        prepared.push(...extracted.files);
+        if (extracted.skippedEntries > 0) {
+          messages.push(`${file.name}: skipped ${extracted.skippedEntries} non-IGC ${extracted.skippedEntries === 1 ? 'file' : 'files'}.`);
+        }
+      } catch (error) {
+        messages.push(`${file.name}: ${error instanceof Error ? error.message : 'The ZIP archive could not be opened.'}`);
+      }
+    }
+    if (invalidFiles > 0) messages.unshift('Only non-empty .igc files of 10 MB or less and .zip archives can be uploaded.');
+    return { prepared, messages };
+  }
+
   uploadTrigger.addEventListener('click', openUploadDialog);
   uploadClose?.addEventListener('click', closeUploadDialog);
   uploadDialog.addEventListener('cancel', (event) => {
@@ -229,11 +259,13 @@ export function initializeFlightUploads(documentRef = document, windowRef = glob
     const files = [...input.files];
     input.value = '';
     if (!files.length) return;
-    const valid = files.filter((file) => file.name.toLowerCase().endsWith('.igc') && file.size > 0 && file.size <= MAX_FILE_BYTES);
-    if (valid.length !== files.length) windowRef.alert('Only non-empty .igc files of 10 MB or less can be uploaded.');
-    if (!valid.length) return;
     if (!uploadDialog.open) openUploadDialog();
-    void initialProgress.then(() => addFiles(valid));
+    void prepareFiles(files).then(async ({ prepared, messages }) => {
+      if (messages.length) windowRef.alert(messages.join('\n'));
+      if (!prepared.length) return;
+      await initialProgress;
+      addFiles(prepared);
+    });
   });
   void refreshProgress();
 }

@@ -1,6 +1,7 @@
 // @ts-nocheck Browser behavior is exercised with a deliberately minimal DOM test double.
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { initializeFlightUploads } from '../../public/scripts/flightUploads.js';
+import { createZipFile } from '../helpers/createZipFile.js';
 
 function element() {
   const listeners = new Map();
@@ -75,7 +76,7 @@ function uploadHarness(initialTotal, fetchImplementation) {
     open() {}
     setRequestHeader() {}
     addEventListener(type, listener) { this.listeners.set(type, listener); }
-    send() {}
+    send(file) { this.file = file; }
     fail() { this.listeners.get('error')?.(); }
     succeed() { this.status = 200; this.listeners.get('load')?.(); }
   }
@@ -176,7 +177,8 @@ describe('flight upload progress UI', () => {
 
     harness.xhr.instances[0].succeed();
     await vi.waitFor(() => expect(fetch).toHaveBeenCalledWith('/v1/igc-uploads/intent-1/complete', expect.objectContaining({ method: 'POST' })));
-    await vi.waitFor(() => expect(harness.timers.some((timer) => timer.delay === 500)).toBe(true));
+    expect(harness.timers.some((timer) => timer.delay === 500)).toBe(false);
+    expect(harness.windowRef.location.reload).not.toHaveBeenCalled();
   });
 });
 
@@ -352,22 +354,42 @@ describe('flight upload active-file capacity', () => {
     expect(harness.windowRef.alert).toHaveBeenCalledWith('You can have at most 1000 active flight uploads.');
   });
 
-  it('cancels a pending handoff reload when more files are accepted', async () => {
+  it('releases local capacity after an authoritative poll retires completed uploads', async () => {
+    const harness = uploadHarness(999);
+
+    harness.select(harness.uploadInput, files(1, 'last-slot'));
+    await vi.waitFor(() => expect(harness.xhr.instances).toHaveLength(1));
+    harness.xhr.instances[0].succeed();
+    await vi.waitFor(() => expect(harness.selectors.get('[data-upload-overall]').textContent).toBe('1/1'));
+
+    harness.setProgressTotal(0);
+    harness.timers.find((timer) => timer.delay === 10_000)();
+    await vi.waitFor(() => expect(harness.selectors.get('[data-upload-trigger]').textContent).toBe('Upload'));
+    harness.select(harness.uploadMoreInput, files(2, 'new-batch'));
+
+    await vi.waitFor(() => expect(harness.selectors.get('[data-upload-list]').append).toHaveBeenCalledTimes(3));
+    expect(harness.windowRef.alert).not.toHaveBeenCalled();
+  });
+
+  it('keeps the modal open after successful uploads and accepts more files without reloading', async () => {
     const harness = uploadHarness(0);
 
     harness.select(harness.uploadInput, files(1, 'first'));
     await vi.waitFor(() => expect(harness.xhr.instances).toHaveLength(1));
     harness.xhr.instances[0].succeed();
-    await vi.waitFor(() => expect(harness.timers.some((timer) => timer.delay === 500)).toBe(true));
+    await vi.waitFor(() => expect(harness.selectors.get('[data-upload-overall]').textContent).toBe('1/1'));
+    expect(harness.selectors.get('[data-upload-dialog]').open).toBe(true);
+    expect(harness.timers.some((timer) => timer.delay === 500)).toBe(false);
+    expect(harness.windowRef.location.reload).not.toHaveBeenCalled();
+
     harness.select(harness.uploadMoreInput, files(1, 'second'));
 
-    await vi.waitFor(() => expect(harness.timers.some((timer) => timer.delay === 500)).toBe(false));
-    expect(harness.windowRef.location.reload).not.toHaveBeenCalled();
     await vi.waitFor(() => expect(harness.xhr.instances).toHaveLength(2));
     harness.xhr.instances[1].succeed();
-    await vi.waitFor(() => expect(harness.timers.some((timer) => timer.delay === 500)).toBe(true));
-    harness.timers.find((timer) => timer.delay === 500)();
-    expect(harness.windowRef.location.reload).toHaveBeenCalledOnce();
+    await vi.waitFor(() => expect(harness.selectors.get('[data-upload-overall]').textContent).toBe('2/2'));
+    expect(harness.selectors.get('[data-upload-dialog]').open).toBe(true);
+    expect(harness.timers.some((timer) => timer.delay === 500)).toBe(false);
+    expect(harness.windowRef.location.reload).not.toHaveBeenCalled();
   });
 
   it('keeps the upload modal open when an upload fails', async () => {
@@ -381,5 +403,70 @@ describe('flight upload active-file capacity', () => {
     expect(harness.selectors.get('[data-upload-dialog]').open).toBe(true);
     expect(harness.timers.some((timer) => timer.delay === 500)).toBe(false);
     expect(harness.windowRef.location.reload).not.toHaveBeenCalled();
+  });
+});
+
+describe('flight ZIP uploads', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('expands ZIP entries and uploads each IGC through the existing intent flow', async () => {
+    const harness = uploadHarness(0);
+    const archive = createZipFile([
+      { name: 'first.igc', contents: 'first flight', compression: 'stored' },
+      { name: 'folder/second.IGC', contents: 'second flight', compression: 'deflated' },
+      { name: 'notes.txt', contents: 'ignore me' },
+    ]);
+
+    harness.select(harness.uploadInput, [archive]);
+
+    await vi.waitFor(() => expect(harness.xhr.instances).toHaveLength(2));
+    const intentBodies = fetch.mock.calls
+      .filter(([url]) => String(url) === '/v1/igc-uploads/intents')
+      .map(([, options]) => JSON.parse(options.body));
+    expect(intentBodies).toEqual([
+      expect.objectContaining({ originalFilename: 'first.igc', byteSize: 12 }),
+      expect.objectContaining({ originalFilename: 'second.IGC', byteSize: 13 }),
+    ]);
+    expect(harness.selectors.get('[data-upload-list]').append).toHaveBeenCalledTimes(2);
+    expect(harness.selectors.get('[data-upload-overall]').textContent).toBe('0/2');
+    expect(harness.windowRef.alert).toHaveBeenCalledWith('flights.zip: skipped 1 non-IGC file.');
+  });
+
+  it('uploads direct IGC files and ZIP entries selected together', async () => {
+    const harness = uploadHarness(0);
+    const archive = createZipFile([{ name: 'archived.igc', contents: 'archive flight' }]);
+
+    harness.select(harness.uploadInput, [files(1, 'direct')[0], archive]);
+
+    await vi.waitFor(() => expect(harness.xhr.instances).toHaveLength(2));
+    const names = fetch.mock.calls
+      .filter(([url]) => String(url) === '/v1/igc-uploads/intents')
+      .map(([, options]) => JSON.parse(options.body).originalFilename);
+    expect(names).toEqual(['direct-0.igc', 'archived.igc']);
+  });
+
+  it('applies active-flight capacity to the number of extracted IGC files', async () => {
+    const harness = uploadHarness(999);
+    const archive = createZipFile([
+      { name: 'one.igc', contents: 'one' },
+      { name: 'two.igc', contents: 'two' },
+    ]);
+
+    harness.select(harness.uploadInput, [archive]);
+
+    await vi.waitFor(() => expect(harness.windowRef.alert).toHaveBeenCalledWith('You can have at most 1000 active flight uploads.'));
+    expect(harness.xhr.instances).toHaveLength(0);
+    expect(harness.selectors.get('[data-upload-list]').append).not.toHaveBeenCalled();
+  });
+
+  it('keeps the modal open and reports a corrupt ZIP without creating uploads', async () => {
+    const harness = uploadHarness(0);
+    const archive = new File(['not a zip'], 'broken.zip', { type: 'application/zip' });
+
+    harness.select(harness.uploadInput, [archive]);
+
+    await vi.waitFor(() => expect(harness.windowRef.alert).toHaveBeenCalledWith(expect.stringContaining('broken.zip: This is not a valid ZIP archive.')));
+    expect(harness.selectors.get('[data-upload-dialog]').open).toBe(true);
+    expect(harness.xhr.instances).toHaveLength(0);
   });
 });

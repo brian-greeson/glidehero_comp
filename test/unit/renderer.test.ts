@@ -108,6 +108,7 @@ describe('Vento page renderer', () => {
     expect(authenticated).toContain('data-upload-trigger aria-controls="flight-upload-dialog"');
     expect(authenticated).toContain('data-upload-close aria-label="Close upload status"');
     expect(authenticated).toContain('Choose flights<input data-upload-more-input');
+    expect(authenticated).toContain('accept=".igc,.zip"');
     expect(authenticated).not.toContain('data-upload-input');
     expect(authenticated.indexOf('data-account-popover')).toBeLessThan(
       authenticated.indexOf('data-onboarding-trigger'),
