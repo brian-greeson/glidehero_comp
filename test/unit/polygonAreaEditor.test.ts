@@ -1,9 +1,36 @@
 import { describe, expect, it, vi } from 'vitest';
 // @ts-expect-error Browser assets remain JavaScript.
-import { areaPreviewPayload, createAreaSelection, createUnsavedActionGate, extractImportedPolygonFeatures, filterAndSortAreas, nextAreaSort, polygonComponentCount } from '../../public/scripts/admin/polygonAreaEditor.js';
+import { MAPLIBRE_DRAW_STYLES, areaPreviewPayload, createAreaSelection, createUnsavedActionGate, enableMapLibreDrawControls, extractImportedPolygonFeatures, filterAndSortAreas, nextAreaSort, polygonComponentCount } from '../../public/scripts/admin/polygonAreaEditor.js';
 
 describe('Arena GeoJSON import', () => {
   const polygon = { type: 'Polygon', coordinates: [[[0, 0], [0, 1], [1, 1], [0, 0]]] };
+
+  it('uses MapLibre-compatible literal arrays for the Draw line dash style', () => {
+    const lineStyle = MAPLIBRE_DRAW_STYLES.find((style: { id: string; paint?: Record<string, unknown> }) => style.id === 'gl-draw-lines');
+
+    expect(lineStyle?.paint?.['line-dasharray']).toEqual([
+      'case', ['==', ['get', 'active'], 'true'], ['literal', [0.2, 2]], ['literal', [2, 0]],
+    ]);
+  });
+
+  it('adds the class aliases MapLibre and Mapbox Draw need to share controls and map events', () => {
+    const elements = new Map([
+      ['.maplibregl-canvas', { classList: { add: vi.fn() } }],
+      ['.maplibregl-canvas-container', { classList: { add: vi.fn() } }],
+      ['.mapboxgl-ctrl-group', { classList: { add: vi.fn() } }],
+    ]);
+    const mapNode = {
+      classList: { add: vi.fn() },
+      querySelector: vi.fn((selector: string) => elements.get(selector)),
+    };
+
+    enableMapLibreDrawControls(mapNode);
+
+    expect(mapNode.classList.add).toHaveBeenCalledWith('mapboxgl-map');
+    expect(elements.get('.maplibregl-canvas')?.classList.add).toHaveBeenCalledWith('mapboxgl-canvas');
+    expect(elements.get('.maplibregl-canvas-container')?.classList.add).toHaveBeenCalledWith('mapboxgl-canvas-container', 'mapboxgl-interactive');
+    expect(elements.get('.mapboxgl-ctrl-group')?.classList.add).toHaveBeenCalledWith('maplibregl-ctrl', 'maplibregl-ctrl-group');
+  });
 
   it('adds Polygon, MultiPolygon, Feature, and mixed FeatureCollection inputs to one draft', () => {
     expect(extractImportedPolygonFeatures(polygon)).toHaveLength(1);

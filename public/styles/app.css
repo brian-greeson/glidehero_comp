@@ -967,7 +967,8 @@ button {
   display: none;
 }
 .leaderboard-card {
-  grid-column: 1;
+    width: 100%;
+  max-width: 36rem;
 }
 
 .territory-card-heading {
@@ -1081,7 +1082,7 @@ button {
   }
 
   .competition-coverage .dashboard-information {
-    grid-template-columns: minmax(560px, 640px) minmax(0, 1fr);
+grid-template-columns: fit-content(36rem) minmax(0, 1fr);
   }
 }
 

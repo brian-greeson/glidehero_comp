@@ -4,6 +4,73 @@ import { normalizeViewportBounds } from '../viewportQuery.js';
 const EMPTY = { type: 'FeatureCollection', features: [] };
 const PREVIEW_SOURCE = 'arena-cell-preview';
 const PREVIEW_ZOOM = 11;
+const DRAW_BLUE = '#3bb2d0';
+const DRAW_ORANGE = '#fbb03b';
+
+export const MAPLIBRE_DRAW_STYLES = [
+  {
+    id: 'gl-draw-polygon-fill', type: 'fill',
+    filter: ['all', ['==', '$type', 'Polygon']],
+    paint: {
+      'fill-color': ['case', ['==', ['get', 'active'], 'true'], DRAW_ORANGE, DRAW_BLUE],
+      'fill-opacity': 0.1,
+    },
+  },
+  {
+    id: 'gl-draw-lines', type: 'line',
+    filter: ['any', ['==', '$type', 'LineString'], ['==', '$type', 'Polygon']],
+    layout: { 'line-cap': 'round', 'line-join': 'round' },
+    paint: {
+      'line-color': ['case', ['==', ['get', 'active'], 'true'], DRAW_ORANGE, DRAW_BLUE],
+      'line-dasharray': ['case', ['==', ['get', 'active'], 'true'], ['literal', [0.2, 2]], ['literal', [2, 0]]],
+      'line-width': 2,
+    },
+  },
+  {
+    id: 'gl-draw-point-outer', type: 'circle',
+    filter: ['all', ['==', '$type', 'Point'], ['==', 'meta', 'feature']],
+    paint: {
+      'circle-radius': ['case', ['==', ['get', 'active'], 'true'], 7, 5],
+      'circle-color': '#fff',
+    },
+  },
+  {
+    id: 'gl-draw-point-inner', type: 'circle',
+    filter: ['all', ['==', '$type', 'Point'], ['==', 'meta', 'feature']],
+    paint: {
+      'circle-radius': ['case', ['==', ['get', 'active'], 'true'], 5, 3],
+      'circle-color': ['case', ['==', ['get', 'active'], 'true'], DRAW_ORANGE, DRAW_BLUE],
+    },
+  },
+  {
+    id: 'gl-draw-vertex-outer', type: 'circle',
+    filter: ['all', ['==', '$type', 'Point'], ['==', 'meta', 'vertex'], ['!=', 'mode', 'simple_select']],
+    paint: {
+      'circle-radius': ['case', ['==', ['get', 'active'], 'true'], 7, 5],
+      'circle-color': '#fff',
+    },
+  },
+  {
+    id: 'gl-draw-vertex-inner', type: 'circle',
+    filter: ['all', ['==', '$type', 'Point'], ['==', 'meta', 'vertex'], ['!=', 'mode', 'simple_select']],
+    paint: {
+      'circle-radius': ['case', ['==', ['get', 'active'], 'true'], 5, 3],
+      'circle-color': DRAW_ORANGE,
+    },
+  },
+  {
+    id: 'gl-draw-midpoint', type: 'circle',
+    filter: ['all', ['==', 'meta', 'midpoint']],
+    paint: { 'circle-radius': 3, 'circle-color': DRAW_ORANGE },
+  },
+];
+
+export function enableMapLibreDrawControls(mapNode) {
+  mapNode.classList.add('mapboxgl-map');
+  mapNode.querySelector('.maplibregl-canvas')?.classList.add('mapboxgl-canvas');
+  mapNode.querySelector('.maplibregl-canvas-container')?.classList.add('mapboxgl-canvas-container', 'mapboxgl-interactive');
+  mapNode.querySelector('.mapboxgl-ctrl-group')?.classList.add('maplibregl-ctrl', 'maplibregl-ctrl-group');
+}
 
 export function filterAndSortAreas(areas, query, sortColumn = 'name', sortDirection = 'asc') {
   const needle = query.trim().toLocaleLowerCase();
@@ -119,8 +186,9 @@ export function initializePolygonAreaEditor({ documentRef = document, maplibre =
   const help = root.querySelector('[data-map-help]');
   const mapNode = root.querySelector('[data-area-map]');
   const map = new maplibre.Map({ container: mapNode, style: mapNode.dataset.mapStyleUrl, center: [-105.5, 39], zoom: 4 });
-  const draw = new Draw({ displayControlsDefault: false, controls: { polygon: true, trash: true } });
+  const draw = new Draw({ displayControlsDefault: false, controls: { polygon: true, trash: true }, styles: MAPLIBRE_DRAW_STYLES });
   map.addControl(draw, 'top-left');
+  enableMapLibreDrawControls(mapNode);
   const state = { areas: [], selectedId: null, isNew: false, original: '', dirty: false, sortColumn: 'name', sortDirection: 'asc' };
   const previewRequest = createLatestRequest(async ({ signal, isCurrent }, payload) => {
     const data = await requestJson('/admin/api/areas/preview', { method: 'POST', body: JSON.stringify(payload), signal }, fetchImpl);

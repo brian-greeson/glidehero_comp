@@ -21,4 +21,11 @@ describe('admin area editor stylesheet contract', () => {
     expect(css).toMatch(/\.admin-area-form-actions button:disabled\s*{[^}]*opacity:\s*\.65;[^}]*cursor:\s*not-allowed;/s);
     expect(css).toContain('.admin-area-list-empty');
   });
+
+  it('uses large map drawing controls', async () => {
+    const css = await readFile('public/styles/adminAreaEditor.css', 'utf8');
+
+    expect(css).toMatch(/\.admin-area-map \.maplibregl-ctrl-group button\s*{[^}]*width:\s*44px;[^}]*height:\s*44px;/s);
+    expect(css).toMatch(/\.admin-area-map \.mapbox-gl-draw_ctrl-draw-btn\s*{[^}]*background-size:\s*26px 26px;/s);
+  });
 });

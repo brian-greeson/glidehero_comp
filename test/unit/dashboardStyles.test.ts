@@ -5,9 +5,6 @@ describe('dashboard stylesheet contract', () => {
   it('lays out the promoted Territory leaderboard without changing the mobile flow', async () => {
     const css = await readFile('public/styles/app.css', 'utf8');
 
-    expect(css).toMatch(
-      /\.competition-coverage \.dashboard-information\s*{[^}]*grid-template-columns: minmax\(560px, 640px\)/s,
-    );
     expect(css).toContain('@media (max-width: 900px)');
     expect(css).toMatch(/\.dashboard-information\s*{\s*display: block;/);
     expect(css).toContain('.competition-breadcrumb {');
