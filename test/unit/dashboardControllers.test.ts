@@ -67,6 +67,8 @@ function mapHarness() {
   const moveHandlers: Array<() => void> = [];
   let errorHandler: (() => void) | undefined;
   let clickHandler: ((event: any) => Promise<void>) | undefined;
+  let mousemoveHandler: ((event: any) => Promise<void>) | undefined;
+  let mouseleaveHandler: (() => void) | undefined;
   const layers = new Set<string>();
   let viewport = { west: -107, east: -105 };
   let renderedFeatures: any[] = [];
@@ -77,7 +79,9 @@ function mapHarness() {
     addControl: vi.fn(),
     getSource: vi.fn((id: string) => sources.get(id)),
     getLayer: vi.fn((id: string) => (layers.has(id) ? { id } : undefined)),
+    setFilter: vi.fn(),
     setLayoutProperty: vi.fn(),
+    getCanvas: vi.fn(() => ({ style: { cursor: '' } })),
     queryRenderedFeatures: vi.fn(() => renderedFeatures),
     getBounds: () => ({
       getWest: () => viewport.west,
@@ -92,6 +96,8 @@ function mapHarness() {
     on: vi.fn((event: string, handler: any) => {
       if (event === 'moveend') moveHandlers.push(handler);
       if (event === 'click') clickHandler = handler;
+      if (event === 'mousemove') mousemoveHandler = handler;
+      if (event === 'mouseleave') mouseleaveHandler = handler;
     }),
   };
   return {
@@ -112,6 +118,12 @@ function mapHarness() {
     },
     click(point = { x: 50, y: 80 }) {
       return clickHandler?.({ point });
+    },
+    hover(point = { x: 50, y: 80 }) {
+      return mousemoveHandler?.({ point });
+    },
+    leave() {
+      mouseleaveHandler?.();
     },
     setRenderedFeatures(features: any[]) {
       renderedFeatures = features;
@@ -439,6 +451,139 @@ describe('Global dashboard controller', () => {
     harness.setRenderedFeatures([]);
     await harness.click();
     expect(popup.hidden).toBe(true);
+  });
+
+  it('highlights exclusive cells on hover and clears the interaction on leave', async () => {
+    let claimantRequestCount = 0;
+    const fetchImpl = vi.fn(async (url: string) => {
+      if (url.startsWith('/v1/competition-territory')) {
+        return jsonResponse({ type: 'FeatureCollection', features: [] });
+      }
+      if (url.startsWith('/v1/competition-cells/')) {
+        claimantRequestCount += 1;
+        return jsonResponse({ claimants: [{ userId: 'pilot-one', displayName: 'Pilot One' }] });
+      }
+      return jsonResponse({ leaders: [], currentPilot: null });
+    });
+    const harness = globalDashboardHarness(fetchImpl);
+    await harness.load();
+    harness.setRenderedFeatures([
+      {
+        properties: {
+          cellId: '500:12:-3',
+          x: 12,
+          y: -3,
+          claimantCount: 1,
+          isShared: false,
+          pilotUserId: 'pilot-one',
+        },
+      },
+    ]);
+
+    await harness.hover({ x: 50, y: 80 });
+    expect(harness.map.setFilter).toHaveBeenCalledWith('competition-territory-hover', [
+      '==',
+      ['get', 'cellId'],
+      '500:12:-3',
+    ]);
+    expect(harness.elements.get('[data-territory-cell-popup]').children[1].children[0].textContent)
+      .toBe('Pilot One');
+
+    await harness.hover({ x: 55, y: 85 });
+    expect(claimantRequestCount).toBe(1);
+    harness.leave();
+    expect(harness.elements.get('[data-territory-cell-popup]').hidden).toBe(true);
+    expect(harness.map.setFilter).toHaveBeenLastCalledWith('competition-territory-hover', [
+      '==',
+      ['get', 'cellId'],
+      '',
+    ]);
+  });
+
+  it('does not add hover interaction to shared cells', async () => {
+    const fetchImpl = vi.fn(async (url: string) => {
+      if (url.startsWith('/v1/competition-territory')) {
+        return jsonResponse({ type: 'FeatureCollection', features: [] });
+      }
+      return jsonResponse({ leaders: [], currentPilot: null });
+    });
+    const harness = globalDashboardHarness(fetchImpl);
+    await harness.load();
+    harness.map.setFilter.mockClear();
+    harness.setRenderedFeatures([
+      {
+        properties: {
+          cellId: '500:12:-3',
+          x: 12,
+          y: -3,
+          claimantCount: 2,
+          isShared: true,
+        },
+      },
+    ]);
+
+    await harness.hover();
+
+    expect(fetchImpl.mock.calls.some(([url]) => url.startsWith('/v1/competition-cells/'))).toBe(
+      false,
+    );
+    expect(harness.elements.get('[data-territory-cell-popup]').hidden).toBe(true);
+    expect(harness.map.setFilter).toHaveBeenCalledWith('competition-territory-hover', [
+      '==',
+      ['get', 'cellId'],
+      '',
+    ]);
+  });
+
+  it('ignores an exclusive-cell response after the pointer moves onto a shared cell', async () => {
+    const claimants = deferred<Response>();
+    const fetchImpl = vi.fn(async (url: string) => {
+      if (url.startsWith('/v1/competition-territory')) {
+        return jsonResponse({ type: 'FeatureCollection', features: [] });
+      }
+      if (url.startsWith('/v1/competition-cells/')) return claimants.promise;
+      return jsonResponse({ leaders: [], currentPilot: null });
+    });
+    const harness = globalDashboardHarness(fetchImpl);
+    await harness.load();
+    harness.setRenderedFeatures([
+      {
+        properties: {
+          cellId: '500:12:-3',
+          x: 12,
+          y: -3,
+          claimantCount: 1,
+          isShared: false,
+          pilotUserId: 'pilot-one',
+        },
+      },
+    ]);
+    const exclusiveHover = harness.hover();
+    await vi.waitFor(() =>
+      expect(
+        fetchImpl.mock.calls.some(([url]) => url.startsWith('/v1/competition-cells/')),
+      ).toBe(true),
+    );
+
+    harness.setRenderedFeatures([
+      {
+        properties: {
+          cellId: '500:13:-3',
+          x: 13,
+          y: -3,
+          claimantCount: 2,
+          isShared: true,
+        },
+      },
+    ]);
+    await harness.hover();
+    claimants.resolve(
+      jsonResponse({ claimants: [{ userId: 'pilot-one', displayName: 'Pilot One' }] }),
+    );
+    await exclusiveHover;
+
+    expect(harness.elements.get('[data-territory-cell-popup]').hidden).toBe(true);
+    expect(harness.elements.get('[data-territory-cell-popup]').children).toHaveLength(0);
   });
 
   it('shows distinct territory, ranking, and map error states', async () => {

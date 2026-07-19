@@ -5,7 +5,7 @@ import { arenaCoverageLeaderboardUrl, coverageCellClaimantsUrl, coverageTerritor
 // @ts-expect-error Browser assets remain JavaScript.
 import { createCompetitionColorRegistry } from '../../public/scripts/competitionColors.js';
 // @ts-expect-error Browser assets remain JavaScript.
-import { colorCoverageTerritory, coverageCellFeatureAtPoint, positionCoverageCellPopup } from '../../public/scripts/competitionCoverageMap.js';
+import { colorCoverageTerritory, coverageCellFeatureAtPoint, isExclusiveCoverageFeature, positionCoverageCellPopup, setCoverageData, setCoverageHoveredCell } from '../../public/scripts/competitionCoverageMap.js';
 // @ts-expect-error Browser assets remain JavaScript.
 import { renderCoverageLeaderboard } from '../../public/scripts/competitionCoverageLeaderboard.js';
 
@@ -121,5 +121,58 @@ describe('competition coverage browser contracts', () => {
       { x: 40, y: 50 },
       { layers: ['competition-territory-fill'] },
     );
+  });
+
+  it('adds a subtle hover layer and filters it to an exclusive coverage cell', () => {
+    const layers = new Map<string, any>();
+    const map = {
+      addSource: vi.fn(),
+      getSource: vi.fn(),
+      addLayer: vi.fn((layer: any) => layers.set(layer.id, layer)),
+      getLayer: vi.fn((id: string) => layers.get(id)),
+      setFilter: vi.fn(),
+    };
+
+    setCoverageData(map, { type: 'FeatureCollection', features: [] });
+    expect(layers.get('competition-territory-hover')).toMatchObject({
+      type: 'fill',
+      source: 'competition-coverage',
+      paint: { 'fill-color': '#ffffff', 'fill-opacity': 0.18 },
+    });
+
+    setCoverageHoveredCell(map, '500:12:-3');
+    expect(map.setFilter).toHaveBeenLastCalledWith('competition-territory-hover', [
+      '==',
+      ['get', 'cellId'],
+      '500:12:-3',
+    ]);
+    setCoverageHoveredCell(map);
+    expect(map.setFilter).toHaveBeenLastCalledWith('competition-territory-hover', [
+      '==',
+      ['get', 'cellId'],
+      '',
+    ]);
+  });
+
+  it('only treats exclusively claimed cells as hoverable', () => {
+    expect(
+      isExclusiveCoverageFeature({
+        properties: {
+          cellId: '500:12:-3',
+          claimantCount: 1,
+          isShared: false,
+          pilotUserId: 'pilot-one',
+        },
+      }),
+    ).toBe(true);
+    expect(
+      isExclusiveCoverageFeature({
+        properties: {
+          cellId: '500:12:-3',
+          claimantCount: 2,
+          isShared: true,
+        },
+      }),
+    ).toBe(false);
   });
 });

@@ -147,6 +147,21 @@ describe('Arena dashboard', () => {
     expect(harness.map.on).toHaveBeenCalledWith('moveend', expect.any(Function));
   });
 
+  it('registers the shared competition hover interaction', () => {
+    const harness = arenaHarness();
+    const { documentRef } = arenaDocument();
+
+    initializeArena({
+      documentRef,
+      maplibre: harness.maplibre,
+      fetchImpl: vi.fn(),
+      locationRef: { pathname: '/arena/us/boulder-745', search: '' },
+    });
+
+    expect(harness.map.on).toHaveBeenCalledWith('mousemove', expect.any(Function));
+    expect(harness.map.on).toHaveBeenCalledWith('mouseleave', expect.any(Function));
+  });
+
   it('shows a recoverable status when the Arena boundary cannot load', async () => {
     const harness = arenaHarness();
     const { documentRef, elements } = arenaDocument();

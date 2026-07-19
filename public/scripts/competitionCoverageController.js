@@ -11,8 +11,10 @@ import { renderCoverageLeaderboard } from './competitionCoverageLeaderboard.js';
 import {
   colorCoverageTerritory,
   coverageCellFeatureAtPoint,
+  isExclusiveCoverageFeature,
   positionCoverageCellPopup,
   setCoverageData,
+  setCoverageHoveredCell,
 } from './competitionCoverageMap.js';
 import { initializeMapFlightAids } from './mapFlightAids.js';
 import { createViewportTerritoryLoader } from './viewportTerritoryLoader.js';
@@ -56,11 +58,36 @@ export function initializeCompetitionCoverage({
   let selectedPilotId = null;
   let leaderboard = { leaders: [], currentPilot: null };
   let cellPopupRequestId = 0;
+  let hoveredCellId = null;
   let territoryLoader;
 
   function hideCellPopup() {
     cellPopupRequestId += 1;
     if (cellPopup) cellPopup.hidden = true;
+  }
+
+  function clearCellHover() {
+    hoveredCellId = null;
+    setCoverageHoveredCell(map);
+    const canvas = map?.getCanvas?.();
+    if (canvas) canvas.style.cursor = '';
+    hideCellPopup();
+  }
+
+  function renderCellPopup(claimants, point) {
+    if (!cellPopup || claimants.length === 0) return false;
+    const heading = documentRef.createElement('strong');
+    heading.textContent = 'Claimed by';
+    const list = documentRef.createElement('ul');
+    for (const claimant of claimants) {
+      const item = documentRef.createElement('li');
+      item.textContent = claimant.displayName;
+      list.append(item);
+    }
+    cellPopup.replaceChildren(heading, list);
+    cellPopup.hidden = false;
+    positionCoverageCellPopup(cellPopup, point, mapElement.clientWidth);
+    return true;
   }
 
   function setStatus(message = '') {
@@ -82,7 +109,10 @@ export function initializeCompetitionCoverage({
         fetchImpl,
         signal,
       ),
-      applyTerritory: (territory) => setCoverageData(map, colorCoverageTerritory(territory, colorRegistry)),
+      applyTerritory: (territory) => {
+        clearCellHover();
+        setCoverageData(map, colorCoverageTerritory(territory, colorRegistry));
+      },
       onVisibleData: (territory) => setStatus(
         territory.features.length === 0 ? 'No coverage for this selection.' : '',
       ),
@@ -98,6 +128,7 @@ export function initializeCompetitionCoverage({
       currentUserId,
       colorRegistry,
       onSelect: (pilot) => {
+        clearCellHover();
         selectedPilotId = pilot?.userId ?? null;
         overviewButton?.setAttribute('aria-pressed', String(!selectedPilotId));
         renderLeaderboard();
@@ -139,7 +170,7 @@ export function initializeCompetitionCoverage({
   async function refreshPeriod() {
     selectedPilotId = null;
     overviewButton?.setAttribute('aria-pressed', 'true');
-    hideCellPopup();
+    clearCellHover();
     await Promise.all([leaderboardRequest.run(), territoryLoader?.refresh({ force: true })]);
   }
 
@@ -155,6 +186,7 @@ export function initializeCompetitionCoverage({
 
   overviewButton?.addEventListener('click', () => {
     if (!selectedPilotId) return;
+    clearCellHover();
     selectedPilotId = null;
     overviewButton.setAttribute('aria-pressed', 'true');
     renderLeaderboard();
@@ -214,6 +246,39 @@ export function initializeCompetitionCoverage({
       if (!arenaSourceId) void leaderboardRequest.run();
       void territoryLoader?.refresh();
     });
+    map.on('mousemove', async (event) => {
+      if (!mapReady || !cellPopup) return;
+      const feature = coverageCellFeatureAtPoint(map, event.point);
+      if (!isExclusiveCoverageFeature(feature)) {
+        clearCellHover();
+        return;
+      }
+
+      const properties = feature.properties;
+      const canvas = map.getCanvas?.();
+      if (canvas) canvas.style.cursor = 'pointer';
+      if (properties.cellId === hoveredCellId) {
+        if (!cellPopup.hidden)
+          positionCoverageCellPopup(cellPopup, event.point, mapElement.clientWidth);
+        return;
+      }
+
+      hoveredCellId = properties.cellId;
+      setCoverageHoveredCell(map, hoveredCellId);
+      const requestId = ++cellPopupRequestId;
+      cellPopup.hidden = true;
+      try {
+        const payload = await jsonRequest(
+          coverageCellClaimantsUrl(properties.x, properties.y, periodControl.month),
+          fetchImpl,
+        );
+        if (requestId !== cellPopupRequestId || properties.cellId !== hoveredCellId) return;
+        if (!renderCellPopup(payload.claimants, event.point)) clearCellHover();
+      } catch {
+        if (requestId === cellPopupRequestId) clearCellHover();
+      }
+    });
+    map.on('mouseleave', clearCellHover);
     map.on('click', async (event) => {
       if (!cellPopup) return;
       const feature = coverageCellFeatureAtPoint(map, event.point);
@@ -230,17 +295,7 @@ export function initializeCompetitionCoverage({
           fetchImpl,
         );
         if (requestId !== cellPopupRequestId) return;
-        const heading = documentRef.createElement('strong');
-        heading.textContent = 'Claimed by';
-        const list = documentRef.createElement('ul');
-        for (const claimant of payload.claimants) {
-          const item = documentRef.createElement('li');
-          item.textContent = claimant.displayName;
-          list.append(item);
-        }
-        cellPopup.replaceChildren(heading, list);
-        cellPopup.hidden = false;
-        positionCoverageCellPopup(cellPopup, event.point, mapElement.clientWidth);
+        renderCellPopup(payload.claimants, event.point);
       } catch {
         if (requestId === cellPopupRequestId) cellPopup.hidden = true;
       }
