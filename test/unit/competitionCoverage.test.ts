@@ -141,8 +141,8 @@ describe('competition coverage browser contracts', () => {
     };
 
     setCoverageData(map, { type: 'FeatureCollection', features: [] });
-    expect(layers.has('competition-territory-fill')).toBe(true);
-    expect(layers.has('competition-territory-outline')).toBe(true);
+    expect(layers.get('competition-territory-fill')).toMatchObject({ minzoom: 8 });
+    expect(layers.get('competition-territory-outline')).toMatchObject({ minzoom: 8 });
     expect([...layers].some((layerId) => layerId.includes('hover'))).toBe(false);
   });
 

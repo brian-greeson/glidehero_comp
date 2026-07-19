@@ -9,18 +9,29 @@ function deferred<T>() {
   return { promise, resolve };
 }
 
-function harness(fetchTerritory = vi.fn(async (bounds) => ({ bounds }))) {
+function harness(fetchTerritory = vi.fn(async (bounds) => ({ bounds })), initialZoom?: number) {
   let bounds = { west: -107, south: 39, east: -105, north: 41 };
+  let zoom = initialZoom;
   const applyTerritory = vi.fn();
   const onVisibleError = vi.fn();
   const loader = createViewportTerritoryLoader({
-    map: { getBounds: () => ({
-      getWest: () => bounds.west, getSouth: () => bounds.south,
-      getEast: () => bounds.east, getNorth: () => bounds.north,
-    }) },
+    map: {
+      ...(initialZoom === undefined ? {} : { getZoom: () => zoom }),
+      getBounds: () => ({
+        getWest: () => bounds.west, getSouth: () => bounds.south,
+        getEast: () => bounds.east, getNorth: () => bounds.north,
+      }),
+    },
     fetchTerritory, applyTerritory, onVisibleError,
   });
-  return { loader, fetchTerritory, applyTerritory, onVisibleError, move(next: typeof bounds) { bounds = next; } };
+  return {
+    loader,
+    fetchTerritory,
+    applyTerritory,
+    onVisibleError,
+    move(next: typeof bounds) { bounds = next; },
+    setZoom(next: number) { zoom = next; },
+  };
 }
 
 describe('viewport territory loader', () => {
@@ -69,5 +80,60 @@ describe('viewport territory loader', () => {
     expect(test.applyTerritory.mock.calls.map(([territory]) => territory.id)).toEqual([
       'first-visible', 'second-visible', 'second-buffer',
     ]);
+  });
+
+  it('does not request territory below the minimum zoom, even when forced', async () => {
+    const test = harness(undefined, 7);
+
+    await test.loader.refresh();
+    await test.loader.refresh({ force: true });
+
+    expect(test.fetchTerritory).not.toHaveBeenCalled();
+  });
+
+  it('cancels and invalidates an active request below the minimum zoom', async () => {
+    const visible = deferred<{ id: string }>();
+    const fetchTerritory = vi.fn().mockReturnValue(visible.promise);
+    const test = harness(fetchTerritory, 10);
+
+    const refresh = test.loader.refresh();
+    await vi.waitFor(() => expect(fetchTerritory).toHaveBeenCalledTimes(1));
+    test.setZoom(7);
+    await test.loader.refresh();
+    visible.resolve({ id: 'stale' });
+    await refresh;
+
+    expect(fetchTerritory.mock.calls[0]?.[1]?.aborted).toBe(true);
+    expect(test.applyTerritory).not.toHaveBeenCalled();
+  });
+
+  it('starts a visible request when moving from below the threshold to zoom 8', async () => {
+    const test = harness(undefined, 7);
+
+    await test.loader.refresh();
+    test.setZoom(8);
+    await test.loader.refresh();
+
+    await vi.waitFor(() => expect(test.fetchTerritory).toHaveBeenCalledTimes(1));
+  });
+
+  it('does not prefetch between zoom 8 and below zoom 9', async () => {
+    const test = harness(undefined, 8);
+
+    await test.loader.refresh();
+
+    expect(test.fetchTerritory).toHaveBeenCalledTimes(1);
+  });
+
+  it('clears cached bounds below the threshold so returning above it fetches again', async () => {
+    const test = harness(undefined, 10);
+    await test.loader.refresh();
+    await vi.waitFor(() => expect(test.fetchTerritory).toHaveBeenCalledTimes(2));
+
+    test.setZoom(7);
+    await test.loader.refresh();
+    test.setZoom(10);
+    await test.loader.refresh();
+    await vi.waitFor(() => expect(test.fetchTerritory).toHaveBeenCalledTimes(4));
   });
 });

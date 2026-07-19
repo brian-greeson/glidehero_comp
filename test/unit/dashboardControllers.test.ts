@@ -62,7 +62,7 @@ function element(): any {
   return node;
 }
 
-function mapHarness() {
+function mapHarness(initialZoom?: number) {
   let loadHandler: (() => Promise<void>) | undefined;
   const moveHandlers: Array<() => void> = [];
   let errorHandler: (() => void) | undefined;
@@ -71,9 +71,11 @@ function mapHarness() {
   let mouseleaveHandler: (() => void) | undefined;
   const layers = new Set<string>();
   let viewport = { west: -107, east: -105 };
+  let zoom = initialZoom;
   let renderedFeatures: any[] = [];
   const sources = new Map<string, any>();
   const map = {
+    ...(initialZoom === undefined ? {} : { getZoom: () => zoom }),
     addSource: vi.fn((id: string, source: any) => sources.set(id, { ...source, setData: vi.fn() })),
     addLayer: vi.fn((layer: { id: string }) => layers.add(layer.id)),
     addControl: vi.fn(),
@@ -128,6 +130,9 @@ function mapHarness() {
     setRenderedFeatures(features: any[]) {
       renderedFeatures = features;
     },
+    setZoom(next: number) {
+      zoom = next;
+    },
   };
 }
 
@@ -143,8 +148,8 @@ function pilot(userId: string, displayName = userId, claimedCellCount = 3) {
   };
 }
 
-function globalDashboardHarness(fetchImpl: any, search = '') {
-  const map = mapHarness();
+function globalDashboardHarness(fetchImpl: any, search = '', initialZoom?: number) {
+  const map = mapHarness(initialZoom);
   const mapElement = element();
   mapElement.dataset = {
     mapStyleUrl: 'map-style',
@@ -257,6 +262,39 @@ describe('Personal dashboard controller', () => {
     await vi.waitFor(() => expect(fetchImpl).toHaveBeenCalledTimes(4));
     expect(fetchImpl.mock.calls[3]?.[0]).toContain('/v1/personal-stats?west=-105');
   });
+
+  it('skips Personal territory below zoom 8 while refreshing Personal stats', async () => {
+    const harness = mapHarness(7);
+    const mapElement = { dataset: { mapStyleUrl: 'map-style', territoryColor: '#1769AA' } };
+    const statsCard = element();
+    const documentRef = {
+      createElement: element,
+      querySelector(selector: string) {
+        return new Map<string, any>([
+          ['[data-dashboard-map]', mapElement],
+          ['[data-map-empty-state]', element()],
+          ['[data-personal-stats]', statsCard],
+        ]).get(selector) ?? null;
+      },
+    };
+    const fetchImpl = vi.fn(async (url: string) => new Response(JSON.stringify(
+      url.startsWith('/v1/personal-stats')
+        ? { claimedCellCount: 0, claimedAreaSquareMeters: 0, flightCount: 0 }
+        : { type: 'FeatureCollection', features: [] },
+    )));
+
+    initializePersonalDashboard({ documentRef, maplibre: harness.maplibre, fetchImpl });
+    await harness.load();
+    expect(fetchImpl.mock.calls.map(([url]) => url)).toEqual([
+      '/v1/personal-stats?west=-107&south=39&east=-105&north=41',
+    ]);
+
+    harness.move({ west: -106, east: -104 });
+    await vi.waitFor(() => expect(fetchImpl).toHaveBeenCalledTimes(2));
+    expect(fetchImpl.mock.calls[1]?.[0]).toBe(
+      '/v1/personal-stats?west=-106&south=39&east=-104&north=41',
+    );
+  });
 });
 
 describe('Global dashboard controller', () => {
@@ -319,6 +357,56 @@ describe('Global dashboard controller', () => {
     harness.move({ west: -106, east: -104 });
     await vi.waitFor(() => expect(fetchImpl).toHaveBeenCalledTimes(4));
     expect(fetchImpl.mock.calls[3]?.[0]).toContain('/v1/competition-leaderboard?west=-106');
+  });
+
+  it('skips Global territory below zoom 8 while refreshing the leaderboard', async () => {
+    const harness = mapHarness(7);
+    const mapElement = {
+      dataset: {
+        mapStyleUrl: 'map-style',
+        currentUserId: 'current-user',
+        territoryColor: '#1769AA',
+      },
+    };
+    const elements = new Map<string, any>([
+      ['[data-competition-coverage]', element()],
+      ['[data-territory-map]', mapElement],
+      ['[data-map-empty-state]', element()],
+      ['[data-territory-leaderboard]', element()],
+      ['[data-territory-allpilots]', element()],
+      ['[data-territory-status]', element()],
+      ['[data-territory-list]', element()],
+      ['[data-territory-current-pilot]', element()],
+      ['[data-territory-cell-popup]', element()],
+    ]);
+    const documentRef = {
+      createElement: () => element(),
+      querySelector: (selector: string) => elements.get(selector) ?? null,
+      querySelectorAll: () => [],
+    };
+    const fetchImpl = vi.fn(async (url: string) => new Response(JSON.stringify(
+      url.startsWith('/v1/competition-leaderboard')
+        ? { leaders: [], currentPilot: null }
+        : { type: 'FeatureCollection', features: [] },
+    )));
+
+    initializeGlobalDashboard({
+      documentRef,
+      maplibre: harness.maplibre,
+      fetchImpl,
+      locationRef: { pathname: '/global', search: '' },
+      historyRef: { replaceState: vi.fn() },
+    });
+    await harness.load();
+    expect(fetchImpl.mock.calls.map(([url]) => url)).toEqual([
+      '/v1/competition-leaderboard?west=-107&south=39&east=-105&north=41',
+    ]);
+
+    harness.move({ west: -106, east: -104 });
+    await vi.waitFor(() => expect(fetchImpl).toHaveBeenCalledTimes(2));
+    expect(fetchImpl.mock.calls[1]?.[0]).toBe(
+      '/v1/competition-leaderboard?west=-106&south=39&east=-104&north=41',
+    );
   });
 
   it('selects a pilot and returns to the overview', async () => {

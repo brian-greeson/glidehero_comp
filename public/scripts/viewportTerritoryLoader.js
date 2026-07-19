@@ -1,4 +1,5 @@
 import { createLatestRequest } from './latestRequest.js';
+import { MINIMUM_TERRITORY_PREFETCH_ZOOM, MINIMUM_TERRITORY_ZOOM } from './mapStyles.js';
 import { expandViewportBounds, normalizeViewportBounds, viewportContains } from './viewportQuery.js';
 
 export function createViewportTerritoryLoader({
@@ -8,6 +9,7 @@ export function createViewportTerritoryLoader({
   onVisibleData = () => {},
   onVisibleError = () => {},
   bufferRatio = 0.5,
+  minimumZoom = MINIMUM_TERRITORY_ZOOM,
 }) {
   let generation = 0;
   let loadedBounds = null;
@@ -30,7 +32,10 @@ export function createViewportTerritoryLoader({
       applyTerritory(territory);
       loadedBounds = bounds;
       onVisibleData(territory);
-      void backgroundRequest.run(expandViewportBounds(bounds, bufferRatio), requestGeneration);
+      const zoom = typeof map.getZoom === 'function' ? map.getZoom() : undefined;
+      if (zoom === undefined || zoom >= MINIMUM_TERRITORY_PREFETCH_ZOOM) {
+        void backgroundRequest.run(expandViewportBounds(bounds, bufferRatio), requestGeneration);
+      }
     } catch (error) {
       if (error?.name !== 'AbortError' && isCurrent() && requestGeneration === generation) onVisibleError(error);
     }
@@ -45,6 +50,14 @@ export function createViewportTerritoryLoader({
 
   return {
     async refresh({ force = false } = {}) {
+      const zoom = typeof map.getZoom === 'function' ? map.getZoom() : undefined;
+      if (zoom !== undefined && zoom < minimumZoom) {
+        generation += 1;
+        loadedBounds = null;
+        visibleRequest.cancel();
+        backgroundRequest.cancel();
+        return;
+      }
       if (!map.getBounds) return;
       const visibleBounds = normalizeViewportBounds(map.getBounds());
       if (!force && loadedBounds && viewportContains(loadedBounds, visibleBounds)) return;

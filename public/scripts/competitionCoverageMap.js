@@ -1,4 +1,4 @@
-import { createTerritoryBoundaryLayer } from './mapStyles.js';
+import { createTerritoryBoundaryLayer, MINIMUM_TERRITORY_ZOOM } from './mapStyles.js';
 
 export const COVERAGE_SOURCE_ID = 'competition-coverage';
 export const COVERAGE_FILL_LAYER_ID = 'competition-territory-fill';
@@ -73,6 +73,7 @@ export function setCoverageData(map, geojson) {
     id: COVERAGE_FILL_LAYER_ID,
     type: 'fill',
     source: COVERAGE_SOURCE_ID,
+    minzoom: MINIMUM_TERRITORY_ZOOM,
     paint: { 'fill-color': COVERAGE_COLOR, 'fill-opacity': COVERAGE_OPACITY },
   });
   map.addLayer(
