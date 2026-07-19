@@ -1,6 +1,15 @@
 {{ if selectedUser }}
   <section class="admin-user-card admin-user-flights">
-    <div><h2>Flight management</h2><span>{{ flights.length }} flights</span></div>
+    <div>
+      <h2>Flight management</h2>
+      <div class="admin-user-flight-summary">
+        <span>{{ flights.length }} flights</span>
+        <form method="post" action="/admin/users/{{ selectedUser.id }}/flights/delete-all" data-confirm="Are you sure you want to delete {{ if deletableFlightCount === 0 }}0{{ else }}{{ deletableFlightCount }}{{ /if }} {{ if deletableFlightCount === 1 }}flight{{ else }}flights{{ /if }}?">
+          <input type="hidden" name="q" value="{{ search }}">
+          <button type="submit" class="admin-user-danger"{{ if deletableFlightCount === 0 }} disabled{{ /if }}>Delete all flights</button>
+        </form>
+      </div>
+    </div>
     <div class="admin-table-wrap">
       <table class="admin-flight-table">
         <thead><tr><th scope="col">Flight date</th><th scope="col">File</th><th scope="col">Status</th><th scope="col"><span class="sr-only">Actions</span></th></tr></thead>

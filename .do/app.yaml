@@ -12,9 +12,19 @@ databases:
   name: app-valkey-sfo
   production: true
   version: "8"
+disable_edge_cache: true
 domains:
 - domain: glidehero.com
   type: PRIMARY
+- domain: www.glidehero.com
+  type: ALIAS
+envs:
+- key: VALKEY_URL
+  scope: RUN_AND_BUILD_TIME
+  value: ${app-valkey-sfo.DATABASE_URL}
+- key: BUCKET_FOLDER
+  scope: RUN_AND_BUILD_TIME
+  value: glidehero
 features:
 - buildpack-stack=ubuntu-22
 ingress:
@@ -26,6 +36,22 @@ ingress:
         exact: ""
       path:
         prefix: /
+jobs:
+- environment_slug: node-js
+  envs:
+  - key: DATABASE_URL
+    scope: RUN_TIME
+    value: postgresql://doadmin:AVNS_rcAyW3YYxB2M8tKN-Bl@apps-db-sfo-do-user-18649130-0.j.db.ondigitalocean.com:25060/glidehero?uselibpqcompat=true&sslmode=require
+  github:
+    branch: main
+    deploy_on_push: true
+    repo: brian-greeson/glidehero_comp
+  instance_count: 1
+  instance_size_slug: apps-s-1vcpu-0.5gb
+  kind: PRE_DEPLOY
+  name: migrate
+  run_command: npm run db:migrate
+  source_dir: /
 name: glidehero-comp
 region: sfo
 services:
@@ -33,42 +59,7 @@ services:
   envs:
   - key: DATABASE_URL
     scope: RUN_AND_BUILD_TIME
-    value: ${apps-db-sfo.DATABASE_PRIVATE_URL}
-  - key: VALKEY_URL
-    scope: RUN_TIME
-    value: ${app-valkey-sfo.DATABASE_PRIVATE_URL}
-  - key: DATABASE_PORT
-    scope: RUN_AND_BUILD_TIME
-    type: SECRET
-    value: EV[1:l9xI6plrNCxV/xFdKcFb4cER0jvhewbq:CXieie4u4A24VbRM4nNv4PXoE48=]
-  - key: DATABASE_NAME
-    scope: RUN_AND_BUILD_TIME
-    type: SECRET
-    value: EV[1:5sL4MIW7e+sRTGiAsF6K1RgPTvQwupA3:85KPmrfoVD1Mv/vg09mi1C2NbIPDDBPxfA==]
-  - key: JWT_SECRET
-    scope: RUN_AND_BUILD_TIME
-    type: SECRET
-    value: EV[1:rfRXPp4ZCsOZFZE1AXXihMwd8OPPsRDD:8YG+MNEEj0HonBvocfZjj1JTcYVal6L6lV9BtbAxvk4wwXa39j4xVa0Mjondu8gwB0U=]
-  - key: JWT_REFRESH_SECRET
-    scope: RUN_AND_BUILD_TIME
-    type: SECRET
-    value: EV[1:WmMHa1geEWxKlWwfc5TNul5lKgU/YK3U:Lo1l/hLUxrKYjTjGsVmIrDoO0QYod8jOS8xnyrtCLd4J9r7snh/6zEen6gWSbrcQoqo=]
-  - key: JWT_ISSUER
-    scope: RUN_AND_BUILD_TIME
-    type: SECRET
-    value: EV[1:x9ijI0pBnRHBbXL052PY5/dWeGfjxckJ:JpEhoL0Yn8Iq/1Ff/QoMQ6j/O7QKj1kFGM+AOcM=]
-  - key: JWT_AUDIENCE
-    scope: RUN_AND_BUILD_TIME
-    type: SECRET
-    value: EV[1:tIdkMUUF/nfsZTsp5VqXHOHk8utoU6GG:n0XFMuBTfkeZoawfVPXZSr1SNsaK6Z0y+r++0yvOC3I=]
-  - key: APPLE_CLIENT_IDS
-    scope: RUN_AND_BUILD_TIME
-    type: SECRET
-    value: EV[1:r4C29MpbLDOXRLwc1LkVpnoH3Wbtqj37:Qi9i9jwgxit+1PzCWKDRrBw9FYDKQZ6rpg9DVXsmr9mNydpxoxO48bCfRPbguuHv]
-  - key: INVITE_BASE_URL
-    scope: RUN_AND_BUILD_TIME
-    type: SECRET
-    value: EV[1:slVNwCZXqYtcs69qoAvJK1chSlLYkAPM:SV/2G6GnFEwJrIlcMz0L2slWEnll3otKyc5KPq3Bv6c+IBrTa/bRWl7E]
+    value: postgresql://doadmin:AVNS_rcAyW3YYxB2M8tKN-Bl@apps-db-sfo-do-user-18649130-0.j.db.ondigitalocean.com:25060/glidehero?uselibpqcompat=true&sslmode=require
   - key: PORT
     scope: RUN_AND_BUILD_TIME
     value: "3000"
@@ -92,7 +83,7 @@ services:
     scope: RUN_AND_BUILD_TIME
     type: SECRET
     value: EV[1:5FvfxRQg0+tIHNjsrr5fFNhd9bhkVWIw:SR3dtgt3emdbqLXb/Fnjtd2Whn3wZZsBaj5f7m8ognGUKqOsFgC09sqmTfmaKCHZqVz3HXuXv0EPZAwNlmg=]
-  - key: BUCKET_FOLDER
+  - key: BUCKET_IGC_FOLDER
     scope: RUN_AND_BUILD_TIME
     type: SECRET
     value: EV[1:ooZGRLZ/ZHxFtc7vYr430TjqZlaKnUGE:JGznAOS7XP1fnSVNv0rRIkGqj2GiqW/FCw==]
@@ -102,7 +93,10 @@ services:
     value: EV[1:i9/zwAR5NzAx/WuAhDLhpBs3DTe1xmyK:zMEzhxMimxgF5GXGCGTbfvIuUYR7yrsNsNgjRQv/QkEKzQ0i]
   - key: GRID_CLAIM_CELL_SIZE
     scope: RUN_AND_BUILD_TIME
-    value: 500
+    value: "500"
+  - key: ADMIN_EMAILS
+    scope: RUN_AND_BUILD_TIME
+    value: brian.greeson@gmail.com,dev@example.com,nick@wildermail.com
   github:
     branch: main
     deploy_on_push: true
@@ -113,12 +107,14 @@ services:
   name: glidehero-comp
   run_command: npm start
   source_dir: /
+vpc:
+  id: c7425901-ed0d-4b21-9683-375cc81cdade
 workers:
 - environment_slug: node-js
   envs:
   - key: DATABASE_URL
     scope: RUN_TIME
-    value: ${apps-db-sfo.DATABASE_PRIVATE_URL}
+    value: postgresql://doadmin:AVNS_rcAyW3YYxB2M8tKN-Bl@apps-db-sfo-do-user-18649130-0.j.db.ondigitalocean.com:25060/glidehero?uselibpqcompat=true&sslmode=require
   - key: VALKEY_URL
     scope: RUN_TIME
     value: ${app-valkey-sfo.DATABASE_PRIVATE_URL}
@@ -138,10 +134,6 @@ workers:
     scope: RUN_TIME
     type: SECRET
     value: EV[1:Wl+evdt6N9kt64O9gW680p9o3xGqomOk:P2wUD3D+mwRJp9ZxJUEIGz5L6hDXBZjrlIQg+N+hIlUDSIdkycpLExNtd/DA5M3VUiCg]
-  - key: BUCKET_FOLDER
-    scope: RUN_TIME
-    type: SECRET
-    value: EV[1:ooZGRLZ/ZHxFtc7vYr430TjqZlaKnUGE:JGznAOS7XP1fnSVNv0rRIkGqj2GiqW/FCw==]
   - key: MAPTILER_API_KEY
     scope: RUN_TIME
     type: SECRET
@@ -154,23 +146,47 @@ workers:
     deploy_on_push: true
     repo: brian-greeson/glidehero_comp
   instance_count: 1
-  instance_size_slug: apps-s-1vcpu-1gb-fixed
+  instance_size_slug: apps-s-1vcpu-0.5gb
   name: flight-worker
   run_command: npm run worker
   source_dir: /
-vpc:
-  id: c7425901-ed0d-4b21-9683-375cc81cdade
-jobs:
-- name: migrate
-  kind: PRE_DEPLOY
-  environment_slug: node-js
+- environment_slug: node-js
+  envs:
+  - key: DATABASE_URL
+    scope: RUN_TIME
+    value: postgresql://doadmin:AVNS_rcAyW3YYxB2M8tKN-Bl@apps-db-sfo-do-user-18649130-0.j.db.ondigitalocean.com:25060/glidehero?uselibpqcompat=true&sslmode=require
+  - key: VALKEY_URL
+    scope: RUN_TIME
+    value: ${app-valkey-sfo.DATABASE_PRIVATE_URL}
+  - key: BUCKET_SECRET
+    scope: RUN_TIME
+    type: SECRET
+    value: EV[1:YsZLdS/N3i2P/tZ9BiOfc4NYyV0Xrl7G:MObDGbgH1PI3FGTGRQhCIN5EUKeJqjzscTfxJNEk2R7NECnepCtyaSKlxe5uDpQBUtskcWvP2XPYuUM=]
+  - key: BUCKET_ID
+    scope: RUN_TIME
+    type: SECRET
+    value: EV[1:FFUjbYHfGFWD22UWiXC9sq9O+t/PEWp8:BTmdY9JySMB0OXXmx48mEFJ/aIjQJsE8y8tb2q9AZjnAnkXd]
+  - key: BUCKET_NAME
+    scope: RUN_TIME
+    type: SECRET
+    value: EV[1:vK9ABFyHGTwtaKudUojRvV2MCunsDbmw:omI/dwe4QqSu9mMUpdZZuq8EG+YEsrTQ9AY=]
+  - key: BUCKET_URL
+    scope: RUN_TIME
+    type: SECRET
+    value: EV[1:Wl+evdt6N9kt64O9gW680p9o3xGqomOk:P2wUD3D+mwRJp9ZxJUEIGz5L6hDXBZjrlIQg+N+hIlUDSIdkycpLExNtd/DA5M3VUiCg]
+  - key: MAPTILER_API_KEY
+    scope: RUN_TIME
+    type: SECRET
+    value: EV[1:i9/zwAR5NzAx/WuAhDLhpBs3DTe1xmyK:zMEzhxMimxgF5GXGCGTbfvIuUYR7yrsNsNgjRQv/QkEKzQ0i]
+  - key: GRID_CLAIM_CELL_SIZE
+    scope: RUN_TIME
+    value: "500"
   github:
     branch: main
     deploy_on_push: true
     repo: brian-greeson/glidehero_comp
-  run_command: npm run db:migrate
+  instance_count: 1
+  instance_size_slug: apps-s-1vcpu-0.5gb
+  name: flight-worker-2
+  run_command: npm run worker
   source_dir: /
-  envs:
-  - key: DATABASE_URL
-    scope: RUN_TIME
-    value: ${apps-db-sfo.DATABASE_PRIVATE_URL}

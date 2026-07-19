@@ -285,6 +285,7 @@ describe('Vento page renderer', () => {
         { id: '00000000-0000-4000-8000-000000000020', flightDate: '2026-07-14', originalFilename: 'done.igc', processingStatus: 'completed' },
         { id: '00000000-0000-4000-8000-000000000021', flightDate: null, originalFilename: 'active.igc', processingStatus: 'processing' },
       ],
+      deletableFlightCount: 1,
       search: 'admin@', searchParam: 'admin%40', mode: 'edit',
     });
 
@@ -293,8 +294,36 @@ describe('Vento page renderer', () => {
     expect(html).toContain('/flights/00000000-0000-4000-8000-000000000020/igc');
     expect(html).toContain('/flights/00000000-0000-4000-8000-000000000020/reprocess');
     expect(html).not.toContain('/flights/00000000-0000-4000-8000-000000000021/delete');
+    expect(html).toContain(`/admin/users/${currentUser.userId}/flights/delete-all`);
+    expect(html).toContain('data-confirm="Are you sure you want to delete 1 flight?"');
+    expect(html).toContain('>Delete all flights</button>');
     expect(html).toContain('/styles/adminUserManagement.css');
     expect(html).toContain('/scripts/admin/userManagement.js');
+  });
+
+  it('disables bulk flight deletion when a selected user has no terminal flights', async () => {
+    const currentUser = {
+      userId: '00000000-0000-4000-8000-000000000001',
+      sessionId: '00000000-0000-4000-8000-000000000002',
+      email: 'admin@example.com', displayName: 'Admin', territoryColor: '#1769AA',
+    };
+    const html = await createAdminUserPageRenderer()({
+      currentUser,
+      users: [{ id: currentUser.userId, email: currentUser.email, displayName: currentUser.displayName }],
+      selectedUser: {
+        id: currentUser.userId, email: currentUser.email, displayName: currentUser.displayName,
+        hasPassword: true, lastLogin: new Date(), createdAt: new Date(), updatedAt: new Date(),
+      },
+      flights: [{
+        id: '00000000-0000-4000-8000-000000000021', flightDate: null,
+        originalFilename: 'active.igc', processingStatus: 'processing',
+      }],
+      deletableFlightCount: 0,
+      search: '', searchParam: '', mode: 'edit',
+    });
+
+    expect(html).toContain('data-confirm="Are you sure you want to delete 0 flights?"');
+    expect(html).toContain('class="admin-user-danger" disabled>Delete all flights</button>');
   });
 
   it('renders the area editor with only its dedicated map assets', async () => {

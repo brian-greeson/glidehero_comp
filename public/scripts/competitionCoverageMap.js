@@ -2,11 +2,7 @@ import { createTerritoryBoundaryLayer } from './mapStyles.js';
 
 export const COVERAGE_SOURCE_ID = 'competition-coverage';
 export const COVERAGE_FILL_LAYER_ID = 'competition-territory-fill';
-export const COVERAGE_HOVER_LAYER_ID = 'competition-territory-hover';
-export const COVERAGE_HOVER_OUTLINE_LAYER_ID = 'competition-territory-hover-outline';
 export const COVERAGE_OUTLINE_LAYER_ID = 'competition-territory-outline';
-
-const EMPTY_HOVER_FILTER = ['==', ['get', 'cellId'], ''];
 
 const COVERAGE_COLOR = [
   'case',
@@ -41,6 +37,7 @@ export function colorCoverageTerritory(geojson, colorRegistry) {
 }
 
 export function coverageCellFeatureAtPoint(map, point) {
+  if (!map.getLayer?.(COVERAGE_FILL_LAYER_ID)) return null;
   return map.queryRenderedFeatures?.(point, { layers: [COVERAGE_FILL_LAYER_ID] })?.[0] ?? null;
 }
 
@@ -51,14 +48,6 @@ export function isExclusiveCoverageFeature(feature) {
       Number(properties.claimantCount) === 1 &&
       properties.isShared !== true,
   );
-}
-
-export function setCoverageHoveredCell(map, cellId = null) {
-  if (!map.setFilter) return;
-  const filter = cellId ? ['==', ['get', 'cellId'], cellId] : EMPTY_HOVER_FILTER;
-  for (const layerId of [COVERAGE_HOVER_LAYER_ID, COVERAGE_HOVER_OUTLINE_LAYER_ID]) {
-    if (map.getLayer?.(layerId)) map.setFilter(layerId, filter);
-  }
 }
 
 export function positionCoverageCellPopup(popup, point, containerWidth) {
@@ -86,13 +75,6 @@ export function setCoverageData(map, geojson) {
     source: COVERAGE_SOURCE_ID,
     paint: { 'fill-color': COVERAGE_COLOR, 'fill-opacity': COVERAGE_OPACITY },
   });
-  map.addLayer({
-    id: COVERAGE_HOVER_LAYER_ID,
-    type: 'fill',
-    source: COVERAGE_SOURCE_ID,
-    filter: EMPTY_HOVER_FILTER,
-    paint: { 'fill-color': '#ffffff', 'fill-opacity': 0.18 },
-  });
   map.addLayer(
     createTerritoryBoundaryLayer({
       id: COVERAGE_OUTLINE_LAYER_ID,
@@ -100,11 +82,4 @@ export function setCoverageData(map, geojson) {
       color: COVERAGE_COLOR,
     }),
   );
-  map.addLayer({
-    id: COVERAGE_HOVER_OUTLINE_LAYER_ID,
-    type: 'line',
-    source: COVERAGE_SOURCE_ID,
-    filter: EMPTY_HOVER_FILTER,
-    paint: { 'line-color': '#ffffff', 'line-width': 3 },
-  });
 }

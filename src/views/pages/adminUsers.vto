@@ -8,7 +8,7 @@
         {{ if errorMessage }}<p class="error" role="alert">{{ errorMessage }}</p>{{ /if }}
         {{ if mode === 'empty' }}<section class="admin-user-card"><h2>Select a user</h2><p class="muted">Choose an account from the list or create a new user.</p></section>{{ /if }}
         {{ include "components/adminUserForm.vto" { mode, selectedUser, currentUser, search } }}
-        {{ include "components/adminUserFlights.vto" { selectedUser, flights, search } }}
+        {{ include "components/adminUserFlights.vto" { selectedUser, flights, deletableFlightCount, search } }}
         {{ if selectedUser }}
           <section class="admin-user-card admin-user-delete">
             <h2>Delete user</h2><p>Permanently removes the account, terminal flights, claims, stored IGC files, and terminal upload records.</p>

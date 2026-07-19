@@ -41,6 +41,7 @@ export type AdminUserPageRenderer = (model: {
   users: AdminUserSummary[];
   selectedUser?: AdminUserDetail;
   flights: AdminUserFlight[];
+  deletableFlightCount: number;
   search: string;
   searchParam: string;
   mode: 'empty' | 'create' | 'edit';

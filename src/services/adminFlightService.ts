@@ -16,11 +16,18 @@ export type AdminFlight = {
 
 export type AdminUserFlight = Omit<AdminFlight, 'pilotEmail'>;
 
+export type AdminBulkFlightDeleteResult = {
+  deleted: number;
+  skipped: number;
+  failed: number;
+};
+
 export interface AdminFlightService {
   listRecentFlights(): Promise<AdminFlight[]>;
   listUserFlights(userId: string): Promise<AdminUserFlight[]>;
   reprocessFlight(input: { flightId: string; userId?: string }): ReturnType<GridClaimService['reprocess']>;
   deleteFlight(input: { flightId: string; userId: string }): Promise<'deleted' | 'already_deleted' | 'processing'>;
+  deleteAllUserFlights(userId: string): Promise<AdminBulkFlightDeleteResult>;
   createDownloadUrl(input: { flightId: string; userId: string }): Promise<{ url: string; filename: string } | null>;
 }
 
@@ -65,6 +72,23 @@ export function createAdminFlightService(
       .where(and(eq(flights.id, input.flightId), eq(flights.userId, input.userId)))
       .limit(1);
     return row ?? null;
+  }
+
+  async function deleteFlight(input: { flightId: string; userId: string }) {
+    const flight = await storedFlight(input);
+    if (!flight) return 'already_deleted' as const;
+    if (flight.processingStatus === 'processing') return 'processing' as const;
+    if (!storage) throw new Error('Admin flight storage is not configured.');
+
+    await storage.s3Client.send(new DeleteObjectCommand({ Bucket: storage.bucketName, Key: flight.bucketKey }));
+    await storage.uploadQueue.removeTerminalJobsForFlight({
+      userId: input.userId,
+      flightId: input.flightId,
+      igcFileId: flight.igcFileId,
+      bucketKey: flight.bucketKey,
+    });
+    await database.delete(igcFiles).where(and(eq(igcFiles.id, flight.igcFileId), eq(igcFiles.userId, input.userId)));
+    return 'deleted' as const;
   }
 
   return {
@@ -119,21 +143,30 @@ export function createAdminFlightService(
       return gridClaim.reprocess({ flightId: input.flightId });
     },
 
-    async deleteFlight(input) {
-      const flight = await storedFlight(input);
-      if (!flight) return 'already_deleted';
-      if (flight.processingStatus === 'processing') return 'processing';
-      if (!storage) throw new Error('Admin flight storage is not configured.');
+    deleteFlight,
 
-      await storage.s3Client.send(new DeleteObjectCommand({ Bucket: storage.bucketName, Key: flight.bucketKey }));
-      await storage.uploadQueue.removeTerminalJobsForFlight({
-        userId: input.userId,
-        flightId: input.flightId,
-        igcFileId: flight.igcFileId,
-        bucketKey: flight.bucketKey,
-      });
-      await database.delete(igcFiles).where(and(eq(igcFiles.id, flight.igcFileId), eq(igcFiles.userId, input.userId)));
-      return 'deleted';
+    async deleteAllUserFlights(userId) {
+      const userFlights = await database
+        .select({ id: flights.id, processingStatus: flights.processingStatus })
+        .from(flights)
+        .where(eq(flights.userId, userId))
+        .orderBy(desc(flights.createdAt), desc(flights.id));
+      const result: AdminBulkFlightDeleteResult = { deleted: 0, skipped: 0, failed: 0 };
+
+      for (const flight of userFlights) {
+        if (flight.processingStatus === 'processing') {
+          result.skipped += 1;
+          continue;
+        }
+        try {
+          const status = await deleteFlight({ userId, flightId: flight.id });
+          if (status === 'deleted') result.deleted += 1;
+          else result.skipped += 1;
+        } catch {
+          result.failed += 1;
+        }
+      }
+      return result;
     },
 
     async createDownloadUrl(input) {

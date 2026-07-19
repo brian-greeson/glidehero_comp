@@ -14,7 +14,6 @@ import {
   isExclusiveCoverageFeature,
   positionCoverageCellPopup,
   setCoverageData,
-  setCoverageHoveredCell,
 } from './competitionCoverageMap.js';
 import { initializeMapFlightAids } from './mapFlightAids.js';
 import { createViewportTerritoryLoader } from './viewportTerritoryLoader.js';
@@ -68,7 +67,6 @@ export function initializeCompetitionCoverage({
 
   function clearCellHover() {
     hoveredCellId = null;
-    setCoverageHoveredCell(map);
     const canvas = map?.getCanvas?.();
     if (canvas) canvas.style.cursor = '';
     hideCellPopup();
@@ -264,7 +262,6 @@ export function initializeCompetitionCoverage({
       }
 
       hoveredCellId = properties.cellId;
-      setCoverageHoveredCell(map, hoveredCellId);
       const requestId = ++cellPopupRequestId;
       cellPopup.hidden = true;
       try {

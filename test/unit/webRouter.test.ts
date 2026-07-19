@@ -309,6 +309,7 @@ describe('webRouter', () => {
       })),
       listUserFlights: vi.fn(async () => []),
       deleteFlight: vi.fn(async () => 'deleted' as const),
+      deleteAllUserFlights: vi.fn(async () => ({ deleted: 0, skipped: 0, failed: 0 })),
       createDownloadUrl: vi.fn(async () => null),
     };
     const renderAdminPage = vi.fn(async () => '<html><body>Admin flights</body></html>');

@@ -453,7 +453,7 @@ describe('Global dashboard controller', () => {
     expect(popup.hidden).toBe(true);
   });
 
-  it('highlights exclusive cells on hover and clears the interaction on leave', async () => {
+  it('shows exclusive-cell information on hover and clears it on leave', async () => {
     let claimantRequestCount = 0;
     const fetchImpl = vi.fn(async (url: string) => {
       if (url.startsWith('/v1/competition-territory')) {
@@ -481,16 +481,7 @@ describe('Global dashboard controller', () => {
     ]);
 
     await harness.hover({ x: 50, y: 80 });
-    expect(harness.map.setFilter).toHaveBeenCalledWith('competition-territory-hover', [
-      '==',
-      ['get', 'cellId'],
-      '500:12:-3',
-    ]);
-    expect(harness.map.setFilter).toHaveBeenCalledWith('competition-territory-hover-outline', [
-      '==',
-      ['get', 'cellId'],
-      '500:12:-3',
-    ]);
+    expect(harness.map.setFilter).not.toHaveBeenCalled();
     expect(harness.elements.get('[data-territory-cell-popup]').children[1].children[0].textContent)
       .toBe('Pilot One');
 
@@ -498,16 +489,7 @@ describe('Global dashboard controller', () => {
     expect(claimantRequestCount).toBe(1);
     harness.leave();
     expect(harness.elements.get('[data-territory-cell-popup]').hidden).toBe(true);
-    expect(harness.map.setFilter).toHaveBeenCalledWith('competition-territory-hover', [
-      '==',
-      ['get', 'cellId'],
-      '',
-    ]);
-    expect(harness.map.setFilter).toHaveBeenCalledWith('competition-territory-hover-outline', [
-      '==',
-      ['get', 'cellId'],
-      '',
-    ]);
+    expect(harness.map.setFilter).not.toHaveBeenCalled();
   });
 
   it('does not add hover interaction to shared cells', async () => {
@@ -538,11 +520,7 @@ describe('Global dashboard controller', () => {
       false,
     );
     expect(harness.elements.get('[data-territory-cell-popup]').hidden).toBe(true);
-    expect(harness.map.setFilter).toHaveBeenCalledWith('competition-territory-hover', [
-      '==',
-      ['get', 'cellId'],
-      '',
-    ]);
+    expect(harness.map.setFilter).not.toHaveBeenCalled();
   });
 
   it('ignores an exclusive-cell response after the pointer moves onto a shared cell', async () => {

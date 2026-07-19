@@ -35,10 +35,17 @@ function userLocation(userId: string, search: string, status?: { kind: 'success'
 function notice(query: Request['query']): { successMessage?: string; errorMessage?: string } {
   const success = typeof query.success === 'string' ? query.success : '';
   const error = typeof query.error === 'string' ? query.error : '';
-  const successMessage = {
+  let successMessage = {
     created: 'User created.', updated: 'User updated.', password: 'Password updated and existing sessions revoked.',
     deleted: 'User deleted.', flight_deleted: 'Flight deleted.', reprocessed: 'Flight cells reprocessed.',
   }[success];
+  if (success === 'flights_deleted') {
+    const count = (key: string) => {
+      const value = typeof query[key] === 'string' ? Number(query[key]) : 0;
+      return Number.isSafeInteger(value) && value >= 0 ? value : 0;
+    };
+    successMessage = `Deleted ${count('deleted')} flights; skipped ${count('skipped')} active flights; ${count('failed')} failed.`;
+  }
   const errorMessage = {
     invalid: 'Enter valid values and make sure the password fields match.',
     reprocess: 'That flight could not be reprocessed.',
@@ -86,7 +93,9 @@ export function createAdminUserRouter(dependencies: {
     if (userId && !selectedUser) throw new AppError(404, 'invalid_request', 'User not found.');
     const flights = selectedUser ? await dependencies.flights.listUserFlights(selectedUser.id) : [];
     res.status(200).type('html').send(await dependencies.renderPage({
-      currentUser, users, selectedUser: selectedUser ?? undefined, flights, search, searchParam: encodeURIComponent(search), mode, ...notice(req.query),
+      currentUser, users, selectedUser: selectedUser ?? undefined, flights,
+      deletableFlightCount: flights.filter((flight) => flight.processingStatus !== 'processing').length,
+      search, searchParam: encodeURIComponent(search), mode, ...notice(req.query),
     }));
   }
 
@@ -165,6 +174,23 @@ export function createAdminUserRouter(dependencies: {
       const result = await dependencies.flights.reprocessFlight({ userId: userId.data, flightId: flightId.data });
       res.redirect(303, userLocation(userId.data, search, result.status === 'completed'
         ? { kind: 'success', value: 'reprocessed' } : { kind: 'error', value: 'reprocess' }));
+    } catch (error) { next(error); }
+  });
+
+  router.post('/admin/users/:userId/flights/delete-all', async (req, res, next) => {
+    const userId = uuid.safeParse(req.params.userId);
+    const search = queryValue(formBody(req.body).q);
+    if (!userId.success) { res.redirect(303, '/admin/users?error=invalid'); return; }
+    try {
+      const result = await dependencies.flights.deleteAllUserFlights(userId.data);
+      const query = new URLSearchParams({
+        success: 'flights_deleted',
+        deleted: String(result.deleted),
+        skipped: String(result.skipped),
+        failed: String(result.failed),
+      });
+      if (search) query.set('q', search);
+      res.redirect(303, `/admin/users/${userId.data}?${query.toString()}`);
     } catch (error) { next(error); }
   });
 

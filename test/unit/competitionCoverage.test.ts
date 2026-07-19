@@ -5,7 +5,7 @@ import { arenaCoverageLeaderboardUrl, coverageCellClaimantsUrl, coverageTerritor
 // @ts-expect-error Browser assets remain JavaScript.
 import { createCompetitionColorRegistry } from '../../public/scripts/competitionColors.js';
 // @ts-expect-error Browser assets remain JavaScript.
-import { colorCoverageTerritory, coverageCellFeatureAtPoint, isExclusiveCoverageFeature, positionCoverageCellPopup, setCoverageData, setCoverageHoveredCell } from '../../public/scripts/competitionCoverageMap.js';
+import { colorCoverageTerritory, coverageCellFeatureAtPoint, isExclusiveCoverageFeature, positionCoverageCellPopup, setCoverageData } from '../../public/scripts/competitionCoverageMap.js';
 // @ts-expect-error Browser assets remain JavaScript.
 import { renderCoverageLeaderboard } from '../../public/scripts/competitionCoverageLeaderboard.js';
 
@@ -117,14 +117,20 @@ describe('competition coverage browser contracts', () => {
     expect(popup.style).toEqual({ left: '68px', top: '40px' });
     expect(popup.dataset.placement).toBe('below');
     const queryRenderedFeatures = vi.fn().mockReturnValue([]);
-    expect(coverageCellFeatureAtPoint({ queryRenderedFeatures }, { x: 40, y: 50 })).toBeNull();
+    const getLayer = vi.fn().mockReturnValue({ id: 'competition-territory-fill' });
+    expect(coverageCellFeatureAtPoint({ getLayer, queryRenderedFeatures }, { x: 40, y: 50 })).toBeNull();
     expect(queryRenderedFeatures).toHaveBeenCalledWith(
       { x: 40, y: 50 },
       { layers: ['competition-territory-fill'] },
     );
+
+    getLayer.mockReturnValue(undefined);
+    queryRenderedFeatures.mockClear();
+    expect(coverageCellFeatureAtPoint({ getLayer, queryRenderedFeatures }, { x: 40, y: 50 })).toBeNull();
+    expect(queryRenderedFeatures).not.toHaveBeenCalled();
   });
 
-  it('adds hover fill and outline layers and filters them to an exclusive coverage cell', () => {
+  it('adds coverage fill and outline layers without hover highlights', () => {
     const layers = new Map<string, any>();
     const map = {
       addSource: vi.fn(),
@@ -135,31 +141,9 @@ describe('competition coverage browser contracts', () => {
     };
 
     setCoverageData(map, { type: 'FeatureCollection', features: [] });
-    expect(layers.get('competition-territory-hover')).toMatchObject({
-      type: 'fill',
-      source: 'competition-coverage',
-      paint: { 'fill-color': '#ffffff', 'fill-opacity': 0.18 },
-    });
-    expect(layers.get('competition-territory-hover-outline')).toMatchObject({
-      type: 'line',
-      source: 'competition-coverage',
-      paint: { 'line-color': '#ffffff', 'line-width': 3 },
-    });
-
-    setCoverageHoveredCell(map, '500:12:-3');
-    const hoveredFilter = ['==', ['get', 'cellId'], '500:12:-3'];
-    expect(map.setFilter).toHaveBeenCalledWith('competition-territory-hover', hoveredFilter);
-    expect(map.setFilter).toHaveBeenCalledWith(
-      'competition-territory-hover-outline',
-      hoveredFilter,
-    );
-    setCoverageHoveredCell(map);
-    const emptyFilter = ['==', ['get', 'cellId'], ''];
-    expect(map.setFilter).toHaveBeenCalledWith('competition-territory-hover', emptyFilter);
-    expect(map.setFilter).toHaveBeenCalledWith(
-      'competition-territory-hover-outline',
-      emptyFilter,
-    );
+    expect(layers.has('competition-territory-fill')).toBe(true);
+    expect(layers.has('competition-territory-outline')).toBe(true);
+    expect([...layers].some((layerId) => layerId.includes('hover'))).toBe(false);
   });
 
   it('only treats exclusively claimed cells as hoverable', () => {
