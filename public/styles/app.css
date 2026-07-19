@@ -1004,7 +1004,7 @@ button {
 .coverage-table-header,
 .coverage-pilot-row {
   display: grid;
-  grid-template-columns: minmax(9rem, 1.7fr) repeat(3, minmax(4.6rem, 0.7fr)) minmax(6.5rem, 0.9fr);
+  grid-template-columns: minmax(9rem, 1.7fr) minmax(4.6rem, 0.7fr) minmax(6.5rem, 0.9fr);
   align-items: center;
   gap: 0.55rem;
   width: 100%;
@@ -1380,7 +1380,7 @@ button {
     overflow: hidden;
   }
   .coverage-table {
-    min-width: 39rem;
+    min-width: 25rem;
   }
   .dashboard-info:not(.is-expanded) .coverage-table-header,
   .dashboard-info:not(.is-expanded) .coverage-pilot-row {

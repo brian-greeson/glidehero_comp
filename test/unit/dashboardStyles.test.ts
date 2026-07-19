@@ -18,7 +18,7 @@ describe('dashboard stylesheet contract', () => {
     );
     expect(css).toContain('height: 292px;');
     expect(css).toMatch(
-      /@media \(max-width: 900px\)[\s\S]*?\.coverage-table\s*{\s*min-width: 39rem;/,
+      /@media \(max-width: 900px\)[\s\S]*?\.coverage-table\s*{\s*min-width: 25rem;/,
     );
     expect(css).toMatch(
       /\.dashboard-info:not\(\.is-expanded\) \.coverage-table-header,\s*\.dashboard-info:not\(\.is-expanded\) \.coverage-pilot-row\s*{\s*grid-template-columns: minmax\(9rem, 1fr\) 5rem;/,

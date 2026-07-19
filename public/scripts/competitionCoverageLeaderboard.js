@@ -24,8 +24,6 @@ function pilotRow(documentRef, pilot, { selectedPilotId, currentUserId, colorReg
   button.append(name);
   for (const value of [
     formatCount(pilot.claimedCellCount),
-    formatCount(pilot.exclusiveCellCount),
-    formatCount(pilot.sharedCellCount),
     formatClaimedArea(pilot.claimedAreaSquareMeters),
   ]) {
     const cell = documentRef.createElement('span');

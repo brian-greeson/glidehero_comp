@@ -101,6 +101,7 @@ describe('competition coverage browser contracts', () => {
       colorRegistry: { colorFor: () => '#1769AA' },
       onSelect,
     });
+    expect((elements.get('[data-territory-list]')?.children[0] as any).children).toHaveLength(3);
     handlers.get('click')?.();
     expect(onSelect).toHaveBeenCalledWith(null);
   });
