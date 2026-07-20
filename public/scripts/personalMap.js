@@ -1,43 +1,34 @@
 import { createTerritoryBoundaryLayer, createTerritoryFillLayer } from './mapStyles.js';
-import { viewportSearchParams } from './viewportQuery.js';
 
 export const PERSONAL_TERRITORY_SOURCE_ID = 'personal-territory';
 export const PERSONAL_TERRITORY_FILL_LAYER_ID = 'personal-territory-fill';
 export const PERSONAL_TERRITORY_OUTLINE_LAYER_ID = 'personal-territory-outline';
+export const PERSONAL_TERRITORY_SOURCE_LAYER = 'personal-territory';
 
-export function personalTerritoryUrl(bounds) {
-  return `/v1/personal-territory?${viewportSearchParams(bounds)}`;
+export function personalTerritoryTileUrl(origin = globalThis.location?.origin ?? '') {
+  return `${origin}/v1/personal-territory/tiles/{z}/{x}/{y}.mvt`;
 }
 
-export async function fetchPersonalTerritory(bounds, fetchImpl = fetch, signal) {
-  const response = await fetchImpl(personalTerritoryUrl(bounds), {
-    credentials: 'same-origin',
-    headers: { accept: 'application/geo+json' },
-    signal,
+export function installPersonalTerritorySource(map, territoryColor, tileZoom) {
+  if (map.getSource?.(PERSONAL_TERRITORY_SOURCE_ID)) return;
+  map.addSource(PERSONAL_TERRITORY_SOURCE_ID, {
+    type: 'vector',
+    tiles: [personalTerritoryTileUrl()],
+    minzoom: tileZoom.minimumZoom,
+    maxzoom: tileZoom.maximumZoom,
   });
-  if (!response.ok) throw new Error(`Personal territory request failed with ${response.status}.`);
-  return response.json();
-}
-
-export function setPersonalTerritoryData(map, territoryColor, geojson) {
-  const source = map.getSource?.(PERSONAL_TERRITORY_SOURCE_ID);
-  if (source?.setData) {
-    source.setData(geojson);
-    return;
-  }
-  map.addSource(PERSONAL_TERRITORY_SOURCE_ID, { type: 'geojson', data: geojson });
   map.addLayer(createTerritoryFillLayer({
     id: PERSONAL_TERRITORY_FILL_LAYER_ID,
     source: PERSONAL_TERRITORY_SOURCE_ID,
+    sourceLayer: PERSONAL_TERRITORY_SOURCE_LAYER,
     color: territoryColor,
+    minzoom: tileZoom.minimumZoom,
   }));
   map.addLayer(createTerritoryBoundaryLayer({
     id: PERSONAL_TERRITORY_OUTLINE_LAYER_ID,
     source: PERSONAL_TERRITORY_SOURCE_ID,
+    sourceLayer: PERSONAL_TERRITORY_SOURCE_LAYER,
     color: territoryColor,
+    minzoom: tileZoom.minimumZoom,
   }));
-}
-
-export async function loadPersonalTerritory(map, territoryColor, bounds, fetchImpl = fetch) {
-  setPersonalTerritoryData(map, territoryColor, await fetchPersonalTerritory(bounds, fetchImpl));
 }

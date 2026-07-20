@@ -4,19 +4,21 @@ import { createLatestRequest } from './latestRequest.js';
 import {
   arenaCoverageLeaderboardUrl,
   coverageCellClaimantsUrl,
-  coverageTerritoryUrl,
+  coverageTerritoryTileUrl,
   globalCoverageLeaderboardUrl,
 } from './competitionCoverageApi.js';
 import { renderCoverageLeaderboard } from './competitionCoverageLeaderboard.js';
 import {
-  colorCoverageTerritory,
+  assignLoadedCoverageColors,
   coverageCellFeatureAtPoint,
+  installCoverageSource,
   isExclusiveCoverageFeature,
   positionCoverageCellPopup,
-  setCoverageData,
+  setCoverageHoveredCell,
+  updateCoverageTiles,
+  visibleCoverageFeatureCount,
 } from './competitionCoverageMap.js';
 import { initializeMapFlightAids } from './mapFlightAids.js';
-import { createViewportTerritoryLoader } from './viewportTerritoryLoader.js';
 
 async function jsonRequest(url, fetchImpl, signal) {
   const response = await fetchImpl(url, {
@@ -58,7 +60,6 @@ export function initializeCompetitionCoverage({
   let leaderboard = { leaders: [], currentPilot: null };
   let cellPopupRequestId = 0;
   let hoveredCellId = null;
-  let territoryLoader;
 
   function hideCellPopup() {
     cellPopupRequestId += 1;
@@ -67,6 +68,7 @@ export function initializeCompetitionCoverage({
 
   function clearCellHover() {
     hoveredCellId = null;
+    if (mapReady) setCoverageHoveredCell(map);
     const canvas = map?.getCanvas?.();
     if (canvas) canvas.style.cursor = '';
     hideCellPopup();
@@ -94,28 +96,17 @@ export function initializeCompetitionCoverage({
     emptyState.hidden = !message;
   }
 
-  function initializeTerritoryLoader() {
-    territoryLoader = createViewportTerritoryLoader({
-      map,
-      fetchTerritory: (bounds, signal) => jsonRequest(
-        coverageTerritoryUrl({
-          arenaSourceId,
-          bounds,
-          month: periodControl.month,
-          pilotUserId: selectedPilotId,
-        }),
-        fetchImpl,
-        signal,
-      ),
-      applyTerritory: (territory) => {
-        clearCellHover();
-        setCoverageData(map, colorCoverageTerritory(territory, colorRegistry));
-      },
-      onVisibleData: (territory) => setStatus(
-        territory.features.length === 0 ? 'No territory for this zoom level or area.' : '',
-      ),
-      onVisibleError: () => setStatus('Unable to load coverage. Try again.'),
+  function activeTileUrl() {
+    return coverageTerritoryTileUrl({
+      arenaSourceId,
+      month: periodControl.month,
+      pilotUserId: selectedPilotId,
     });
+  }
+
+  function refreshTerritoryTiles() {
+    clearCellHover();
+    updateCoverageTiles(map, activeTileUrl());
   }
 
   function renderLeaderboard() {
@@ -130,7 +121,7 @@ export function initializeCompetitionCoverage({
         selectedPilotId = pilot?.userId ?? null;
         overviewButton?.setAttribute('aria-pressed', String(!selectedPilotId));
         renderLeaderboard();
-        void territoryLoader?.refresh({ force: true });
+        refreshTerritoryTiles();
       },
     });
   }
@@ -152,7 +143,7 @@ export function initializeCompetitionCoverage({
       ) {
         selectedPilotId = null;
         overviewButton?.setAttribute('aria-pressed', 'true');
-        await territoryLoader?.refresh({ force: true });
+        refreshTerritoryTiles();
       }
       renderLeaderboard();
     } catch (error) {
@@ -169,7 +160,8 @@ export function initializeCompetitionCoverage({
     selectedPilotId = null;
     overviewButton?.setAttribute('aria-pressed', 'true');
     clearCellHover();
-    await Promise.all([leaderboardRequest.run(), territoryLoader?.refresh({ force: true })]);
+    refreshTerritoryTiles();
+    await leaderboardRequest.run();
   }
 
   const periodControl = initializeCompetitionPeriodControl({
@@ -188,7 +180,7 @@ export function initializeCompetitionCoverage({
     selectedPilotId = null;
     overviewButton.setAttribute('aria-pressed', 'true');
     renderLeaderboard();
-    void territoryLoader?.refresh({ force: true });
+    refreshTerritoryTiles();
   });
 
   try {
@@ -199,7 +191,6 @@ export function initializeCompetitionCoverage({
       zoom: 7,
     });
     map.addControl(new maplibre.NavigationControl(), 'top-right');
-    initializeTerritoryLoader();
     map.once('error', () => setStatus('Map unavailable. Check your connection and try again.'));
     map.once('load', async () => {
       try {
@@ -223,6 +214,10 @@ export function initializeCompetitionCoverage({
             { padding: 60, duration: 0 },
           );
         }
+        installCoverageSource(map, activeTileUrl(), {
+          minimumZoom: Number(mapElement.dataset.territoryTileMinimumZoom),
+          maximumZoom: Number(mapElement.dataset.territoryTileMaximumZoom),
+        });
         mapReady = true;
         await refreshPeriod();
       } catch {
@@ -242,7 +237,14 @@ export function initializeCompetitionCoverage({
     map.on('moveend', () => {
       if (!mapReady) return;
       if (!arenaSourceId) void leaderboardRequest.run();
-      void territoryLoader?.refresh();
+    });
+    map.on('sourcedata', (event) => {
+      if (!mapReady || event.sourceId !== 'competition-coverage' || !event.isSourceLoaded) return;
+      assignLoadedCoverageColors(map, colorRegistry);
+    });
+    map.on('idle', () => {
+      if (!mapReady) return;
+      setStatus(visibleCoverageFeatureCount(map) === 0 ? 'No territory for this zoom level or area.' : '');
     });
     map.on('mousemove', async (event) => {
       if (!mapReady || !cellPopup) return;
@@ -262,6 +264,7 @@ export function initializeCompetitionCoverage({
       }
 
       hoveredCellId = properties.cellId;
+      setCoverageHoveredCell(map, hoveredCellId);
       const requestId = ++cellPopupRequestId;
       cellPopup.hidden = true;
       try {
@@ -279,6 +282,10 @@ export function initializeCompetitionCoverage({
     map.on('click', async (event) => {
       if (!cellPopup) return;
       const feature = coverageCellFeatureAtPoint(map, event.point);
+      if (!isExclusiveCoverageFeature(feature)) {
+        hideCellPopup();
+        return;
+      }
       const properties = feature?.properties;
       if (!properties) {
         hideCellPopup();

@@ -2,11 +2,9 @@ import { sql } from 'drizzle-orm';
 import type { Database } from '../db/client.js';
 import type {
   MonthlyCoverageCellClaimant,
-  MonthlyCoverageGeoJson,
   MonthlyCoverageLeaderboard,
   MonthlyCoveragePilot,
 } from '../domain/competition/monthlyCoverage.js';
-import { emptyMonthlyCoverageGeoJson } from '../domain/competition/monthlyCoverage.js';
 import { normalizeCompetitionLeaderboardMonth } from '../domain/competition/competitionLeaderboardMonth.js';
 import { viewportCtes, type ViewportBounds } from './viewportGrid.js';
 import { claimCellCenterSql } from './arenaGeometrySql.js';
@@ -16,17 +14,13 @@ export type MonthlyCoveragePeriod = { competitionMonth: string } | { period: 'al
 export interface MonthlyCoverageService {
   getGlobalLeaderboard(input: MonthlyCoveragePeriod & ViewportBounds & { currentUserId: string }): Promise<MonthlyCoverageLeaderboard>;
   getArenaLeaderboard(input: MonthlyCoveragePeriod & { arenaId: string; currentUserId: string }): Promise<MonthlyCoverageLeaderboard>;
-  getGlobalTerritory(input: MonthlyCoveragePeriod & ViewportBounds & { pilotUserId?: string }): Promise<MonthlyCoverageGeoJson>;
-  getArenaTerritory(input: MonthlyCoveragePeriod & ViewportBounds & { arenaId: string; pilotUserId?: string }): Promise<MonthlyCoverageGeoJson>;
   getCellClaimants(input: MonthlyCoveragePeriod & { x: number; y: number }): Promise<MonthlyCoverageCellClaimant[]>;
 }
 
 type StoredPilot = MonthlyCoveragePilot & { isCurrentPilotOnly: boolean; displayPosition: number };
-type StoredProjection = { geojson: MonthlyCoverageGeoJson };
 
-function coverageClaimsCtes(input: { competitionMonth?: string; cellSize: number; viewport?: ViewportBounds }) {
+function coverageClaimsCtes(input: { competitionMonth?: string; cellSize: number }) {
   return sql`
-    ${input.viewport ? sql`${viewportCtes(input.viewport)},` : sql``}
     pilot_cells AS (
       SELECT DISTINCT c.cell_size, c.x, c.y, c.claim_user
       FROM competition_grid_claims c
@@ -34,15 +28,6 @@ function coverageClaimsCtes(input: { competitionMonth?: string; cellSize: number
         ${input.competitionMonth
           ? sql`AND c.competition_month = ${input.competitionMonth}::date`
           : sql``}
-        ${input.viewport ? sql`AND EXISTS (
-          SELECT 1 FROM viewport_parts viewport
-          WHERE ST_Intersects(
-            ST_MakeEnvelope(
-              c.x * ${input.cellSize}, c.y * ${input.cellSize},
-              (c.x + 1) * ${input.cellSize}, (c.y + 1) * ${input.cellSize}, 6933
-            ), viewport.geometry
-          )
-        )` : sql``}
     ),
     cell_claimants AS (
       SELECT
@@ -161,38 +146,6 @@ function leaderboardQuery(input: {
   `;
 }
 
-function territoryQuery(input: {
-  scopedCells: ReturnType<typeof sql>;
-  cellSize: number;
-  pilotUserId?: string;
-}) {
-  return sql`
-    scoped_cells AS (${input.scopedCells})
-    SELECT jsonb_build_object(
-      'type', 'FeatureCollection',
-      'features', COALESCE(jsonb_agg(
-        jsonb_build_object(
-          'type', 'Feature',
-          'properties', jsonb_strip_nulls(jsonb_build_object(
-            'cellId', concat(${input.cellSize}::integer, ':', scoped.x, ':', scoped.y),
-            'cellSize', ${input.cellSize}::integer,
-            'x', scoped.x,
-            'y', scoped.y,
-            'claimantCount', scoped.claimant_count,
-            'isShared', scoped.claimant_count > 1,
-            'pilotUserId', ${input.pilotUserId ? sql`${input.pilotUserId}::uuid` : sql`scoped.pilot_user_id`}
-          )),
-          'geometry', ST_AsGeoJSON(ST_Transform(ST_MakeEnvelope(
-            scoped.x * ${input.cellSize}, scoped.y * ${input.cellSize},
-            (scoped.x + 1) * ${input.cellSize}, (scoped.y + 1) * ${input.cellSize}, 6933
-          ), 4326))::jsonb
-        ) ORDER BY scoped.x, scoped.y
-      ), '[]'::jsonb)
-    ) AS geojson
-    FROM scoped_cells scoped
-  `;
-}
-
 export function createMonthlyCoverageService(
   database: Database,
   options: { cellSize: number },
@@ -241,41 +194,6 @@ export function createMonthlyCoverageService(
         })}
       `);
       return leaderboardFromRows(result.rows);
-    },
-
-    async getGlobalTerritory(input) {
-      const competitionMonth = normalizePeriod(input);
-      const result = await database.execute<StoredProjection>(sql`
-        WITH ${coverageClaimsCtes({ competitionMonth, cellSize, viewport: input })},
-        ${territoryQuery({
-          cellSize,
-          pilotUserId: input.pilotUserId,
-          scopedCells: input.pilotUserId
-            ? sql`SELECT pilot.x, pilot.y, claimant.claimant_count, pilot.claim_user AS pilot_user_id FROM pilot_cells pilot INNER JOIN cell_claimants claimant USING (cell_size, x, y) WHERE pilot.claim_user = ${input.pilotUserId}`
-            : sql`SELECT x, y, claimant_count, pilot_user_id FROM cell_claimants`,
-        })}
-      `);
-      return result.rows[0]?.geojson ?? emptyMonthlyCoverageGeoJson();
-    },
-
-    async getArenaTerritory(input) {
-      const competitionMonth = normalizePeriod(input);
-      const result = await database.execute<StoredProjection>(sql`
-        WITH ${coverageClaimsCtes({ competitionMonth, cellSize, viewport: input })},
-        ${territoryQuery({
-          cellSize,
-          pilotUserId: input.pilotUserId,
-          scopedCells: sql`
-            SELECT source.x, source.y, source.claimant_count, source.pilot_user_id
-            FROM ${input.pilotUserId
-              ? sql`(SELECT pilot.x, pilot.y, claimant.claimant_count, pilot.cell_size, pilot.claim_user AS pilot_user_id FROM pilot_cells pilot INNER JOIN cell_claimants claimant USING (cell_size, x, y) WHERE pilot.claim_user = ${input.pilotUserId})`
-              : sql`cell_claimants`} source
-            INNER JOIN arenas arena ON arena.id = ${input.arenaId}
-              AND ST_Covers(arena.area, ${claimCellCenterSql({ x: sql`source.x`, y: sql`source.y`, cellSize: sql`${cellSize}` })})
-          `,
-        })}
-      `);
-      return result.rows[0]?.geojson ?? emptyMonthlyCoverageGeoJson();
     },
 
     async getCellClaimants(input) {

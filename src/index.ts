@@ -15,6 +15,7 @@ import { createFailedFlightCleanupService } from './services/failedFlightCleanup
 import { createProfileService } from './services/profileService.js';
 import { createMonthlyCoverageService } from './services/monthlyCoverageService.js';
 import { createMapGridService } from './services/mapGridService.js';
+import { createTerritoryTileService } from './services/territoryTileService.js';
 import { createAdminAreaPageRenderer, createAdminPageRenderer, createAdminUserPageRenderer, createPageRenderer } from './views/renderer.js';
 import { createAdminAreaRouter } from './web/adminAreaRouter.js';
 import { createAdminUserRouter } from './web/adminUserRouter.js';
@@ -32,6 +33,7 @@ const adminAreas = createAdminAreaService(db, { cellSize: config.gridClaimCellSi
 const arenas = createArenaService(db, { cellSize: config.gridClaimCellSize });
 const monthlyCoverage = createMonthlyCoverageService(db, { cellSize: config.gridClaimCellSize });
 const mapGrid = createMapGridService(db, { cellSize: config.gridClaimCellSize });
+const territoryTiles = createTerritoryTileService(db, { cellSize: config.gridClaimCellSize });
 const profiles = createProfileService(db);
 const uploadQueue = createFlightUploadQueueService(valkey, {
   s3Client,
@@ -80,6 +82,7 @@ const webMiddleware = [
     gridClaim,
     mapGrid,
     coverage: monthlyCoverage,
+    territoryTiles,
     arenas,
     renderPage: createPageRenderer({ mapTilerApiKey: config.mapTilerApiKey }),
     adminEmails: config.adminEmails,

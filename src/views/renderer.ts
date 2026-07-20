@@ -5,6 +5,7 @@ import type { AdminFlight } from '../services/adminFlightService.js';
 import type { AdminUserFlight } from '../services/adminFlightService.js';
 import type { AdminUserDetail, AdminUserSummary } from '../services/adminUserService.js';
 import type { ArenaDetail } from '../services/arenaService.js';
+import { territoryTileConfig } from '../config/territoryTiles.js';
 
 export type PageModel = {
   currentUser: AuthenticatedUser | null;
@@ -87,6 +88,7 @@ export function createPageRenderer(options: { mapTilerApiKey: string }): PageRen
         pageStylesheet: undefined,
         pageScript: undefined,
         mapTilerStyleUrl: `https://api.maptiler.com/maps/outdoor-v2/style.json?key=${options.mapTilerApiKey}`,
+        territoryTileConfig,
         ...model,
       })
     ).content;

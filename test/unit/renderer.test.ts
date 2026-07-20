@@ -118,6 +118,8 @@ describe('Vento page renderer', () => {
     );
     expect(authenticated).toContain('href="/personal" class="mode-tab">Personal</a>');
     expect(authenticated).toContain('data-territory-color="#1769AA"');
+    expect(authenticated).toContain('data-territory-tile-minimum-zoom="4"');
+    expect(authenticated).toContain('data-territory-tile-maximum-zoom="14"');
     expect(authenticated).toContain('data-current-user-id="00000000-0000-4000-8000-000000000001"');
     expect(authenticated).toContain('<script type="module" src="/scripts/dashboard.js"></script>');
     expect(authenticated).toContain('<h2>Territory leaderboard</h2>');
@@ -167,6 +169,8 @@ describe('Vento page renderer', () => {
       'href="/personal" class="mode-tab is-active" aria-current="page">Personal</a>',
     );
     expect(personal).toContain('data-personal-stats');
+    expect(personal).toContain('data-territory-tile-minimum-zoom="4"');
+    expect(personal).toContain('data-territory-tile-maximum-zoom="14"');
     expect(personal).toContain('data-map-flight-aid-status');
     expect(personal).not.toContain('data-arena-search');
     expect(personal).not.toContain('competition-breadcrumb');
@@ -194,6 +198,8 @@ describe('Vento page renderer', () => {
     expect(arena).toContain('data-competition-coverage="arena"');
     expect(arena).toContain('data-territory-map');
     expect(arena).toContain('data-arena-source-id="745"');
+    expect(arena).toContain('data-territory-tile-minimum-zoom="4"');
+    expect(arena).toContain('data-territory-tile-maximum-zoom="14"');
     expect(arena).toContain('data-map-flight-aid-status');
     expect(arena).toContain('<a href="/global" data-competition-period-link="/global">Global</a>');
     expect(arena).toContain('aria-current="page">Boulder</span>');

@@ -13,31 +13,7 @@ export type MonthlyCoverageLeaderboard = {
   currentPilot: MonthlyCoveragePilot | null;
 };
 
-export type MonthlyCoverageGeoJson = {
-  type: 'FeatureCollection';
-  features: Array<{
-    type: 'Feature';
-    properties: {
-      cellId: string;
-      cellSize: number;
-      x: number;
-      y: number;
-      claimantCount: number;
-      isShared: boolean;
-      pilotUserId?: string;
-    };
-    geometry: {
-      type: 'Polygon';
-      coordinates: number[][][];
-    };
-  }>;
-};
-
 export type MonthlyCoverageCellClaimant = {
   userId: string;
   displayName: string;
 };
-
-export function emptyMonthlyCoverageGeoJson(): MonthlyCoverageGeoJson {
-  return { type: 'FeatureCollection', features: [] };
-}

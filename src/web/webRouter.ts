@@ -13,7 +13,9 @@ import type { PageModel, PageRenderer } from '../views/renderer.js';
 import type { AdminPageRenderer } from '../views/renderer.js';
 import type { FlightUploadQueueService } from '../services/flightUploadQueueService.js';
 import type { FailedFlightCleanupService } from '../services/failedFlightCleanupService.js';
+import type { TerritoryTileService } from '../services/territoryTileService.js';
 import type { SessionCookie } from './sessionCookie.js';
+import { territoryTileConfig } from '../config/territoryTiles.js';
 
 const email = z.string().trim().toLowerCase().pipe(z.email());
 const password = z.string().min(3).max(128);
@@ -44,11 +46,6 @@ const viewportBoundsShape = {
 const viewportBoundsSchema = z.object(viewportBoundsShape)
   .strict()
   .refine((bounds) => bounds.south < bounds.north && bounds.west !== bounds.east);
-const competitionTerritorySchema = z.object({
-  month: competitionMonthValue.optional(),
-  pilot: z.string().uuid().optional(),
-  ...viewportBoundsShape,
-}).strict().refine((bounds) => bounds.south < bounds.north && bounds.west !== bounds.east);
 const competitionLeaderboardSchema = z.object({
   month: competitionMonthValue.optional(),
   ...viewportBoundsShape,
@@ -56,6 +53,24 @@ const competitionLeaderboardSchema = z.object({
 const arenaSearchSchema = z.object({ q: z.string().trim().min(1).max(100) }).strict();
 const arenaSourceIdSchema = z.coerce.number().int().positive().safe();
 const cellCoordinateSchema = z.coerce.number().int().safe();
+const tileQuerySchema = z.object({
+  month: competitionMonthValue.optional(),
+  pilot: z.string().uuid().optional(),
+}).strict();
+
+function territoryTileCoordinates(
+  zoom: { minimumZoom: number; maximumZoom: number },
+  params: Record<string, string>,
+) {
+  const parsed = z.object({
+    z: z.coerce.number().int().min(zoom.minimumZoom).max(zoom.maximumZoom),
+    x: z.coerce.number().int().min(0),
+    y: z.coerce.number().int().min(0),
+  }).safeParse(params);
+  if (!parsed.success) return null;
+  const tileCount = 2 ** parsed.data.z;
+  return parsed.data.x < tileCount && parsed.data.y < tileCount ? parsed.data : null;
+}
 
 function coveragePeriod(month?: string): MonthlyCoveragePeriod {
   return month ? { competitionMonth: month } : { period: 'all-time' };
@@ -85,6 +100,7 @@ export function createWebRouter(dependencies: {
   gridClaim: GridClaimService;
   mapGrid: MapGridService;
   coverage: MonthlyCoverageService;
+  territoryTiles: TerritoryTileService;
   arenas: ArenaService;
   renderPage: PageRenderer;
   adminEmails?: readonly string[];
@@ -94,6 +110,13 @@ export function createWebRouter(dependencies: {
   const router = Router();
   const adminEmails = new Set((dependencies.adminEmails ?? []).map((email) => email.trim().toLowerCase()));
   const isAdmin = (email: string) => adminEmails.has(email.trim().toLowerCase());
+
+  function sendTerritoryTile(res: Response, tile: { data: Buffer }) {
+    res.status(200)
+      .type('application/vnd.mapbox-vector-tile')
+      .set('Cache-Control', 'private, max-age=60')
+      .send(tile.data);
+  }
 
   function dashboardReturnTo(value: unknown): string {
     if (typeof value !== 'string') return '/global';
@@ -223,23 +246,22 @@ export function createWebRouter(dependencies: {
     }
   });
 
-  router.get('/v1/personal-territory', async (req, res, next) => {
+  router.get('/v1/personal-territory/tiles/:z/:x/:y.mvt', async (req, res, next) => {
     const currentUser = res.locals.currentUser;
     if (!currentUser) {
       next(new AppError(401, 'unauthorized', 'Sign in to view your personal territory.'));
       return;
     }
-
-    const viewport = viewportBoundsSchema.safeParse(req.query);
-    if (!viewport.success) {
-      res.status(400).json({
-        error: { code: 'invalid_request', message: 'Personal territory requires valid viewport bounds.' },
-      });
+    const coordinates = territoryTileCoordinates(territoryTileConfig.personal, req.params);
+    if (!coordinates || Object.keys(req.query).length > 0) {
+      res.status(400).json({ error: { code: 'invalid_request', message: 'Personal territory tile coordinates are invalid.' } });
       return;
     }
     try {
-      const territory = await dependencies.gridClaim.get({ userId: currentUser.userId, ...viewport.data });
-      res.status(200).json(territory);
+      sendTerritoryTile(res, await dependencies.territoryTiles.getPersonalTile({
+        ...coordinates,
+        userId: currentUser.userId,
+      }));
     } catch (error) {
       next(error);
     }
@@ -297,30 +319,23 @@ export function createWebRouter(dependencies: {
     }
   });
 
-  router.get('/v1/competition-territory', async (req, res, next) => {
+  router.get('/v1/competition-territory/tiles/:z/:x/:y.mvt', async (req, res, next) => {
     if (!res.locals.currentUser) {
       next(new AppError(401, 'unauthorized', 'Sign in to view competition territory.'));
       return;
     }
-
-    const input = competitionTerritorySchema.safeParse(req.query);
-    if (!input.success) {
-      res.status(400).json({
-        error: { code: 'invalid_request', message: 'Competition territory requires a valid YYYY-MM month and viewport bounds.' },
-      });
+    const coordinates = territoryTileCoordinates(territoryTileConfig.competition, req.params);
+    const query = tileQuerySchema.safeParse(req.query);
+    if (!coordinates || !query.success) {
+      res.status(400).json({ error: { code: 'invalid_request', message: 'Competition territory tile request is invalid.' } });
       return;
     }
-
     try {
-      const territory = await dependencies.coverage.getGlobalTerritory({
-        ...coveragePeriod(input.data.month),
-        ...(input.data.pilot ? { pilotUserId: input.data.pilot } : {}),
-        west: input.data.west,
-        south: input.data.south,
-        east: input.data.east,
-        north: input.data.north,
-      });
-      res.status(200).json(territory);
+      sendTerritoryTile(res, await dependencies.territoryTiles.getGlobalCompetitionTile({
+        ...coordinates,
+        period: coveragePeriod(query.data.month),
+        ...(query.data.pilot ? { pilotUserId: query.data.pilot } : {}),
+      }));
     } catch (error) {
       next(error);
     }
@@ -423,15 +438,16 @@ export function createWebRouter(dependencies: {
     }
   });
 
-  router.get('/v1/arenas/:sourceId/competition-territory', async (req, res, next) => {
+  router.get('/v1/arenas/:sourceId/competition-territory/tiles/:z/:x/:y.mvt', async (req, res, next) => {
     if (!res.locals.currentUser) {
       next(new AppError(401, 'unauthorized', 'Sign in to view Arena territory.'));
       return;
     }
     const sourceId = arenaSourceIdSchema.safeParse(req.params.sourceId);
-    const input = competitionTerritorySchema.safeParse(req.query);
-    if (!sourceId.success || !input.success) {
-      res.status(400).json({ error: { code: 'invalid_request', message: 'Arena territory requires a valid Arena, YYYY-MM month, and viewport bounds.' } });
+    const coordinates = territoryTileCoordinates(territoryTileConfig.competition, req.params);
+    const query = tileQuerySchema.safeParse(req.query);
+    if (!sourceId.success || !coordinates || !query.success) {
+      res.status(400).json({ error: { code: 'invalid_request', message: 'Arena territory tile request is invalid.' } });
       return;
     }
     try {
@@ -440,16 +456,12 @@ export function createWebRouter(dependencies: {
         res.status(404).json({ error: { code: 'not_found', message: 'Arena not found.' } });
         return;
       }
-      const territory = await dependencies.coverage.getArenaTerritory({
-        ...coveragePeriod(input.data.month),
+      sendTerritoryTile(res, await dependencies.territoryTiles.getArenaCompetitionTile({
+        ...coordinates,
         arenaId: arena.id,
-        ...(input.data.pilot ? { pilotUserId: input.data.pilot } : {}),
-        west: input.data.west,
-        south: input.data.south,
-        east: input.data.east,
-        north: input.data.north,
-      });
-      res.status(200).json(territory);
+        period: coveragePeriod(query.data.month),
+        ...(query.data.pilot ? { pilotUserId: query.data.pilot } : {}),
+      }));
     } catch (error) {
       next(error);
     }

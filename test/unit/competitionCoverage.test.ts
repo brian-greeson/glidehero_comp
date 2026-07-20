@@ -1,11 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
 
 // @ts-expect-error Browser assets remain JavaScript.
-import { arenaCoverageLeaderboardUrl, coverageCellClaimantsUrl, coverageTerritoryUrl, globalCoverageLeaderboardUrl } from '../../public/scripts/competitionCoverageApi.js';
+import { arenaCoverageLeaderboardUrl, coverageCellClaimantsUrl, coverageTerritoryTileUrl, globalCoverageLeaderboardUrl } from '../../public/scripts/competitionCoverageApi.js';
 // @ts-expect-error Browser assets remain JavaScript.
 import { createCompetitionColorRegistry } from '../../public/scripts/competitionColors.js';
 // @ts-expect-error Browser assets remain JavaScript.
-import { colorCoverageTerritory, coverageCellFeatureAtPoint, isExclusiveCoverageFeature, positionCoverageCellPopup, setCoverageData } from '../../public/scripts/competitionCoverageMap.js';
+import { assignLoadedCoverageColors, coverageCellFeatureAtPoint, installCoverageSource, isExclusiveCoverageFeature, positionCoverageCellPopup, updateCoverageTiles } from '../../public/scripts/competitionCoverageMap.js';
 // @ts-expect-error Browser assets remain JavaScript.
 import { renderCoverageLeaderboard } from '../../public/scripts/competitionCoverageLeaderboard.js';
 
@@ -24,11 +24,17 @@ describe('competition coverage browser contracts', () => {
     expect(arenaCoverageLeaderboardUrl('745', '2026-07')).toBe(
       '/v1/arenas/745/competition-leaderboard?month=2026-07',
     );
-    expect(
-      coverageTerritoryUrl({ arenaSourceId: '745', bounds, pilotUserId: 'pilot', month: '2026-07' }),
-    ).toBe('/v1/arenas/745/competition-territory?month=2026-07&west=-107&south=39&east=-105&north=41&pilot=pilot');
     expect(coverageCellClaimantsUrl(1, 2, '2026-07')).toBe(
       '/v1/competition-cells/1/2/claimants?month=2026-07',
+    );
+    expect(coverageTerritoryTileUrl({ month: '2026-07', pilotUserId: 'pilot' })).toBe(
+      '/v1/competition-territory/tiles/{z}/{x}/{y}.mvt?month=2026-07&pilot=pilot',
+    );
+    expect(coverageTerritoryTileUrl({ arenaSourceId: '745' })).toBe(
+      '/v1/arenas/745/competition-territory/tiles/{z}/{x}/{y}.mvt',
+    );
+    expect(coverageTerritoryTileUrl({}, 'https://glidehero.test')).toBe(
+      'https://glidehero.test/v1/competition-territory/tiles/{z}/{x}/{y}.mvt',
     );
   });
 
@@ -36,23 +42,6 @@ describe('competition coverage browser contracts', () => {
     const registry = createCompetitionColorRegistry('current', '#1769AA', () => 0.5);
     expect(registry.colorFor('current')).toBe('#1769AA');
     expect(registry.colorFor('other')).toBe(registry.colorFor('other'));
-  });
-
-  it('colors selected-pilot cells from the leaderboard color registry', () => {
-    const geojson = {
-      type: 'FeatureCollection',
-      features: [
-        {
-          type: 'Feature',
-          properties: { claimantCount: 1, isShared: false, pilotUserId: 'pilot' },
-          geometry: null,
-        },
-        { type: 'Feature', properties: { claimantCount: 2, isShared: true }, geometry: null },
-      ],
-    };
-    const colored = colorCoverageTerritory(geojson, { colorFor: () => '#1769AA' });
-    expect(colored.features[0].properties.displayColor).toBe('#1769AA');
-    expect(colored.features[1].properties).not.toHaveProperty('displayColor');
   });
 
   it('reports null when the selected leaderboard pilot is tapped again', () => {
@@ -130,22 +119,6 @@ describe('competition coverage browser contracts', () => {
     expect(queryRenderedFeatures).not.toHaveBeenCalled();
   });
 
-  it('adds coverage fill and outline layers without hover highlights', () => {
-    const layers = new Map<string, any>();
-    const map = {
-      addSource: vi.fn(),
-      getSource: vi.fn(),
-      addLayer: vi.fn((layer: any) => layers.set(layer.id, layer)),
-      getLayer: vi.fn((id: string) => layers.get(id)),
-      setFilter: vi.fn(),
-    };
-
-    setCoverageData(map, { type: 'FeatureCollection', features: [] });
-    expect(layers.get('competition-territory-fill')).toMatchObject({ minzoom: 8 });
-    expect(layers.get('competition-territory-outline')).toMatchObject({ minzoom: 8 });
-    expect([...layers].some((layerId) => layerId.includes('hover'))).toBe(false);
-  });
-
   it('only treats exclusively claimed cells as hoverable', () => {
     expect(
       isExclusiveCoverageFeature({
@@ -166,5 +139,47 @@ describe('competition coverage browser contracts', () => {
         },
       }),
     ).toBe(false);
+  });
+
+  it('installs zoom 4-14 vector layers and changes tiles without changing paint', () => {
+    const sources = new Map<string, any>();
+    const layers: any[] = [];
+    const map = {
+      getSource: vi.fn((id: string) => sources.get(id)),
+      addSource: vi.fn((id: string, source: any) => sources.set(id, { ...source, setTiles: vi.fn() })),
+      addLayer: vi.fn((layer: any) => layers.push(layer)),
+      setPaintProperty: vi.fn(),
+      querySourceFeatures: vi.fn(() => [
+        { properties: { pilotUserId: 'pilot-one' } },
+        { properties: { pilotUserId: 'pilot-one' } },
+      ]),
+    };
+    installCoverageSource(map, '/tiles/{z}/{x}/{y}.mvt', {
+      minimumZoom: 4,
+      maximumZoom: 14,
+    });
+    expect(map.addSource).toHaveBeenCalledWith('competition-coverage', {
+      type: 'vector', tiles: ['/tiles/{z}/{x}/{y}.mvt'], minzoom: 4, maxzoom: 14,
+    });
+    expect(layers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: 'competition-territory-fill', source: 'competition-coverage',
+        'source-layer': 'competition-coverage', minzoom: 4,
+      }),
+      expect.objectContaining({
+        id: 'competition-territory-outline', source: 'competition-coverage',
+        'source-layer': 'competition-coverage', minzoom: 4,
+      }),
+    ]));
+    expect(JSON.stringify(layers.find((layer) => layer.id === 'competition-territory-outline')))
+      .not.toContain('["match",["get","pilotUserId"],"#94a3b8"]');
+
+    updateCoverageTiles(map, '/next/{z}/{x}/{y}.mvt');
+    expect(sources.get('competition-coverage').setTiles).toHaveBeenCalledWith([
+      '/next/{z}/{x}/{y}.mvt',
+    ]);
+    assignLoadedCoverageColors(map, { colorFor: () => '#1769AA' });
+    expect(map.setPaintProperty).toHaveBeenCalledTimes(2);
+    expect(JSON.stringify(map.setPaintProperty.mock.calls[0]?.[2])).toContain('#1769AA');
   });
 });

@@ -5,6 +5,8 @@
   <section class="map-stage" aria-label="{{ arena.name }} Arena competition coverage map">
     <div class="map-canvas" data-territory-map data-map-style-url="{{ mapTilerStyleUrl }}"
       data-current-user-id="{{ currentUser.userId }}" data-territory-color="{{ currentUser.territoryColor }}"
+      data-territory-tile-minimum-zoom="{{ territoryTileConfig.competition.minimumZoom }}"
+      data-territory-tile-maximum-zoom="{{ territoryTileConfig.competition.maximumZoom }}"
       data-arena-source-id="{{ arena.sourceId }}"></div>
     {{ include "components/arenaSearch.vto" }}
     <p class="map-empty-state" data-map-empty-state hidden></p>

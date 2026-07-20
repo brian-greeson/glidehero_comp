@@ -8,14 +8,17 @@ export function globalCoverageLeaderboardUrl(bounds, month = null) {
   return `/v1/competition-leaderboard?${viewportSearchParams(bounds, periodValues(month))}`;
 }
 
-export function coverageTerritoryUrl({ arenaSourceId, bounds, month = null, pilotUserId = null }) {
-  const params = viewportSearchParams(bounds, periodValues(month));
+export function coverageTerritoryTileUrl(
+  { arenaSourceId = null, month = null, pilotUserId = null },
+  origin = globalThis.location?.origin ?? '',
+) {
+  const params = new URLSearchParams(periodValues(month));
   if (pilotUserId) params.set('pilot', pilotUserId);
   const path = arenaSourceId
-    ? `/v1/arenas/${encodeURIComponent(arenaSourceId)}/competition-territory`
-    : '/v1/competition-territory';
+    ? `/v1/arenas/${encodeURIComponent(arenaSourceId)}/competition-territory/tiles/{z}/{x}/{y}.mvt`
+    : '/v1/competition-territory/tiles/{z}/{x}/{y}.mvt';
   const query = params.toString();
-  return `${path}${query ? `?${query}` : ''}`;
+  return `${origin}${path}${query ? `?${query}` : ''}`;
 }
 
 export function arenaCoverageLeaderboardUrl(arenaSourceId, month = null) {

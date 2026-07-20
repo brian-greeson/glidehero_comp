@@ -1,9 +1,8 @@
 import { createLatestRequest } from './latestRequest.js';
-import { fetchPersonalTerritory, setPersonalTerritoryData } from './personalMap.js';
+import { installPersonalTerritorySource } from './personalMap.js';
 import { renderPersonalStats } from './personalStatsView.js';
 import { personalStatsUrl } from './viewportQuery.js';
 import { initializeMapFlightAids } from './mapFlightAids.js';
-import { createViewportTerritoryLoader } from './viewportTerritoryLoader.js';
 
 export function initializePersonalDashboard({
   documentRef = document,
@@ -29,7 +28,6 @@ export function initializePersonalDashboard({
 
   let map;
   let mapReady = false;
-  let territoryLoader;
   const statsRequest = createLatestRequest(async ({ signal, isCurrent }, bounds) => {
     statsCard?.setAttribute('aria-busy', 'true');
     try {
@@ -56,13 +54,10 @@ export function initializePersonalDashboard({
     map.addControl(new maplibre.NavigationControl(), 'top-right');
     map.once('error', () => showStatus('Map unavailable. Check your connection and try again.'));
     map.once('load', async () => {
-      territoryLoader = createViewportTerritoryLoader({
-        map,
-        fetchTerritory: (bounds, signal) => fetchPersonalTerritory(bounds, fetchImpl, signal),
-        applyTerritory: (territory) => setPersonalTerritoryData(map, mapElement.dataset.territoryColor, territory),
-        onVisibleError: () => showStatus('Unable to load your territory. Refresh the page.'),
+      installPersonalTerritorySource(map, mapElement.dataset.territoryColor, {
+        minimumZoom: Number(mapElement.dataset.territoryTileMinimumZoom),
+        maximumZoom: Number(mapElement.dataset.territoryTileMaximumZoom),
       });
-      await territoryLoader.refresh();
       initializeMapFlightAids({
         map, mapElement, documentRef, fetchImpl, navigatorRef, storage,
       });
@@ -72,7 +67,6 @@ export function initializePersonalDashboard({
     map.on?.('moveend', () => {
       if (mapReady && map.getBounds) {
         void statsRequest.run(map.getBounds());
-        void territoryLoader?.refresh();
       }
     });
   } catch {
