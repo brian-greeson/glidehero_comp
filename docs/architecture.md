@@ -4,7 +4,11 @@ This guide describes the architecture used in this repository and helps coding a
 
 ## Architecture at a glance
 
-GlideHero is a server-rendered Express application with browser-side JavaScript for interactive maps and forms. PostgreSQL with PostGIS is the system of record, Drizzle provides database access, and Vento renders HTML.
+GlideHero is a server-rendered Express application with browser-side JavaScript
+for interactive maps, uploads, and forms. PostgreSQL with PostGIS is the system
+of record, Drizzle provides database access, and Vento renders HTML. Private
+S3-compatible object storage holds uploaded IGC files, while Valkey holds the
+transient upload state and Streams work queue consumed by flight workers.
 
 The usual request flow is:
 
@@ -14,8 +18,8 @@ Browser
   -> Router
   -> Service
   -> Domain logic and/or database query
-  -> PostgreSQL, PostGIS, object storage, or another external resource
-  -> HTML, JSON, or GeoJSON response
+  -> PostgreSQL, PostGIS, Valkey, object storage, or another external resource
+  -> HTML, JSON, GeoJSON, or Mapbox Vector Tile response
 ```
 
 Dependencies should generally point inward:
@@ -26,9 +30,13 @@ Dependencies should generally point inward:
 
 ## 1. Process startup and composition
 
-Location: `src/index.ts`
+Locations:
 
-This is the composition root and executable entry point. It:
+- `src/index.ts` for the HTTP process.
+- `src/worker.ts` for the flight-worker process.
+- `src/services/flightWorkerRuntime.ts` for worker lifecycle and shutdown.
+
+`src/index.ts` is the web composition root and executable entry point. It:
 
 - Reads and validates configuration.
 - Creates the database and external clients.
@@ -36,7 +44,13 @@ This is the composition root and executable entry point. It:
 - Passes dependencies explicitly into factory functions.
 - Starts the HTTP server.
 
-Put code here only when it is required to assemble or start the running application.
+`src/worker.ts` independently creates the database, object-storage, and Valkey
+clients needed to consume flight jobs. It gives blocking Stream reads their own
+Valkey connection and delegates concurrent processing, maintenance loops, and
+graceful shutdown to `flightWorkerRuntime.ts`.
+
+Put code in these entry points only when it is required to assemble or start a
+running process.
 
 Do not put business rules, request handling, database queries, or reusable helpers here. When adding a service or router, create it in its appropriate layer and wire it together here.
 
@@ -56,6 +70,8 @@ The application shell configures behavior shared by the entire Express applicati
 Put application-wide HTTP policy here. Feature endpoints belong in routers, while feature behavior belongs in services.
 
 `createApp` accepts its web dependencies so it can be tested without starting a real server.
+
+It does not participate in the background worker process.
 
 ## 3. Configuration
 
@@ -178,7 +194,7 @@ Existing examples include:
 - Competition-month normalization.
 - Launch-time-zone rules.
 - Arena route identifiers.
-- Grid and territory GeoJSON construction.
+- Grid GeoJSON construction.
 - Leaderboard and viewport-stat transformations.
 - Domain error types.
 
@@ -257,11 +273,17 @@ Competition claims remain global and Arena-independent. For Arena reads,
 editing an Arena immediately changes the view over historical claims without
 flight reprocessing.
 
-Personal, Global competition, and Arena territory endpoints require viewport
-bounds. Their database queries apply `viewportCtes` before dissolving Personal
-regions or aggregating competition claimants, so offscreen claims do not enter
-the returned GeoJSON or the territory-query workload. Arena territory applies
-both the requested viewport and the canonical Arena center-coverage rule.
+Personal, Global competition, and Arena territory are served as authenticated,
+on-demand Mapbox Vector Tiles by `TerritoryTileService`. Each query derives its
+grid range from the requested tile envelope before constructing cell geometry.
+Personal cells are dissolved into connected regions within the tile query;
+competition tiles contain per-cell claimant metadata. Arena tiles apply the
+canonical Arena center-coverage rule in addition to the tile range.
+
+Tile zoom ranges are centralized in `src/config/territoryTiles.ts` and supplied
+to both the HTTP coordinate validation and the rendered MapLibre source
+configuration. The admin map-settings page can change these ranges only in the
+current web process; they are not persisted to PostgreSQL.
 
 The Arena editor accepts drawn or imported WGS84 Polygon/MultiPolygon inputs,
 applies two-dimensional make-valid,
@@ -279,7 +301,11 @@ the 50 states by stable Census FIPS identity, and excludes D.C. and territories.
 
 Location: `src/resources/`
 
-Resource modules construct clients for systems outside the application, such as object storage.
+Resource modules construct clients for systems outside the application:
+
+- `bucketClient.ts` configures the S3-compatible private object store.
+- `valkeyClient.ts` validates `redis://`/`rediss://` connection URLs and creates
+  GLIDE clients.
 
 They translate typed application configuration into configured SDK clients.
 
@@ -370,22 +396,42 @@ Extract reusable browser behavior into a focused module instead of continually g
 
 Feature-specific browser assets may use a subdirectory, as the admin area editor does.
 
-### Viewport territory loading
+### On-demand territory tiles
 
-`viewportTerritoryLoader.js` owns the shared Personal, Global, and Arena
-territory-loading lifecycle. On initial load or after leaving the currently
-loaded region, it requests the exact visible viewport first. Once that response
-has rendered, it requests a viewport expanded by 50 percent on every edge and
-replaces the source with that buffered result. Movements contained by the
-loaded buffer do not reload territory; Personal stats and the Global
-leaderboard still refresh for their visible viewport.
+`personalMap.js` and `competitionCoverageMap.js` install MapLibre vector
+sources for Personal and competition territory. MapLibre requests the visible
+tiles from the authenticated `.mvt` endpoints as the map moves. Territory is
+hidden below the configured minimum zoom, and HTTP routes reject coordinates
+outside each configured zoom range.
 
-The loader normalizes wrapped longitude bounds, supports antimeridian-crossing
-viewports, cancels stale visible and buffered requests, and invalidates its
-buffer when the competition period or selected pilot changes. A failed
-background request leaves the visible response in place. Territory endpoints
-require `west`, `south`, `east`, and `north`, preventing an accidental fallback
-to an unbounded worldwide response.
+Changing the competition period or selected pilot replaces the competition
+tile URL so MapLibre reloads the correct scope. Arena tile URLs include the
+Arena source ID and apply the same polygon membership rule used by its complete
+leaderboard. Personal stats and the Global leaderboard remain viewport-based
+JSON requests and refresh independently of territory tiles.
+
+### Asynchronous flight uploads
+
+`flightUploads.js` owns the browser upload lifecycle. It accepts individual IGC
+files or uses `zipIgcFiles.js` to validate and extract IGC entries from ZIP
+archives, creates an authenticated upload intent, sends each file directly to
+object storage with a presigned `PUT`, and calls the completion endpoint. The
+browser limits upload concurrency and polls Valkey-backed progress while the
+status dialog is open.
+
+`FlightUploadQueueService` owns upload admission, job state and indexes, the
+`glidehero:flight-jobs` Stream, presigning, and abandoned-upload cleanup. Job
+states progress through `uploading`, `queued`, `processing`, and a terminal
+`completed`, `duplicate`, or `failed` state. PostgreSQL remains untouched until
+a worker claims a queued upload.
+
+`FlightWorkerService` consumes the `flight-workers` group, downloads each
+object, hashes it for duplicate detection, persists IGC metadata, delegates
+parsing and claim creation to `FlightProcessingService`, and reconciles the
+terminal database and queue state. It also recovers stale claims and performs
+leased cleanup so multiple worker processes can operate safely. Blocking
+`XREADGROUP` calls use a dedicated Valkey client; maintenance and acknowledgments
+use the normal client.
 
 ### Map flight aids
 
@@ -514,7 +560,8 @@ A vertical feature should normally protect both its public boundary contract and
 | Application-wide Express middleware | `src/middleware/` |
 | Session or current-user HTTP concern | `src/web/` |
 | External SDK client construction | `src/resources/` |
-| Dependency wiring or server startup | `src/index.ts` |
+| Web dependency wiring or HTTP startup | `src/index.ts` |
+| Flight-worker wiring and startup | `src/worker.ts` and `src/services/flightWorkerRuntime.ts` |
 | Application-wide Express, error, or static-file policy | `src/app.ts` |
 | Route-level server-rendered screen | `src/views/pages/` |
 | Reusable server-rendered UI | `src/views/components/` |
@@ -534,7 +581,7 @@ A vertical feature should normally protect both its public boundary contract and
 - Services own feature persistence; domain modules remain infrastructure-independent.
 - Renderers and templates present data; they do not fetch it.
 - Browser code enhances the UI; it is not an authorization or data-integrity boundary.
-- `src/index.ts` wires dependencies; constructors and factories should not hide global environment reads.
+- `src/index.ts` and `src/worker.ts` wire process dependencies; constructors and factories should not hide global environment reads.
 - Shared code should have a real second consumer or a clear domain identity.
 - Avoid placeholder repositories, generic utility buckets, and abstractions created only to make the folder tree look layered.
 - Preserve existing public route, JSON, GeoJSON, template, and data-attribute contracts unless the task explicitly changes them.

@@ -1,8 +1,9 @@
 # GlideHero
 
-GlideHero is a Node.js, Express, Vento, Drizzle, valkey, and PostgreSQL web application.
-The first milestone provides server-rendered email/password signup and login using
-revocable HTTP-only cookie sessions.
+GlideHero is a Node.js, Express, Vento, Drizzle, Valkey, and PostgreSQL/PostGIS
+web application. It uses server-rendered pages with browser-side MapLibre
+interactions, direct object-storage uploads, and separate background workers for
+flight processing.
 
 ## V1 product overview
 
@@ -22,12 +23,14 @@ long cross-country flight.
 
 The experience revolves around a single interactive world map.
 
-Pilots upload IGC flight logs after flying. The app automatically analyzes each
-flight against a shared square grid and records the cells claimed by its track.
-No manual selection or editing is required.
+Pilots upload one or more IGC flight logs after flying. ZIP archives are unpacked
+in the browser and their IGC entries are uploaded individually. The app
+automatically analyzes each flight against a shared square grid and records the
+cells claimed by its track. No manual selection or editing is required.
 
-Every uploaded flight is processed automatically and becomes a permanent part
-of the pilot's history.
+Uploads go directly from the browser to private object storage using short-lived
+presigned URLs. A Valkey-backed queue hands completed uploads to background
+workers, which parse the files and persist flights and claims in PostgreSQL.
 
 ### Grid and cell claiming
 
@@ -49,8 +52,9 @@ pilot's personal claim, so multiple pilots can independently include the same
 cell on their own maps. Adjacent cells are dissolved into regions for display,
 while individual grid cells remain the ownership model.
 
-The Personal Map displays only this territory using a color selected
-by the pilot. Individual flight tracks are not displayed.
+The Personal Map displays only this territory using a color selected by the
+pilot. Individual flight tracks are not displayed. Territory is delivered as
+on-demand vector tiles once the map reaches the configured minimum zoom.
 
 Each uploaded flight reports statistics including:
 
@@ -105,7 +109,7 @@ scope is the Arena instead of the visible map.
 ### Map routes and navigation
 
 - `/` displays login and signup to signed-out visitors. A signed-in request to
-  `/` redirects to `/global`.
+  `/` redirects to `/personal`.
 - `/global` displays the viewport-based additive coverage competition.
 - `/personal` displays the signed-in pilot's permanent Personal Map and
   viewport Stats.
@@ -155,6 +159,7 @@ Included features:
 - Unified grid- and polygon-authored Arena search and fixed-area leaderboards.
 - Optional grid overlay and foreground live-position trail on every map.
 - Flight statistics after upload.
+- Administrative Arena, map-setting, user, and flight-management tools.
 
 Excluded from Version 1:
 
@@ -162,7 +167,7 @@ Excluded from Version 1:
 - Social features.
 - Comments or likes.
 - Following other pilots.
-- Flight editing or deletion.
+- Pilot-facing flight editing or deletion.
 - Historical playback.
 - Support for file formats other than IGC.
 
@@ -180,6 +185,9 @@ exploring new areas, regardless of experience level or cross-country distance.
 
 - Node.js 25.9.0 (`.nvmrc` and `mise.toml` are provided)
 - PostgreSQL with PostGIS enabled and permission to create tables in the target database
+- Valkey or Redis-compatible storage reachable through a `redis://` or `rediss://` URL
+- Private S3-compatible object storage with browser-upload CORS configured
+- A MapTiler API key
 
 ## Local setup
 
@@ -189,11 +197,27 @@ createdb glidehero
 psql glidehero -c 'CREATE EXTENSION postgis'
 cp .env.example .env
 npm run db:push -- --force
-npm run dev
 ```
 
+Fill in the Valkey, object-storage, and MapTiler values in `.env` before
+starting the application. Then keep the web process and flight processor
+running in separate terminals:
+
+```bash
+# Terminal 1
+npm run dev
+
+# Terminal 2
+npm run dev:worker
+```
+
+Both processes use the same `.env`. The web process creates upload intents and
+serves status; the worker consumes queued uploads and writes completed flights
+and claims. For object-storage permissions and CORS requirements, see
+[`docs/flight-upload-deployment.md`](docs/flight-upload-deployment.md).
+
 `GRID_CLAIM_CELL_SIZE` is required and specifies the grid-cell size in meters;
-the example environment uses `1000`. Arena scoring constructs each claim-cell
+the example environment uses `500`. Arena scoring constructs each claim-cell
 center from that claim's stored size and applies `ST_Covers` to `arenas.area`.
 
 Administrators author every Arena at **Areas** using multiple drawn polygons,
@@ -222,6 +246,9 @@ historical global claims; flight parsing never assigns claims to Arenas.
 Open <http://localhost:3000>. Create an account, log out, and log back in.
 The process health endpoint is <http://localhost:3000/v1/up>.
 
+For code organization and dependency boundaries, see
+[`docs/architecture.md`](docs/architecture.md).
+
 ## Validation
 
 Create a separate disposable test database, then run:
@@ -241,6 +268,8 @@ Never point `TEST_DATABASE_URL` at development or production data.
 ## Production notes
 
 Set `ENVIRONMENT=production` so the session cookie receives the `Secure`
-attribute. Terminate HTTPS before traffic reaches the application, run
-`npm run db:push -- --force` to synchronize the target database before starting a
-new release, and provide `DATABASE_URL` through the deployment secret store.
+attribute. Terminate HTTPS before traffic reaches the application, apply checked-in
+migrations with `npm run db:migrate`, and provide configuration through the
+deployment secret store. Production requires at least one web process and one
+`npm run worker` process sharing PostgreSQL, Valkey, object storage,
+`GRID_CLAIM_CELL_SIZE`, and `BUCKET_FOLDER` configuration.
