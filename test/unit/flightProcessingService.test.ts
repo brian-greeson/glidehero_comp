@@ -77,7 +77,16 @@ describe('FlightProcessingService', () => {
     const send = vi.fn(async () => objectBody(validIgc));
     gridClaim.process.mockImplementation(async () => {
       events.push('grid-claim-processed');
-      return { flightId, cellSize: 1000, directCellCount: 0, enclosedCellCount: 0 };
+      return {
+        flightId,
+        cellSize: 1000,
+        directCellCount: 0,
+        enclosedCellCount: 0,
+        newPersonalCellCount: 0,
+        personalCellTotalAfter: 0,
+        progressionVersion: 1,
+        evaluatedAt: new Date('2026-07-20T00:00:00Z'),
+      };
     });
     const service = createFlightProcessingService(database as never, {
       bucketName: 'glidehero-files',

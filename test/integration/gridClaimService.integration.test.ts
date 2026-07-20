@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { eq } from 'drizzle-orm';
-import { competitionGridClaims, flights, igcFiles, personalGridClaims as userGridClaims, trackPoints, users } from '../../src/db/schema.js';
+import { competitionGridClaims, flightProgress, flights, igcFiles, personalGridClaims as userGridClaims, trackPoints, users } from '../../src/db/schema.js';
 import { createGridClaimService } from '../../src/services/gridClaimService.js';
 import { createAdminFlightService } from '../../src/services/adminFlightService.js';
 import { resetAndPushTestDatabase } from './database.js';
@@ -38,10 +38,13 @@ async function persistFlight(
   coordinates: readonly ProjectedCoordinate[],
   recordedAt = new Date(Date.UTC(2026, 0, 1)),
   launchTimezone = 'UTC',
+  existingUserId?: string,
 ): Promise<{ flightId: string; userId: string; launchTimezone: string }> {
-  const [user] = await database.db.insert(users).values({
-    email: `pilot-${crypto.randomUUID()}@example.com`,
-  }).returning({ id: users.id });
+  const [user] = existingUserId
+    ? await database.db.select({ id: users.id }).from(users).where(eq(users.id, existingUserId))
+    : await database.db.insert(users).values({
+      email: `pilot-${crypto.randomUUID()}@example.com`,
+    }).returning({ id: users.id });
   if (!user) throw new Error('User insert returned no row.');
 
   const [igcFile] = await database.db.insert(igcFiles).values({
@@ -98,6 +101,11 @@ async function storedCompetitionCells(cellSize: number) {
     );
 }
 
+async function storedProgression(flightId: string) {
+  const [progression] = await database.db.select().from(flightProgress).where(eq(flightProgress.flightId, flightId));
+  return progression;
+}
+
 async function persistClaimCells(
   claim: { flightId: string; userId: string },
   cells: ReadonlyArray<{ x: number; y: number }>,
@@ -114,6 +122,104 @@ async function persistClaimCells(
 }
 
 describe('GridClaimService with PostGIS', () => {
+  it('stores direct, enclosed, new, and resulting lifetime counts for a first evaluation', async () => {
+    const flight = await persistFlight([
+      [500, 500], [1_500, 500], [2_500, 500], [2_500, 1_500], [2_500, 2_500],
+      [1_500, 2_500], [500, 2_500], [500, 1_500], [500, 500],
+    ]);
+    const result = await createGridClaimService(database.db, { cellSize: 1_000 }).process(flight);
+
+    expect(result).toMatchObject({
+      directCellCount: 8,
+      enclosedCellCount: 1,
+      newPersonalCellCount: 9,
+      personalCellTotalAfter: 9,
+      progressionVersion: 1,
+      evaluatedAt: expect.any(Date),
+    });
+    expect(await storedProgression(flight.flightId)).toMatchObject({
+      flightId: flight.flightId,
+      userId: flight.userId,
+      directCellCount: 8,
+      enclosedCellCount: 1,
+      newPersonalCellCount: 9,
+      personalCellTotalAfter: 9,
+      progressionVersion: 1,
+      evaluatedAt: result.evaluatedAt,
+      updatedAt: expect.any(Date),
+    });
+  });
+
+  it('counts only genuinely new cells on an overlapping second flight', async () => {
+    const first = await persistFlight([[100, 100], [2_100, 100]]);
+    await createGridClaimService(database.db, { cellSize: 1_000 }).process(first);
+    const second = await persistFlight([[1_100, 100], [3_100, 100]], new Date(Date.UTC(2026, 0, 2)), 'UTC', first.userId);
+
+    await expect(createGridClaimService(database.db, { cellSize: 1_000 }).process(second)).resolves.toMatchObject({
+      directCellCount: 3,
+      enclosedCellCount: 0,
+      newPersonalCellCount: 1,
+      personalCellTotalAfter: 4,
+    });
+    expect(await storedProgression(second.flightId)).toMatchObject({
+      newPersonalCellCount: 1,
+      personalCellTotalAfter: 4,
+    });
+  });
+
+  it('stores zero new cells when a flight adds no Personal Map cells', async () => {
+    const first = await persistFlight([[100, 100], [2_100, 100]]);
+    await createGridClaimService(database.db, { cellSize: 1_000 }).process(first);
+    const second = await persistFlight([[100, 100], [2_100, 100]], new Date(Date.UTC(2026, 0, 2)), 'UTC', first.userId);
+
+    await createGridClaimService(database.db, { cellSize: 1_000 }).process(second);
+
+    expect(await storedProgression(second.flightId)).toMatchObject({
+      newPersonalCellCount: 0,
+      personalCellTotalAfter: 3,
+    });
+  });
+
+  it('preserves first-evaluation snapshots while updating claim counts during reprocessing', async () => {
+    const flight = await persistFlight([[100, 100], [2_100, 100]]);
+    const service = createGridClaimService(database.db, { cellSize: 1_000 });
+    const firstResult = await service.process(flight);
+    const [newPoint] = await toWgs84([[3_100, 100]]);
+    if (!newPoint) throw new Error('Expected reprocessing coordinate.');
+    await database.db.insert(trackPoints).values({
+      flightId: flight.flightId,
+      sequenceNumber: 2,
+      recordedAt: new Date(Date.UTC(2026, 0, 1, 0, 0, 2)),
+      latitude: newPoint.latitude,
+      longitude: newPoint.longitude,
+      gpsAltitudeMeters: 1_000,
+      pressureAltitudeMeters: 1_000,
+    });
+
+    const reprocessed = await service.reprocess({ flightId: flight.flightId });
+
+    expect(reprocessed).toMatchObject({
+      status: 'completed',
+      result: {
+        directCellCount: 4,
+        enclosedCellCount: 0,
+        newPersonalCellCount: firstResult.newPersonalCellCount,
+        personalCellTotalAfter: firstResult.personalCellTotalAfter,
+        progressionVersion: 2,
+        evaluatedAt: firstResult.evaluatedAt,
+      },
+    });
+    expect(await storedProgression(flight.flightId)).toMatchObject({
+      directCellCount: 4,
+      enclosedCellCount: 0,
+      newPersonalCellCount: 3,
+      personalCellTotalAfter: 3,
+      progressionVersion: 2,
+      evaluatedAt: firstResult.evaluatedAt,
+      updatedAt: expect.any(Date),
+    });
+  });
+
   it('aggregates personal viewport stats by distinct cells and contributing flights', async () => {
     const first = await persistFlight([[100, 100], [1_100, 100]]);
     const [secondFile] = await database.db.insert(igcFiles).values({
@@ -165,6 +271,10 @@ describe('GridClaimService with PostGIS', () => {
       cellSize: 1_000,
       directCellCount: 4,
       enclosedCellCount: 0,
+      newPersonalCellCount: 4,
+      personalCellTotalAfter: 4,
+      progressionVersion: 1,
+      evaluatedAt: expect.any(Date),
     });
 
     expect(await storedCells(1_000)).toMatchObject([

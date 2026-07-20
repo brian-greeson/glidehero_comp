@@ -92,6 +92,10 @@ function dependencies() {
       cellSize: 1_000,
       directCellCount: 0,
       enclosedCellCount: 0,
+      newPersonalCellCount: 0,
+      personalCellTotalAfter: 0,
+      progressionVersion: 1,
+      evaluatedAt: new Date('2026-07-20T00:00:00Z'),
     })),
     reprocess: vi.fn(async () => ({ status: 'not_found' as const })),
   };
@@ -260,7 +264,12 @@ describe('webRouter', () => {
       }]),
       reprocessFlight: vi.fn(async () => ({
         status: 'completed' as const,
-        result: { flightId: '00000000-0000-4000-8000-000000000020', cellSize: 1000, directCellCount: 1, enclosedCellCount: 0 },
+        result: {
+          flightId: '00000000-0000-4000-8000-000000000020', cellSize: 1000,
+          directCellCount: 1, enclosedCellCount: 0, newPersonalCellCount: 1,
+          personalCellTotalAfter: 1, progressionVersion: 1,
+          evaluatedAt: new Date('2026-07-20T00:00:00Z'),
+        },
       })),
       listUserFlights: vi.fn(async () => []),
       deleteFlight: vi.fn(async () => 'deleted' as const),
@@ -639,6 +648,8 @@ describe('webRouter', () => {
         getViewportStats: vi.fn(async () => viewportStats),
         process: vi.fn(async () => ({
           flightId: 'flight-id', cellSize: 1_000, directCellCount: 0, enclosedCellCount: 0,
+          newPersonalCellCount: 0, personalCellTotalAfter: 0, progressionVersion: 1,
+          evaluatedAt: new Date('2026-07-20T00:00:00Z'),
         })),
         reprocess: vi.fn(async () => ({ status: 'not_found' as const })),
       },
@@ -822,6 +833,7 @@ describe('webRouter', () => {
       expect(personal.status).toBe(200);
       expect(personal.headers.get('content-type')).toContain('application/vnd.mapbox-vector-tile');
       expect(personal.headers.get('cache-control')).toBe('private, max-age=60');
+      expect(personal.headers.get('vary')).toBe('Cookie');
       expect(Buffer.from(await personal.arrayBuffer())).toEqual(Buffer.from([1, 2, 3]));
       expect(territoryTiles.getPersonalTile).toHaveBeenCalledWith({
         z: 4, x: 8, y: 7, userId: user.userId,
@@ -833,6 +845,7 @@ describe('webRouter', () => {
       );
       expect(global.status).toBe(200);
       expect(global.headers.get('cache-control')).toBe('private, max-age=60');
+      expect(global.headers.get('vary')).toBeNull();
       expect((await global.arrayBuffer()).byteLength).toBe(0);
       expect(territoryTiles.getGlobalCompetitionTile).toHaveBeenCalledWith({
         z: 4, x: 8, y: 7,
@@ -842,6 +855,7 @@ describe('webRouter', () => {
 
       const arenaResponse = await fetch(`${baseUrl}/v1/arenas/745/competition-territory/tiles/14/8192/8191.mvt`, { headers });
       expect(arenaResponse.status).toBe(200);
+      expect(arenaResponse.headers.get('vary')).toBeNull();
       expect(territoryTiles.getArenaCompetitionTile).toHaveBeenCalledWith({
         z: 14, x: 8192, y: 8191,
         arenaId: arena.id,

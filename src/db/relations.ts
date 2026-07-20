@@ -8,6 +8,8 @@ export const relations = defineRelations(schema, (r) => ({
     sessions: r.many.appSessions({ from: r.users.id, to: r.appSessions.userId }),
     igcFiles: r.many.igcFiles({ from: r.users.id, to: r.igcFiles.userId }),
     flights: r.many.flights({ from: r.users.id, to: r.flights.userId }),
+    flightProgress: r.many.flightProgress({ from: r.users.id, to: r.flightProgress.userId }),
+    achievements: r.many.achievements({ from: r.users.id, to: r.achievements.userId }),
     personalGridClaims: r.many.personalGridClaims({ from: r.users.id, to: r.personalGridClaims.claimUser }),
     competitionGridClaims: r.many.competitionGridClaims({ from: r.users.id, to: r.competitionGridClaims.claimUser }),
   },
@@ -27,12 +29,22 @@ export const relations = defineRelations(schema, (r) => ({
   flights: {
     user: r.one.users({ from: r.flights.userId, to: r.users.id }),
     igcFile: r.one.igcFiles({ from: r.flights.igcFileId, to: r.igcFiles.id }),
+    flightProgress: r.one.flightProgress({ from: r.flights.id, to: r.flightProgress.flightId }),
+    achievements: r.many.achievements({ from: r.flights.id, to: r.achievements.sourceFlightId }),
     trackPoints: r.many.trackPoints({ from: r.flights.id, to: r.trackPoints.flightId }),
     personalGridClaims: r.many.personalGridClaims({ from: r.flights.id, to: r.personalGridClaims.claimFlight }),
     competitionGridClaims: r.many.competitionGridClaims({ from: r.flights.id, to: r.competitionGridClaims.claimFlight }),
   },
   trackPoints: {
     flight: r.one.flights({ from: r.trackPoints.flightId, to: r.flights.id }),
+  },
+  flightProgress: {
+    flight: r.one.flights({ from: r.flightProgress.flightId, to: r.flights.id }),
+    user: r.one.users({ from: r.flightProgress.userId, to: r.users.id }),
+  },
+  achievements: {
+    user: r.one.users({ from: r.achievements.userId, to: r.users.id }),
+    sourceFlight: r.one.flights({ from: r.achievements.sourceFlightId, to: r.flights.id }),
   },
   personalGridClaims: {
     flight: r.one.flights({ from: r.personalGridClaims.claimFlight, to: r.flights.id }),

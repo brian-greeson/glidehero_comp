@@ -4,6 +4,7 @@ import { competitionGridClaims, flights, personalGridClaims } from '../db/schema
 import { emptyViewportStats, type ViewportStats } from '../domain/territory/viewportStats.js';
 import { createCompetitionGridClaimService, rebuildCompetitionGridClaims } from './competitionGridClaimService.js';
 import { gridClaimCandidateCtes } from './gridClaimCandidates.js';
+import { createProgressionAchievementService, type ProgressionAchievementService } from './progressionAchievementService.js';
 import { viewportCtes, type ViewportBounds } from './viewportGrid.js';
 
 export type GridClaimProcessResult = {
@@ -11,6 +12,10 @@ export type GridClaimProcessResult = {
   cellSize: number;
   directCellCount: number;
   enclosedCellCount: number;
+  newPersonalCellCount: number;
+  personalCellTotalAfter: number;
+  progressionVersion: number;
+  evaluatedAt: Date;
 };
 
 export interface PersonalGridClaimService {
@@ -31,6 +36,10 @@ export interface GridClaimService {
 type ProcessCounts = {
   directCellCount: number;
   enclosedCellCount: number;
+  newPersonalCellCount: number;
+  personalCellTotalAfter: number;
+  progressionVersion: number;
+  evaluatedAt: Date;
 };
 
 type StoredViewportStats = ViewportStats;
@@ -63,36 +72,144 @@ async function rebuildPersonalClaims(
       SET
         claim_timestamp = EXCLUDED.claim_timestamp
       RETURNING x, y
+    ),
+    new_personal_cells AS (
+      SELECT personal_cells.x, personal_cells.y
+      FROM personal_cells
+      WHERE NOT EXISTS (
+        SELECT 1
+        FROM user_grid_claims existing_claims
+        WHERE existing_claims.claim_user = ${input.userId}
+          AND existing_claims.cell_size = ${cellSize}
+          AND existing_claims.x = personal_cells.x
+          AND existing_claims.y = personal_cells.y
+          AND existing_claims.claim_flight <> ${input.flightId}
+      )
+    ),
+    personal_claim_cells AS (
+      SELECT existing_claims.x, existing_claims.y
+      FROM user_grid_claims existing_claims
+      WHERE existing_claims.claim_user = ${input.userId}
+        AND existing_claims.cell_size = ${cellSize}
+      UNION
+      SELECT x, y
+      FROM personal_inserted
+    ),
+    claim_counts AS (
+      SELECT
+        (SELECT count(*)::integer FROM direct_cells) AS direct_cell_count,
+        (SELECT count(*)::integer FROM enclosed_candidates) AS enclosed_cell_count,
+        (SELECT count(*)::integer FROM new_personal_cells) AS new_personal_cell_count,
+        (SELECT count(*)::integer FROM personal_claim_cells) AS personal_cell_total_after
+    ),
+    progression_upsert AS (
+      INSERT INTO flight_progress (
+        flight_id,
+        user_id,
+        direct_cell_count,
+        enclosed_cell_count,
+        new_personal_cell_count,
+        personal_cell_total_after,
+        progression_version,
+        evaluated_at,
+        updated_at
+      )
+      SELECT
+        ${input.flightId},
+        ${input.userId},
+        direct_cell_count,
+        enclosed_cell_count,
+        new_personal_cell_count,
+        personal_cell_total_after,
+        1,
+        now(),
+        now()
+      FROM claim_counts
+      ON CONFLICT (flight_id) DO UPDATE SET
+        direct_cell_count = EXCLUDED.direct_cell_count,
+        enclosed_cell_count = EXCLUDED.enclosed_cell_count,
+        progression_version = flight_progress.progression_version + 1,
+        updated_at = now()
+      RETURNING new_personal_cell_count, personal_cell_total_after, progression_version, evaluated_at
     )
     SELECT
-      (SELECT count(*)::integer FROM direct_cells) AS "directCellCount",
-      (SELECT count(*)::integer FROM enclosed_candidates) AS "enclosedCellCount"
+      claim_counts.direct_cell_count AS "directCellCount",
+      claim_counts.enclosed_cell_count AS "enclosedCellCount",
+      progression_upsert.new_personal_cell_count AS "newPersonalCellCount",
+      progression_upsert.personal_cell_total_after AS "personalCellTotalAfter",
+      progression_upsert.progression_version AS "progressionVersion",
+      progression_upsert.evaluated_at AS "evaluatedAt"
+    FROM claim_counts
+    CROSS JOIN progression_upsert
   `);
-  const counts = result.rows[0] ?? { directCellCount: 0, enclosedCellCount: 0 };
+  const counts = result.rows[0] ?? {
+    directCellCount: 0,
+    enclosedCellCount: 0,
+    newPersonalCellCount: 0,
+    personalCellTotalAfter: 0,
+    progressionVersion: 1,
+    evaluatedAt: new Date(),
+  };
 
   return {
     flightId: input.flightId,
     cellSize,
     directCellCount: counts.directCellCount,
     enclosedCellCount: counts.enclosedCellCount,
+    newPersonalCellCount: counts.newPersonalCellCount,
+    personalCellTotalAfter: counts.personalCellTotalAfter,
+    progressionVersion: counts.progressionVersion,
+    evaluatedAt: new Date(counts.evaluatedAt),
   };
+}
+
+async function lockUserProgression(database: Pick<Database, 'execute'>, userId: string): Promise<void> {
+  await database.execute(sql`
+    SELECT pg_advisory_xact_lock(hashtextextended(${userId}::text, 0))
+  `);
 }
 
 export function createPersonalGridClaimService(
   database: Database,
   options: { cellSize: number },
+  progressionAchievements: ProgressionAchievementService = createProgressionAchievementService(),
 ): PersonalGridClaimService {
   const { cellSize } = options;
 
   return {
     async process({ flightId, userId }) {
       return database.transaction(async (tx) => {
+        await lockUserProgression(tx, userId);
+        const [flight] = await tx
+          .select({ startedAt: flights.startedAt, createdAt: flights.createdAt })
+          .from(flights)
+          .where(eq(flights.id, flightId));
         await tx.delete(personalGridClaims).where(and(
           eq(personalGridClaims.claimFlight, flightId),
           eq(personalGridClaims.cellSize, cellSize),
         ));
 
-        return rebuildPersonalClaims(tx, { flightId, userId }, cellSize);
+        const result = await rebuildPersonalClaims(tx, { flightId, userId }, cellSize);
+        if (result.progressionVersion === 1 && flight) {
+          await progressionAchievements.awardUniqueCellMilestones(tx, {
+            userId,
+            sourceFlightId: flightId,
+            earnedAt: result.evaluatedAt,
+            flightStartedAt: flight.startedAt ?? flight.createdAt,
+            previousTotal: result.personalCellTotalAfter - result.newPersonalCellCount,
+            newTotal: result.personalCellTotalAfter,
+            newCells: result.newPersonalCellCount,
+          });
+          await progressionAchievements.awardPersonalBestAchievements(tx, {
+            userId,
+            sourceFlightId: flightId,
+            earnedAt: result.evaluatedAt,
+            flightStartedAt: flight.startedAt ?? flight.createdAt,
+            directCells: result.directCellCount,
+            enclosedCells: result.enclosedCellCount,
+          });
+        }
+        return result;
       });
     },
 
@@ -133,8 +250,9 @@ export function createPersonalGridClaimService(
 export function createGridClaimService(
   database: Database,
   options: { cellSize: number },
+  progressionAchievements: ProgressionAchievementService = createProgressionAchievementService(),
 ): GridClaimService {
-  const personalGridClaim = createPersonalGridClaimService(database, options);
+  const personalGridClaim = createPersonalGridClaimService(database, options, progressionAchievements);
   const competitionGridClaim = createCompetitionGridClaimService(database, options);
 
   return {
@@ -158,6 +276,7 @@ export function createGridClaimService(
           return { status: 'not_completed' as const };
         }
 
+        await lockUserProgression(tx, flight.userId);
         await tx.delete(personalGridClaims).where(eq(personalGridClaims.claimFlight, flightId));
         await tx.delete(competitionGridClaims).where(eq(competitionGridClaims.claimFlight, flightId));
         const result = await rebuildPersonalClaims(tx, { flightId, userId: flight.userId }, options.cellSize);

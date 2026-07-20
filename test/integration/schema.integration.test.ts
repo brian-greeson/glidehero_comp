@@ -21,9 +21,11 @@ describe('authentication schema', () => {
        ORDER BY table_name`,
     );
     expect(result.rows.map((row) => row.table_name)).toEqual([
+      'achievements',
       'app_sessions',
       'arenas',
       'competition_grid_claims',
+      'flight_progress',
       'flights',
       'igc_files',
       'launches',
@@ -56,6 +58,81 @@ describe('authentication schema', () => {
       { column_name: 'updated_at', is_nullable: 'NO' },
       { column_name: 'user_id', is_nullable: 'NO' },
     ]);
+  });
+
+  it('stores achievement history with unique keys, profile ordering, and deletion semantics', async () => {
+    const columns = await database.pool.query<{
+      column_name: string;
+      data_type: string;
+      is_nullable: string;
+      column_default: string | null;
+    }>(
+      [
+        'SELECT column_name, data_type, is_nullable, column_default',
+        'FROM information_schema.columns',
+        "WHERE table_schema = 'public' AND table_name = 'achievements'",
+        'ORDER BY column_name',
+      ].join('\n'),
+    );
+    expect(columns.rows).toEqual([
+      { column_name: 'achievement_key', data_type: 'text', is_nullable: 'NO', column_default: null },
+      { column_name: 'achievement_type', data_type: 'text', is_nullable: 'NO', column_default: null },
+      { column_name: 'created_at', data_type: 'timestamp with time zone', is_nullable: 'NO', column_default: 'now()' },
+      { column_name: 'details', data_type: 'jsonb', is_nullable: 'NO', column_default: null },
+      { column_name: 'earned_at', data_type: 'timestamp with time zone', is_nullable: 'NO', column_default: null },
+      { column_name: 'id', data_type: 'uuid', is_nullable: 'NO', column_default: 'gen_random_uuid()' },
+      { column_name: 'source_flight_id', data_type: 'uuid', is_nullable: 'YES', column_default: null },
+      { column_name: 'user_id', data_type: 'uuid', is_nullable: 'NO', column_default: null },
+    ]);
+
+    const constraints = await database.pool.query<{ conname: string; definition: string }>(
+      [
+        'SELECT conname, pg_get_constraintdef(oid) AS definition',
+        'FROM pg_constraint',
+        "WHERE conrelid = 'achievements'::regclass",
+        'ORDER BY conname',
+      ].join('\n'),
+    );
+    expect(constraints.rows).toEqual(expect.arrayContaining([
+      { conname: 'achievements_pkey', definition: 'PRIMARY KEY (id)' },
+      { conname: 'achievements_user_id_achievement_key_unique', definition: 'UNIQUE (user_id, achievement_key)' },
+    ]));
+
+    const foreignKeys = await database.pool.query<{ referenced_table: string; column_name: string; confdeltype: string }>(
+      [
+        'SELECT referenced.relname AS referenced_table,',
+        '       local.attname AS column_name,',
+        '       constraint_row.confdeltype',
+        'FROM pg_constraint constraint_row',
+        'INNER JOIN pg_class referenced ON referenced.oid = constraint_row.confrelid',
+        'INNER JOIN LATERAL unnest(constraint_row.conkey) WITH ORDINALITY AS local_key(attnum, position) ON true',
+        'INNER JOIN pg_attribute local',
+        '  ON local.attrelid = constraint_row.conrelid AND local.attnum = local_key.attnum',
+        "WHERE constraint_row.conrelid = 'achievements'::regclass",
+        "  AND constraint_row.contype = 'f'",
+        'ORDER BY local.attname',
+      ].join('\n'),
+    );
+    expect(foreignKeys.rows).toEqual([
+      { referenced_table: 'flights', column_name: 'source_flight_id', confdeltype: 'n' },
+      { referenced_table: 'users', column_name: 'user_id', confdeltype: 'c' },
+    ]);
+
+    const indexes = await database.pool.query<{ indexname: string; indexdef: string }>(
+      [
+        'SELECT indexname, indexdef',
+        'FROM pg_indexes',
+        "WHERE schemaname = 'public' AND tablename = 'achievements'",
+        'ORDER BY indexname',
+      ].join('\n'),
+    );
+    expect(indexes.rows.map((row) => row.indexname)).toEqual([
+      'achievements_pkey',
+      'achievements_user_id_achievement_key_unique',
+      'achievements_user_id_earned_at_idx',
+    ]);
+    expect(indexes.rows.find(({ indexname }) => indexname === 'achievements_user_id_earned_at_idx')?.indexdef)
+      .toContain('(user_id, earned_at)');
   });
 
   it('stores canonical Arena polygons and optional launch metadata', async () => {
@@ -156,6 +233,76 @@ describe('authentication schema', () => {
       'user_grid_claims_claim_user_cell_size_idx',
       'user_grid_claims_pkey',
     ]);
+  });
+
+  it('stores progression snapshots with nonnegative counts, cascading references, and profile query support', async () => {
+    const columns = await database.pool.query<{
+      column_name: string;
+      data_type: string;
+      is_nullable: string;
+      column_default: string | null;
+    }>(
+      `SELECT column_name, data_type, is_nullable, column_default
+       FROM information_schema.columns
+       WHERE table_schema = 'public' AND table_name = 'flight_progress'
+       ORDER BY column_name`,
+    );
+    expect(columns.rows).toEqual([
+      { column_name: 'direct_cell_count', data_type: 'integer', is_nullable: 'NO', column_default: null },
+      { column_name: 'enclosed_cell_count', data_type: 'integer', is_nullable: 'NO', column_default: null },
+      { column_name: 'evaluated_at', data_type: 'timestamp with time zone', is_nullable: 'NO', column_default: 'now()' },
+      { column_name: 'flight_id', data_type: 'uuid', is_nullable: 'NO', column_default: null },
+      { column_name: 'new_personal_cell_count', data_type: 'integer', is_nullable: 'NO', column_default: null },
+      { column_name: 'personal_cell_total_after', data_type: 'integer', is_nullable: 'NO', column_default: null },
+      { column_name: 'progression_version', data_type: 'integer', is_nullable: 'NO', column_default: '1' },
+      { column_name: 'updated_at', data_type: 'timestamp with time zone', is_nullable: 'NO', column_default: 'now()' },
+      { column_name: 'user_id', data_type: 'uuid', is_nullable: 'NO', column_default: null },
+    ]);
+
+    const constraints = await database.pool.query<{ conname: string; definition: string }>(
+      `SELECT conname, pg_get_constraintdef(oid) AS definition
+       FROM pg_constraint
+       WHERE conrelid = 'flight_progress'::regclass
+       ORDER BY conname`,
+    );
+    expect(constraints.rows).toEqual(expect.arrayContaining([
+      { conname: 'flight_progress_direct_cell_count_nonnegative', definition: 'CHECK ((direct_cell_count >= 0))' },
+      { conname: 'flight_progress_enclosed_cell_count_nonnegative', definition: 'CHECK ((enclosed_cell_count >= 0))' },
+      { conname: 'flight_progress_new_personal_cell_count_nonnegative', definition: 'CHECK ((new_personal_cell_count >= 0))' },
+      { conname: 'flight_progress_personal_cell_total_after_nonnegative', definition: 'CHECK ((personal_cell_total_after >= 0))' },
+      { conname: 'flight_progress_pkey', definition: 'PRIMARY KEY (flight_id)' },
+    ]));
+
+    const foreignKeys = await database.pool.query<{ referenced_table: string; column_name: string; confdeltype: string }>(
+      `SELECT referenced.relname AS referenced_table,
+              local.attname AS column_name,
+              constraint_row.confdeltype
+       FROM pg_constraint constraint_row
+       INNER JOIN pg_class referenced ON referenced.oid = constraint_row.confrelid
+       INNER JOIN LATERAL unnest(constraint_row.conkey) WITH ORDINALITY AS local_key(attnum, position) ON true
+       INNER JOIN pg_attribute local
+         ON local.attrelid = constraint_row.conrelid AND local.attnum = local_key.attnum
+       WHERE constraint_row.conrelid = 'flight_progress'::regclass
+         AND constraint_row.contype = 'f'
+       ORDER BY local.attname`,
+    );
+    expect(foreignKeys.rows).toEqual([
+      { referenced_table: 'flights', column_name: 'flight_id', confdeltype: 'c' },
+      { referenced_table: 'users', column_name: 'user_id', confdeltype: 'c' },
+    ]);
+
+    const indexes = await database.pool.query<{ indexname: string; indexdef: string }>(
+      `SELECT indexname, indexdef
+       FROM pg_indexes
+       WHERE schemaname = 'public' AND tablename = 'flight_progress'
+       ORDER BY indexname`,
+    );
+    expect(indexes.rows.map((row) => row.indexname)).toEqual([
+      'flight_progress_pkey',
+      'flight_progress_user_id_evaluated_at_idx',
+    ]);
+    expect(indexes.rows.find(({ indexname }) => indexname === 'flight_progress_user_id_evaluated_at_idx')?.indexdef)
+      .toContain('(user_id, evaluated_at)');
   });
 
   it('stores monthly competition cell history with cascading ownership references', async () => {

@@ -30,6 +30,8 @@ function serviceHarness(send = vi.fn(async (_command: unknown) => ({}))) {
   const uploadQueue = { removeTerminalJobsForFlight: vi.fn(async () => undefined) };
   const reprocess = vi.fn(async () => ({ status: 'completed' as const, result: {
     flightId: 'flight', cellSize: 1000, directCellCount: 1, enclosedCellCount: 0,
+    newPersonalCellCount: 1, personalCellTotalAfter: 1, progressionVersion: 1,
+    evaluatedAt: new Date('2026-07-20T00:00:00Z'),
   } }));
   const presign = vi.fn(async () => 'https://objects.example.test/download');
   return {

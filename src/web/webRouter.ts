@@ -280,10 +280,12 @@ export function createWebRouter(dependencies: {
       return;
     }
     try {
-      sendTerritoryTile(res, await dependencies.territoryTiles.getPersonalTile({
+      const tile = await dependencies.territoryTiles.getPersonalTile({
         ...coordinates,
         userId: currentUser.userId,
-      }));
+      });
+      res.vary('Cookie');
+      sendTerritoryTile(res, tile);
     } catch (error) {
       next(error);
     }

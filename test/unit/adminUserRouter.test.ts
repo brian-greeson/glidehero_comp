@@ -28,7 +28,11 @@ function dependencies() {
   const flights: AdminFlightService = {
     listRecentFlights: vi.fn(async () => []),
     listUserFlights: vi.fn(async () => [{ id: flightId, flightDate: '2026-07-14', originalFilename: 'flight.igc', processingStatus: 'completed' as const }]),
-    reprocessFlight: vi.fn(async () => ({ status: 'completed' as const, result: { flightId, cellSize: 1000, directCellCount: 1, enclosedCellCount: 0 } })),
+    reprocessFlight: vi.fn(async () => ({ status: 'completed' as const, result: {
+      flightId, cellSize: 1000, directCellCount: 1, enclosedCellCount: 0,
+      newPersonalCellCount: 1, personalCellTotalAfter: 1, progressionVersion: 1,
+      evaluatedAt: new Date('2026-07-20T00:00:00Z'),
+    } })),
     deleteFlight: vi.fn(async () => 'deleted' as const),
     deleteAllUserFlights: vi.fn(async () => ({ deleted: 2, skipped: 1, failed: 1 })),
     createDownloadUrl: vi.fn(async () => ({ url: 'https://objects.example.test/download', filename: 'flight.igc' })),

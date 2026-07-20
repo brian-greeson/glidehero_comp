@@ -1,4 +1,4 @@
-import { bigint, customType, date, doublePrecision, index, integer, pgEnum, pgSequence, pgTable, primaryKey, text, timestamp, unique, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
+import { bigint, check, customType, date, doublePrecision, index, integer, jsonb, pgEnum, pgSequence, pgTable, primaryKey, text, timestamp, unique, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 
 const geometryPoint4326 = customType<{ data: string; driverData: string }>({
@@ -6,7 +6,7 @@ const geometryPoint4326 = customType<{ data: string; driverData: string }>({
 });
 
 const geometryMultiPolygon6933 = customType<{ data: string; driverData: string }>({
-  dataType: () => 'geometry(multipolygon,6933)',
+  dataType: () => 'geometry(MultiPolygon,6933)',
 });
 
 const timestamps = {
@@ -227,5 +227,45 @@ export const competitionGridClaims = pgTable(
       table.claimTimestamp,
     ),
     index('competition_grid_claims_claim_flight_idx').on(table.claimFlight),
+  ],
+);
+
+export const flightProgress = pgTable(
+  'flight_progress',
+  {
+    flightId: uuid('flight_id').primaryKey().references(() => flights.id, { onDelete: 'cascade' }),
+    userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    directCellCount: integer('direct_cell_count').notNull(),
+    enclosedCellCount: integer('enclosed_cell_count').notNull(),
+    newPersonalCellCount: integer('new_personal_cell_count').notNull(),
+    personalCellTotalAfter: integer('personal_cell_total_after').notNull(),
+    progressionVersion: integer('progression_version').notNull().default(1),
+    evaluatedAt: timestamp('evaluated_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
+  },
+  (table) => [
+    check('flight_progress_direct_cell_count_nonnegative', sql`${table.directCellCount} >= 0`),
+    check('flight_progress_enclosed_cell_count_nonnegative', sql`${table.enclosedCellCount} >= 0`),
+    check('flight_progress_new_personal_cell_count_nonnegative', sql`${table.newPersonalCellCount} >= 0`),
+    check('flight_progress_personal_cell_total_after_nonnegative', sql`${table.personalCellTotalAfter} >= 0`),
+    index('flight_progress_user_id_evaluated_at_idx').on(table.userId, table.evaluatedAt),
+  ],
+);
+
+export const achievements = pgTable(
+  'achievements',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    achievementType: text('achievement_type').notNull(),
+    achievementKey: text('achievement_key').notNull(),
+    sourceFlightId: uuid('source_flight_id').references(() => flights.id, { onDelete: 'set null' }),
+    earnedAt: timestamp('earned_at', { withTimezone: true, mode: 'date' }).notNull(),
+    details: jsonb('details').$type<Record<string, unknown>>().notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
+  },
+  (table) => [
+    unique('achievements_user_id_achievement_key_unique').on(table.userId, table.achievementKey),
+    index('achievements_user_id_earned_at_idx').on(table.userId, table.earnedAt),
   ],
 );
