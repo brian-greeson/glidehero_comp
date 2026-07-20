@@ -244,7 +244,7 @@ export function initializeCompetitionCoverage({
     });
     map.on('idle', () => {
       if (!mapReady) return;
-      setStatus(visibleCoverageFeatureCount(map) === 0 ? 'No coverage for this selection.' : '');
+      setStatus(visibleCoverageFeatureCount(map) === 0 ? 'No territory for this zoom level or area.' : '');
     });
     map.on('mousemove', async (event) => {
       if (!mapReady || !cellPopup) return;
