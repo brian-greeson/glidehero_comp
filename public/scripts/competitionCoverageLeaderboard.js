@@ -69,6 +69,6 @@ export function renderCoverageLeaderboard({
     );
   status.textContent =
     leaderboard.leaders.length === 0
-      ? 'No coverage in this area.'
+      ? 'No territory for this zoom level or area.'
       : 'Select a pilot to view their coverage.';
 }

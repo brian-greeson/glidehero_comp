@@ -352,7 +352,7 @@ describe('Global dashboard controller', () => {
       ]),
     );
     expect(emptyState.hidden).toBe(false);
-    expect(emptyState.textContent).toBe('No coverage for this selection.');
+    expect(emptyState.textContent).toBe('No territory for this zoom level or area.');
 
     harness.move({ west: -106, east: -104 });
     await vi.waitFor(() => expect(fetchImpl).toHaveBeenCalledTimes(4));

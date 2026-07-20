@@ -112,7 +112,7 @@ export function initializeCompetitionCoverage({
         setCoverageData(map, colorCoverageTerritory(territory, colorRegistry));
       },
       onVisibleData: (territory) => setStatus(
-        territory.features.length === 0 ? 'No coverage for this selection.' : '',
+        territory.features.length === 0 ? 'No territory for this zoom level or area.' : '',
       ),
       onVisibleError: () => setStatus('Unable to load coverage. Try again.'),
     });
