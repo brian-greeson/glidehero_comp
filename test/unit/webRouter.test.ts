@@ -312,10 +312,11 @@ describe('webRouter', () => {
       expect(await anonymous.text()).toContain('anonymous');
 
       const authenticated = await fetch(`${baseUrl}/`, {
+        redirect: 'manual',
         headers: { cookie: 'glidehero_session=valid-token' },
       });
-      expect(authenticated.status).toBe(200);
-      expect(await authenticated.text()).toContain('Sky Pilot');
+      expect(authenticated.status).toBe(302);
+      expect(authenticated.headers.get('location')).toBe('/personal');
     });
   });
 
@@ -441,7 +442,7 @@ describe('webRouter', () => {
         }),
       });
       expect(response.status).toBe(303);
-      expect(response.headers.get('location')).toBe('/global?onboarding=1');
+      expect(response.headers.get('location')).toBe('/personal?onboarding=1');
       expect(response.headers.get('set-cookie')).toContain(
         'glidehero_session=new-token; Max-Age=604800; Path=/; HttpOnly; SameSite=Lax',
       );

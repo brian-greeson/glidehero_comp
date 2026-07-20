@@ -521,7 +521,7 @@ export function createWebRouter(dependencies: {
 
   router.get('/', async (req, res) => {
     if (res.locals.currentUser) {
-      res.redirect(302, '/global');
+      res.redirect(302, '/personal');
       return;
     }
     await render(res, dependencies.renderPage, 200, {
@@ -651,7 +651,7 @@ export function createWebRouter(dependencies: {
         displayName: parsed.data.displayName || undefined,
       });
       res.setHeader('set-cookie', dependencies.cookie.set(session.token));
-      res.redirect(303, '/global?onboarding=1');
+      res.redirect(303, '/personal?onboarding=1');
     } catch (error) {
       if (error instanceof AuthFailure && error.code === 'duplicate_email') {
         await render(res, dependencies.renderPage, 409, {

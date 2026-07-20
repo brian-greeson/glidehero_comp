@@ -57,14 +57,14 @@ describe('Vento page renderer', () => {
     expect(authenticated).toContain(
       '<img class="brand-logo" src="/android-chrome-192x192.png" alt="">',
     );
-    expect(authenticated).toContain('aria-label="Glide Hero dashboard"');
+    expect(authenticated).toContain('class="brand" href="/personal" aria-label="Glide Hero dashboard"');
     expect(authenticated).toContain('<span class="brand-name">GLIDE HERO</span>');
     expect(authenticated).toContain('pilot@example.com');
     expect(authenticated).toContain('action="/logout"');
     expect(authenticated).toContain('action="/profile/territory-color"');
     expect(authenticated).toContain('value="#1769AA"');
-    expect(authenticated).toContain('data-competition-coverage="global"');
-    expect(authenticated).toContain('data-territory-map');
+    expect(authenticated).not.toContain('data-competition-coverage="global"');
+    expect(authenticated).toContain('data-dashboard-map');
     expect(authenticated).toContain('data-onboarding-trigger');
     expect(authenticated).toContain('aria-controls="glide-hero-onboarding"');
     expect(authenticated).toContain('<dialog id="glide-hero-onboarding"');
@@ -114,25 +114,23 @@ describe('Vento page renderer', () => {
       authenticated.indexOf('data-onboarding-trigger'),
     );
     expect(authenticated).toContain(
-      'href="/global" data-competition-period-link="/global" class="mode-tab is-active" aria-current="page">Competitive</a>',
+      'href="/personal" class="mode-tab is-active" aria-current="page">Personal</a>',
     );
-    expect(authenticated).toContain('href="/personal" class="mode-tab">Personal</a>');
+    expect(authenticated).toContain('href="/global" data-competition-period-link="/global" class="mode-tab">Competitive</a>');
     expect(authenticated).toContain('data-territory-color="#1769AA"');
     expect(authenticated).toContain('data-territory-tile-minimum-zoom="4"');
     expect(authenticated).toContain('data-territory-tile-maximum-zoom="14"');
     expect(authenticated).toContain('data-current-user-id="00000000-0000-4000-8000-000000000001"');
     expect(authenticated).toContain('<script type="module" src="/scripts/dashboard.js"></script>');
-    expect(authenticated).toContain('<h2>Territory leaderboard</h2>');
-    expect(authenticated).toContain('data-territory-allpilots');
-    expect(authenticated).toContain('data-territory-cell-popup');
+    expect(authenticated).not.toContain('<h2>Territory leaderboard</h2>');
+    expect(authenticated).not.toContain('data-territory-allpilots');
+    expect(authenticated).not.toContain('data-territory-cell-popup');
     expect(authenticated).toContain('data-map-flight-aid-status');
     expect(authenticated).toContain('role="status" aria-live="polite"');
-    expect(authenticated).toContain('data-competition-period');
-    expect(authenticated).toContain('aria-label="Coverage time period"');
-    expect(authenticated).toContain('data-current-month-option');
-    expect(authenticated).not.toContain('data-personal-stats');
-    expect(authenticated).toContain('data-arena-search-input');
-    expect(authenticated).toContain('aria-current="page">Global</span>');
+    expect(authenticated).not.toContain('aria-label="Coverage time period"');
+    expect(authenticated).not.toContain('data-current-month-option');
+    expect(authenticated).toContain('data-personal-stats');
+    expect(authenticated).not.toContain('data-arena-search-input');
     expect(authenticated).toContain(
       'https://api.maptiler.com/maps/outdoor-v2/style.json?key=maptiler-test-key',
     );

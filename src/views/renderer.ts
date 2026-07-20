@@ -62,7 +62,7 @@ export function createPageRenderer(options: { mapTilerApiKey: string }): PageRen
   const environment = createEnvironment();
 
   return async (model) => {
-    const page = model.page ?? (model.currentUser ? 'global' : 'landing');
+    const page = model.page ?? (model.currentUser ? 'personal' : 'landing');
     const template = {
       landing: 'pages/index.vto',
       global: 'pages/global.vto',
