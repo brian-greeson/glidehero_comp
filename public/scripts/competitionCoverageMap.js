@@ -1,8 +1,4 @@
-import {
-  createTerritoryBoundaryLayer,
-  MAXIMUM_TERRITORY_TILE_ZOOM,
-  MINIMUM_COMPETITION_TERRITORY_ZOOM,
-} from './mapStyles.js';
+import { createTerritoryBoundaryLayer } from './mapStyles.js';
 
 export const COVERAGE_SOURCE_ID = 'competition-coverage';
 export const COVERAGE_FILL_LAYER_ID = 'competition-territory-fill';
@@ -60,13 +56,13 @@ function coveragePaintColor(pilotColors = []) {
   ];
 }
 
-export function installCoverageSource(map, tileUrl) {
+export function installCoverageSource(map, tileUrl, tileZoom) {
   if (map.getSource?.(COVERAGE_SOURCE_ID)) return;
   map.addSource(COVERAGE_SOURCE_ID, {
     type: 'vector',
     tiles: [tileUrl],
-    minzoom: MINIMUM_COMPETITION_TERRITORY_ZOOM,
-    maxzoom: MAXIMUM_TERRITORY_TILE_ZOOM,
+    minzoom: tileZoom.minimumZoom,
+    maxzoom: tileZoom.maximumZoom,
   });
   const color = coveragePaintColor();
   map.addLayer({
@@ -74,7 +70,7 @@ export function installCoverageSource(map, tileUrl) {
     type: 'fill',
     source: COVERAGE_SOURCE_ID,
     'source-layer': COVERAGE_SOURCE_LAYER,
-    minzoom: MINIMUM_COMPETITION_TERRITORY_ZOOM,
+    minzoom: tileZoom.minimumZoom,
     paint: { 'fill-color': color, 'fill-opacity': COVERAGE_OPACITY },
   });
   map.addLayer(createTerritoryBoundaryLayer({
@@ -82,7 +78,7 @@ export function installCoverageSource(map, tileUrl) {
     source: COVERAGE_SOURCE_ID,
     sourceLayer: COVERAGE_SOURCE_LAYER,
     color,
-    minzoom: MINIMUM_COMPETITION_TERRITORY_ZOOM,
+    minzoom: tileZoom.minimumZoom,
   }));
   const emptyHoverFilter = ['==', ['get', 'cellId'], ''];
   map.addLayer({
@@ -90,7 +86,7 @@ export function installCoverageSource(map, tileUrl) {
     type: 'fill',
     source: COVERAGE_SOURCE_ID,
     'source-layer': COVERAGE_SOURCE_LAYER,
-    minzoom: MINIMUM_COMPETITION_TERRITORY_ZOOM,
+    minzoom: tileZoom.minimumZoom,
     filter: emptyHoverFilter,
     paint: { 'fill-color': '#ffffff', 'fill-opacity': 0.12 },
   });
@@ -99,7 +95,7 @@ export function installCoverageSource(map, tileUrl) {
     type: 'line',
     source: COVERAGE_SOURCE_ID,
     'source-layer': COVERAGE_SOURCE_LAYER,
-    minzoom: MINIMUM_COMPETITION_TERRITORY_ZOOM,
+    minzoom: tileZoom.minimumZoom,
     filter: emptyHoverFilter,
     paint: { 'line-color': '#ffffff', 'line-width': 3 },
   });

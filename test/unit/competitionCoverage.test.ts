@@ -141,7 +141,7 @@ describe('competition coverage browser contracts', () => {
     ).toBe(false);
   });
 
-  it('installs zoom 7-14 vector layers and changes tiles without changing paint', () => {
+  it('installs zoom 4-14 vector layers and changes tiles without changing paint', () => {
     const sources = new Map<string, any>();
     const layers: any[] = [];
     const map = {
@@ -154,18 +154,21 @@ describe('competition coverage browser contracts', () => {
         { properties: { pilotUserId: 'pilot-one' } },
       ]),
     };
-    installCoverageSource(map, '/tiles/{z}/{x}/{y}.mvt');
+    installCoverageSource(map, '/tiles/{z}/{x}/{y}.mvt', {
+      minimumZoom: 4,
+      maximumZoom: 14,
+    });
     expect(map.addSource).toHaveBeenCalledWith('competition-coverage', {
-      type: 'vector', tiles: ['/tiles/{z}/{x}/{y}.mvt'], minzoom: 7, maxzoom: 14,
+      type: 'vector', tiles: ['/tiles/{z}/{x}/{y}.mvt'], minzoom: 4, maxzoom: 14,
     });
     expect(layers).toEqual(expect.arrayContaining([
       expect.objectContaining({
         id: 'competition-territory-fill', source: 'competition-coverage',
-        'source-layer': 'competition-coverage', minzoom: 7,
+        'source-layer': 'competition-coverage', minzoom: 4,
       }),
       expect.objectContaining({
         id: 'competition-territory-outline', source: 'competition-coverage',
-        'source-layer': 'competition-coverage', minzoom: 7,
+        'source-layer': 'competition-coverage', minzoom: 4,
       }),
     ]));
     expect(JSON.stringify(layers.find((layer) => layer.id === 'competition-territory-outline')))

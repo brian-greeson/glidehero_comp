@@ -2,7 +2,10 @@
   <section class="dashboard" data-dashboard data-dashboard-mode="personal">
     {{ include "components/dashboardNav.vto" { activeMode: "personal", currentPath: "/personal", currentUser, isAdmin, territoryColorSuccess, territoryColorError } }}
     <section class="map-stage" aria-label="Personal territory map">
-      <div class="map-canvas" data-dashboard-map data-map-style-url="{{ mapTilerStyleUrl }}" data-current-user-id="{{ currentUser.userId }}" data-territory-color="{{ currentUser.territoryColor }}"></div>
+      <div class="map-canvas" data-dashboard-map data-map-style-url="{{ mapTilerStyleUrl }}"
+        data-current-user-id="{{ currentUser.userId }}" data-territory-color="{{ currentUser.territoryColor }}"
+        data-territory-tile-minimum-zoom="{{ territoryTileConfig.personal.minimumZoom }}"
+        data-territory-tile-maximum-zoom="{{ territoryTileConfig.personal.maximumZoom }}"></div>
       <p class="map-empty-state" data-map-empty-state hidden>Map unavailable. Check your connection and try again.</p>
       {{ include "components/mapFlightAidStatus.vto" }}
     </section>

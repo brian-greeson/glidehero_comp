@@ -740,14 +740,14 @@ describe('webRouter', () => {
       });
 
       const global = await fetch(
-        `${baseUrl}/v1/competition-territory/tiles/7/64/63.mvt?month=2026-07&pilot=${user.userId}`,
+        `${baseUrl}/v1/competition-territory/tiles/4/8/7.mvt?month=2026-07&pilot=${user.userId}`,
         { headers },
       );
       expect(global.status).toBe(200);
       expect(global.headers.get('cache-control')).toBe('private, max-age=60');
       expect((await global.arrayBuffer()).byteLength).toBe(0);
       expect(territoryTiles.getGlobalCompetitionTile).toHaveBeenCalledWith({
-        z: 7, x: 64, y: 63,
+        z: 4, x: 8, y: 7,
         period: { competitionMonth: '2026-07' },
         pilotUserId: user.userId,
       });
@@ -782,8 +782,8 @@ describe('webRouter', () => {
       const headers = { cookie: 'glidehero_session=valid-token' };
       for (const path of [
         '/v1/personal-territory/tiles/4/8/7.mvt',
-        '/v1/competition-territory/tiles/7/64/63.mvt',
-        '/v1/arenas/745/competition-territory/tiles/7/64/63.mvt',
+        '/v1/competition-territory/tiles/4/8/7.mvt',
+        '/v1/arenas/745/competition-territory/tiles/4/8/7.mvt',
       ]) {
         expect((await fetch(`${baseUrl}${path}`)).status).toBe(401);
       }
@@ -791,15 +791,15 @@ describe('webRouter', () => {
         '/v1/personal-territory/tiles/3/0/0.mvt',
         '/v1/personal-territory/tiles/4/16/0.mvt',
         `/v1/personal-territory/tiles/4/8/7.mvt?user=${user.userId}`,
-        '/v1/competition-territory/tiles/6/0/0.mvt',
-        '/v1/competition-territory/tiles/7/128/0.mvt',
-        '/v1/competition-territory/tiles/7/64/63.mvt?month=2026-13',
-        '/v1/competition-territory/tiles/7/64/63.mvt?pilot=not-a-uuid',
+        '/v1/competition-territory/tiles/3/0/0.mvt',
+        '/v1/competition-territory/tiles/4/16/0.mvt',
+        '/v1/competition-territory/tiles/4/8/7.mvt?month=2026-13',
+        '/v1/competition-territory/tiles/4/8/7.mvt?pilot=not-a-uuid',
       ]) {
         expect((await fetch(`${baseUrl}${path}`, { headers })).status).toBe(400);
       }
       expect((await fetch(
-        `${baseUrl}/v1/arenas/999/competition-territory/tiles/7/64/63.mvt`,
+        `${baseUrl}/v1/arenas/999/competition-territory/tiles/4/8/7.mvt`,
         { headers },
       )).status).toBe(404);
     });

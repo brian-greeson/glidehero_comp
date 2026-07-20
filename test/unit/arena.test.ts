@@ -68,6 +68,8 @@ function arenaDocument() {
       mapStyleUrl: 'map-style',
       currentUserId: 'user-1',
       territoryColor: '#1769AA',
+      territoryTileMinimumZoom: '4',
+      territoryTileMaximumZoom: '14',
     },
   };
   const elements = new Map<string, any>([
@@ -125,7 +127,7 @@ describe('Arena dashboard', () => {
     expect(harness.map.addSource).toHaveBeenCalledWith('competition-coverage', {
       type: 'vector',
       tiles: ['/v1/arenas/745/competition-territory/tiles/{z}/{x}/{y}.mvt?month=2026-07'],
-      minzoom: 7,
+      minzoom: 4,
       maxzoom: 14,
     });
     expect(harness.map.addSource).toHaveBeenCalledWith('competition-arena-boundary', {

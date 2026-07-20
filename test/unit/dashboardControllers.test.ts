@@ -161,6 +161,8 @@ function globalDashboardHarness(fetchImpl: any, search = '') {
     mapStyleUrl: 'map-style',
     currentUserId: 'current-user',
     territoryColor: '#1769AA',
+    territoryTileMinimumZoom: '4',
+    territoryTileMaximumZoom: '14',
   };
   mapElement.clientWidth = 600;
   const allTime = element();
@@ -218,7 +220,14 @@ function deferred<T>() {
 describe('Personal dashboard controller', () => {
   it('loads Personal territory and refreshes stats after viewport movement', async () => {
     const harness = mapHarness();
-    const mapElement = { dataset: { mapStyleUrl: 'map-style', territoryColor: '#1769AA' } };
+    const mapElement = {
+      dataset: {
+        mapStyleUrl: 'map-style',
+        territoryColor: '#1769AA',
+        territoryTileMinimumZoom: '4',
+        territoryTileMaximumZoom: '14',
+      },
+    };
     const emptyState = element();
     const statsCard = element();
     const claimedArea = element();
@@ -277,6 +286,8 @@ describe('Global dashboard controller', () => {
         mapStyleUrl: 'map-style',
         currentUserId: 'current-user',
         territoryColor: '#1769AA',
+        territoryTileMinimumZoom: '4',
+        territoryTileMaximumZoom: '14',
       },
     };
     const emptyState = element();
@@ -318,7 +329,7 @@ describe('Global dashboard controller', () => {
     expect(harness.map.addSource).toHaveBeenCalledWith('competition-coverage', {
       type: 'vector',
       tiles: ['/v1/competition-territory/tiles/{z}/{x}/{y}.mvt'],
-      minzoom: 7,
+      minzoom: 4,
       maxzoom: 14,
     });
     harness.idle();

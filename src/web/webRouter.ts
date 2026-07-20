@@ -15,6 +15,7 @@ import type { FlightUploadQueueService } from '../services/flightUploadQueueServ
 import type { FailedFlightCleanupService } from '../services/failedFlightCleanupService.js';
 import type { TerritoryTileService } from '../services/territoryTileService.js';
 import type { SessionCookie } from './sessionCookie.js';
+import { territoryTileConfig } from '../config/territoryTiles.js';
 
 const email = z.string().trim().toLowerCase().pipe(z.email());
 const password = z.string().min(3).max(128);
@@ -57,9 +58,12 @@ const tileQuerySchema = z.object({
   pilot: z.string().uuid().optional(),
 }).strict();
 
-function territoryTileCoordinates(minimumZoom: number, params: Record<string, string>) {
+function territoryTileCoordinates(
+  zoom: { minimumZoom: number; maximumZoom: number },
+  params: Record<string, string>,
+) {
   const parsed = z.object({
-    z: z.coerce.number().int().min(minimumZoom).max(14),
+    z: z.coerce.number().int().min(zoom.minimumZoom).max(zoom.maximumZoom),
     x: z.coerce.number().int().min(0),
     y: z.coerce.number().int().min(0),
   }).safeParse(params);
@@ -248,7 +252,7 @@ export function createWebRouter(dependencies: {
       next(new AppError(401, 'unauthorized', 'Sign in to view your personal territory.'));
       return;
     }
-    const coordinates = territoryTileCoordinates(4, req.params);
+    const coordinates = territoryTileCoordinates(territoryTileConfig.personal, req.params);
     if (!coordinates || Object.keys(req.query).length > 0) {
       res.status(400).json({ error: { code: 'invalid_request', message: 'Personal territory tile coordinates are invalid.' } });
       return;
@@ -320,7 +324,7 @@ export function createWebRouter(dependencies: {
       next(new AppError(401, 'unauthorized', 'Sign in to view competition territory.'));
       return;
     }
-    const coordinates = territoryTileCoordinates(7, req.params);
+    const coordinates = territoryTileCoordinates(territoryTileConfig.competition, req.params);
     const query = tileQuerySchema.safeParse(req.query);
     if (!coordinates || !query.success) {
       res.status(400).json({ error: { code: 'invalid_request', message: 'Competition territory tile request is invalid.' } });
@@ -440,7 +444,7 @@ export function createWebRouter(dependencies: {
       return;
     }
     const sourceId = arenaSourceIdSchema.safeParse(req.params.sourceId);
-    const coordinates = territoryTileCoordinates(7, req.params);
+    const coordinates = territoryTileCoordinates(territoryTileConfig.competition, req.params);
     const query = tileQuerySchema.safeParse(req.query);
     if (!sourceId.success || !coordinates || !query.success) {
       res.status(400).json({ error: { code: 'invalid_request', message: 'Arena territory tile request is invalid.' } });

@@ -54,7 +54,10 @@ export function initializePersonalDashboard({
     map.addControl(new maplibre.NavigationControl(), 'top-right');
     map.once('error', () => showStatus('Map unavailable. Check your connection and try again.'));
     map.once('load', async () => {
-      installPersonalTerritorySource(map, mapElement.dataset.territoryColor);
+      installPersonalTerritorySource(map, mapElement.dataset.territoryColor, {
+        minimumZoom: Number(mapElement.dataset.territoryTileMinimumZoom),
+        maximumZoom: Number(mapElement.dataset.territoryTileMaximumZoom),
+      });
       initializeMapFlightAids({
         map, mapElement, documentRef, fetchImpl, navigatorRef, storage,
       });

@@ -214,7 +214,10 @@ export function initializeCompetitionCoverage({
             { padding: 60, duration: 0 },
           );
         }
-        installCoverageSource(map, activeTileUrl());
+        installCoverageSource(map, activeTileUrl(), {
+          minimumZoom: Number(mapElement.dataset.territoryTileMinimumZoom),
+          maximumZoom: Number(mapElement.dataset.territoryTileMaximumZoom),
+        });
         mapReady = true;
         await refreshPeriod();
       } catch {
