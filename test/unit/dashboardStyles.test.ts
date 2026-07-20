@@ -29,6 +29,8 @@ describe('dashboard stylesheet contract', () => {
     expect(css).toMatch(
       /\.dashboard-info\.is-expanded \.dashboard-information\s*{\s*overflow-y: auto;/,
     );
+    expect(css).toMatch(/\.flight-upload-panel footer\s*{[^}]*flex-wrap:\s*wrap;[^}]*gap:/);
+    expect(css).toContain('.leaderboard-profile-link');
   });
 
   it('anchors the coverage claimant card around its map tap', async () => {

@@ -570,7 +570,12 @@ button {
 }
 .flight-upload-panel footer {
   display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
   justify-content: flex-end;
+}
+.flight-upload-progress-link {
+  text-decoration: none;
 }
 .flight-upload-panel footer input {
   position: absolute;
@@ -1193,6 +1198,10 @@ grid-template-columns: fit-content(36rem) minmax(0, 1fr);
   color: var(--color-text-muted);
   font-size: 0.88rem;
   line-height: 1.4;
+}
+.leaderboard-profile-link {
+  color: var(--color-primary-strong);
+  font-weight: 700;
 }
 .leaderboard-status:empty {
   display: none;

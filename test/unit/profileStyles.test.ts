@@ -8,6 +8,10 @@ describe('pilot profile styles', () => {
     expect(css).toMatch(/\.profile-summary\s*{[^}]*display:\s*grid;[^}]*grid-template-columns:\s*repeat\(3/s);
     expect(css).toMatch(/\.profile-summary-card\s*{[^}]*border:\s*1px solid/);
     expect(css).toMatch(/\.profile-back-link:focus-visible\s*{[^}]*outline:\s*3px solid/);
+    expect(css).toContain('.profile-achievement-list,');
+    expect(css).toMatch(/\.profile-flight-stats\s*{/);
+    expect(css).toContain('.profile-empty-state');
+    expect(css).toContain('.profile-section-heading');
     expect(css).toContain('@media (max-width: 700px)');
     expect(css).toContain('@media (max-width: 440px)');
   });

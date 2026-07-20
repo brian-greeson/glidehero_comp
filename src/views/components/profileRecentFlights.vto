@@ -1,0 +1,29 @@
+<section class="profile-section" aria-labelledby="profile-recent-flights-heading">
+  <header class="profile-section-heading">
+    <div>
+      <p class="admin-eyebrow">Flight history</p>
+      <h2 id="profile-recent-flights-heading">Recent flights</h2>
+    </div>
+    <span class="profile-section-count">Latest 20</span>
+  </header>
+  {{ if flights.length === 0 }}
+    <p class="profile-empty-state">No completed flights yet. Upload a flight to see it here.</p>
+  {{ else }}
+    <ol class="profile-flight-list">
+      {{ for flight of flights }}
+        <li class="profile-flight-item">
+          <header class="profile-flight-heading">
+            <time>{{ flight.flightDate }}</time>
+            <span>{{ flight.distance }} · {{ flight.duration }}</span>
+          </header>
+          <dl class="profile-flight-stats">
+            <div><dt>Total cells claimed</dt><dd>{{ flight.totalCellCount }}</dd></div>
+            <div><dt>New Personal Map cells</dt><dd>{{ flight.newPersonalCellCount }}</dd></div>
+            <div><dt>Direct cells</dt><dd>{{ flight.directCellCount }}</dd></div>
+            <div><dt>Enclosed cells</dt><dd>{{ flight.enclosedCellCount }}</dd></div>
+          </dl>
+        </li>
+      {{ /for }}
+    </ol>
+  {{ /if }}
+</section>

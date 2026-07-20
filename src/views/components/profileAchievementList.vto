@@ -1,0 +1,26 @@
+<section class="profile-section" aria-labelledby="profile-achievements-heading">
+  <header class="profile-section-heading">
+    <div>
+      <p class="admin-eyebrow">History</p>
+      <h2 id="profile-achievements-heading">Achievements</h2>
+    </div>
+    <span class="profile-section-count">Latest 50</span>
+  </header>
+  {{ if achievements.length === 0 }}
+    <p class="profile-empty-state">No achievements yet. Complete a flight to start building your history.</p>
+  {{ else }}
+    <ol class="profile-achievement-list">
+      {{ for achievement of achievements }}
+        <li class="profile-achievement-item">
+          <div class="profile-item-meta">
+            <span>{{ achievement.typeLabel }}</span>
+            <time>{{ achievement.earnedDate }}</time>
+          </div>
+          <h3>{{ achievement.title }}</h3>
+          <p>{{ achievement.description }}</p>
+          {{ if achievement.sourceFlightId }}<small>Flight {{ achievement.sourceFlightId }}</small>{{ /if }}
+        </li>
+      {{ /for }}
+    </ol>
+  {{ /if }}
+</section>

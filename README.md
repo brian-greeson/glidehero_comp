@@ -9,10 +9,9 @@ flight processing.
 
 ### Purpose
 
-Glide Hero is a map-based app that transforms GPS flight tracks into a
-territory-claiming game. Instead of rewarding only long-distance flights, Glide
-Hero encourages exploration by allowing pilots to permanently build their own
-map of claimed territory while participating in a lighthearted monthly
+Glide Hero transforms GPS flight tracks into a personal exploration and
+progression game. Pilots permanently grow their own Personal Map, earn
+achievements and personal records, and choose when to compare coverage in
 competition.
 
 The app is designed so that pilots of all skill levels can make meaningful
@@ -154,6 +153,10 @@ Included features:
 - Upload IGC flight logs.
 - Automatic flight processing.
 - Personal territory map.
+- Authenticated pilot profiles.
+- Persisted flight progression summaries.
+- Unique-cell milestones.
+- Total-cell and enclosed-cell personal bests.
 - Monthly competitive territory map.
 - Dynamic viewport-based leaderboard.
 - Unified grid- and polygon-authored Arena search and fixed-area leaderboards.
@@ -163,10 +166,13 @@ Included features:
 
 Excluded from Version 1:
 
-- Public profiles.
-- Social features.
-- Comments or likes.
-- Following other pilots.
+- Following.
+- Activity feeds.
+- Reactions.
+- Comments.
+- Messaging.
+- Public signed-out profiles.
+- Arena exploration achievements and leadership history.
 - Pilot-facing flight editing or deletion.
 - Historical playback.
 - Support for file formats other than IGC.
@@ -177,9 +183,10 @@ Glide Hero is not intended to replace existing flight logging applications.
 Instead, it introduces a new way to enjoy flying by rewarding exploration rather
 than only long-distance performance.
 
-Every flight has value. Pilots steadily build a permanent personal map while
-participating in a friendly monthly competition where anyone can compete by
-exploring new areas, regardless of experience level or cross-country distance.
+Every flight has value. Pilots steadily build a permanent Personal Map and
+progress through achievements and personal records. Competition remains an
+optional way to compare coverage by exploring new areas, regardless of
+experience level or cross-country distance.
 
 ## Requirements
 

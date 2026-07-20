@@ -37,6 +37,7 @@ export type UploadJob = {
 export type UploadProgress = {
   total: number;
   finished: number;
+  completed: number;
   queued: number;
   processing: number;
   failed: number;
@@ -318,7 +319,7 @@ export function createFlightUploadQueueService(
       valkey.zcard(userJobsByStatusKey(userId, 'duplicate')),
       valkey.zcard(userJobsByStatusKey(userId, 'failed')),
     ]);
-    return { total, finished: completed + duplicate + failed, queued, processing, failed };
+    return { total, finished: completed + duplicate + failed, completed, queued, processing, failed };
   }
 
   async function retireSuccessfulJob(userId: string, id: string, expectedStatus: 'completed' | 'duplicate'): Promise<boolean> {
@@ -509,7 +510,9 @@ export function createFlightUploadQueueService(
           ...completedIds.map((id) => retireSuccessfulJob(userId, String(id), 'completed')),
           ...duplicateIds.map((id) => retireSuccessfulJob(userId, String(id), 'duplicate')),
         ]);
-        if (retired.every(Boolean)) return { total: 0, finished: 0, queued: 0, processing: 0, failed: 0 };
+        if (retired.every(Boolean)) {
+          return { total: 0, finished: 0, completed: completedIds.length, queued: 0, processing: 0, failed: 0 };
+        }
         return readProgress(userId);
       }
       return progress;

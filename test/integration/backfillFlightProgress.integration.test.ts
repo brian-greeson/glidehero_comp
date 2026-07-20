@@ -98,7 +98,7 @@ async function storedProgress(userId: string) {
 async function storedAchievements(userId: string) {
   return database.db.select().from(achievements)
     .where(eq(achievements.userId, userId))
-    .orderBy(achievements.achievementKey);
+    .orderBy(achievements.earnedAt, achievements.sourceFlightId, achievements.achievementKey);
 }
 
 describe('flight-progress backfill with PostgreSQL', () => {

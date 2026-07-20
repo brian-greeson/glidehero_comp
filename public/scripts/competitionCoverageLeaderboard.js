@@ -67,8 +67,20 @@ export function renderCoverageLeaderboard({
         onSelect,
       }),
     );
-  status.textContent =
-    leaderboard.leaders.length === 0
-      ? 'No territory for this zoom level or area.'
-      : 'Select a pilot to view their coverage.';
+  const selectedPilot = [...leaderboard.leaders, ...(leaderboard.currentPilot ? [leaderboard.currentPilot] : [])]
+    .find((pilot) => pilot.userId === selectedPilotId);
+  status.replaceChildren();
+  if (!selectedPilot) {
+    status.textContent =
+      leaderboard.leaders.length === 0
+        ? 'No territory for this zoom level or area.'
+        : 'Select a pilot to view their coverage.';
+    return;
+  }
+  status.textContent = `Viewing ${selectedPilot.displayName}. `;
+  const profileLink = documentRef.createElement('a');
+  profileLink.className = 'leaderboard-profile-link';
+  profileLink.setAttribute('href', `/pilots/${encodeURIComponent(selectedPilot.userId)}`);
+  profileLink.textContent = `View ${selectedPilot.displayName}’s progress`;
+  status.append(profileLink);
 }

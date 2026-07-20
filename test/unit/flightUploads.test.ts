@@ -5,6 +5,7 @@ import { createZipFile } from '../helpers/createZipFile.js';
 
 function element() {
   const listeners = new Map();
+  const attributes = new Map();
   return {
     hidden: false,
     open: false,
@@ -12,6 +13,8 @@ function element() {
     textContent: '',
     className: '',
     classList: { add: vi.fn() },
+    setAttribute(name, value) { attributes.set(name, value); if (name === 'hidden') this.hidden = true; },
+    getAttribute(name) { return attributes.get(name) ?? null; },
     addEventListener(type, listener) { listeners.set(type, listener); },
     dispatch(type, event = {}) {
       const dispatchedEvent = { target: this, preventDefault: vi.fn(), ...event };
@@ -38,8 +41,11 @@ function uploadHarness(initialTotal, fetchImplementation) {
   const selectors = new Map([
     ['[data-upload-trigger]', element()], ['[data-upload-close]', element()],
     ['[data-upload-dialog]', element()], ['[data-upload-list]', element()], ['[data-upload-overall]', element()],
+    ['[data-upload-progress-link]', element()],
     ['[data-flight-progress-bar]', element()], ['[data-flight-progress-count]', element()],
   ]);
+  selectors.get('[data-upload-progress-link]').hidden = true;
+  selectors.get('[data-upload-progress-link]').setAttribute('href', '/profile');
   const documentRef = {
     querySelector: (selector) => selectors.get(selector) ?? null,
     querySelectorAll: () => [uploadMoreInput],
@@ -56,7 +62,7 @@ function uploadHarness(initialTotal, fetchImplementation) {
   let nextIntentId = 1;
   const defaultFetch = async (url, options = {}) => {
     if (String(url) === '/v1/igc-upload-progress') {
-      return { ok: true, json: async () => ({ total: progressTotal, finished: 0, queued: progressTotal, processing: 0, failed: 0 }) };
+      return { ok: true, json: async () => ({ total: progressTotal, finished: 0, completed: 0, queued: progressTotal, processing: 0, failed: 0 }) };
     }
     if (String(url) === '/v1/igc-uploads/intents') {
       const id = `intent-${nextIntentId++}`;
@@ -393,6 +399,70 @@ describe('flight upload active-file capacity', () => {
     expect(harness.selectors.get('[data-upload-dialog]').open).toBe(true);
     expect(harness.timers.some((timer) => timer.delay === 500)).toBe(false);
     expect(harness.windowRef.location.reload).not.toHaveBeenCalled();
+  });
+
+  it('shows a profile link after a successful flight finishes', async () => {
+    let progress = { total: 0, finished: 0, queued: 0, processing: 0, failed: 0 };
+    const harness = uploadHarness(0, (url, options, fallback) => (
+      String(url) === '/v1/igc-upload-progress'
+        ? { ok: true, json: async () => progress }
+        : fallback(url, options)
+    ));
+    const link = harness.selectors.get('[data-upload-progress-link]');
+
+    harness.select(harness.uploadInput, files(1, 'successful'));
+    await vi.waitFor(() => expect(harness.xhr.instances).toHaveLength(1));
+    harness.xhr.instances[0].succeed();
+    await vi.waitFor(() => expect(harness.selectors.get('[data-upload-overall]').textContent).toBe('1/1'));
+    progress = { total: 1, finished: 1, queued: 0, processing: 0, failed: 0 };
+    harness.timers.find((timer) => timer.delay === 5_000)();
+
+    await vi.waitFor(() => expect(link.hidden).toBe(false));
+    expect(link.getAttribute?.('href')).toBe('/profile');
+    expect(harness.selectors.get('[data-upload-dialog]').open).toBe(true);
+    expect(harness.windowRef.location.reload).not.toHaveBeenCalled();
+  });
+
+  it('does not show a profile link for a failed-only cycle and keeps closing manual', async () => {
+    let progress = { total: 0, finished: 0, queued: 0, processing: 0, failed: 0 };
+    const harness = uploadHarness(0, (url, options, fallback) => (
+      String(url) === '/v1/igc-upload-progress'
+        ? { ok: true, json: async () => progress }
+        : fallback(url, options)
+    ));
+    const link = harness.selectors.get('[data-upload-progress-link]');
+    const dialog = harness.selectors.get('[data-upload-dialog]');
+
+    harness.select(harness.uploadInput, files(1, 'failed-only'));
+    await vi.waitFor(() => expect(harness.xhr.instances).toHaveLength(1));
+    harness.xhr.instances[0].succeed();
+    await vi.waitFor(() => expect(harness.selectors.get('[data-upload-overall]').textContent).toBe('1/1'));
+    progress = { total: 1, finished: 1, queued: 0, processing: 0, failed: 1 };
+    harness.timers.find((timer) => timer.delay === 5_000)();
+
+    await vi.waitFor(() => expect(link.hidden).toBe(true));
+    expect(dialog.open).toBe(true);
+    harness.selectors.get('[data-upload-close]').dispatch('click');
+    expect(dialog.open).toBe(false);
+  });
+
+  it('does not show a profile link when a duplicate-only cycle is retired', async () => {
+    let progress = { total: 0, finished: 0, completed: 0, queued: 0, processing: 0, failed: 0 };
+    const harness = uploadHarness(0, (url, options, fallback) => (
+      String(url) === '/v1/igc-upload-progress'
+        ? { ok: true, json: async () => progress }
+        : fallback(url, options)
+    ));
+    const link = harness.selectors.get('[data-upload-progress-link]');
+
+    harness.select(harness.uploadInput, files(1, 'duplicate-only'));
+    await vi.waitFor(() => expect(harness.xhr.instances).toHaveLength(1));
+    harness.xhr.instances[0].succeed();
+    await vi.waitFor(() => expect(harness.selectors.get('[data-upload-overall]').textContent).toBe('1/1'));
+    progress = { total: 0, finished: 0, completed: 0, queued: 0, processing: 0, failed: 0 };
+    harness.timers.find((timer) => timer.delay === 5_000)();
+
+    await vi.waitFor(() => expect(link.hidden).toBe(true));
   });
 
   it('keeps the upload modal open when an upload fails', async () => {

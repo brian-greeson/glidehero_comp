@@ -358,6 +358,11 @@ describe('Global dashboard controller', () => {
     ]);
     expect(list.children[0].getAttribute('aria-pressed')).toBe('true');
     expect(overview.getAttribute('aria-pressed')).toBe('false');
+    const status = harness.elements.get('[data-territory-status]');
+    expect(status.children).toHaveLength(1);
+    expect(status.children[0].getAttribute('href')).toBe('/pilots/pilot-one');
+    expect(status.children[0].textContent).toBe('View Pilot One’s progress');
+    expect(list.children[0].getAttribute('href')).toBeNull();
 
     await overview.click();
     expect(source.setTiles).toHaveBeenLastCalledWith([
@@ -365,6 +370,8 @@ describe('Global dashboard controller', () => {
     ]);
     expect(list.children[0].getAttribute('aria-pressed')).toBe('false');
     expect(overview.getAttribute('aria-pressed')).toBe('true');
+    expect(status.children).toHaveLength(0);
+    expect(status.textContent).toBe('Select a pilot to view their coverage.');
   });
 
   it('resets pilot selection and refreshes territory and rankings when the period changes', async () => {

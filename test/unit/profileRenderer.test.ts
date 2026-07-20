@@ -22,6 +22,8 @@ describe('pilot profile renderer', () => {
       currentTotalCellRecord: 11,
       currentEnclosedCellRecord: 3,
       achievementCount: 2,
+      achievements: [],
+      recentFlights: [],
     };
 
     const current = await render({ currentUser, page: 'profile', profile: { ...profile, userId: currentUser.userId }, profileIsCurrent: true });
@@ -37,5 +39,114 @@ describe('pilot profile renderer', () => {
 
     const other = await render({ currentUser, page: 'profile', profile, profileIsCurrent: false });
     expect(other).toContain('Cloud Dancer’s Progress');
+  });
+
+  it('renders achievement and flight history without exposing private fields', async () => {
+    const render = createPageRenderer({ mapTilerApiKey: 'maptiler-test-key' });
+    const currentUser = {
+      userId: '00000000-0000-4000-8000-000000000001',
+      sessionId: '00000000-0000-4000-8000-000000000002',
+      email: 'viewer@example.com',
+      displayName: 'Sky Pilot',
+      territoryColor: '#1769AA',
+    };
+    const profile = {
+      userId: currentUser.userId,
+      displayName: 'Sky Pilot',
+      territoryColor: '#1769AA',
+      lifetimeUniqueCellCount: 30,
+      completedFlightCount: 1,
+      lifetimeDirectCellCount: 20,
+      lifetimeEnclosedCellCount: 4,
+      currentTotalCellRecord: 24,
+      currentEnclosedCellRecord: 4,
+      achievementCount: 3,
+      achievements: [
+        {
+          id: 'achievement-1',
+          achievementType: 'unique_cells_milestone',
+          typeLabel: 'Unique cell milestone',
+          earnedDate: 'Jul 20, 2026',
+          sourceFlightId: null,
+          title: '25 Unique Cells',
+          description: 'Reached 25 unique Personal Map cells, adding 17 new cells to a total of 25.',
+        },
+        {
+          id: 'achievement-2',
+          achievementType: 'personal_best_total_cells',
+          typeLabel: 'Total-cell personal best',
+          earnedDate: 'Jul 19, 2026',
+          sourceFlightId: currentUser.userId,
+          title: 'New Flight Cell Record',
+          description: 'Established an initial total-cell record of 24 cells (20 direct and 4 enclosed).',
+        },
+        {
+          id: 'achievement-3',
+          achievementType: 'personal_best_enclosed_cells',
+          typeLabel: 'Enclosed-cell personal best',
+          earnedDate: 'Jul 18, 2026',
+          sourceFlightId: null,
+          title: 'New Enclosed Cell Record',
+          description: 'Established an initial enclosed-cell record of 4 cells (20 direct and 4 enclosed).',
+        },
+      ],
+      recentFlights: [{
+        flightId: 'flight-1',
+        flightDate: 'Jul 20, 2026',
+        distance: '12.5 km',
+        duration: '1h 01m',
+        directCellCount: 20,
+        enclosedCellCount: 4,
+        totalCellCount: 24,
+        newPersonalCellCount: 17,
+      }],
+    };
+
+    const html = await render({ currentUser, page: 'profile', profile, profileIsCurrent: true });
+
+    expect(html).toContain('Achievements');
+    expect(html).toContain('25 Unique Cells');
+    expect(html).toContain('New Flight Cell Record');
+    expect(html).toContain('New Enclosed Cell Record');
+    expect(html).toContain('Recent flights');
+    expect(html).toContain('Total cells claimed');
+    expect(html).toContain('New Personal Map cells');
+    expect(html).toContain('12.5 km');
+    expect(html).toContain('1h 01m');
+    expect(html).not.toContain('Flight achievement-1');
+    expect(html).not.toContain('viewer@example.com');
+  });
+
+  it('renders clear empty states for a pilot with no history', async () => {
+    const render = createPageRenderer({ mapTilerApiKey: 'maptiler-test-key' });
+    const currentUser = {
+      userId: '00000000-0000-4000-8000-000000000001',
+      sessionId: '00000000-0000-4000-8000-000000000002',
+      email: 'viewer@example.com',
+      displayName: 'Sky Pilot',
+      territoryColor: '#1769AA',
+    };
+    const html = await render({
+      currentUser,
+      page: 'profile',
+      profile: {
+        userId: currentUser.userId,
+        displayName: 'Sky Pilot',
+        territoryColor: '#1769AA',
+        lifetimeUniqueCellCount: 0,
+        completedFlightCount: 0,
+        lifetimeDirectCellCount: 0,
+        lifetimeEnclosedCellCount: 0,
+        currentTotalCellRecord: null,
+        currentEnclosedCellRecord: null,
+        achievementCount: 0,
+        achievements: [],
+        recentFlights: [],
+      },
+      profileIsCurrent: true,
+    });
+
+    expect(html).toContain('No achievements yet. Complete a flight to start building your history.');
+    expect(html).toContain('No completed flights yet. Upload a flight to see it here.');
   });
 });

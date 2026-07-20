@@ -42,6 +42,8 @@ const pilotProfile = {
   currentTotalCellRecord: 11,
   currentEnclosedCellRecord: 3,
   achievementCount: 2,
+  achievements: [],
+  recentFlights: [],
 };
 
 const arena = {

@@ -29,7 +29,10 @@ describe('Vento page renderer', () => {
     expect(anonymous).toContain(
       '<link rel="icon" type="image/png" sizes="192x192" href="/android-chrome-192x192.png">',
     );
-    expect(anonymous).toContain('Paint the sky with your friends.');
+    expect(anonymous).toContain('Turn every flight into progress.');
+    expect(anonymous).toContain('Upload your flights. Expand your Personal Map.');
+    expect(anonymous).toContain('Set new records. Compete when you want.');
+    expect(anonymous).toContain('Start building your Personal Map.');
     expect(anonymous).toContain('class="landing" data-auth-landing data-auth-initial="login"');
     expect(anonymous).toContain('<script type="module" src="/scripts/landing.js"></script>');
     expect(anonymous).not.toContain('data-auth-tab');
@@ -77,19 +80,17 @@ describe('Vento page renderer', () => {
       ...authenticated.matchAll(/<h2[^>]*data-onboarding-heading[^>]*tabindex="-1"[^>]*>/g),
     ]).toHaveLength(6);
     expect(authenticated).toContain('Welcome to Glide Hero!');
+    expect(authenticated).toContain('Every flight grows your permanent Personal Map and can unlock new achievements. Competition is there when you want it.');
     expect(authenticated).toContain('Claim cells as you fly');
     expect(authenticated).toContain('Close the loop');
-    expect(authenticated).toContain('Build competitive territory');
+    expect(authenticated).toContain('Compare your progress');
     expect(authenticated).toContain('Explore Global and Arenas');
-    expect(authenticated).toContain('Competition periods');
-    expect(authenticated).toContain('Claim territory on a shared competitive map.');
-    expect(authenticated).toContain('Each cell is worth 1 point');
-    expect(authenticated).toContain('multiple pilots can claim the same cell');
-    expect(authenticated).toContain('All flights are submitted to the Global competition.');
-    expect(authenticated).toContain('Arenas are predefined areas of competition.');
-    expect(authenticated).toContain('Only cells inside the boundary count toward Arena points.');
-    expect(authenticated).toContain('Arena competitions reset every month.');
-    expect(authenticated).toContain('you can view claims by month or All Time.');
+    expect(authenticated).toContain('Choose your challenge');
+    expect(authenticated).toContain('Competitive maps let pilots compare coverage. Shared cells count for everyone, and competition never changes your Personal Map.');
+    expect(authenticated).toContain('Global compares coverage in the visible map.');
+    expect(authenticated).toContain('Arenas compare coverage inside a fixed boundary.');
+    expect(authenticated).toContain('Both are optional ways to challenge yourself and other pilots.');
+    expect(authenticated).toContain('View competition All Time or focus on the Current Month. Your Personal Map and achievements remain permanent.');
     expect(authenticated).toContain('data-onboarding-back');
     expect(authenticated).toContain('data-onboarding-next');
     expect(authenticated).toContain('data-onboarding-done');
@@ -101,7 +102,7 @@ describe('Vento page renderer', () => {
     expect(onboarding).toContain('id="onboarding-shared-stripes"');
     expect(onboarding).toContain('onboarding-orange-score');
     expect(onboarding).toContain('onboarding-blue-score');
-    expect(onboarding.toLowerCase()).not.toContain('coverage');
+    expect(onboarding).toContain('Global compares coverage in the visible map. Arenas compare coverage inside a fixed boundary. Both are optional ways to challenge yourself and other pilots.');
     expect(onboarding.toLowerCase()).not.toContain('most recent pilot');
     expect(onboarding.toLowerCase()).not.toContain('transfers ownership');
     expect(onboarding.toLowerCase()).not.toContain('map resets');
@@ -110,6 +111,7 @@ describe('Vento page renderer', () => {
     expect(authenticated).toContain('Help &amp; walkthrough');
     expect(authenticated).toContain('data-upload-trigger aria-controls="flight-upload-dialog"');
     expect(authenticated).toContain('data-upload-close aria-label="Close upload status"');
+    expect(authenticated).toContain('href="/profile" hidden>View my progress</a>');
     expect(authenticated).toContain('Choose flights<input data-upload-more-input');
     expect(authenticated).toContain('accept=".igc,.zip"');
     expect(authenticated).not.toContain('data-upload-input');

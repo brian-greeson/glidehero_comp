@@ -1,6 +1,6 @@
 import { extractIgcFilesFromZip } from './zipIgcFiles.js';
 
-const MAX_ACTIVE_FILES = 2000;
+const MAX_ACTIVE_FILES = 1_000;
 const MAX_FILE_BYTES = 100 * 1024 * 1024;
 const CONCURRENCY = 4;
 const PROGRESS_POLL_INTERVAL_MS = 5_000;
@@ -34,6 +34,7 @@ export function initializeFlightUploads(documentRef = document, windowRef = glob
   const uploadDialog = documentRef.querySelector('[data-upload-dialog]');
   const uploadClose = documentRef.querySelector('[data-upload-close]');
   const uploadList = documentRef.querySelector('[data-upload-list]');
+  const progressLink = documentRef.querySelector('[data-upload-progress-link]');
   const overall = documentRef.querySelector('[data-upload-overall]');
   const progressBar = documentRef.querySelector('[data-flight-progress-bar]');
   const progressCount = documentRef.querySelector('[data-flight-progress-count]');
@@ -56,6 +57,11 @@ export function initializeFlightUploads(documentRef = document, windowRef = glob
   let initialProgressResolved = false;
   let progressPollTimer = null;
   let progressRequestId = 0;
+  let successfulProgressBaseline = null;
+
+  function showProgressLink() {
+    if (progressLink) progressLink.hidden = false;
+  }
 
   function updateUploadTrigger() {
     const localWorkActive = selected > settled || currentReservations.size > 0;
@@ -173,6 +179,11 @@ export function initializeFlightUploads(documentRef = document, windowRef = glob
       if (requestId !== progressRequestId) return;
       serverTotal = progress.total;
       serverFinished = progress.finished;
+      const successfulProgress = typeof progress.completed === 'number'
+        ? Math.max(0, progress.completed)
+        : Math.max(0, progress.finished - progress.failed);
+      if (successfulProgressBaseline === null) successfulProgressBaseline = successfulProgress;
+      if (currentReservations.size > 0 && successfulProgress > successfulProgressBaseline) showProgressLink();
       for (const id of intentIdsBeforeRequest) {
         if (currentIntentIds.has(id)) representedIntentIds.add(id);
       }
@@ -212,6 +223,10 @@ export function initializeFlightUploads(documentRef = document, windowRef = glob
   }
 
   function openUploadDialog() {
+    if (!uploadDialog.open && currentReservations.size === 0) {
+      progressLink?.setAttribute('hidden', '');
+      successfulProgressBaseline = null;
+    }
     if (!uploadDialog.open) uploadDialog.showModal();
     void refreshProgress();
   }

@@ -14,6 +14,8 @@
         <p class="muted">A summary of this pilot’s Personal Map progress.</p>
       </header>
       {{ include "components/pilotProfileSummary.vto" { profile } }}
+      {{ include "components/profileAchievementList.vto" { achievements: profile.achievements } }}
+      {{ include "components/profileRecentFlights.vto" { flights: profile.recentFlights } }}
     </main>
   </section>
 {{ /layout }}
