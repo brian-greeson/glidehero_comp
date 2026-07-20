@@ -163,7 +163,7 @@ async function rebuildPersonalClaims(
   };
 }
 
-async function lockUserProgression(database: Pick<Database, 'execute'>, userId: string): Promise<void> {
+export async function lockUserProgression(database: Pick<Database, 'execute'>, userId: string): Promise<void> {
   await database.execute(sql`
     SELECT pg_advisory_xact_lock(hashtextextended(${userId}::text, 0))
   `);

@@ -21,7 +21,8 @@
     "db:check": "drizzle-kit check",
     "db:reset": "dropdb --if-exists \"$DB_NAME\" && createdb \"$DB_NAME\"",
     "import:launches": "tsx --env-file=.env src/scripts/importLaunches.ts",
-    "import:state-arenas": "tsx --env-file=.env src/scripts/importStateArenas.ts"
+    "import:state-arenas": "tsx --env-file=.env src/scripts/importStateArenas.ts",
+    "backfill:flight-progress": "tsx --env-file=.env src/scripts/backfillFlightProgress.ts"
   },
   "author": "Mountain Sentry",
   "license": "UNLICENSED",

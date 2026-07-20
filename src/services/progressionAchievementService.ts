@@ -35,6 +35,10 @@ export type PersonalBestAchievementInput = {
   flightStartedAt: Date;
   directCells: number;
   enclosedCells: number;
+  previousRecords?: {
+    totalCells: number | null;
+    enclosedCells: number | null;
+  };
 };
 
 export type ProgressionAchievementService = {
@@ -85,29 +89,36 @@ export function createProgressionAchievementService(): ProgressionAchievementSer
       const totalCells = input.directCells + input.enclosedCells;
       if (totalCells <= 0 && input.enclosedCells <= 0) return [];
 
-      const [prior] = await database
-        .select({
-          totalCells: sql<number | null>`MAX(
-            CASE
-              WHEN ${flightProgress.directCellCount} + ${flightProgress.enclosedCellCount} > 0
-              THEN ${flightProgress.directCellCount} + ${flightProgress.enclosedCellCount}
-            END
-          )`,
-          enclosedCells: sql<number | null>`MAX(
-            CASE
-              WHEN ${flightProgress.enclosedCellCount} > 0
-              THEN ${flightProgress.enclosedCellCount}
-            END
-          )`,
-        })
-        .from(flightProgress)
-        .where(and(
-          eq(flightProgress.userId, input.userId),
-          ne(flightProgress.flightId, input.sourceFlightId),
-        ));
+      let previousTotalRecord: number | null;
+      let previousEnclosedRecord: number | null;
+      if (input.previousRecords) {
+        previousTotalRecord = input.previousRecords.totalCells;
+        previousEnclosedRecord = input.previousRecords.enclosedCells;
+      } else {
+        const [prior] = await database
+          .select({
+            totalCells: sql<number | null>`MAX(
+              CASE
+                WHEN ${flightProgress.directCellCount} + ${flightProgress.enclosedCellCount} > 0
+                THEN ${flightProgress.directCellCount} + ${flightProgress.enclosedCellCount}
+              END
+            )`,
+            enclosedCells: sql<number | null>`MAX(
+              CASE
+                WHEN ${flightProgress.enclosedCellCount} > 0
+                THEN ${flightProgress.enclosedCellCount}
+              END
+            )`,
+          })
+          .from(flightProgress)
+          .where(and(
+            eq(flightProgress.userId, input.userId),
+            ne(flightProgress.flightId, input.sourceFlightId),
+          ));
 
-      const previousTotalRecord = nullableNumber(prior?.totalCells);
-      const previousEnclosedRecord = nullableNumber(prior?.enclosedCells);
+        previousTotalRecord = nullableNumber(prior?.totalCells);
+        previousEnclosedRecord = nullableNumber(prior?.enclosedCells);
+      }
       const rows: Array<{
         userId: string;
         achievementType: string;

@@ -2,6 +2,22 @@
 
 The web service and `flight-worker` component both require `VALKEY_URL`. The web service also needs the Spaces credentials to create presigned upload URLs; the worker needs Spaces and PostgreSQL access to process queued objects.
 
+## Historical flight-progress backfill
+
+Before a production backfill, pause and drain the flight workers so no new flight claims or progression evaluations race the historical order. Deploy the schema and application code, then run the default dry-run:
+
+```sh
+npm run backfill:flight-progress
+```
+
+Review the reported counts. Run the mutating command only with explicit authorization:
+
+```sh
+npm run backfill:flight-progress -- --apply
+```
+
+After successful verification, restart the flight workers. The command is rerunnable: completed flights that already have `flight_progress` are skipped, and achievement keys are unique per user.
+
 Configure the private DigitalOcean Space with a CORS rule that allows:
 
 - Origin: `https://glidehero.com`
