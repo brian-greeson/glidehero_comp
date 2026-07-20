@@ -1,7 +1,7 @@
 import { extractIgcFilesFromZip } from './zipIgcFiles.js';
 
 const MAX_ACTIVE_FILES = 2000;
-const MAX_FILE_BYTES = 75 * 1024 * 1024;
+const MAX_FILE_BYTES = 100 * 1024 * 1024;
 const CONCURRENCY = 4;
 const PROGRESS_POLL_INTERVAL_MS = 5_000;
 

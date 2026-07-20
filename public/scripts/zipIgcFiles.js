@@ -1,6 +1,6 @@
 export const MAX_ZIP_FILE_BYTES = 100 * 1024 * 1024;
 export const MAX_ZIP_EXPANDED_BYTES = 250 * 1024 * 1024;
-export const MAX_ZIP_ENTRIES = 1000;
+export const MAX_ZIP_ENTRIES = 2000;
 
 const EOCD_SIGNATURE = 0x06054b50;
 const CENTRAL_FILE_SIGNATURE = 0x02014b50;
