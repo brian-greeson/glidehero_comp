@@ -700,6 +700,47 @@ describe('FlightUploadQueueService', () => {
     expect((await service.listJobs('user-1', { page: 1, pageSize: 10 })).jobs).toHaveLength(1);
   });
 
+  it('reads the admin queue summary in batches of at most 500 jobs', async () => {
+    const valkey = new FakeValkey();
+    let inFlightGets = 0;
+    let maxInFlightGets = 0;
+    valkey.get = async (key: string) => {
+      valkey.getCalls += 1;
+      valkey.getKeys.push(key);
+      inFlightGets += 1;
+      maxInFlightGets = Math.max(maxInFlightGets, inFlightGets);
+      await Promise.resolve();
+      inFlightGets -= 1;
+      return valkey.values.get(key) ?? null;
+    };
+    for (let index = 0; index < 1_001; index += 1) {
+      const id = `job-${index}`;
+      await valkey.zadd('glidehero:uploads', { [id]: index });
+      valkey.values.set(`glidehero:upload:${id}`, JSON.stringify({
+        id,
+        userId: 'user-1',
+        originalFilename: `${id}.igc`,
+        contentType: 'text/plain',
+        byteSize: 1,
+        bucketKey: `uploads/${id}`,
+        status: index < 600 ? 'queued' : index < 900 ? 'processing' : 'failed',
+        createdAt: index,
+        updatedAt: index,
+      }));
+    }
+    const service = createFlightUploadQueueService(valkey as never, {
+      s3Client: {} as never,
+      bucketName: 'flights',
+      presign: vi.fn(async () => 'signed'),
+    });
+
+    const summary = await service.queueSummary();
+
+    expect(summary).toMatchObject({ queued: 600, processing: 300, failed: 101 });
+    expect(valkey.getCalls).toBe(1_001);
+    expect(maxInFlightGets).toBe(500);
+  });
+
   it('discovers only expired intents by score in a bounded pass without reading job records', async () => {
     const valkey = new FakeValkey();
     const now = 50_000;

@@ -11,6 +11,7 @@ export const MAX_IGC_FILE_BYTES = 10 * 1024 * 1024;
 export const ABANDONED_UPLOAD_MS = 24 * 60 * 60 * 1_000;
 export const JOB_DISPOSITION_TTL_SECONDS = 24 * 60 * 60;
 export const MAINTENANCE_BATCH_SIZE = 100;
+const QUEUE_SUMMARY_BATCH_SIZE = 500;
 
 export type UploadJobStatus = 'uploading' | 'queued' | 'processing' | 'completed' | 'duplicate' | 'failed';
 const uploadJobStatuses: UploadJobStatus[] = ['uploading', 'queued', 'processing', 'completed', 'duplicate', 'failed'];
@@ -601,7 +602,11 @@ export function createFlightUploadQueueService(
 
     async queueSummary() {
       const ids = (await valkey.zrange(allJobsKey, { start: 0, end: -1 })).map(String);
-      const jobs = (await Promise.all(ids.map(getJob))).filter((job): job is UploadJob => Boolean(job));
+      const jobs: UploadJob[] = [];
+      for (let start = 0; start < ids.length; start += QUEUE_SUMMARY_BATCH_SIZE) {
+        const batch = await Promise.all(ids.slice(start, start + QUEUE_SUMMARY_BATCH_SIZE).map(getJob));
+        jobs.push(...batch.filter((job): job is UploadJob => Boolean(job)));
+      }
       const queued = jobs.filter((job) => job.status === 'queued');
       return {
         queued: queued.length,
