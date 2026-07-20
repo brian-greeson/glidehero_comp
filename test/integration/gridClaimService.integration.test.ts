@@ -519,6 +519,44 @@ describe('GridClaimService with PostGIS', () => {
     ]);
   });
 
+  it('serializes concurrent different flights for one user across personal and competition claims', async () => {
+    const first = await persistFlight([[100, 100], [2_100, 100]]);
+    const second = await persistFlight(
+      [[3_100, 100], [5_100, 100]],
+      new Date(Date.UTC(2026, 0, 2)),
+      'UTC',
+      first.userId,
+    );
+    const service = createGridClaimService(database.db, { cellSize: 1_000 });
+
+    const results = await Promise.all([service.process(first), service.process(second)]);
+
+    expect(results.map((result) => result.newPersonalCellCount).sort((a, b) => a - b)).toEqual([3, 3]);
+    expect(results.map((result) => result.personalCellTotalAfter).sort((a, b) => a - b)).toEqual([3, 6]);
+    expect(await storedCells(1_000)).toHaveLength(6);
+    const competitionRows = await storedCompetitionCells(1_000);
+    expect(competitionRows).toHaveLength(6);
+    expect(competitionRows.filter((row) => row.claimFlight === first.flightId)).toHaveLength(3);
+    expect(competitionRows.filter((row) => row.claimFlight === second.flightId)).toHaveLength(3);
+    expect(new Set(competitionRows.map((row) => row.claimFlight))).toEqual(
+      new Set([first.flightId, second.flightId]),
+    );
+    const firstProgression = await storedProgression(first.flightId);
+    const secondProgression = await storedProgression(second.flightId);
+    expect(firstProgression).toMatchObject({
+      newPersonalCellCount: 3,
+      personalCellTotalAfter: expect.any(Number),
+    });
+    expect(secondProgression).toMatchObject({
+      newPersonalCellCount: 3,
+      personalCellTotalAfter: expect.any(Number),
+    });
+    expect(new Set([
+      firstProgression?.personalCellTotalAfter,
+      secondProgression?.personalCellTotalAfter,
+    ])).toEqual(new Set([3, 6]));
+  });
+
   it('stores independent 1000m and 2000m grid variants', async () => {
     const flight = await persistFlight([[100, 100], [2_100, 100]]);
 
@@ -603,6 +641,21 @@ describe('GridClaimService with PostGIS', () => {
     expect(await database.db.select().from(competitionGridClaims).where(eq(competitionGridClaims.claimFlight, flight.flightId))).toMatchObject([
       { competitionMonth: '2026-01-01', cellSize: 1_000, x: 99, y: 99, claimUser: flight.userId },
     ]);
+  });
+
+  it('atomically rolls back normal processing when competition month calculation fails', async () => {
+    const flight = await persistFlight([[100, 100], [900, 100]]);
+    const service = createGridClaimService(database.db, { cellSize: 1_000 });
+    await service.process(flight);
+    const personalBefore = await storedCells(1_000);
+    const competitionBefore = await storedCompetitionCells(1_000);
+    const progressionBefore = await storedProgression(flight.flightId);
+
+    await expect(service.process({ ...flight, launchTimezone: 'Invalid/Timezone' })).rejects.toThrow();
+
+    expect(await storedCells(1_000)).toEqual(personalBefore);
+    expect(await storedCompetitionCells(1_000)).toEqual(competitionBefore);
+    expect(await storedProgression(flight.flightId)).toEqual(progressionBefore);
   });
 
 });

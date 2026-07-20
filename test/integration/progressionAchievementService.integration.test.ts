@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { eq } from 'drizzle-orm';
-import { achievements, flights, flightProgress, igcFiles, personalGridClaims, trackPoints, users } from '../../src/db/schema.js';
+import { achievements, competitionGridClaims, flights, flightProgress, igcFiles, personalGridClaims, trackPoints, users } from '../../src/db/schema.js';
 import { createGridClaimService } from '../../src/services/gridClaimService.js';
 import { resetAndPushTestDatabase } from './database.js';
 
@@ -231,6 +231,27 @@ describe('Progression achievements with PostgreSQL', () => {
     expect(await storedAchievements(user.id)).toEqual(firstRows);
   });
 
+  it('serializes concurrent different flights before evaluating progression achievements', async () => {
+    const user = await createUser();
+    const service = createGridClaimService(database.db, { cellSize: 1_000 });
+    const first = await createLineFlight(user.id, 100, 9_100, new Date('2026-07-20T12:00:00Z'));
+    const second = await createLineFlight(user.id, 10_100, 19_100, new Date('2026-07-21T12:00:00Z'));
+
+    const results = await Promise.all([service.process(first), service.process(second)]);
+
+    expect(results.map((result) => result.newPersonalCellCount).sort((a, b) => a - b)).toEqual([10, 10]);
+    expect(results.map((result) => result.personalCellTotalAfter).sort((a, b) => a - b)).toEqual([10, 20]);
+    const rows = await storedAchievements(user.id);
+    const milestoneRows = rows.filter((row) => row.achievementType === 'unique_cells_milestone');
+    expect(milestoneRows).toHaveLength(1);
+    expect(milestoneRows[0]).toMatchObject({ achievementKey: 'unique-cells:10' });
+    expect(rows.filter((row) => row.achievementType === 'personal_best_total_cells')).toHaveLength(1);
+    expect(rows.filter((row) => row.achievementType === 'personal_best_enclosed_cells')).toHaveLength(0);
+    const achievementSourceIds = [...new Set(rows.map((row) => row.sourceFlightId))];
+    expect(achievementSourceIds).toHaveLength(1);
+    expect([first.flightId, second.flightId]).toContain(achievementSourceIds[0]);
+  });
+
   it('retains the achievement and clears only sourceFlightId when the source flight is deleted', async () => {
     const user = await createUser();
     const service = createGridClaimService(database.db, { cellSize: 1_000 });
@@ -279,6 +300,7 @@ describe('Progression achievements with PostgreSQL', () => {
     await expect(service.process(flight)).rejects.toThrow('achievement write failed');
     expect(await database.db.select().from(flightProgress).where(eq(flightProgress.flightId, flight.flightId))).toEqual([]);
     expect(await database.db.select().from(personalGridClaims).where(eq(personalGridClaims.claimFlight, flight.flightId))).toEqual([]);
+    expect(await database.db.select().from(competitionGridClaims).where(eq(competitionGridClaims.claimFlight, flight.flightId))).toEqual([]);
     expect(await storedAchievements(user.id)).toEqual([]);
   });
 });
