@@ -43,6 +43,7 @@ const competitionMonthValue = z.string().refine((value) => {
   }
 });
 const competitionMonthSchema = z.object({ month: competitionMonthValue.optional() }).strict();
+const pilotUserIdSchema = z.string().uuid();
 const finiteCoordinate = z.string().refine(
   (value) => value.length > 0 && value.trim() === value && Number.isFinite(Number(value)),
 ).transform(Number);
@@ -580,6 +581,59 @@ export function createWebRouter(dependencies: {
       isAdmin: isAdmin(currentUser.email),
       territoryColorSuccess: req.query.territoryColor === 'success',
     });
+  });
+
+  router.get('/profile', async (_req, res, next) => {
+    const currentUser = res.locals.currentUser;
+    if (!currentUser) {
+      res.redirect(302, '/');
+      return;
+    }
+    try {
+      const profile = await dependencies.profiles.getPilotProfile(currentUser.userId);
+      if (!profile) {
+        next();
+        return;
+      }
+      await render(res, dependencies.renderPage, 200, {
+        currentUser,
+        page: 'profile',
+        profile,
+        profileIsCurrent: true,
+        isAdmin: isAdmin(currentUser.email),
+      });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.get('/pilots/:userId', async (req, res, next) => {
+    const currentUser = res.locals.currentUser;
+    if (!currentUser) {
+      res.redirect(302, '/');
+      return;
+    }
+    const parsedUserId = pilotUserIdSchema.safeParse(req.params.userId);
+    if (!parsedUserId.success) {
+      next();
+      return;
+    }
+    try {
+      const profile = await dependencies.profiles.getPilotProfile(parsedUserId.data);
+      if (!profile) {
+        next();
+        return;
+      }
+      await render(res, dependencies.renderPage, 200, {
+        currentUser,
+        page: 'profile',
+        profile,
+        profileIsCurrent: parsedUserId.data === currentUser.userId,
+        isAdmin: isAdmin(currentUser.email),
+      });
+    } catch (error) {
+      next(error);
+    }
   });
 
   router.get('/arena/:countryCode/:arenaSlug', async (req, res, next) => {

@@ -6,12 +6,15 @@ import type { AdminUserFlight } from '../services/adminFlightService.js';
 import type { AdminUserDetail, AdminUserSummary } from '../services/adminUserService.js';
 import type { ArenaDetail } from '../services/arenaService.js';
 import type { TerritoryTileConfig } from '../config/territoryTiles.js';
+import type { PilotProfileSummary } from '../services/profileService.js';
 import { createTerritoryTileSettingsService, type TerritoryTileSettingsService } from '../services/territoryTileSettingsService.js';
 
 export type PageModel = {
   currentUser: AuthenticatedUser | null;
-  page?: 'landing' | 'global' | 'personal' | 'arena';
+  page?: 'landing' | 'global' | 'personal' | 'arena' | 'profile';
   arena?: ArenaDetail;
+  profile?: PilotProfileSummary;
+  profileIsCurrent?: boolean;
   loginError?: string;
   signupError?: string;
   loginEmail?: string;
@@ -79,6 +82,7 @@ export function createPageRenderer(options: {
       global: 'pages/global.vto',
       personal: 'pages/personal.vto',
       arena: 'pages/arena.vto',
+      profile: 'pages/profile.vto',
     }[page];
     const dashboardScript = page === 'arena' ? '/scripts/arena.js' : '/scripts/dashboard.js';
 
@@ -93,10 +97,12 @@ export function createPageRenderer(options: {
         territoryColorSuccess: false,
         isAdmin: false,
         arena: undefined,
+        profile: undefined,
+        profileIsCurrent: false,
         isDashboard: page === 'global' || page === 'personal' || page === 'arena',
         isErrorPage: false,
         dashboardScript,
-        pageStylesheet: undefined,
+        pageStylesheet: page === 'profile' ? '/styles/profile.css' : undefined,
         pageScript: undefined,
         mapTilerStyleUrl: `https://api.maptiler.com/maps/outdoor-v2/style.json?key=${options.mapTilerApiKey}`,
         territoryTileConfig: territoryTileSettings.get(),

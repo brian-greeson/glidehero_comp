@@ -1,0 +1,26 @@
+<section class="profile-summary" aria-label="Pilot progress summary">
+  <article class="profile-summary-card">
+    <dl><dt>Unique cells</dt><dd>{{ profile.lifetimeUniqueCellCount }}</dd></dl>
+  </article>
+  <article class="profile-summary-card">
+    <dl><dt>Completed flights</dt><dd>{{ profile.completedFlightCount }}</dd></dl>
+  </article>
+  <article class="profile-summary-card">
+    <dl><dt>Lifetime direct cells</dt><dd>{{ profile.lifetimeDirectCellCount }}</dd></dl>
+  </article>
+  <article class="profile-summary-card">
+    <dl><dt>Lifetime enclosed cells</dt><dd>{{ profile.lifetimeEnclosedCellCount }}</dd></dl>
+  </article>
+  <article class="profile-summary-card">
+    <dl><dt>Total-cell record</dt><dd>{{ profile.currentTotalCellRecord ?? '—' }}</dd></dl>
+  </article>
+  <article class="profile-summary-card">
+    <dl><dt>Enclosed-cell record</dt><dd>{{ profile.currentEnclosedCellRecord ?? '—' }}</dd></dl>
+  </article>
+  <article class="profile-summary-card">
+    <dl><dt>Achievements</dt><dd>{{ profile.achievementCount }}</dd></dl>
+  </article>
+  <article class="profile-summary-card">
+    <dl><dt>Map color</dt><dd class="profile-color-value"><span class="profile-color-swatch" style="--profile-territory-color: {{ profile.territoryColor }}" aria-hidden="true"></span>{{ profile.territoryColor }}</dd></dl>
+  </article>
+</section>

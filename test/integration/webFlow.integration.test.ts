@@ -30,7 +30,7 @@ describe('GlideHero browser authentication flow', () => {
     if (!testDatabase) throw new Error('Test database was not initialized.');
 
     const auth = createAuthService(testDatabase.db, { sessionTtlSeconds: 604800 });
-    const profiles = createProfileService(testDatabase.db);
+    const profiles = createProfileService(testDatabase.db, { cellSize: 1_000 });
     const gridClaim = createGridClaimService(testDatabase.db, { cellSize: 1_000 });
     const mapGrid = createMapGridService(testDatabase.db, { cellSize: 1_000 });
     const coverage = createMonthlyCoverageService(testDatabase.db, { cellSize: 1_000 });

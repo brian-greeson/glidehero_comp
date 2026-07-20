@@ -36,7 +36,7 @@ const monthlyCoverage = createMonthlyCoverageService(db, { cellSize: config.grid
 const mapGrid = createMapGridService(db, { cellSize: config.gridClaimCellSize });
 const territoryTiles = createTerritoryTileService(db, { cellSize: config.gridClaimCellSize });
 const territoryTileSettings = createTerritoryTileSettingsService();
-const profiles = createProfileService(db);
+const profiles = createProfileService(db, { cellSize: config.gridClaimCellSize });
 const uploadQueue = createFlightUploadQueueService(valkey, {
   s3Client,
   bucketName: config.bucket.bucketName,

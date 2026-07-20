@@ -1,0 +1,19 @@
+{{ layout "layouts/appLayout.vto" }}
+  <section class="admin-page profile-page">
+    <header class="profile-nav">
+      <a class="brand" href="/personal" aria-label="Glide Hero dashboard">
+        <img class="brand-logo" src="/android-chrome-192x192.png" alt=""><span class="brand-name">GLIDE HERO</span>
+      </a>
+      <a class="profile-nav-link" href="/personal">Personal Map</a>
+    </header>
+    <main class="profile-content">
+      <a class="profile-back-link" href="/personal">← Back to Personal Map</a>
+      <header class="profile-heading">
+        <p class="admin-eyebrow">Pilot progress</p>
+        <h1>{{ if profileIsCurrent }}My Progress{{ else }}{{ profile.displayName }}’s Progress{{ /if }}</h1>
+        <p class="muted">A summary of this pilot’s Personal Map progress.</p>
+      </header>
+      {{ include "components/pilotProfileSummary.vto" { profile } }}
+    </main>
+  </section>
+{{ /layout }}

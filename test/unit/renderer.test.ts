@@ -64,6 +64,7 @@ describe('Vento page renderer', () => {
     expect(authenticated).toContain('pilot@example.com');
     expect(authenticated).toContain('action="/logout"');
     expect(authenticated).toContain('action="/profile/territory-color"');
+    expect(authenticated).toContain('href="/profile">My Progress</a>');
     expect(authenticated).toContain('value="#1769AA"');
     expect(authenticated).not.toContain('data-competition-coverage="global"');
     expect(authenticated).toContain('data-dashboard-map');

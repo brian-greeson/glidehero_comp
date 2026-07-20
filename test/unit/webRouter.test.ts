@@ -31,6 +31,19 @@ const user = {
   territoryColor: '#1769AA',
 };
 
+const pilotProfile = {
+  userId: '00000000-0000-4000-8000-000000000003',
+  displayName: 'Cloud Dancer',
+  territoryColor: '#A1B2C3',
+  lifetimeUniqueCellCount: 12,
+  completedFlightCount: 3,
+  lifetimeDirectCellCount: 20,
+  lifetimeEnclosedCellCount: 4,
+  currentTotalCellRecord: 11,
+  currentEnclosedCellRecord: 3,
+  achievementCount: 2,
+};
+
 const arena = {
   id: '00000000-0000-4000-8000-000000000099',
   sourceId: 745,
@@ -84,7 +97,10 @@ function dependencies() {
       `<div>${model.loginError ?? model.signupError ?? ''}</div></body></html>`,
   );
   const middleware = createCurrentUserMiddleware(auth, cookie);
-  const profiles: ProfileService = { updateTerritoryColor: vi.fn(async () => undefined) };
+  const profiles: ProfileService = {
+    updateTerritoryColor: vi.fn(async () => undefined),
+    getPilotProfile: vi.fn(async () => null),
+  };
   const gridClaim: GridClaimService = {
     getViewportStats: vi.fn(async () => viewportStats),
     process: vi.fn(async () => ({
@@ -643,7 +659,10 @@ describe('webRouter', () => {
     const router = createWebRouter({
       auth,
       cookie,
-      profiles: { updateTerritoryColor: vi.fn(async () => undefined) },
+      profiles: {
+        updateTerritoryColor: vi.fn(async () => undefined),
+        getPilotProfile: vi.fn(async () => null),
+      },
       gridClaim: {
         getViewportStats: vi.fn(async () => viewportStats),
         process: vi.fn(async () => ({
@@ -698,6 +717,81 @@ describe('webRouter', () => {
         'glidehero_session=; Max-Age=0; Path=/; HttpOnly; SameSite=Lax',
       );
       expect(auth.logout).toHaveBeenCalledWith('valid-token');
+    });
+  });
+
+  it('serves the authenticated current pilot profile and passes only the summary to the page', async () => {
+    const { app, profiles, renderPage } = dependencies();
+    vi.mocked(profiles.getPilotProfile).mockResolvedValueOnce({ ...pilotProfile, userId: user.userId });
+    await withServer(app, async (baseUrl) => {
+      const response = await fetch(`${baseUrl}/profile`, {
+        headers: { cookie: 'glidehero_session=valid-token' },
+      });
+
+      expect(response.status).toBe(200);
+      expect(profiles.getPilotProfile).toHaveBeenCalledWith(user.userId);
+      expect(renderPage).toHaveBeenCalledWith(expect.objectContaining({
+        page: 'profile',
+        profile: { ...pilotProfile, userId: user.userId },
+        profileIsCurrent: true,
+      }));
+    });
+  });
+
+  it('serves a valid authenticated pilot profile without exposing the pilot email', async () => {
+    const base = dependencies();
+    vi.mocked(base.profiles.getPilotProfile).mockResolvedValueOnce(pilotProfile);
+    const router = createWebRouter({
+      auth: base.auth,
+      cookie: base.cookie,
+      profiles: base.profiles,
+      gridClaim: base.gridClaim,
+      mapGrid: base.mapGrid,
+      coverage: base.coverage,
+      territoryTiles: base.territoryTiles,
+      arenas: base.arenas,
+      renderPage: createPageRenderer({ mapTilerApiKey: 'maptiler-test-key' }),
+    });
+    const app = createApp({ webMiddleware: [createCurrentUserMiddleware(base.auth, base.cookie), router] });
+
+    await withServer(app, async (baseUrl) => {
+      const response = await fetch(`${baseUrl}/pilots/${pilotProfile.userId}`, {
+        headers: { cookie: 'glidehero_session=valid-token' },
+      });
+      const html = await response.text();
+
+      expect(response.status).toBe(200);
+      expect(html).toContain('Cloud Dancer’s Progress');
+      expect(html).toContain('12');
+      expect(html).toContain('href="/personal"');
+      expect(html).not.toContain('cloud-dancer@example.com');
+    });
+  });
+
+  it('requires authentication and returns normal HTML 404s for invalid or missing pilot profiles', async () => {
+    const { app, profiles } = dependencies();
+    await withServer(app, async (baseUrl) => {
+      const anonymous = await fetch(`${baseUrl}/profile`, { redirect: 'manual' });
+      expect(anonymous.status).toBe(302);
+      expect(anonymous.headers.get('location')).toBe('/');
+
+      const anonymousPilot = await fetch(`${baseUrl}/pilots/${pilotProfile.userId}`, { redirect: 'manual' });
+      expect(anonymousPilot.status).toBe(302);
+      expect(anonymousPilot.headers.get('location')).toBe('/');
+
+      const invalid = await fetch(`${baseUrl}/pilots/not-a-uuid`, {
+        headers: { cookie: 'glidehero_session=valid-token' },
+      });
+      expect(invalid.status).toBe(404);
+      expect(invalid.headers.get('content-type')).toContain('text/html');
+      expect(profiles.getPilotProfile).not.toHaveBeenCalled();
+
+      const missing = await fetch(`${baseUrl}/pilots/${pilotProfile.userId}`, {
+        headers: { cookie: 'glidehero_session=valid-token' },
+      });
+      expect(missing.status).toBe(404);
+      expect(missing.headers.get('content-type')).toContain('text/html');
+      expect(profiles.getPilotProfile).toHaveBeenCalledWith(pilotProfile.userId);
     });
   });
 

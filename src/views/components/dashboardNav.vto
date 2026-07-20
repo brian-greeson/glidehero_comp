@@ -15,6 +15,7 @@
       </button>
       <section id="account-popover" class="account-popover" data-account-popover hidden>
         <p class="account-email">{{ currentUser.email }}</p>
+        <a class="profile-link" href="/profile">My Progress</a>
         {{ if isAdmin }}<a class="admin-link" href="/admin">Admin</a>{{ /if }}
         <button type="button" class="account-help-button" data-onboarding-trigger aria-controls="glide-hero-onboarding">Help &amp; walkthrough</button>
         <form method="post" action="/profile/territory-color">
