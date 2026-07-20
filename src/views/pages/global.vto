@@ -6,8 +6,8 @@
   <section class="map-stage" aria-label="Global competition coverage map">
     <div class="map-canvas" data-territory-map data-map-style-url="{{ mapTilerStyleUrl }}"
       data-current-user-id="{{ currentUser.userId }}" data-territory-color="{{ currentUser.territoryColor }}"
-      data-territory-tile-minimum-zoom="{{ territoryTileConfig.competition.minimumZoom }}"
-      data-territory-tile-maximum-zoom="{{ territoryTileConfig.competition.maximumZoom }}"></div>
+      data-territory-tile-minimum-zoom="{{ if territoryTileConfig.competition.minimumZoom === 0 }}0{{ else }}{{ territoryTileConfig.competition.minimumZoom }}{{ /if }}"
+      data-territory-tile-maximum-zoom="{{ if territoryTileConfig.competition.maximumZoom === 0 }}0{{ else }}{{ territoryTileConfig.competition.maximumZoom }}{{ /if }}"></div>
     {{ include "components/arenaSearch.vto" }}
     <p class="map-empty-state" data-map-empty-state hidden></p>
     {{ include "components/mapFlightAidStatus.vto" }}

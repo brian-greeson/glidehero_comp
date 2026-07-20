@@ -9,13 +9,22 @@ import { normalizeTerritoryColor, type ProfileService } from '../services/profil
 import type { GridClaimService } from '../services/gridClaimService.js';
 import type { AdminFlightService } from '../services/adminFlightService.js';
 import type { ArenaService } from '../services/arenaService.js';
-import type { PageModel, PageRenderer } from '../views/renderer.js';
-import type { AdminPageRenderer } from '../views/renderer.js';
+import type {
+  AdminMapSettingsPageRenderer,
+  AdminPageRenderer,
+  PageModel,
+  PageRenderer,
+} from '../views/renderer.js';
 import type { FlightUploadQueueService } from '../services/flightUploadQueueService.js';
 import type { FailedFlightCleanupService } from '../services/failedFlightCleanupService.js';
 import type { TerritoryTileService } from '../services/territoryTileService.js';
+import {
+  createTerritoryTileSettingsService,
+  MAXIMUM_TERRITORY_TILE_ZOOM,
+  MINIMUM_TERRITORY_TILE_ZOOM,
+  type TerritoryTileSettingsService,
+} from '../services/territoryTileSettingsService.js';
 import type { SessionCookie } from './sessionCookie.js';
-import { territoryTileConfig } from '../config/territoryTiles.js';
 
 const email = z.string().trim().toLowerCase().pipe(z.email());
 const password = z.string().min(3).max(128);
@@ -57,6 +66,16 @@ const tileQuerySchema = z.object({
   month: competitionMonthValue.optional(),
   pilot: z.string().uuid().optional(),
 }).strict();
+const territoryTileZoomSchema = z.string().trim().regex(/^\d+$/).transform(Number)
+  .pipe(z.number().int().min(MINIMUM_TERRITORY_TILE_ZOOM).max(MAXIMUM_TERRITORY_TILE_ZOOM));
+const territoryTileSettingsSchema = z.object({
+  personalMinimumZoom: territoryTileZoomSchema,
+  personalMaximumZoom: territoryTileZoomSchema,
+  competitionMinimumZoom: territoryTileZoomSchema,
+  competitionMaximumZoom: territoryTileZoomSchema,
+}).strict()
+  .refine((settings) => settings.personalMinimumZoom <= settings.personalMaximumZoom)
+  .refine((settings) => settings.competitionMinimumZoom <= settings.competitionMaximumZoom);
 
 function territoryTileCoordinates(
   zoom: { minimumZoom: number; maximumZoom: number },
@@ -106,8 +125,11 @@ export function createWebRouter(dependencies: {
   adminEmails?: readonly string[];
   adminFlights?: AdminFlightService;
   renderAdminPage?: AdminPageRenderer;
+  territoryTileSettings?: TerritoryTileSettingsService;
+  renderAdminMapSettingsPage?: AdminMapSettingsPageRenderer;
 }) {
   const router = Router();
+  const territoryTileSettings = dependencies.territoryTileSettings ?? createTerritoryTileSettingsService();
   const adminEmails = new Set((dependencies.adminEmails ?? []).map((email) => email.trim().toLowerCase()));
   const isAdmin = (email: string) => adminEmails.has(email.trim().toLowerCase());
 
@@ -252,7 +274,7 @@ export function createWebRouter(dependencies: {
       next(new AppError(401, 'unauthorized', 'Sign in to view your personal territory.'));
       return;
     }
-    const coordinates = territoryTileCoordinates(territoryTileConfig.personal, req.params);
+    const coordinates = territoryTileCoordinates(territoryTileSettings.get().personal, req.params);
     if (!coordinates || Object.keys(req.query).length > 0) {
       res.status(400).json({ error: { code: 'invalid_request', message: 'Personal territory tile coordinates are invalid.' } });
       return;
@@ -324,7 +346,7 @@ export function createWebRouter(dependencies: {
       next(new AppError(401, 'unauthorized', 'Sign in to view competition territory.'));
       return;
     }
-    const coordinates = territoryTileCoordinates(territoryTileConfig.competition, req.params);
+    const coordinates = territoryTileCoordinates(territoryTileSettings.get().competition, req.params);
     const query = tileQuerySchema.safeParse(req.query);
     if (!coordinates || !query.success) {
       res.status(400).json({ error: { code: 'invalid_request', message: 'Competition territory tile request is invalid.' } });
@@ -444,7 +466,7 @@ export function createWebRouter(dependencies: {
       return;
     }
     const sourceId = arenaSourceIdSchema.safeParse(req.params.sourceId);
-    const coordinates = territoryTileCoordinates(territoryTileConfig.competition, req.params);
+    const coordinates = territoryTileCoordinates(territoryTileSettings.get().competition, req.params);
     const query = tileQuerySchema.safeParse(req.query);
     if (!sourceId.success || !coordinates || !query.success) {
       res.status(400).json({ error: { code: 'invalid_request', message: 'Arena territory tile request is invalid.' } });
@@ -604,6 +626,61 @@ export function createWebRouter(dependencies: {
         reprocessSuccess: req.query.reprocess === 'success',
         reprocessError: req.query.reprocess === 'error',
       }));
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.get('/admin/map-settings', async (req, res, next) => {
+    const currentUser = res.locals.currentUser;
+    if (!currentUser || !hasAdminAccess(currentUser)) {
+      next(new AppError(403, 'unauthorized', 'Admin access is required.'));
+      return;
+    }
+    if (!dependencies.renderAdminMapSettingsPage) {
+      throw new Error('Admin map settings dependencies are not configured.');
+    }
+
+    try {
+      res.status(200).type('html').send(await dependencies.renderAdminMapSettingsPage({
+        currentUser,
+        settings: territoryTileSettings.get(),
+        saveSuccess: req.query.save === 'success',
+        saveError: req.query.save === 'error',
+      }));
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.post('/admin/map-settings', async (req, res, next) => {
+    const currentUser = res.locals.currentUser;
+    if (!currentUser || !hasAdminAccess(currentUser)) {
+      next(new AppError(403, 'unauthorized', 'Admin access is required.'));
+      return;
+    }
+    if (!dependencies.renderAdminMapSettingsPage) {
+      throw new Error('Admin map settings dependencies are not configured.');
+    }
+
+    const parsed = territoryTileSettingsSchema.safeParse(formBody(req.body));
+    if (!parsed.success) {
+      res.redirect(303, '/admin/map-settings?save=error');
+      return;
+    }
+
+    try {
+      territoryTileSettings.update({
+        personal: {
+          minimumZoom: parsed.data.personalMinimumZoom,
+          maximumZoom: parsed.data.personalMaximumZoom,
+        },
+        competition: {
+          minimumZoom: parsed.data.competitionMinimumZoom,
+          maximumZoom: parsed.data.competitionMaximumZoom,
+        },
+      });
+      res.redirect(303, '/admin/map-settings?save=success');
     } catch (error) {
       next(error);
     }

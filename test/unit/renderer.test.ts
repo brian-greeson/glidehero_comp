@@ -1,11 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import {
   createAdminAreaPageRenderer,
+  createAdminMapSettingsPageRenderer,
   createAdminPageRenderer,
   createAdminUserPageRenderer,
   createErrorPageRenderer,
   createPageRenderer,
 } from '../../src/views/renderer.js';
+import { createTerritoryTileSettingsService } from '../../src/services/territoryTileSettingsService.js';
 
 describe('Vento page renderer', () => {
   const render = createPageRenderer({ mapTilerApiKey: 'maptiler-test-key' });
@@ -205,6 +207,33 @@ describe('Vento page renderer', () => {
     expect(arena).toContain('<script type="module" src="/scripts/arena.js"></script>');
   });
 
+  it('reads current runtime tile settings for each new dashboard render', async () => {
+    const territoryTileSettings = createTerritoryTileSettingsService();
+    const runtimeRender = createPageRenderer({
+      mapTilerApiKey: 'maptiler-test-key',
+      territoryTileSettings,
+    });
+    territoryTileSettings.update({
+      personal: { minimumZoom: 0, maximumZoom: 0 },
+      competition: { minimumZoom: 0, maximumZoom: 0 },
+    });
+    const currentUser = {
+      userId: '00000000-0000-4000-8000-000000000001',
+      sessionId: '00000000-0000-4000-8000-000000000002',
+      email: 'pilot@example.com',
+      displayName: 'Sky Pilot',
+      territoryColor: '#1769AA',
+    };
+
+    const personal = await runtimeRender({ currentUser, page: 'personal' });
+    const global = await runtimeRender({ currentUser, page: 'global' });
+
+    expect(personal).toContain('data-territory-tile-minimum-zoom="0"');
+    expect(personal).toContain('data-territory-tile-maximum-zoom="0"');
+    expect(global).toContain('data-territory-tile-minimum-zoom="0"');
+    expect(global).toContain('data-territory-tile-maximum-zoom="0"');
+  });
+
   it('renders the generic landing-out 404 without dashboard or landing scripts', async () => {
     const html = await createErrorPageRenderer()({ currentUser: null, status: 404 });
 
@@ -266,10 +295,38 @@ describe('Vento page renderer', () => {
     expect(html).not.toContain('dashboard.js');
     expect(html).not.toContain('maplibre-gl');
     expect(html).toContain('href="/admin/areas"');
-    expect(html).toContain(
-      'href="/admin" class="admin-tab is-active" aria-current="page">Recent activity</a>',
-    );
+    expect(html).toContain('href="/admin" class="admin-tab is-active" aria-current="page">System</a>');
+    expect(html).toContain('aria-label="System sections"');
+    expect(html).toContain('href="/admin" class="admin-system-tab is-active" aria-current="page">Recent activity</a>');
+    expect(html).toContain('href="/admin/map-settings" class="admin-system-tab">Map settings</a>');
     expect(html).toContain('href="/admin/users"');
+  });
+
+  it('renders all four runtime map settings in one System form', async () => {
+    const html = await createAdminMapSettingsPageRenderer()({
+      currentUser: {
+        userId: '00000000-0000-4000-8000-000000000001',
+        sessionId: '00000000-0000-4000-8000-000000000002',
+        email: 'admin@example.com',
+        displayName: 'Admin',
+        territoryColor: '#1769AA',
+      },
+      settings: {
+        personal: { minimumZoom: 0, maximumZoom: 11 },
+        competition: { minimumZoom: 0, maximumZoom: 12 },
+      },
+      saveSuccess: true,
+    });
+
+    expect(html).toContain('href="/admin" class="admin-tab is-active" aria-current="page">System</a>');
+    expect(html).toContain('href="/admin/map-settings" class="admin-system-tab is-active" aria-current="page">Map settings</a>');
+    expect(html).toContain('action="/admin/map-settings"');
+    expect(html).toContain('name="personalMinimumZoom" min="0" max="22" step="1" required value="0"');
+    expect(html).toContain('name="personalMaximumZoom" min="0" max="22" step="1" required value="11"');
+    expect(html).toContain('name="competitionMinimumZoom" min="0" max="22" step="1" required value="0"');
+    expect(html).toContain('name="competitionMaximumZoom" min="0" max="22" step="1" required value="12"');
+    expect(html).toContain('Save settings');
+    expect(html).toContain('Map settings were updated for this runtime.');
   });
 
   it('renders user management with protected self-service and terminal flight actions', async () => {

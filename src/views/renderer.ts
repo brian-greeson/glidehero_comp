@@ -5,7 +5,8 @@ import type { AdminFlight } from '../services/adminFlightService.js';
 import type { AdminUserFlight } from '../services/adminFlightService.js';
 import type { AdminUserDetail, AdminUserSummary } from '../services/adminUserService.js';
 import type { ArenaDetail } from '../services/arenaService.js';
-import { territoryTileConfig } from '../config/territoryTiles.js';
+import type { TerritoryTileConfig } from '../config/territoryTiles.js';
+import { createTerritoryTileSettingsService, type TerritoryTileSettingsService } from '../services/territoryTileSettingsService.js';
 
 export type PageModel = {
   currentUser: AuthenticatedUser | null;
@@ -37,6 +38,12 @@ export type AdminPageRenderer = (model: {
 export type AdminAreaPageRenderer = (model: {
   currentUser: AuthenticatedUser;
 }) => Promise<string>;
+export type AdminMapSettingsPageRenderer = (model: {
+  currentUser: AuthenticatedUser;
+  settings: TerritoryTileConfig;
+  saveSuccess?: boolean;
+  saveError?: boolean;
+}) => Promise<string>;
 export type AdminUserPageRenderer = (model: {
   currentUser: AuthenticatedUser;
   users: AdminUserSummary[];
@@ -58,8 +65,12 @@ function createEnvironment() {
   });
 }
 
-export function createPageRenderer(options: { mapTilerApiKey: string }): PageRenderer {
+export function createPageRenderer(options: {
+  mapTilerApiKey: string;
+  territoryTileSettings?: TerritoryTileSettingsService;
+}): PageRenderer {
   const environment = createEnvironment();
+  const territoryTileSettings = options.territoryTileSettings ?? createTerritoryTileSettingsService();
 
   return async (model) => {
     const page = model.page ?? (model.currentUser ? 'personal' : 'landing');
@@ -88,7 +99,7 @@ export function createPageRenderer(options: { mapTilerApiKey: string }): PageRen
         pageStylesheet: undefined,
         pageScript: undefined,
         mapTilerStyleUrl: `https://api.maptiler.com/maps/outdoor-v2/style.json?key=${options.mapTilerApiKey}`,
-        territoryTileConfig,
+        territoryTileConfig: territoryTileSettings.get(),
         ...model,
       })
     ).content;
@@ -133,6 +144,23 @@ export function createAdminPageRenderer(): AdminPageRenderer {
       pageStylesheet: undefined,
       pageScript: undefined,
       queueSummary: undefined,
+      ...model,
+    })
+  ).content;
+}
+
+export function createAdminMapSettingsPageRenderer(): AdminMapSettingsPageRenderer {
+  const environment = createEnvironment();
+
+  return async (model) => (
+    await environment.run('pages/adminMapSettings.vto', {
+      saveSuccess: false,
+      saveError: false,
+      isDashboard: false,
+      isErrorPage: false,
+      dashboardScript: '',
+      pageStylesheet: undefined,
+      pageScript: undefined,
       ...model,
     })
   ).content;

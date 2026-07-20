@@ -4,8 +4,8 @@
     <section class="map-stage" aria-label="Personal territory map">
       <div class="map-canvas" data-dashboard-map data-map-style-url="{{ mapTilerStyleUrl }}"
         data-current-user-id="{{ currentUser.userId }}" data-territory-color="{{ currentUser.territoryColor }}"
-        data-territory-tile-minimum-zoom="{{ territoryTileConfig.personal.minimumZoom }}"
-        data-territory-tile-maximum-zoom="{{ territoryTileConfig.personal.maximumZoom }}"></div>
+        data-territory-tile-minimum-zoom="{{ if territoryTileConfig.personal.minimumZoom === 0 }}0{{ else }}{{ territoryTileConfig.personal.minimumZoom }}{{ /if }}"
+        data-territory-tile-maximum-zoom="{{ if territoryTileConfig.personal.maximumZoom === 0 }}0{{ else }}{{ territoryTileConfig.personal.maximumZoom }}{{ /if }}"></div>
       <p class="map-empty-state" data-map-empty-state hidden>Map unavailable. Check your connection and try again.</p>
       {{ include "components/mapFlightAidStatus.vto" }}
     </section>

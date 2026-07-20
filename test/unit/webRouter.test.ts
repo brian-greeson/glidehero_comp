@@ -10,6 +10,7 @@ import type { ArenaService } from '../../src/services/arenaService.js';
 import type { MapGridService } from '../../src/services/mapGridService.js';
 import type { FlightUploadQueueService } from '../../src/services/flightUploadQueueService.js';
 import type { FailedFlightCleanupService } from '../../src/services/failedFlightCleanupService.js';
+import { createTerritoryTileSettingsService } from '../../src/services/territoryTileSettingsService.js';
 import { createPageRenderer } from '../../src/views/renderer.js';
 import { createCurrentUserMiddleware } from '../../src/web/currentUserMiddleware.js';
 import { createSessionCookie } from '../../src/web/sessionCookie.js';
@@ -300,6 +301,92 @@ describe('webRouter', () => {
       expect(reprocess.status).toBe(303);
       expect(reprocess.headers.get('location')).toBe('/admin?reprocess=success');
       expect(adminFlights.reprocessFlight).toHaveBeenCalledWith({ flightId: '00000000-0000-4000-8000-000000000020' });
+    });
+  });
+
+  it('updates admin map settings for subsequent renders and tile requests in the current runtime', async () => {
+    const base = dependencies();
+    const territoryTileSettings = createTerritoryTileSettingsService();
+    const renderAdminMapSettingsPage = vi.fn(async () => '<html><body>Map settings</body></html>');
+    const router = createWebRouter({
+      auth: base.auth,
+      cookie: base.cookie,
+      profiles: base.profiles,
+      gridClaim: base.gridClaim,
+      mapGrid: base.mapGrid,
+      coverage: base.coverage,
+      territoryTiles: base.territoryTiles,
+      arenas: base.arenas,
+      renderPage: base.renderPage,
+      adminEmails: ['PILOT@example.com'],
+      territoryTileSettings,
+      renderAdminMapSettingsPage,
+    });
+    const app = createApp({
+      webMiddleware: [createCurrentUserMiddleware(base.auth, base.cookie), router],
+    });
+    const adminHeaders = { cookie: 'glidehero_session=valid-token' };
+
+    await withServer(app, async (baseUrl) => {
+      expect((await fetch(`${baseUrl}/admin/map-settings`)).status).toBe(403);
+      expect((await fetch(`${baseUrl}/admin/map-settings`, { method: 'POST' })).status).toBe(403);
+
+      const settingsPage = await fetch(`${baseUrl}/admin/map-settings`, { headers: adminHeaders });
+      expect(settingsPage.status).toBe(200);
+      expect(await settingsPage.text()).toContain('Map settings');
+      expect(renderAdminMapSettingsPage).toHaveBeenCalledWith(expect.objectContaining({
+        settings: {
+          personal: { minimumZoom: 4, maximumZoom: 14 },
+          competition: { minimumZoom: 4, maximumZoom: 14 },
+        },
+      }));
+
+      const saved = await fetch(`${baseUrl}/admin/map-settings`, {
+        method: 'POST',
+        redirect: 'manual',
+        headers: { ...adminHeaders, 'content-type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+          personalMinimumZoom: '5',
+          personalMaximumZoom: '11',
+          competitionMinimumZoom: '6',
+          competitionMaximumZoom: '12',
+        }),
+      });
+      expect(saved.status).toBe(303);
+      expect(saved.headers.get('location')).toBe('/admin/map-settings?save=success');
+      expect(territoryTileSettings.get()).toEqual({
+        personal: { minimumZoom: 5, maximumZoom: 11 },
+        competition: { minimumZoom: 6, maximumZoom: 12 },
+      });
+
+      expect((await fetch(`${baseUrl}/v1/personal-territory/tiles/4/0/0.mvt`, { headers: adminHeaders })).status).toBe(400);
+      expect((await fetch(`${baseUrl}/v1/personal-territory/tiles/5/0/0.mvt`, { headers: adminHeaders })).status).toBe(200);
+      expect((await fetch(`${baseUrl}/v1/competition-territory/tiles/5/0/0.mvt`, { headers: adminHeaders })).status).toBe(400);
+      expect((await fetch(`${baseUrl}/v1/competition-territory/tiles/6/0/0.mvt`, { headers: adminHeaders })).status).toBe(200);
+
+      const invalid = await fetch(`${baseUrl}/admin/map-settings`, {
+        method: 'POST',
+        redirect: 'manual',
+        headers: { ...adminHeaders, 'content-type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+          personalMinimumZoom: '12',
+          personalMaximumZoom: '11',
+          competitionMinimumZoom: '6',
+          competitionMaximumZoom: '23',
+        }),
+      });
+      expect(invalid.status).toBe(303);
+      expect(invalid.headers.get('location')).toBe('/admin/map-settings?save=error');
+      expect(territoryTileSettings.get()).toEqual({
+        personal: { minimumZoom: 5, maximumZoom: 11 },
+        competition: { minimumZoom: 6, maximumZoom: 12 },
+      });
+
+      await fetch(`${baseUrl}/admin/map-settings?save=success`, { headers: adminHeaders });
+      expect(renderAdminMapSettingsPage).toHaveBeenLastCalledWith(expect.objectContaining({
+        saveSuccess: true,
+        saveError: false,
+      }));
     });
   });
 

@@ -1,8 +1,9 @@
 {{ layout "layouts/appLayout.vto" }}
 
   <section class="admin-page">
-    {{ include "components/adminNav.vto" { activeAdminPage: "recent" } }}
+    {{ include "components/adminNav.vto" { activeAdminPage: "system" } }}
     <div class="admin-content">
+      {{ include "components/adminSystemNav.vto" { activeSystemPage: "recent" } }}
       <div>
         <p class="admin-eyebrow">Administration</p>
         <h1>Recent activity</h1>
