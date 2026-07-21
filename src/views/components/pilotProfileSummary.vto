@@ -1,29 +1,24 @@
-<section class="profile-summary" aria-label="Pilot progress summary">
-  <article class="profile-summary-card">
-    <dl><dt>Unique cells</dt><dd>{{ profile.lifetimeUniqueCellCount }}</dd></dl>
-  </article>
-  <article class="profile-summary-card profile-milestone-card">
-    <dl><dt>Next milestone</dt><dd>{{ profile.uniqueCellsToNextMilestone }} more {{ if profile.uniqueCellsToNextMilestone === 1 }}cell{{ else }}cells{{ /if }} to reach {{ profile.nextUniqueCellMilestone }}.</dd></dl>
-  </article>
-  <article class="profile-summary-card">
-    <dl><dt>Completed flights</dt><dd>{{ profile.completedFlightCount }}</dd></dl>
-  </article>
-  <article class="profile-summary-card">
-    <dl><dt>Lifetime direct cells</dt><dd>{{ profile.lifetimeDirectCellCount }}</dd></dl>
-  </article>
-  <article class="profile-summary-card">
-    <dl><dt>Lifetime enclosed cells</dt><dd>{{ profile.lifetimeEnclosedCellCount }}</dd></dl>
-  </article>
-  <article class="profile-summary-card">
-    <dl><dt>Total-cell record</dt><dd>{{ profile.currentTotalCellRecord ?? '—' }}</dd></dl>
-  </article>
-  <article class="profile-summary-card">
-    <dl><dt>Enclosed-cell record</dt><dd>{{ profile.currentEnclosedCellRecord ?? '—' }}</dd></dl>
-  </article>
-  <article class="profile-summary-card">
-    <dl><dt>Achievements</dt><dd>{{ profile.achievementCount }}</dd></dl>
-  </article>
-  <article class="profile-summary-card">
-    <dl><dt>Map color</dt><dd class="profile-color-value"><span class="profile-color-swatch" style="--profile-territory-color: {{ profile.territoryColor }}" aria-hidden="true"></span>{{ profile.territoryColor }}</dd></dl>
-  </article>
-</section>
+<header class="achievement-hero">
+  <div class="achievement-hero-copy">
+    <span class="achievement-trophy" aria-hidden="true">★</span>
+    <div>
+      <p class="achievement-eyebrow">Pilot achievements</p>
+      <h1>{{ if profileIsCurrent }}Achievements{{ else }}{{ profile.displayName }}’s Achievements{{ /if }}</h1>
+      <p>Celebrate flights, Personal Map milestones, and new records.</p>
+    </div>
+  </div>
+  <dl class="achievement-summary" aria-label="Achievement summary">
+    <div>
+      <dt>Achievements earned</dt>
+      <dd>{{ if profile.achievementCount === 0 }}0{{ else }}{{ profile.achievementCount }}{{ /if }}</dd>
+    </div>
+    <div>
+      <dt>Unique cells</dt>
+      <dd>{{ if profile.lifetimeUniqueCellCount === 0 }}0{{ else }}{{ profile.lifetimeUniqueCellCount }}{{ /if }}</dd>
+    </div>
+    <div>
+      <dt>Next milestone</dt>
+      <dd>{{ profile.nextUniqueCellMilestone }}</dd>
+    </div>
+  </dl>
+</header>

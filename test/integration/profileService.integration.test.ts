@@ -124,12 +124,12 @@ describe('profileService', () => {
       {
         userId: pilot.user.userId, achievementType: 'unique_cells_milestone', achievementKey: 'unique-cells:10',
         sourceFlightId: firstFlight,
-        earnedAt: new Date('2026-07-23T12:00:00Z'), details: { milestone: 10, previousTotal: 8, newTotal: 10, newCells: 2 },
+        earnedAt: new Date('2026-07-23T12:00:00Z'), details: { milestone: 10, previousTotal: 9, newTotal: 10, newCells: 1 },
       },
       {
         userId: pilot.user.userId, achievementType: 'personal_best_total_cells', achievementKey: 'personal-best-total-cells:' + secondFlight,
         sourceFlightId: secondFlight,
-        earnedAt: new Date('2026-07-22T12:00:00Z'), details: { previousRecord: 5, newRecord: 8, directCells: 6, enclosedCells: 2, totalCells: 8 },
+        earnedAt: new Date('2026-07-22T12:00:00Z'), details: { previousRecord: null, newRecord: 1, directCells: 1, enclosedCells: 0, totalCells: 1 },
       },
       {
         userId: pilot.user.userId, achievementType: 'personal_best_enclosed_cells', achievementKey: 'personal-best-enclosed-cells:' + secondFlight,
@@ -145,6 +145,7 @@ describe('profileService', () => {
       lifetimeUniqueCellCount: 2,
       nextUniqueCellMilestone: 10,
       uniqueCellsToNextMilestone: 8,
+      nextUniqueCellMilestoneProgressPercent: 20,
       completedFlightCount: 2,
       lifetimeDirectCellCount: 10,
       lifetimeEnclosedCellCount: 3,
@@ -155,13 +156,13 @@ describe('profileService', () => {
         expect.objectContaining({
           achievementType: 'unique_cells_milestone',
           title: '10 Unique Cells',
-          description: 'Reached 10 unique Personal Map cells, adding 2 new cells to a total of 10.',
+          description: 'Reached 10 unique Personal Map cells, adding 1 new cell to a total of 10.',
           sourceFlightId: firstFlight,
         }),
         expect.objectContaining({
           achievementType: 'personal_best_total_cells',
           title: 'New Flight Cell Record',
-          description: 'Improved the total-cell record from 5 to 8 cells (6 direct and 2 enclosed).',
+          description: 'Established an initial total-cell record of 1 cell (1 direct and 0 enclosed).',
           sourceFlightId: secondFlight,
         }),
         expect.objectContaining({
@@ -201,6 +202,7 @@ describe('profileService', () => {
       lifetimeUniqueCellCount: 0,
       nextUniqueCellMilestone: 10,
       uniqueCellsToNextMilestone: 10,
+      nextUniqueCellMilestoneProgressPercent: 0,
       completedFlightCount: 0,
       lifetimeDirectCellCount: 0,
       lifetimeEnclosedCellCount: 0,
@@ -259,16 +261,19 @@ describe('profileService', () => {
       lifetimeUniqueCellCount: 0,
       nextUniqueCellMilestone: 10,
       uniqueCellsToNextMilestone: 10,
+      nextUniqueCellMilestoneProgressPercent: 0,
     }));
     await expect(profiles.getPilotProfile(exactThresholdPilotId)).resolves.toEqual(expect.objectContaining({
       lifetimeUniqueCellCount: 10,
       nextUniqueCellMilestone: 25,
       uniqueCellsToNextMilestone: 15,
+      nextUniqueCellMilestoneProgressPercent: 40,
     }));
     await expect(profiles.getPilotProfile(recurringPilotId)).resolves.toEqual(expect.objectContaining({
       lifetimeUniqueCellCount: 1_001,
       nextUniqueCellMilestone: 2_000,
       uniqueCellsToNextMilestone: 999,
+      nextUniqueCellMilestoneProgressPercent: 50,
     }));
   });
 

@@ -8,14 +8,11 @@
     </header>
     <main class="profile-content">
       <a class="profile-back-link" href="/personal">← Back to Personal Map</a>
-      <header class="profile-heading">
-        <p class="admin-eyebrow">Pilot progress</p>
-        <h1>{{ if profileIsCurrent }}My Progress{{ else }}{{ profile.displayName }}’s Progress{{ /if }}</h1>
-        <p class="muted">A summary of this pilot’s Personal Map progress.</p>
-      </header>
-      {{ include "components/pilotProfileSummary.vto" { profile } }}
-      {{ include "components/profileAchievementList.vto" { achievements: profile.achievements } }}
-      {{ include "components/profileRecentFlights.vto" { flights: profile.recentFlights } }}
+      {{ include "components/pilotProfileSummary.vto" { profile, profileIsCurrent } }}
+      {{ include "components/profileAchievementHelp.vto" }}
+      {{ include "components/profileAchievementList.vto" { achievements: profile.achievements, achievementCount: profile.achievementCount, profileIsCurrent } }}
+      {{ include "components/profileAchievementProgress.vto" { profile, profileIsCurrent } }}
+      {{ include "components/profileRecentFlights.vto" { flights: profile.recentFlights, profileIsCurrent } }}
     </main>
   </section>
 {{ /layout }}

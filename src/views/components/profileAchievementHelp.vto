@@ -1,0 +1,26 @@
+<section class="achievement-help" aria-labelledby="achievement-help-heading">
+  <div class="achievement-types">
+    <h2 id="achievement-help-heading">Achievement types</h2>
+    <div class="achievement-type-list">
+      <article>
+        {{ include "components/profileAchievementBadge.vto" { achievementType: 'unique_cells_milestone', badgeLabel: '10' } }}
+        <div><h3>Unique cell milestones</h3><p>Reach permanent cell milestones on the Personal Map.</p></div>
+      </article>
+      <article>
+        {{ include "components/profileAchievementBadge.vto" { achievementType: 'personal_best_total_cells', badgeLabel: 'PB' } }}
+        <div><h3>Total-cell personal bests</h3><p>Set or improve the most cells claimed in one flight.</p></div>
+      </article>
+      <article>
+        {{ include "components/profileAchievementBadge.vto" { achievementType: 'personal_best_enclosed_cells', badgeLabel: 'Loop' } }}
+        <div><h3>Enclosed-cell personal bests</h3><p>Set or improve the record for cells enclosed in one flight.</p></div>
+      </article>
+    </div>
+  </div>
+  <aside class="achievement-how-it-works">
+    <span class="achievement-info-icon" aria-hidden="true">i</span>
+    <div>
+      <h2>How progress works</h2>
+      <p>Progress updates after flights are processed. Milestones are earned once, while a new personal best is awarded whenever a pilot sets or improves a record.</p>
+    </div>
+  </aside>
+</section>

@@ -17,6 +17,7 @@ export type PilotProfileSummary = {
   lifetimeUniqueCellCount: number;
   nextUniqueCellMilestone: number;
   uniqueCellsToNextMilestone: number;
+  nextUniqueCellMilestoneProgressPercent: number;
   completedFlightCount: number;
   lifetimeDirectCellCount: number;
   lifetimeEnclosedCellCount: number;
@@ -35,6 +36,7 @@ export type PilotAchievement = {
   sourceFlightId: string | null;
   title: string;
   description: string;
+  badgeLabel: string;
 };
 
 export type PilotRecentFlight = {
@@ -143,6 +145,14 @@ function countText(value: number | null): string {
   return value === null ? 'an unknown number of' : String(value);
 }
 
+function newCellCountText(value: number | null): string {
+  return `${countText(value)} new ${value === 1 ? 'cell' : 'cells'}`;
+}
+
+function cellCountText(value: number | null): string {
+  return `${countText(value)} ${value === 1 ? 'cell' : 'cells'}`;
+}
+
 function achievementDisplay(row: StoredAchievement): PilotAchievement {
   const details = detailsObject(row.details);
   const milestone = detailNumber(details, 'milestone');
@@ -157,7 +167,7 @@ function achievementDisplay(row: StoredAchievement): PilotAchievement {
     const title = milestone === null ? 'Unique Cells Milestone' : `${milestone} Unique Cells`;
     const description = milestone === null
       ? 'Reached a new Personal Map milestone.'
-      : `Reached ${milestone} unique Personal Map cells, adding ${countText(newCells)} new cells to a total of ${countText(newTotal)}.`;
+      : `Reached ${milestone} unique Personal Map cells, adding ${newCellCountText(newCells)} to a total of ${countText(newTotal)}.`;
     return {
       id: row.id,
       achievementType: row.achievementType,
@@ -166,13 +176,14 @@ function achievementDisplay(row: StoredAchievement): PilotAchievement {
       sourceFlightId: row.sourceFlightId,
       title,
       description,
+      badgeLabel: milestone === null ? 'Cells' : String(milestone),
     };
   }
 
   if (row.achievementType === 'personal_best_total_cells') {
     const record = countText(newRecord);
     const description = previousRecord === null
-      ? `Established an initial total-cell record of ${record} cells (${countText(directCells)} direct and ${countText(enclosedCells)} enclosed).`
+      ? `Established an initial total-cell record of ${cellCountText(newRecord)} (${countText(directCells)} direct and ${countText(enclosedCells)} enclosed).`
       : `Improved the total-cell record from ${previousRecord} to ${record} cells (${countText(directCells)} direct and ${countText(enclosedCells)} enclosed).`;
     return {
       id: row.id,
@@ -182,13 +193,14 @@ function achievementDisplay(row: StoredAchievement): PilotAchievement {
       sourceFlightId: row.sourceFlightId,
       title: 'New Flight Cell Record',
       description,
+      badgeLabel: 'PB',
     };
   }
 
   if (row.achievementType === 'personal_best_enclosed_cells') {
     const record = countText(newRecord);
     const description = previousRecord === null
-      ? `Established an initial enclosed-cell record of ${record} cells (${countText(directCells)} direct and ${countText(enclosedCells)} enclosed).`
+      ? `Established an initial enclosed-cell record of ${cellCountText(newRecord)} (${countText(directCells)} direct and ${countText(enclosedCells)} enclosed).`
       : `Improved the enclosed-cell record from ${previousRecord} to ${record} cells (${countText(directCells)} direct and ${countText(enclosedCells)} enclosed).`;
     return {
       id: row.id,
@@ -198,6 +210,7 @@ function achievementDisplay(row: StoredAchievement): PilotAchievement {
       sourceFlightId: row.sourceFlightId,
       title: 'New Enclosed Cell Record',
       description,
+      badgeLabel: 'Loop',
     };
   }
 
@@ -209,6 +222,7 @@ function achievementDisplay(row: StoredAchievement): PilotAchievement {
     sourceFlightId: row.sourceFlightId,
     title: 'Progress Achievement',
     description: 'A progression achievement earned during a flight.',
+    badgeLabel: 'Award',
   };
 }
 
@@ -310,6 +324,10 @@ export function createProfileService(database: Database, options: { cellSize: nu
         lifetimeUniqueCellCount,
         nextUniqueCellMilestone: nextMilestone,
         uniqueCellsToNextMilestone: nextMilestone - lifetimeUniqueCellCount,
+        nextUniqueCellMilestoneProgressPercent: Math.min(
+          100,
+          Math.max(0, Math.round((lifetimeUniqueCellCount / nextMilestone) * 100)),
+        ),
         completedFlightCount: Number(row.completedFlightCount),
         lifetimeDirectCellCount: Number(row.lifetimeDirectCellCount),
         lifetimeEnclosedCellCount: Number(row.lifetimeEnclosedCellCount),

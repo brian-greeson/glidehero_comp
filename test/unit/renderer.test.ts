@@ -70,7 +70,7 @@ describe('Vento page renderer', () => {
     expect(authenticated).toContain('class="territory-color-control"><input class="territory-color-input"');
     expect(authenticated).toContain('data-territory-color-input required><span>Territory color</span>');
     expect(authenticated).not.toContain('>Save map color</button>');
-    expect(authenticated).toContain('href="/profile">My Progress</a>');
+    expect(authenticated).toContain('href="/profile">Achievements</a>');
     expect(authenticated).toContain('value="#1769AA"');
     expect(authenticated).not.toContain('data-competition-coverage="global"');
     expect(authenticated).toContain('data-dashboard-map');
@@ -114,7 +114,7 @@ describe('Vento page renderer', () => {
     expect(authenticated).toContain('Help &amp; walkthrough');
     expect(authenticated).toContain('data-upload-trigger aria-controls="flight-upload-dialog"');
     expect(authenticated).toContain('data-upload-close aria-label="Close upload status"');
-    expect(authenticated).toContain('href="/profile" hidden>View my progress</a>');
+    expect(authenticated).toContain('href="/profile" hidden>View achievements</a>');
     expect(authenticated).toContain('Choose flights<input data-upload-more-input');
     expect(authenticated).toContain('accept=".igc,.zip"');
     expect(authenticated).not.toContain('data-upload-input');

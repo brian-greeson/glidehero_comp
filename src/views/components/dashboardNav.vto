@@ -15,7 +15,7 @@
       </button>
       <section id="account-popover" class="account-popover" data-account-popover hidden>
         <p class="account-email">{{ currentUser.email }}</p>
-        <a class="profile-link" href="/profile">My Progress</a>
+        <a class="profile-link" href="/profile">Achievements</a>
         {{ if isAdmin }}<a class="admin-link" href="/admin">Admin</a>{{ /if }}
         <button type="button" class="account-help-button" data-onboarding-trigger aria-controls="glide-hero-onboarding">Help &amp; walkthrough</button>
         <form class="territory-color-form" method="post" action="/profile/territory-color">
@@ -41,7 +41,7 @@
     </div>
     <div class="flight-upload-list" data-upload-list></div>
     <footer>
-      <a class="secondary-button flight-upload-progress-link" data-upload-progress-link href="/profile" hidden>View my progress</a>
+      <a class="secondary-button flight-upload-progress-link" data-upload-progress-link href="/profile" hidden>View achievements</a>
       <label class="secondary-button">Choose flights<input data-upload-more-input type="file" accept=".igc,.zip" multiple></label>
     </footer>
   </section>

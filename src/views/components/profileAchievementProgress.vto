@@ -1,0 +1,30 @@
+<section class="profile-section" aria-labelledby="profile-progress-heading">
+  <header class="profile-section-heading">
+    <div>
+      <p class="admin-eyebrow">Keep exploring</p>
+      <h2 id="profile-progress-heading">In progress</h2>
+    </div>
+    <span class="profile-section-count">1 milestone</span>
+  </header>
+  <article class="achievement-progress-card">
+    {{ include "components/profileAchievementBadge.vto" { achievementType: 'unique_cells_milestone', badgeLabel: profile.nextUniqueCellMilestone } }}
+    <div class="achievement-progress-copy">
+      <div class="achievement-progress-heading">
+        <div>
+          <p>Unique cell milestone</p>
+          <h3>{{ profile.nextUniqueCellMilestone }} Unique Cells</h3>
+        </div>
+        <strong>{{ if profile.lifetimeUniqueCellCount === 0 }}0{{ else }}{{ profile.lifetimeUniqueCellCount }}{{ /if }} / {{ profile.nextUniqueCellMilestone }}</strong>
+      </div>
+      {{ if profileIsCurrent }}
+        <p>Claim {{ profile.uniqueCellsToNextMilestone }} more {{ if profile.uniqueCellsToNextMilestone === 1 }}cell{{ else }}cells{{ /if }} on your Personal Map.</p>
+      {{ else }}
+        <p>{{ profile.displayName }} needs {{ profile.uniqueCellsToNextMilestone }} more {{ if profile.uniqueCellsToNextMilestone === 1 }}cell{{ else }}cells{{ /if }} to reach this Personal Map milestone.</p>
+      {{ /if }}
+      <div class="achievement-progress-value">
+        <progress aria-label="Progress toward {{ profile.nextUniqueCellMilestone }} Unique Cells" max="{{ profile.nextUniqueCellMilestone }}" value="{{ profile.lifetimeUniqueCellCount }}">{{ profile.nextUniqueCellMilestoneProgressPercent }}%</progress>
+        <span aria-hidden="true">{{ if profile.nextUniqueCellMilestoneProgressPercent === 0 }}0{{ else }}{{ profile.nextUniqueCellMilestoneProgressPercent }}{{ /if }}%</span>
+      </div>
+    </div>
+  </article>
+</section>

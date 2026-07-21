@@ -38,6 +38,7 @@ const pilotProfile = {
   lifetimeUniqueCellCount: 12,
   nextUniqueCellMilestone: 25,
   uniqueCellsToNextMilestone: 13,
+  nextUniqueCellMilestoneProgressPercent: 48,
   completedFlightCount: 3,
   lifetimeDirectCellCount: 20,
   lifetimeEnclosedCellCount: 4,
@@ -767,8 +768,8 @@ describe('webRouter', () => {
       const html = await response.text();
 
       expect(response.status).toBe(200);
-      expect(html).toContain('Cloud Dancer’s Progress');
-      expect(html).toContain('13 more cells to reach 25.');
+      expect(html).toContain('Cloud Dancer’s Achievements');
+      expect(html).toContain('Cloud Dancer needs 13 more cells to reach this Personal Map milestone.');
       expect(html).toContain('12');
       expect(html).toContain('href="/personal"');
       expect(html).not.toContain('cloud-dancer@example.com');

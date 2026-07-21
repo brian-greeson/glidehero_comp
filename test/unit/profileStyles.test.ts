@@ -2,18 +2,21 @@ import { readFile } from 'node:fs/promises';
 import { describe, expect, it } from 'vitest';
 
 describe('pilot profile styles', () => {
-  it('keeps the profile summary responsive and keyboard accessible', async () => {
+  it('keeps achievement cards responsive and keyboard accessible', async () => {
     const css = await readFile('public/styles/profile.css', 'utf8');
 
-    expect(css).toMatch(/\.profile-summary\s*{[^}]*display:\s*grid;[^}]*grid-template-columns:\s*repeat\(3/s);
-    expect(css).toMatch(/\.profile-summary-card\s*{[^}]*border:\s*1px solid/);
-    expect(css).toMatch(/\.profile-milestone-card\s+dd\s*{[^}]*line-height:\s*1\.3/);
+    expect(css).toMatch(/\.achievement-summary\s*{[^}]*display:\s*grid;[^}]*grid-template-columns:\s*repeat\(3/s);
+    expect(css).toMatch(/\.achievement-help\s*{[^}]*display:\s*grid/);
+    expect(css).toMatch(/\.profile-achievement-list\s*{[^}]*grid-template-columns:\s*repeat\(3/s);
     expect(css).toMatch(/\.profile-back-link:focus-visible\s*{[^}]*outline:\s*3px solid/);
     expect(css).toContain('.profile-achievement-list,');
+    expect(css).toContain('.achievement-progress-value progress');
+    expect(css).toContain('.achievement-badge--milestone');
     expect(css).toMatch(/\.profile-flight-stats\s*{/);
     expect(css).toContain('.profile-empty-state');
     expect(css).toContain('.profile-section-heading');
     expect(css).toContain('@media (max-width: 700px)');
     expect(css).toContain('@media (max-width: 440px)');
+    expect(css).toContain('@media (prefers-reduced-motion: reduce)');
   });
 });

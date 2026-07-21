@@ -1,24 +1,34 @@
 <section class="profile-section" aria-labelledby="profile-achievements-heading">
   <header class="profile-section-heading">
     <div>
-      <p class="admin-eyebrow">History</p>
-      <h2 id="profile-achievements-heading">Achievements</h2>
+      <p class="admin-eyebrow">Achievement history</p>
+      <h2 id="profile-achievements-heading">Earned achievements</h2>
     </div>
-    <span class="profile-section-count">Latest 50</span>
+    <span class="profile-section-count">
+      {{ if achievements.length === 50 }}
+        {{ if achievementCount > 50 }}Latest 50 of {{ achievementCount }}{{ else }}50 earned{{ /if }}
+      {{ else }}
+        {{ if achievementCount === 0 }}0{{ else }}{{ achievementCount }}{{ /if }} earned
+      {{ /if }}
+    </span>
   </header>
   {{ if achievements.length === 0 }}
-    <p class="profile-empty-state">No achievements yet. Complete a flight to start building your history.</p>
+    <p class="profile-empty-state">No achievements yet.{{ if profileIsCurrent }} Complete a flight to start building your history.{{ /if }}</p>
   {{ else }}
     <ol class="profile-achievement-list">
       {{ for achievement of achievements }}
         <li class="profile-achievement-item">
-          <div class="profile-item-meta">
-            <span>{{ achievement.typeLabel }}</span>
-            <time>{{ achievement.earnedDate }}</time>
+          {{ include "components/profileAchievementBadge.vto" { achievementType: achievement.achievementType, badgeLabel: achievement.badgeLabel } }}
+          <div class="profile-achievement-copy">
+            <div class="profile-item-meta">
+              <span>{{ achievement.typeLabel }}</span>
+              <time>Earned {{ achievement.earnedDate }}</time>
+            </div>
+            <h3>{{ achievement.title }}</h3>
+            <p>{{ achievement.description }}</p>
+            {{ if achievement.sourceFlightId }}<small>Flight {{ achievement.sourceFlightId }}</small>{{ /if }}
           </div>
-          <h3>{{ achievement.title }}</h3>
-          <p>{{ achievement.description }}</p>
-          {{ if achievement.sourceFlightId }}<small>Flight {{ achievement.sourceFlightId }}</small>{{ /if }}
+          <span class="achievement-earned-mark" aria-hidden="true">✓</span>
         </li>
       {{ /for }}
     </ol>
