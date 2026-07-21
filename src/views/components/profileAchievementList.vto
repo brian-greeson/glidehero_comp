@@ -15,7 +15,7 @@
   {{ if achievements.length === 0 }}
     <p class="profile-empty-state">No achievements yet.{{ if profileIsCurrent }} Complete a flight to start building your history.{{ /if }}</p>
   {{ else }}
-    <ol class="profile-achievement-list">
+    <ol id="profile-achievement-list" class="profile-achievement-list" data-profile-list>
       {{ for achievement of achievements }}
         <li class="profile-achievement-item">
           {{ include "components/profileAchievementBadge.vto" { achievementType: achievement.achievementType, badgeLabel: achievement.badgeLabel } }}
@@ -32,5 +32,8 @@
         </li>
       {{ /for }}
     </ol>
+    {{ if achievements.length > 3 }}
+      <button type="button" class="profile-list-toggle" data-profile-list-toggle data-show-all-label="Show all" data-show-fewer-label="Show fewer" aria-controls="profile-achievement-list" aria-expanded="false" hidden>Show all</button>
+    {{ /if }}
   {{ /if }}
 </section>

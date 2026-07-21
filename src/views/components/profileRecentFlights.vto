@@ -9,7 +9,7 @@
   {{ if flights.length === 0 }}
     <p class="profile-empty-state">No completed flights yet.{{ if profileIsCurrent }} Upload a flight to see it here.{{ /if }}</p>
   {{ else }}
-    <ol class="profile-flight-list">
+    <ol id="profile-flight-list" class="profile-flight-list" data-profile-list>
       {{ for flight of flights }}
         <li class="profile-flight-item">
           <header class="profile-flight-heading">
@@ -25,5 +25,8 @@
         </li>
       {{ /for }}
     </ol>
+    {{ if flights.length > 3 }}
+      <button type="button" class="profile-list-toggle" data-profile-list-toggle data-show-all-label="Show all" data-show-fewer-label="Show fewer" aria-controls="profile-flight-list" aria-expanded="false" hidden>Show all</button>
+    {{ /if }}
   {{ /if }}
 </section>

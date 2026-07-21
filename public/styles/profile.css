@@ -305,6 +305,37 @@
   list-style: none;
 }
 
+[data-profile-list][data-collapsible]:not([data-expanded]) > li:nth-child(n + 4) {
+  display: none;
+}
+
+.profile-list-toggle {
+  display: block;
+  min-height: 44px;
+  margin: 1rem auto 0;
+  padding: 0.6rem 1rem;
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  color: var(--color-primary-strong);
+  background: var(--color-surface);
+  font: inherit;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.profile-list-toggle[hidden] {
+  display: none;
+}
+
+.profile-list-toggle:hover {
+  background: var(--color-surface-highlight);
+}
+
+.profile-list-toggle:focus-visible {
+  outline: 3px solid var(--color-focus-ring);
+  outline-offset: 3px;
+}
+
 .profile-achievement-list {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }

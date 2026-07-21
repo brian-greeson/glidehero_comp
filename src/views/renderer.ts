@@ -103,7 +103,7 @@ export function createPageRenderer(options: {
         isErrorPage: false,
         dashboardScript,
         pageStylesheet: page === 'profile' ? '/styles/profile.css' : undefined,
-        pageScript: undefined,
+        pageScript: page === 'profile' ? '/scripts/profile.js' : undefined,
         mapTilerStyleUrl: `https://api.maptiler.com/maps/outdoor-v2/style.json?key=${options.mapTilerApiKey}`,
         territoryTileConfig: territoryTileSettings.get(),
         ...model,

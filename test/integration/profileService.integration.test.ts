@@ -112,12 +112,12 @@ describe('profileService', () => {
       {
         flightId: firstFlight, userId: pilot.user.userId, directCellCount: 4, enclosedCellCount: 1,
         newPersonalCellCount: 5, personalCellTotalAfter: 1,
-        evaluatedAt: new Date('2026-07-20T12:00:00Z'), updatedAt: new Date('2026-07-20T12:00:00Z'),
+        evaluatedAt: new Date('2026-07-22T12:00:00Z'), updatedAt: new Date('2026-07-22T12:00:00Z'),
       },
       {
         flightId: secondFlight, userId: pilot.user.userId, directCellCount: 6, enclosedCellCount: 2,
         newPersonalCellCount: 1, personalCellTotalAfter: 2,
-        evaluatedAt: new Date('2026-07-21T12:00:00Z'), updatedAt: new Date('2026-07-21T12:00:00Z'),
+        evaluatedAt: new Date('2026-07-20T12:00:00Z'), updatedAt: new Date('2026-07-20T12:00:00Z'),
       },
     ]);
     await database.db.insert(achievements).values([

@@ -313,7 +313,7 @@ export function createProfileService(database: Database, options: { cellSize: nu
           FROM flight_progress progress
           INNER JOIN flights ON flights.flight_id = progress.flight_id
           WHERE progress.user_id = ${userId}
-          ORDER BY progress.evaluated_at DESC, progress.flight_id DESC
+          ORDER BY flights.started_at DESC NULLS LAST, progress.evaluated_at DESC, progress.flight_id DESC
           LIMIT 20
         `),
       ]);

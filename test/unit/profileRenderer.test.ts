@@ -44,6 +44,7 @@ describe('pilot profile renderer', () => {
     expect(current).toContain('whenever a pilot sets or improves a record.');
     expect(current).toContain('href="/personal"');
     expect(current).toContain('/styles/profile.css');
+    expect(current).toContain('/scripts/profile.js');
     expect(current).not.toContain('/scripts/dashboard.js');
 
     const other = await render({ currentUser, page: 'profile', profile, profileIsCurrent: false });
@@ -186,10 +187,17 @@ describe('pilot profile renderer', () => {
           ...profile.achievements[0]!,
           id: `achievement-${index}`,
         })),
+        recentFlights: Array.from({ length: 4 }, (_, index) => ({
+          ...profile.recentFlights[0]!,
+          flightId: `flight-${index}`,
+        })),
       },
       profileIsCurrent: true,
     });
     expect(truncatedHistory).toContain('Latest 50 of 55');
+    expect(truncatedHistory.match(/data-profile-list-toggle/g)).toHaveLength(2);
+    expect(truncatedHistory).toContain('aria-controls="profile-achievement-list" aria-expanded="false" hidden>Show all</button>');
+    expect(truncatedHistory).toContain('aria-controls="profile-flight-list" aria-expanded="false" hidden>Show all</button>');
 
     const zeroCellFlight = await render({
       currentUser,
