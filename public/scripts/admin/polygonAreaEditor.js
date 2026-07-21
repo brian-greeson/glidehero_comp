@@ -6,6 +6,13 @@ const PREVIEW_SOURCE = 'arena-cell-preview';
 const PREVIEW_ZOOM = 11;
 const DRAW_BLUE = '#3bb2d0';
 const DRAW_ORANGE = '#fbb03b';
+const ARENA_TYPE_LABELS = { launch: 'Launch', general: 'General', state: 'State', country: 'Country' };
+
+export function arenaTypeLabel(type) { return ARENA_TYPE_LABELS[type] ?? type ?? ''; }
+export function countryOptionForArea(countries, area) { return countries.find((country) => country.countryCode === area.countryCode); }
+export function adminAreaSavePayload(fields, geojson) {
+  return { name: fields.name, countryArenaId: fields.countryArenaId, state: fields.state, city: fields.city, geojson };
+}
 
 export const MAPLIBRE_DRAW_STYLES = [
   {
@@ -79,7 +86,7 @@ export function filterAndSortAreas(areas, query, sortColumn = 'name', sortDirect
     .filter((area) => !needle || [area.name, area.country, area.state, area.city]
       .some((value) => value?.toLocaleLowerCase().includes(needle)))
     .toSorted((left, right) => {
-      const primary = left[sortColumn].localeCompare(right[sortColumn], undefined, { sensitivity: 'base' });
+      const primary = String(left[sortColumn] ?? '').localeCompare(String(right[sortColumn] ?? ''), undefined, { sensitivity: 'base' });
       if (primary) return primary * direction;
       return left.name.localeCompare(right.name, undefined, { sensitivity: 'base' });
     });
@@ -189,18 +196,18 @@ export function initializePolygonAreaEditor({ documentRef = document, maplibre =
   const draw = new Draw({ displayControlsDefault: false, controls: { polygon: true, trash: true }, styles: MAPLIBRE_DRAW_STYLES });
   map.addControl(draw, 'top-left');
   enableMapLibreDrawControls(mapNode);
-  const state = { areas: [], selectedId: null, isNew: false, original: '', dirty: false, sortColumn: 'name', sortDirection: 'asc' };
+  const state = { areas: [], countries: [], selectedId: null, isNew: false, original: '', dirty: false, sortColumn: 'name', sortDirection: 'asc' };
   const previewRequest = createLatestRequest(async ({ signal, isCurrent }, payload) => {
     const data = await requestJson('/admin/api/areas/preview', { method: 'POST', body: JSON.stringify(payload), signal }, fetchImpl);
     if (isCurrent()) map.getSource(PREVIEW_SOURCE)?.setData(data);
   });
   const setStatus = (message = '', error = false) => { status.textContent = message; status.classList.toggle('is-error', error); };
   const geojson = () => draw.getAll();
-  const snapshot = () => JSON.stringify({ name: fields.name.value, country: fields.country.value, state: fields.state.value, city: fields.city.value, geojson: geojson() });
+  const snapshot = () => JSON.stringify({ name: fields.name.value, countryArenaId: fields.countryArenaId.value, state: fields.state.value, city: fields.city.value, geojson: geojson() });
   const update = () => {
     state.dirty = Boolean(state.selectedId || state.isNew) && snapshot() !== state.original;
     fields.componentCount.value = String(polygonComponentCount(geojson()));
-    saveButton.disabled = !state.dirty || !fields.name.value.trim() || !fields.country.value.trim() || !geojson().features.length;
+    saveButton.disabled = !state.dirty || !fields.name.value.trim() || !fields.countryArenaId.value || !geojson().features.length;
     cancelButton.disabled = !state.dirty;
   };
   function renderList() {
@@ -220,11 +227,29 @@ export function initializePolygonAreaEditor({ documentRef = document, maplibre =
     for (const area of areas) {
       const button = documentRef.createElement('button'); button.type = 'button';
       button.className = `admin-area-list-row${area.id === state.selectedId ? ' is-selected' : ''}`; button.dataset.areaId = area.id;
-      for (const value of [area.name, area.country, area.state]) { const cell = documentRef.createElement('span'); cell.textContent = value; button.append(cell); }
+      for (const value of [area.name, arenaTypeLabel(area.arenaType), area.country, area.state]) { const cell = documentRef.createElement('span'); cell.textContent = value ?? ''; button.append(cell); }
       list.append(button);
     }
   }
-  function setEnabled(enabled) { for (const name of ['name', 'country', 'state', 'city']) fields[name].disabled = !enabled; importInput.disabled = !enabled; }
+  function setEnabled(enabled) {
+    for (const name of ['name', 'state', 'city']) fields[name].disabled = !enabled;
+    fields.countryArenaId.disabled = !enabled || fields.arenaType.value === arenaTypeLabel('country');
+    fields.country.disabled = true;
+    importInput.disabled = !enabled;
+  }
+  function renderCountryOptions() {
+    const selected = fields.countryArenaId.value;
+    fields.countryArenaId.replaceChildren();
+    const placeholder = documentRef.createElement('option'); placeholder.value = ''; placeholder.textContent = 'Select a Country Arena…'; fields.countryArenaId.append(placeholder);
+    for (const country of state.countries) {
+      const option = documentRef.createElement('option'); option.value = country.id; option.textContent = `${country.name} (${country.countryCode})`; option.dataset.sourceId = String(country.sourceId); option.dataset.country = country.name; option.dataset.countryCode = country.countryCode; fields.countryArenaId.append(option);
+    }
+    fields.countryArenaId.value = selected;
+  }
+  function applyCountrySelection() {
+    const option = fields.countryArenaId.selectedOptions[0];
+    fields.country.value = option?.dataset.country ?? '';
+  }
   async function refreshPreview() {
     if (map.getZoom() < PREVIEW_ZOOM || !geojson().features.length) {
       previewRequest.cancel(); map.getSource(PREVIEW_SOURCE)?.setData(EMPTY); help.textContent = 'Zoom in to preview Arena cells.'; return;
@@ -238,6 +263,9 @@ export function initializePolygonAreaEditor({ documentRef = document, maplibre =
   function applySelection(area) {
     state.selectedId = area.id; state.isNew = false; heading.textContent = area.name;
     for (const name of ['id', 'sourceId', 'name', 'country', 'state', 'city']) fields[name].value = String(area[name] ?? '');
+    fields.arenaType.value = arenaTypeLabel(area.arenaType);
+    const country = countryOptionForArea(state.countries, area);
+    fields.countryArenaId.value = country?.id ?? '';
     loadGeometry(area.geometry); setEnabled(true); state.original = snapshot(); update(); renderList(); setStatus();
     map.fitBounds([[area.bbox[0], area.bbox[1]], [area.bbox[2], area.bbox[3]]], { padding: 70, maxZoom: 12, duration: 0 }); void refreshPreview();
   }
@@ -256,11 +284,11 @@ export function initializePolygonAreaEditor({ documentRef = document, maplibre =
   function startNew() {
     selectionRequest.cancel();
     state.selectedId = null; state.isNew = true; heading.textContent = 'New Arena'; draw.deleteAll();
-    fields.id.value = 'Assigned on save'; fields.sourceId.value = 'Assigned on save'; fields.name.value = ''; fields.country.value = ''; fields.state.value = ''; fields.city.value = '';
+    fields.id.value = 'Assigned on save'; fields.sourceId.value = 'Assigned on save'; fields.arenaType.value = arenaTypeLabel('general'); fields.name.value = ''; fields.countryArenaId.value = ''; fields.country.value = ''; fields.state.value = ''; fields.city.value = '';
     setEnabled(true); state.original = snapshot(); update(); renderList(); setStatus('Draw or import one or more polygons.');
   }
   async function save() {
-    const payload = { name: fields.name.value, country: fields.country.value, state: fields.state.value, city: fields.city.value, geojson: geojson() };
+    const payload = adminAreaSavePayload({ name: fields.name.value, countryArenaId: fields.countryArenaId.value, state: fields.state.value, city: fields.city.value }, geojson());
     const url = state.isNew ? '/admin/api/areas' : `/admin/api/areas/${encodeURIComponent(state.selectedId)}`;
     try {
       const { area } = await requestJson(url, { method: state.isNew ? 'POST' : 'PUT', body: JSON.stringify(payload) }, fetchImpl);
@@ -277,7 +305,7 @@ export function initializePolygonAreaEditor({ documentRef = document, maplibre =
   });
   map.on('moveend', () => { void refreshPreview(); });
   for (const event of ['draw.create', 'draw.update', 'draw.delete']) map.on(event, () => { update(); void refreshPreview(); });
-  form.addEventListener('input', update); form.addEventListener('submit', (event) => { event.preventDefault(); void save(); });
+  form.addEventListener('input', update); fields.countryArenaId.addEventListener('change', () => { applyCountrySelection(); update(); }); form.addEventListener('submit', (event) => { event.preventDefault(); void save(); });
   root.querySelector('[data-new-area]').addEventListener('click', () => { void actionGate.request(startNew); });
   cancelButton.addEventListener('click', () => { if (state.isNew) startNew(); else void select(state.selectedId); });
   search.addEventListener('input', renderList); list.addEventListener('click', (event) => {
@@ -301,7 +329,12 @@ export function initializePolygonAreaEditor({ documentRef = document, maplibre =
     importInput.value = '';
   });
   window.addEventListener('beforeunload', (event) => { if (state.dirty) { event.preventDefault(); event.returnValue = ''; } });
-  void requestJson('/admin/api/areas', {}, fetchImpl).then(({ areas }) => { state.areas = areas; renderList(); }).catch((error) => setStatus(error.message, true));
+  void Promise.all([
+    requestJson('/admin/api/areas', {}, fetchImpl),
+    requestJson('/admin/api/areas/countries', {}, fetchImpl),
+  ]).then(([areaResult, countryResult]) => {
+    state.areas = areaResult.areas; state.countries = countryResult.countries; renderCountryOptions(); renderList();
+  }).catch((error) => setStatus(error.message, true));
   return { map, draw, refreshPreview };
 }
 

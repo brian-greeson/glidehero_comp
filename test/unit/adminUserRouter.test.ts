@@ -32,6 +32,7 @@ function dependencies() {
       flightId, cellSize: 1000, directCellCount: 1, enclosedCellCount: 0,
       newPersonalCellCount: 1, personalCellTotalAfter: 1, progressionVersion: 1,
       evaluatedAt: new Date('2026-07-20T00:00:00Z'),
+      arenaAchievements: { newlyEarned: [], alreadyEarned: 0, record: null },
     } })),
     deleteFlight: vi.fn(async () => 'deleted' as const),
     deleteAllUserFlights: vi.fn(async () => ({ deleted: 2, skipped: 1, failed: 1 })),

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { extractPolygonGeometries } from '../../src/domain/arena/geoJson.js';
-import { parseStateArenaGeoJson } from '../../src/services/stateArenaImportService.js';
+import { parseStateArenaGeoJson, stateArenaSourceId } from '../../src/services/stateArenaImportService.js';
 
 const polygon = { type: 'Polygon', coordinates: [[[0, 0], [0, 1], [1, 1], [0, 0]]] };
 
@@ -30,5 +30,12 @@ describe('Arena GeoJSON', () => {
     expect(states).toHaveLength(50);
     expect(new Set(states.map((state) => state.fips)).size).toBe(50);
     expect(states.some((state) => state.abbreviation === 'DC')).toBe(false);
+  });
+
+  it('derives deterministic State source IDs from two-digit FIPS codes', () => {
+    expect(stateArenaSourceId('01')).toBe(2_000_000_001);
+    expect(stateArenaSourceId('56')).toBe(2_000_000_056);
+    expect(stateArenaSourceId('01')).not.toBe(stateArenaSourceId('02'));
+    expect(() => stateArenaSourceId('1')).toThrow('two-digit');
   });
 });

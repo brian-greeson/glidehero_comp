@@ -31,7 +31,7 @@
 .admin-area-list-heading span { color: #607083; font-size: .8rem; font-weight: 800; }
 .admin-area-search { margin: .55rem 0; }
 .admin-area-list-table { min-height: 0; max-height: min(32rem, 50svh); overflow: auto; border: 1px solid #e0e7ef; border-radius: .55rem; }
-.admin-area-list-columns, .admin-area-list-row { display: grid; grid-template-columns: 1.5fr 1fr 1fr; }
+.admin-area-list-columns, .admin-area-list-row { display: grid; grid-template-columns: 1.5fr .85fr 1fr 1fr; }
 .admin-area-list-columns { position: sticky; z-index: 1; top: 0; background: #f4f7fa; }
 .admin-area-list-columns button { width: auto; padding: .55rem .45rem; border: 0; border-radius: 0; color: #52657a; background: transparent; font-size: .68rem; text-align: left; text-transform: uppercase; }
 .admin-area-list-row { width: 100%; padding: 0; border: 0; border-top: 1px solid #e6edf4; border-radius: 0; color: #23364e; background: #fff; font-size: .75rem; font-weight: 500; text-align: left; }

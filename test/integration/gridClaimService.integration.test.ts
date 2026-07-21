@@ -1,17 +1,18 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { eq } from 'drizzle-orm';
-import { achievements, competitionGridClaims, flightProgress, flights, igcFiles, personalGridClaims as userGridClaims, trackPoints, users } from '../../src/db/schema.js';
+import { achievementRecordEvents, achievementRecords, achievements, competitionGridClaims, flightProgress, flights, igcFiles, personalGridClaims as userGridClaims, trackPoints, users } from '../../src/db/schema.js';
 import { createGridClaimService } from '../../src/services/gridClaimService.js';
+import type { ArenaAchievementService } from '../../src/services/arenaAchievementService.js';
 import { createAdminFlightService } from '../../src/services/adminFlightService.js';
-import { resetAndPushTestDatabase } from './database.js';
+import { resetAndMigrateTestDatabase } from './database.js';
 
 type ProjectedCoordinate = readonly [x: number, y: number];
 
-let database: Awaited<ReturnType<typeof resetAndPushTestDatabase>>;
+let database: Awaited<ReturnType<typeof resetAndMigrateTestDatabase>>;
 const viewport = { west: -180, south: -89, east: 180, north: 89 };
 
 beforeAll(async () => {
-  database = await resetAndPushTestDatabase();
+  database = await resetAndMigrateTestDatabase();
 });
 
 beforeEach(async () => {
@@ -142,6 +143,7 @@ describe('GridClaimService with PostGIS', () => {
       personalCellTotalAfter: 9,
       progressionVersion: 1,
       evaluatedAt: expect.any(Date),
+      arenaAchievements: { newlyEarned: [], alreadyEarned: 0, record: null },
     });
     expect(await storedProgression(flight.flightId)).toMatchObject({
       flightId: flight.flightId,
@@ -315,6 +317,7 @@ describe('GridClaimService with PostGIS', () => {
       personalCellTotalAfter: 4,
       progressionVersion: 1,
       evaluatedAt: expect.any(Date),
+      arenaAchievements: { newlyEarned: [], alreadyEarned: 0, record: null },
     });
 
     expect(await storedCells(1_000)).toMatchObject([
@@ -707,6 +710,36 @@ describe('GridClaimService with PostGIS', () => {
     expect(await database.db.select().from(userGridClaims).where(eq(userGridClaims.claimFlight, flight.flightId))).toEqual([]);
     expect(await database.db.select().from(flightProgress).where(eq(flightProgress.flightId, flight.flightId))).toEqual([]);
     expect(await database.db.select().from(competitionGridClaims).where(eq(competitionGridClaims.claimFlight, flight.flightId))).toEqual([]);
+  });
+
+  it('rolls back claims, progression, and awards when Arena evaluation fails in the caller transaction', async () => {
+    const flight = await persistFlight([[100, 100], [9_100, 100]]);
+    const failingArenaAchievements: ArenaAchievementService = {
+      evaluateInTransaction: async () => { throw new Error('forced Arena evaluator failure'); },
+    };
+    const service = createGridClaimService(database.db, { cellSize: 1_000 }, undefined, failingArenaAchievements);
+    await expect(service.process(flight)).rejects.toThrow('forced Arena evaluator failure');
+    expect(await database.db.select().from(userGridClaims).where(eq(userGridClaims.claimFlight, flight.flightId))).toEqual([]);
+    expect(await database.db.select().from(flightProgress).where(eq(flightProgress.flightId, flight.flightId))).toEqual([]);
+    expect(await database.db.select().from(achievements).where(eq(achievements.userId, flight.userId))).toEqual([]);
+  });
+
+  it('serializes concurrent flights through Arena awards and keeps one monotonic tag record history', async () => {
+    const first = await persistFlight([[100, 100], [200, 200]]);
+    const second = await persistFlight([[100, 100], [200, 200]], new Date(Date.UTC(2026, 0, 2)), 'UTC', first.userId);
+    await database.pool.query(`UPDATE flights SET launch_latitude = 0, launch_longitude = 0 WHERE flight_id IN ($1, $2)`, [first.flightId, second.flightId]);
+    for (const sourceId of [900, 901, 902]) {
+      await database.pool.query(`INSERT INTO arenas
+        (source_id, name, country, country_code, area, arena_type)
+        VALUES ($1, $2, 'United States', 'US', ST_Multi(ST_GeomFromText('POLYGON((-1000 -1000,1000 -1000,1000 1000,-1000 1000,-1000 -1000))', 6933)), 'launch')`, [sourceId, `Concurrent ${sourceId}`]);
+    }
+    const service = createGridClaimService(database.db, { cellSize: 1_000 });
+    await Promise.all([service.process(first), service.process(second)]);
+    const records = await database.db.select().from(achievementRecords).where(eq(achievementRecords.userId, first.userId));
+    const events = await database.db.select().from(achievementRecordEvents).where(eq(achievementRecordEvents.userId, first.userId));
+    expect(records).toHaveLength(1);
+    expect(records[0]?.bestValue).toBe(3);
+    expect(events.map((event) => event.value)).toEqual([3]);
   });
 
 });

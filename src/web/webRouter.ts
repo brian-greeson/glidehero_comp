@@ -9,6 +9,7 @@ import { normalizeTerritoryColor, type ProfileService } from '../services/profil
 import type { GridClaimService } from '../services/gridClaimService.js';
 import type { AdminFlightService } from '../services/adminFlightService.js';
 import type { ArenaService } from '../services/arenaService.js';
+import type { ArenaProgressService } from '../services/arenaProgressService.js';
 import type {
   AdminMapSettingsPageRenderer,
   AdminPageRenderer,
@@ -122,6 +123,7 @@ export function createWebRouter(dependencies: {
   coverage: MonthlyCoverageService;
   territoryTiles: TerritoryTileService;
   arenas: ArenaService;
+  arenaProgress: ArenaProgressService;
   renderPage: PageRenderer;
   adminEmails?: readonly string[];
   adminFlights?: AdminFlightService;
@@ -652,6 +654,7 @@ export function createWebRouter(dependencies: {
         currentUser,
         page: 'arena',
         arena,
+        arenaProgress: await dependencies.arenaProgress.get({ arenaId: arena.id, userId: currentUser.userId }),
         isAdmin: isAdmin(currentUser.email),
         territoryColorSuccess: req.query.territoryColor === 'success',
       });

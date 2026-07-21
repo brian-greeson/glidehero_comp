@@ -5,6 +5,7 @@ import type { AdminFlight } from '../services/adminFlightService.js';
 import type { AdminUserFlight } from '../services/adminFlightService.js';
 import type { AdminUserDetail, AdminUserSummary } from '../services/adminUserService.js';
 import type { ArenaDetail } from '../services/arenaService.js';
+import type { ArenaPersonalProgress } from '../services/arenaProgressService.js';
 import type { TerritoryTileConfig } from '../config/territoryTiles.js';
 import type { PilotProfileSummary } from '../services/profileService.js';
 import { createTerritoryTileSettingsService, type TerritoryTileSettingsService } from '../services/territoryTileSettingsService.js';
@@ -13,6 +14,7 @@ export type PageModel = {
   currentUser: AuthenticatedUser | null;
   page?: 'landing' | 'global' | 'personal' | 'arena' | 'profile';
   arena?: ArenaDetail;
+  arenaProgress?: ArenaPersonalProgress;
   profile?: PilotProfileSummary;
   profileIsCurrent?: boolean;
   loginError?: string;
@@ -97,6 +99,7 @@ export function createPageRenderer(options: {
         territoryColorSuccess: false,
         isAdmin: false,
         arena: undefined,
+        arenaProgress: undefined,
         profile: undefined,
         profileIsCurrent: false,
         isDashboard: page === 'global' || page === 'personal' || page === 'arena',

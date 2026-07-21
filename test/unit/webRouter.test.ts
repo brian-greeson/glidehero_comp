@@ -7,6 +7,7 @@ import type { MonthlyCoverageService } from '../../src/services/monthlyCoverageS
 import type { TerritoryTileService } from '../../src/services/territoryTileService.js';
 import type { AdminFlightService } from '../../src/services/adminFlightService.js';
 import type { ArenaService } from '../../src/services/arenaService.js';
+import type { ArenaProgressService } from '../../src/services/arenaProgressService.js';
 import type { MapGridService } from '../../src/services/mapGridService.js';
 import type { FlightUploadQueueService } from '../../src/services/flightUploadQueueService.js';
 import type { FailedFlightCleanupService } from '../../src/services/failedFlightCleanupService.js';
@@ -57,6 +58,7 @@ const arena = {
   state: 'Colorado',
   country: 'United States',
   countryCode: 'us',
+  arenaType: 'general' as const,
   path: '/arena/us/boulder-745',
   boundary: {
     type: 'Feature' as const,
@@ -72,6 +74,10 @@ function arenaService(): ArenaService {
     getBySourceId: vi.fn(async () => null),
     getByRoute: vi.fn(async () => null),
   };
+}
+
+function arenaProgressService(): ArenaProgressService {
+  return { get: vi.fn(async () => ({ kind: 'general' as const, firstProgressDate: null, mostRecentProgressDate: null, claimedCells: 0, totalCells: 1, coveragePercentage: 0, nextMilestone: 10 })) };
 }
 
 function mapGridService(): MapGridService {
@@ -117,6 +123,7 @@ function dependencies() {
       personalCellTotalAfter: 0,
       progressionVersion: 1,
       evaluatedAt: new Date('2026-07-20T00:00:00Z'),
+      arenaAchievements: { newlyEarned: [], alreadyEarned: 0, record: null },
     })),
     reprocess: vi.fn(async () => ({ status: 'not_found' as const })),
   };
@@ -144,6 +151,7 @@ function dependencies() {
     getArenaCompetitionTile: vi.fn(async () => ({ data: Buffer.alloc(0), featureCount: 0 })),
   };
   const arenas = arenaService();
+  const arenaProgress = arenaProgressService();
   const mapGrid = mapGridService();
   const router = createWebRouter({
     auth,
@@ -154,6 +162,7 @@ function dependencies() {
     coverage,
     territoryTiles,
     arenas,
+    arenaProgress,
     renderPage,
   });
   return {
@@ -164,6 +173,7 @@ function dependencies() {
     coverage,
     territoryTiles,
     arenas,
+    arenaProgress,
     renderPage,
     cookie,
     app: createApp({ webMiddleware: [middleware, router] }),
@@ -239,6 +249,7 @@ describe('webRouter', () => {
       coverage: base.coverage,
       territoryTiles: base.territoryTiles,
       arenas: base.arenas,
+      arenaProgress: base.arenaProgress,
       renderPage: base.renderPage,
     });
     const app = createApp({ webMiddleware: [createCurrentUserMiddleware(base.auth, base.cookie), router] });
@@ -292,6 +303,7 @@ describe('webRouter', () => {
           directCellCount: 1, enclosedCellCount: 0, newPersonalCellCount: 1,
           personalCellTotalAfter: 1, progressionVersion: 1,
           evaluatedAt: new Date('2026-07-20T00:00:00Z'),
+          arenaAchievements: { newlyEarned: [], alreadyEarned: 0, record: null },
         },
       })),
       listUserFlights: vi.fn(async () => []),
@@ -309,6 +321,7 @@ describe('webRouter', () => {
       coverage,
       territoryTiles: dependencies().territoryTiles,
       arenas,
+      arenaProgress: dependencies().arenaProgress,
       renderPage,
       adminEmails: ['PILOT@example.com'],
       adminFlights,
@@ -349,6 +362,7 @@ describe('webRouter', () => {
       coverage: base.coverage,
       territoryTiles: base.territoryTiles,
       arenas: base.arenas,
+      arenaProgress: base.arenaProgress,
       renderPage: base.renderPage,
       adminEmails: ['PILOT@example.com'],
       territoryTileSettings,
@@ -440,7 +454,7 @@ describe('webRouter', () => {
   });
 
   it('protects dashboard routes and renders canonical Arenas with a basic 404', async () => {
-    const { app, arenas, renderPage } = dependencies();
+    const { app, arenas, arenaProgress, renderPage } = dependencies();
     vi.mocked(arenas.getByRoute).mockResolvedValueOnce(arena).mockResolvedValueOnce(null);
     await withServer(app, async (baseUrl) => {
       const anonymous = await fetch(`${baseUrl}/global`, { redirect: 'manual' });
@@ -452,6 +466,7 @@ describe('webRouter', () => {
       });
       expect(found.status).toBe(200);
       expect(renderPage).toHaveBeenCalledWith(expect.objectContaining({ page: 'arena', arena }));
+      expect(arenaProgress.get).toHaveBeenCalledWith({ arenaId: arena.id, userId: user.userId });
 
       vi.mocked(renderPage).mockClear();
       const missing = await fetch(`${baseUrl}/arena/us/missing-999`, {
@@ -676,6 +691,7 @@ describe('webRouter', () => {
           flightId: 'flight-id', cellSize: 1_000, directCellCount: 0, enclosedCellCount: 0,
           newPersonalCellCount: 0, personalCellTotalAfter: 0, progressionVersion: 1,
           evaluatedAt: new Date('2026-07-20T00:00:00Z'),
+          arenaAchievements: { newlyEarned: [], alreadyEarned: 0, record: null },
         })),
         reprocess: vi.fn(async () => ({ status: 'not_found' as const })),
       },
@@ -687,6 +703,7 @@ describe('webRouter', () => {
       },
       territoryTiles: dependencies().territoryTiles,
       arenas: arenaService(),
+      arenaProgress: dependencies().arenaProgress,
       renderPage: createPageRenderer({ mapTilerApiKey: 'maptiler-test-key' }),
     });
     const app = createApp({ webMiddleware: [middleware, router] });
@@ -757,6 +774,7 @@ describe('webRouter', () => {
       coverage: base.coverage,
       territoryTiles: base.territoryTiles,
       arenas: base.arenas,
+      arenaProgress: base.arenaProgress,
       renderPage: createPageRenderer({ mapTilerApiKey: 'maptiler-test-key' }),
     });
     const app = createApp({ webMiddleware: [createCurrentUserMiddleware(base.auth, base.cookie), router] });

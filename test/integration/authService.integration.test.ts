@@ -1,12 +1,12 @@
 import { createHash } from 'node:crypto';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { createAuthService } from '../../src/services/authService.js';
-import { resetAndPushTestDatabase } from './database.js';
+import { resetAndMigrateTestDatabase } from './database.js';
 
-let database: Awaited<ReturnType<typeof resetAndPushTestDatabase>>;
+let database: Awaited<ReturnType<typeof resetAndMigrateTestDatabase>>;
 
 beforeAll(async () => {
-  database = await resetAndPushTestDatabase();
+  database = await resetAndMigrateTestDatabase();
 });
 
 beforeEach(async () => {

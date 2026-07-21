@@ -1,10 +1,10 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { resetAndPushTestDatabase } from './database.js';
+import { resetAndMigrateTestDatabase } from './database.js';
 
-let database: Awaited<ReturnType<typeof resetAndPushTestDatabase>>;
+let database: Awaited<ReturnType<typeof resetAndMigrateTestDatabase>>;
 
 beforeAll(async () => {
-  database = await resetAndPushTestDatabase();
+  database = await resetAndMigrateTestDatabase();
 });
 
 afterAll(async () => {
@@ -21,6 +21,8 @@ describe('authentication schema', () => {
        ORDER BY table_name`,
     );
     expect(result.rows.map((row) => row.table_name)).toEqual([
+      'achievement_record_events',
+      'achievement_records',
       'achievements',
       'app_sessions',
       'arenas',
@@ -185,6 +187,13 @@ describe('authentication schema', () => {
        WHERE table_schema = 'public' AND table_name = 'arenas'
        ORDER BY ordinal_position`,
     );
+    const claimableColumns = await database.pool.query<{ column_name: string; data_type: string }>(
+      `SELECT column_name, data_type
+       FROM information_schema.columns
+       WHERE table_schema = 'public' AND table_name = 'arenas'
+         AND column_name IN ('claimable_cell_count', 'claimable_cell_size')
+       ORDER BY column_name`,
+    );
     const indexes = await database.pool.query<{ indexname: string; indexdef: string }>(
       `SELECT indexname, indexdef
        FROM pg_indexes
@@ -205,6 +214,14 @@ describe('authentication schema', () => {
       { column_name: 'area', is_nullable: 'NO' },
       { column_name: 'external_source', is_nullable: 'YES' },
       { column_name: 'external_id', is_nullable: 'YES' },
+      { column_name: 'arena_type', is_nullable: 'NO' },
+      { column_name: 'country_code', is_nullable: 'NO' },
+      { column_name: 'claimable_cell_count', is_nullable: 'YES' },
+      { column_name: 'claimable_cell_size', is_nullable: 'YES' },
+    ]);
+    expect(claimableColumns.rows).toEqual([
+      { column_name: 'claimable_cell_count', data_type: 'bigint' },
+      { column_name: 'claimable_cell_size', data_type: 'integer' },
     ]);
     expect(geometryColumns.rows).toEqual([
       { f_geometry_column: 'area', srid: 6933, type: 'MULTIPOLYGON' },
@@ -220,6 +237,14 @@ describe('authentication schema', () => {
       .toContain('USING gist (area)');
     expect(indexes.rows.find(({ indexname }) => indexname === 'arenas_external_source_external_id_unique')?.indexdef)
       .toContain('WHERE ((external_source IS NOT NULL) AND (external_id IS NOT NULL))');
+    const enumValues = await database.pool.query<{ enumlabel: string }>(
+      `SELECT enumlabel
+       FROM pg_enum
+       INNER JOIN pg_type ON pg_type.oid = pg_enum.enumtypid
+       WHERE pg_type.typname = 'arena_type'
+       ORDER BY enumsortorder`,
+    );
+    expect(enumValues.rows.map(({ enumlabel }) => enumlabel)).toEqual(['launch', 'general', 'state', 'country']);
   });
 
   it('stores permanent personal grid contributions with a cascading pilot and flight identity', async () => {

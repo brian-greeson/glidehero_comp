@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 // @ts-expect-error Browser assets remain JavaScript.
-import { MAPLIBRE_DRAW_STYLES, areaPreviewPayload, createAreaSelection, createUnsavedActionGate, enableMapLibreDrawControls, extractImportedPolygonFeatures, filterAndSortAreas, nextAreaSort, polygonComponentCount } from '../../public/scripts/admin/polygonAreaEditor.js';
+import { MAPLIBRE_DRAW_STYLES, adminAreaSavePayload, arenaTypeLabel, areaPreviewPayload, countryOptionForArea, createAreaSelection, createUnsavedActionGate, enableMapLibreDrawControls, extractImportedPolygonFeatures, filterAndSortAreas, nextAreaSort, polygonComponentCount } from '../../public/scripts/admin/polygonAreaEditor.js';
 
 describe('Arena GeoJSON import', () => {
   const polygon = { type: 'Polygon', coordinates: [[[0, 0], [0, 1], [1, 1], [0, 0]]] };
@@ -120,6 +120,16 @@ describe('Arena GeoJSON import', () => {
     ];
     expect(filterAndSortAreas(areas, 'golden').map((area: { name: string }) => area.name)).toEqual(['Zulu']);
     expect(filterAndSortAreas(areas, '').map((area: { name: string }) => area.name)).toEqual(['Alpha', 'Zulu']);
+  });
+
+  it('renders readable type labels, resolves an existing country selection, and posts only countryArenaId', () => {
+    expect(['launch', 'general', 'state', 'country'].map(arenaTypeLabel)).toEqual(['Launch', 'General', 'State', 'Country']);
+    const countries = [{ id: 'country-1', sourceId: 3000000001, name: 'United States', countryCode: 'US' }];
+    expect(countryOptionForArea(countries, { countryCode: 'US' })).toEqual(countries[0]);
+    expect(adminAreaSavePayload({ name: 'Boulder', countryArenaId: countries[0]!.id, state: 'CO', city: '', country: 'United States' }, { type: 'FeatureCollection', features: [] })).toEqual({
+      name: 'Boulder', countryArenaId: 'country-1', state: 'CO', city: '', geojson: { type: 'FeatureCollection', features: [] },
+    });
+    expect(adminAreaSavePayload({ name: 'Boulder', countryArenaId: 'country-1', country: 'United States' }, {}).country).toBeUndefined();
   });
 
   it('toggles the active sort direction and resets direction for a new column', () => {

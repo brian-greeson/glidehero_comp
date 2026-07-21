@@ -137,7 +137,7 @@ describe('Vento page renderer', () => {
     expect(authenticated).not.toContain('aria-label="Coverage time period"');
     expect(authenticated).not.toContain('data-current-month-option');
     expect(authenticated).toContain('data-personal-stats');
-    expect(authenticated).not.toContain('data-arena-search-input');
+    expect(authenticated).toContain('data-arena-search-input');
     expect(authenticated).toContain(
       'https://api.maptiler.com/maps/outdoor-v2/style.json?key=maptiler-test-key',
     );
@@ -177,7 +177,8 @@ describe('Vento page renderer', () => {
     expect(personal).toContain('data-territory-tile-minimum-zoom="4"');
     expect(personal).toContain('data-territory-tile-maximum-zoom="14"');
     expect(personal).toContain('data-map-flight-aid-status');
-    expect(personal).not.toContain('data-arena-search');
+    expect(personal).toContain('data-arena-search');
+    expect(personal).toContain('data-arena-search-input');
     expect(personal).not.toContain('competition-breadcrumb');
 
     const arena = await render({
@@ -191,6 +192,7 @@ describe('Vento page renderer', () => {
         state: 'Colorado',
         country: 'United States',
         countryCode: 'us',
+        arenaType: 'general',
         path: '/arena/us/boulder-745',
         boundary: {
           type: 'Feature',
@@ -198,6 +200,15 @@ describe('Vento page renderer', () => {
           geometry: { type: 'MultiPolygon', coordinates: [] },
           bbox: [-106, 39, -105, 40],
         },
+      },
+      arenaProgress: {
+        kind: 'general',
+        firstProgressDate: null,
+        mostRecentProgressDate: null,
+        claimedCells: 1,
+        totalCells: 3,
+        coveragePercentage: 33.3,
+        nextMilestone: 50,
       },
     });
     expect(arena).toContain('data-competition-coverage="arena"');
@@ -209,6 +220,11 @@ describe('Vento page renderer', () => {
     expect(arena).toContain('<a href="/global" data-competition-period-link="/global">Global</a>');
     expect(arena).toContain('aria-current="page">Boulder</span>');
     expect(arena).toContain('data-arena-search-input');
+    expect(arena).toContain('data-arena-personal-progress');
+    expect(arena).toContain('Cells claimed:</strong> 1/3');
+    expect(arena).toContain('Coverage:</strong> 33.3%');
+    expect(arena).toContain('Next milestone:</strong> 50%');
+    expect(arena).not.toContain('2026-');
     expect(arena).toContain('<script type="module" src="/scripts/arena.js"></script>');
   });
 

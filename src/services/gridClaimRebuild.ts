@@ -175,5 +175,6 @@ export async function rebuildGridClaims(
     personalCellTotalAfter: counts.personalCellTotalAfter,
     progressionVersion: counts.progressionVersion,
     evaluatedAt: new Date(counts.evaluatedAt),
+    arenaAchievements: { newlyEarned: [], alreadyEarned: 0, record: null },
   };
 }

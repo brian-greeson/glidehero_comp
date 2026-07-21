@@ -1,11 +1,11 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { createArenaService } from '../../src/services/arenaService.js';
-import { resetAndPushTestDatabase } from './database.js';
+import { resetAndMigrateTestDatabase } from './database.js';
 
-let database: Awaited<ReturnType<typeof resetAndPushTestDatabase>>;
+let database: Awaited<ReturnType<typeof resetAndMigrateTestDatabase>>;
 
 beforeAll(async () => {
-  database = await resetAndPushTestDatabase();
+  database = await resetAndMigrateTestDatabase();
 });
 
 beforeEach(async () => {
@@ -16,16 +16,16 @@ afterAll(async () => {
   await database.pool.end();
 });
 
-async function insertArena(input: { sourceId: number; name: string; city: string }) {
+async function insertArena(input: { sourceId: number; name: string; city: string; countryCode?: string; arenaType?: string }) {
   const inserted = await database.pool.query<{ id: string }>(`
     INSERT INTO arenas (
-      source_id, name, country, state, city, location, altitude_meters, timezone, area
+      source_id, name, country, country_code, arena_type, state, city, location, altitude_meters, timezone, area
     ) VALUES (
-      $1, $2, 'United States', 'Colorado', $3,
+      $1, $2, 'United States', $4, $5, 'Colorado', $3,
       ST_Transform(ST_SetSRID(ST_Point(500, 500), 6933), 4326), 1000, 'America/Denver',
       ST_Multi(ST_MakeEnvelope(0, 0, 1000, 1000, 6933))
     ) RETURNING id
-  `, [input.sourceId, input.name, input.city]);
+  `, [input.sourceId, input.name, input.city, input.countryCode ?? 'US', input.arenaType ?? 'general']);
   const id = inserted.rows[0]?.id;
   if (!id) throw new Error('Expected Arena id.');
   return id;
@@ -43,6 +43,7 @@ describe('ArenaService with PostGIS', () => {
     expect(arenas[0]).toMatchObject({
       name: 'Boulder Ridge',
       countryCode: 'us',
+      arenaType: 'general',
       path: '/arena/us/boulder-ridge-745',
     });
   });
@@ -66,6 +67,17 @@ describe('ArenaService with PostGIS', () => {
     await expect(service.search("' OR TRUE --")).resolves.toEqual([]);
   });
 
+  it('uses the stored country code for routes outside the legacy country list', async () => {
+    await insertArena({ sourceId: 910, name: 'Pristina Ridge', city: 'Pristina', countryCode: 'XK', arenaType: 'country' });
+    const service = createArenaService(database.db);
+
+    await expect(service.getByRoute('xk', 'pristina-ridge-910')).resolves.toMatchObject({
+      countryCode: 'xk',
+      arenaType: 'country',
+      path: '/arena/xk/pristina-ridge-910',
+    });
+  });
+
   it('resolves only canonical routes and returns a WGS84 boundary and bounds', async () => {
     await insertArena({ sourceId: 745, name: 'Boulder Ridge', city: 'Boulder' });
     const service = createArenaService(database.db, { cellSize: 1_000 });
@@ -83,8 +95,8 @@ describe('ArenaService with PostGIS', () => {
 
   it('preserves disconnected components and returns narrow antimeridian display bounds', async () => {
     await database.pool.query(`
-      INSERT INTO arenas (source_id, name, country, state, area)
-      VALUES (900, 'Date Line Arena', 'United States', 'Alaska', ST_Multi(ST_Collect(
+      INSERT INTO arenas (source_id, name, country, country_code, state, area)
+      VALUES (900, 'Date Line Arena', 'United States', 'US', 'Alaska', ST_Multi(ST_Collect(
         ST_Transform(ST_MakeEnvelope(170, 50, 179, 60, 4326), 6933),
         ST_Transform(ST_MakeEnvelope(-179, 50, -170, 60, 4326), 6933)
       )))

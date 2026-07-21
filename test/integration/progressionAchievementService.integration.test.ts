@@ -2,14 +2,14 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { eq } from 'drizzle-orm';
 import { achievements, competitionGridClaims, flights, flightProgress, igcFiles, personalGridClaims, trackPoints, users } from '../../src/db/schema.js';
 import { createGridClaimService } from '../../src/services/gridClaimService.js';
-import { resetAndPushTestDatabase } from './database.js';
+import { resetAndMigrateTestDatabase } from './database.js';
 
 type ProjectedCoordinate = readonly [x: number, y: number];
 
-let database: Awaited<ReturnType<typeof resetAndPushTestDatabase>>;
+let database: Awaited<ReturnType<typeof resetAndMigrateTestDatabase>>;
 
 beforeAll(async () => {
-  database = await resetAndPushTestDatabase();
+  database = await resetAndMigrateTestDatabase();
 });
 
 beforeEach(async () => {

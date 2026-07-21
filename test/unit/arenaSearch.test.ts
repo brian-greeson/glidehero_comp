@@ -91,9 +91,9 @@ function response(arenas: unknown[]) {
 }
 
 const arenas = [
-  { name: 'Alpha', city: 'One', state: 'Colorado', country: 'United States', path: '/arena/us/alpha-1' },
-  { name: 'Bravo', city: 'Two', state: 'Colorado', country: 'United States', path: '/arena/us/bravo-2' },
-  { name: 'Charlie', city: 'Three', state: 'Colorado', country: 'United States', path: '/arena/us/charlie-3' },
+  { name: 'Alpha', city: 'One', state: 'Colorado', country: 'United States', arenaType: 'launch', path: '/arena/us/alpha-1' },
+  { name: 'Bravo', city: 'Two', state: 'Colorado', country: 'United States', arenaType: 'general', path: '/arena/us/bravo-2' },
+  { name: 'Charlie', city: 'Three', state: 'Colorado', country: 'United States', arenaType: 'state', path: '/arena/us/charlie-3' },
 ];
 
 describe('Arena autocomplete', () => {
@@ -181,5 +181,22 @@ describe('Arena autocomplete', () => {
     context.results.children[0]?.dispatch('click');
 
     expect(context.navigate).toHaveBeenCalledWith('/arena/us/alpha-1?month=2026-07');
+  });
+
+  it('renders readable labels for every Arena type', async () => {
+    const context = harness(vi.fn(async () => response([
+      ...arenas,
+      { name: 'Delta', city: '', state: '', country: 'United States', arenaType: 'country', path: '/arena/us/delta-4' },
+    ])));
+    context.input.value = 'a';
+    context.input.dispatch('input');
+    await vi.advanceTimersByTimeAsync(200);
+
+    expect(context.results.children.map((child) => child.textContent)).toEqual([
+      'Launch — Alpha — One, Colorado, United States',
+      'General — Bravo — Two, Colorado, United States',
+      'State — Charlie — Three, Colorado, United States',
+      'Country — Delta — United States',
+    ]);
   });
 });

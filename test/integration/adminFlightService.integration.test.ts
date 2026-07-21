@@ -2,10 +2,10 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vites
 import { eq } from 'drizzle-orm';
 import { flights, igcFiles, personalGridClaims, trackPoints, users } from '../../src/db/schema.js';
 import { createAdminFlightService } from '../../src/services/adminFlightService.js';
-import { resetAndPushTestDatabase } from './database.js';
+import { resetAndMigrateTestDatabase } from './database.js';
 
-let database: Awaited<ReturnType<typeof resetAndPushTestDatabase>>;
-beforeAll(async () => { database = await resetAndPushTestDatabase(); });
+let database: Awaited<ReturnType<typeof resetAndMigrateTestDatabase>>;
+beforeAll(async () => { database = await resetAndMigrateTestDatabase(); });
 beforeEach(async () => { await database.pool.query('TRUNCATE TABLE users CASCADE'); });
 afterAll(async () => { if (database) await database.pool.end(); });
 
@@ -32,6 +32,7 @@ function serviceHarness(send = vi.fn(async (_command: unknown) => ({}))) {
     flightId: 'flight', cellSize: 1000, directCellCount: 1, enclosedCellCount: 0,
     newPersonalCellCount: 1, personalCellTotalAfter: 1, progressionVersion: 1,
     evaluatedAt: new Date('2026-07-20T00:00:00Z'),
+    arenaAchievements: { newlyEarned: [], alreadyEarned: 0, record: null },
   } }));
   const presign = vi.fn(async () => 'https://objects.example.test/download');
   return {

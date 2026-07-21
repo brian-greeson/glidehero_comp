@@ -4,6 +4,7 @@ import { competitionGridClaims, flights, personalGridClaims } from '../db/schema
 import { emptyViewportStats, type ViewportStats } from '../domain/territory/viewportStats.js';
 import { rebuildGridClaims } from './gridClaimRebuild.js';
 import { createProgressionAchievementService, type ProgressionAchievementService } from './progressionAchievementService.js';
+import { createArenaAchievementService, type ArenaAchievementEvaluation, type ArenaAchievementService } from './arenaAchievementService.js';
 import { viewportCtes, type ViewportBounds } from './viewportGrid.js';
 
 export type GridClaimProcessResult = {
@@ -15,6 +16,7 @@ export type GridClaimProcessResult = {
   personalCellTotalAfter: number;
   progressionVersion: number;
   evaluatedAt: Date;
+  arenaAchievements: ArenaAchievementEvaluation;
 };
 
 type DatabaseTransaction = Parameters<Parameters<Database['transaction']>[0]>[0];
@@ -49,6 +51,7 @@ export function createGridClaimService(
   database: Database,
   options: { cellSize: number },
   progressionAchievements: ProgressionAchievementService = createProgressionAchievementService(),
+  arenaAchievements: ArenaAchievementService = createArenaAchievementService(),
 ): TransactionalGridClaimService {
   async function processInTransaction(
     transaction: GridClaimTransaction,
@@ -89,6 +92,14 @@ export function createGridClaimService(
         enclosedCells: result.enclosedCellCount,
       });
     }
+    result.arenaAchievements = flight && evaluateAchievements
+      ? await arenaAchievements.evaluateInTransaction(transaction, {
+        userId: input.userId,
+        sourceFlightId: input.flightId,
+        cellSize: options.cellSize,
+        earnedAt: result.evaluatedAt,
+      })
+      : { newlyEarned: [], alreadyEarned: 0, record: null };
     return result;
   }
 

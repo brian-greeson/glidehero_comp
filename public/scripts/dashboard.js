@@ -18,10 +18,10 @@ export function initializeDashboard({
   initializeOnboarding({ documentRef });
   initializeMobileSheet({ documentRef });
   initializeDashboardChrome({ documentRef });
+  initializeArenaSearch({ documentRef, fetchImpl });
 
   const dashboardRoot = documentRef.querySelector('[data-dashboard]');
   if (dashboardRoot?.dataset.dashboardMode === 'global') {
-    initializeArenaSearch({ documentRef, fetchImpl });
     initializeGlobalDashboard({
       documentRef,
       maplibre,

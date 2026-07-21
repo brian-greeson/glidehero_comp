@@ -9,6 +9,7 @@ import { createAdminFlightService } from './services/adminFlightService.js';
 import { createAdminAreaService } from './services/adminAreaService.js';
 import { createAdminUserService } from './services/adminUserService.js';
 import { createArenaService } from './services/arenaService.js';
+import { createArenaProgressService } from './services/arenaProgressService.js';
 import { createGridClaimService } from './services/gridClaimService.js';
 import { createFlightUploadQueueService } from './services/flightUploadQueueService.js';
 import { createFailedFlightCleanupService } from './services/failedFlightCleanupService.js';
@@ -32,6 +33,7 @@ const valkey = await createValkeyClient(config.valkeyUrl);
 const gridClaim = createGridClaimService(db, { cellSize: config.gridClaimCellSize });
 const adminAreas = createAdminAreaService(db, { cellSize: config.gridClaimCellSize });
 const arenas = createArenaService(db, { cellSize: config.gridClaimCellSize });
+const arenaProgress = createArenaProgressService(db, { cellSize: config.gridClaimCellSize });
 const monthlyCoverage = createMonthlyCoverageService(db, { cellSize: config.gridClaimCellSize });
 const mapGrid = createMapGridService(db, { cellSize: config.gridClaimCellSize });
 const territoryTiles = createTerritoryTileService(db, { cellSize: config.gridClaimCellSize });
@@ -86,6 +88,7 @@ const webMiddleware = [
     coverage: monthlyCoverage,
     territoryTiles,
     arenas,
+    arenaProgress,
     renderPage: createPageRenderer({
       mapTilerApiKey: config.mapTilerApiKey,
       territoryTileSettings,

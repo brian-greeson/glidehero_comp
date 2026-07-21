@@ -10,6 +10,8 @@ export const relations = defineRelations(schema, (r) => ({
     flights: r.many.flights({ from: r.users.id, to: r.flights.userId }),
     flightProgress: r.many.flightProgress({ from: r.users.id, to: r.flightProgress.userId }),
     achievements: r.many.achievements({ from: r.users.id, to: r.achievements.userId }),
+    achievementRecords: r.many.achievementRecords({ from: r.users.id, to: r.achievementRecords.userId }),
+    achievementRecordEvents: r.many.achievementRecordEvents({ from: r.users.id, to: r.achievementRecordEvents.userId }),
     personalGridClaims: r.many.personalGridClaims({ from: r.users.id, to: r.personalGridClaims.claimUser }),
     competitionGridClaims: r.many.competitionGridClaims({ from: r.users.id, to: r.competitionGridClaims.claimUser }),
   },
@@ -45,6 +47,16 @@ export const relations = defineRelations(schema, (r) => ({
   achievements: {
     user: r.one.users({ from: r.achievements.userId, to: r.users.id }),
     sourceFlight: r.one.flights({ from: r.achievements.sourceFlightId, to: r.flights.id }),
+  },
+  achievementRecords: {
+    user: r.one.users({ from: r.achievementRecords.userId, to: r.users.id }),
+    sourceFlight: r.one.flights({ from: r.achievementRecords.sourceFlightId, to: r.flights.id }),
+    events: r.many.achievementRecordEvents({ from: r.achievementRecords.id, to: r.achievementRecordEvents.recordId }),
+  },
+  achievementRecordEvents: {
+    record: r.one.achievementRecords({ from: r.achievementRecordEvents.recordId, to: r.achievementRecords.id }),
+    user: r.one.users({ from: r.achievementRecordEvents.userId, to: r.users.id }),
+    sourceFlight: r.one.flights({ from: r.achievementRecordEvents.sourceFlightId, to: r.flights.id }),
   },
   personalGridClaims: {
     flight: r.one.flights({ from: r.personalGridClaims.claimFlight, to: r.flights.id }),

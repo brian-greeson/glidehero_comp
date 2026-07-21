@@ -19,6 +19,8 @@ const area = {
   country: 'United States',
   state: 'Colorado',
   city: 'Boulder',
+  arenaType: 'general' as const,
+  countryCode: 'US',
   componentCount: 1,
   geometry: { type: 'MultiPolygon' as const, coordinates: [] },
   bbox: [-106, 39, -105, 40] as [number, number, number, number],
@@ -28,6 +30,7 @@ const geojson = { type: 'Polygon', coordinates: [[[0, 0], [0, 1], [1, 1], [0, 0]
 function setup() {
   const areas: AdminAreaService = {
     list: vi.fn(async () => [area]),
+    listCountryOptions: vi.fn(async () => [{ id: '00000000-0000-4000-8000-000000000011', sourceId: 3_000_000_001, name: 'United States', countryCode: 'US' }]),
     get: vi.fn(async () => area),
     create: vi.fn(async () => area),
     update: vi.fn(async () => area),
@@ -66,19 +69,33 @@ describe('admin Arena router', () => {
       const headers = { 'x-admin': 'yes' };
       expect(await (await fetch(`${baseUrl}/admin/areas`, { headers })).text()).toContain('Arena editor');
       expect(await (await fetch(`${baseUrl}/admin/api/areas`, { headers })).json()).toEqual({ areas: [area] });
+      expect(await (await fetch(`${baseUrl}/admin/api/areas/countries`, { headers })).json()).toEqual({ countries: [{ id: '00000000-0000-4000-8000-000000000011', sourceId: 3_000_000_001, name: 'United States', countryCode: 'US' }] });
       expect(await (await fetch(`${baseUrl}/admin/api/areas/${id}`, { headers })).json()).toEqual({ area });
 
-      const body = { name: 'Boulder', country: 'United States', state: '', city: '', geojson };
+      const countryArenaId = '00000000-0000-4000-8000-000000000011';
+      const body = { name: 'Boulder', countryArenaId, state: '', city: '', geojson };
       expect((await fetch(`${baseUrl}/admin/api/areas`, {
         method: 'POST', headers: { ...headers, 'content-type': 'application/json' }, body: JSON.stringify(body),
       })).status).toBe(201);
-      expect(areas.create).toHaveBeenCalledWith(expect.objectContaining({ state: '', city: '', geometries: [geojson] }));
+      expect(areas.create).toHaveBeenCalledWith(expect.objectContaining({ countryArenaId, state: '', city: '', geometries: [geojson] }));
 
       expect((await fetch(`${baseUrl}/admin/api/areas/preview`, {
         method: 'POST', headers: { ...headers, 'content-type': 'application/json' },
         body: JSON.stringify({ west: 0, south: 0, east: 1, north: 1, geojson }),
       })).status).toBe(200);
       expect(areas.preview).toHaveBeenCalled();
+    });
+  });
+
+  it('rejects malformed and unresolved Country Arena identifiers', async () => {
+    const { app, areas } = setup();
+    vi.mocked(areas.create).mockRejectedValueOnce(new RangeError('Select a valid Country Arena.'));
+    await withServer(app, async (baseUrl) => {
+      const headers = { 'x-admin': 'yes', 'content-type': 'application/json' };
+      const malformed = await fetch(`${baseUrl}/admin/api/areas`, { method: 'POST', headers, body: JSON.stringify({ name: 'Boulder', countryArenaId: 'not-a-uuid', geojson }) });
+      expect(malformed.status).toBe(422);
+      const unresolved = await fetch(`${baseUrl}/admin/api/areas`, { method: 'POST', headers, body: JSON.stringify({ name: 'Boulder', countryArenaId: id, geojson }) });
+      expect(unresolved.status).toBe(422);
     });
   });
 

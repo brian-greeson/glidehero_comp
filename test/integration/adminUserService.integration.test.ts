@@ -3,11 +3,11 @@ import { appSessions, flights, igcFiles, profiles, userPasswords, users } from '
 import { eq } from 'drizzle-orm';
 import { createAdminUserService } from '../../src/services/adminUserService.js';
 import { verifyPassword } from '../../src/services/passwordService.js';
-import { resetAndPushTestDatabase } from './database.js';
+import { resetAndMigrateTestDatabase } from './database.js';
 
-let database: Awaited<ReturnType<typeof resetAndPushTestDatabase>>;
+let database: Awaited<ReturnType<typeof resetAndMigrateTestDatabase>>;
 
-beforeAll(async () => { database = await resetAndPushTestDatabase(); });
+beforeAll(async () => { database = await resetAndMigrateTestDatabase(); });
 beforeEach(async () => { await database.pool.query('TRUNCATE TABLE users CASCADE'); });
 afterAll(async () => { if (database) await database.pool.end(); });
 

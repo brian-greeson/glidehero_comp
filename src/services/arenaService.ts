@@ -1,6 +1,6 @@
 import { sql } from 'drizzle-orm';
 import type { Database } from '../db/client.js';
-import { arenaCountryCode, arenaPath, isCanonicalArenaRoute, parseArenaSourceId } from '../domain/arena/arenaRoute.js';
+import { arenaPath, isCanonicalArenaRoute, parseArenaSourceId } from '../domain/arena/arenaRoute.js';
 import { buildLiteralSearchPatterns } from '../domain/search/searchSanitizer.js';
 
 export type ArenaSummary = {
@@ -10,6 +10,7 @@ export type ArenaSummary = {
   state: string;
   country: string;
   countryCode: string;
+  arenaType: 'launch' | 'general' | 'state' | 'country';
   path: string;
 };
 
@@ -35,6 +36,8 @@ type StoredArena = {
   city: string;
   state: string;
   country: string;
+  countryCode: string;
+  arenaType: ArenaSummary['arenaType'];
 };
 
 type StoredArenaDetail = StoredArena & {
@@ -52,7 +55,8 @@ function summary(row: StoredArena): ArenaSummary {
     city: row.city,
     state: row.state,
     country: row.country,
-    countryCode: arenaCountryCode(row.country),
+    countryCode: row.countryCode.toLowerCase(),
+    arenaType: row.arenaType,
     path: arenaPath(row),
   };
 }
@@ -92,6 +96,7 @@ export function createArenaService(database: Database, _options?: { cellSize: nu
       SELECT
         id, source_id::integer AS "sourceId", name,
         COALESCE(city, '') AS city, COALESCE(state, '') AS state, country,
+        country_code AS "countryCode", arena_type AS "arenaType",
         ST_AsGeoJSON(display_geometry)::jsonb AS geometry,
         ST_XMin(ST_Envelope(display_geometry))::double precision AS west,
         ST_YMin(ST_Envelope(display_geometry))::double precision AS south,
@@ -115,7 +120,9 @@ export function createArenaService(database: Database, _options?: { cellSize: nu
           area.name,
           COALESCE(area.city, '') AS city,
           COALESCE(area.state, '') AS state,
-          area.country
+          area.country,
+          area.country_code AS "countryCode",
+          area.arena_type AS "arenaType"
         FROM arenas area
         WHERE NOT ST_IsEmpty(area.area)
           AND ST_IsValid(area.area)

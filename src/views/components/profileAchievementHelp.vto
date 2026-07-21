@@ -14,6 +14,26 @@
         {{ include "components/profileAchievementBadge.vto" { achievementType: 'personal_best_enclosed_cells', badgeLabel: 'Loop' } }}
         <div><h3>Enclosed-cell personal bests</h3><p>Set or improve the record for cells enclosed in one flight.</p></div>
       </article>
+      <article>
+        {{ include "components/profileAchievementBadge.vto" { achievementType: 'special', achievementCategory: 'launch', badgeLabel: '★', badgeAriaLabel: 'Launch Arena achievement' } }}
+        <div><h3>Launch Arena achievements</h3><p>Visit Launch Arenas, start your first flight from one, and complete every cell in one.</p></div>
+      </article>
+      <article>
+        {{ include "components/profileAchievementBadge.vto" { achievementType: 'threshold', achievementCategory: 'general', badgeLabel: '10', badgeAriaLabel: 'General Arena achievement' } }}
+        <div><h3>General Arena achievements</h3><p>Claim cells in General Arenas and reach coverage milestones in any one Arena.</p></div>
+      </article>
+      <article>
+        {{ include "components/profileAchievementBadge.vto" { achievementType: 'threshold', achievementCategory: 'state', badgeLabel: '1', badgeAriaLabel: 'State achievement' } }}
+        <div><h3>State achievements</h3><p>States Flown in counts a State Arena once you claim at least one cell there.</p></div>
+      </article>
+      <article>
+        {{ include "components/profileAchievementBadge.vto" { achievementType: 'threshold', achievementCategory: 'country', badgeLabel: '1', badgeAriaLabel: 'Country achievement' } }}
+        <div><h3>Country achievements</h3><p>Countries Flown in counts a Country Arena once you claim at least one cell there.</p></div>
+      </article>
+      <article>
+        {{ include "components/profileAchievementBadge.vto" { achievementType: 'record', achievementCategory: 'launch', badgeLabel: 'PB', badgeAriaLabel: 'Launch Arena personal-best achievement' } }}
+        <div><h3>Launch Arena personal bests</h3><p>Tag distinct Launch Arenas during one flight to establish or improve the record.</p></div>
+      </article>
     </div>
   </div>
   <aside class="achievement-how-it-works">

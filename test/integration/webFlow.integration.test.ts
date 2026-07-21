@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createApp } from '../../src/app.js';
 import { createAuthService } from '../../src/services/authService.js';
 import { createArenaService } from '../../src/services/arenaService.js';
+import { createArenaProgressService } from '../../src/services/arenaProgressService.js';
 import { createMonthlyCoverageService } from '../../src/services/monthlyCoverageService.js';
 import { createGridClaimService } from '../../src/services/gridClaimService.js';
 import { createMapGridService } from '../../src/services/mapGridService.js';
@@ -12,12 +13,12 @@ import { createCurrentUserMiddleware } from '../../src/web/currentUserMiddleware
 import { createSessionCookie } from '../../src/web/sessionCookie.js';
 import { createWebRouter } from '../../src/web/webRouter.js';
 import { withServer } from '../support/http.js';
-import { resetAndPushTestDatabase } from './database.js';
+import { resetAndMigrateTestDatabase } from './database.js';
 
-let database: Awaited<ReturnType<typeof resetAndPushTestDatabase>> | undefined;
+let database: Awaited<ReturnType<typeof resetAndMigrateTestDatabase>> | undefined;
 
 beforeAll(async () => {
-  database = await resetAndPushTestDatabase();
+  database = await resetAndMigrateTestDatabase();
 });
 
 afterAll(async () => {
@@ -35,6 +36,7 @@ describe('GlideHero browser authentication flow', () => {
     const mapGrid = createMapGridService(testDatabase.db, { cellSize: 1_000 });
     const coverage = createMonthlyCoverageService(testDatabase.db, { cellSize: 1_000 });
     const arenas = createArenaService(testDatabase.db, { cellSize: 1_000 });
+    const arenaProgress = createArenaProgressService(testDatabase.db, { cellSize: 1_000 });
     const territoryTiles = createTerritoryTileService(testDatabase.db, { cellSize: 1_000 });
     const cookie = createSessionCookie({
       name: 'glidehero_session',
@@ -53,6 +55,7 @@ describe('GlideHero browser authentication flow', () => {
           coverage,
           territoryTiles,
           arenas,
+          arenaProgress,
           renderPage: createPageRenderer({ mapTilerApiKey: 'maptiler-test-key' }),
         }),
       ],

@@ -20,9 +20,12 @@
     "db:migrate": "drizzle-kit migrate",
     "db:check": "drizzle-kit check",
     "db:reset": "dropdb --if-exists \"$DB_NAME\" && createdb \"$DB_NAME\"",
-    "import:launches": "tsx --env-file=.env src/scripts/importLaunches.ts",
-    "import:state-arenas": "tsx --env-file=.env src/scripts/importStateArenas.ts",
-    "backfill:flight-progress": "tsx --env-file-if-exists=.env src/scripts/backfillFlightProgress.ts"
+    "import:launches": "tsx --env-file-if-exists=.env src/scripts/importLaunches.ts",
+    "import:state-arenas": "tsx --env-file-if-exists=.env src/scripts/importStateArenas.ts",
+    "import:country-arenas": "tsx --env-file-if-exists=.env src/scripts/importCountryArenas.ts",
+    "rebuild:arenas": "tsx --env-file-if-exists=.env src/scripts/rebuildArenas.ts",
+    "backfill:flight-progress": "tsx --env-file-if-exists=.env src/scripts/backfillFlightProgress.ts",
+    "backfill:arena-achievements": "tsx --env-file-if-exists=.env src/scripts/backfillArenaAchievements.ts"
   },
   "author": "Mountain Sentry",
   "license": "UNLICENSED",

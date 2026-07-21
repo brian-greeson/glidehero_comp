@@ -8,7 +8,7 @@ import type { AdminAreaPageRenderer } from '../views/renderer.js';
 const uuid = z.string().uuid();
 const saveSchema = z.object({
   name: z.string().trim().min(1).max(160),
-  country: z.string().trim().min(1).max(120),
+  countryArenaId: uuid,
   state: z.string().trim().max(120).optional(),
   city: z.string().trim().max(120).optional(),
   geojson: z.unknown(),
@@ -52,6 +52,14 @@ export function createAdminAreaRouter(dependencies: {
   router.get('/admin/api/areas', async (_req, res, next) => {
     try {
       res.json({ areas: await dependencies.areas.list() });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.get(['/admin/api/areas/countries', '/admin/api/countries'], async (_req, res, next) => {
+    try {
+      res.json({ countries: await dependencies.areas.listCountryOptions() });
     } catch (error) {
       next(error);
     }
@@ -105,7 +113,7 @@ export function createAdminAreaRouter(dependencies: {
   async function save(req: Request, res: Response, next: NextFunction, id?: string) {
     const parsed = saveSchema.safeParse(req.body);
     if (!parsed.success) {
-      next(new AppError(422, 'invalid_request', 'Enter a name, country, and polygon geometry.'));
+      next(new AppError(422, 'invalid_request', 'Enter a name, Country Arena, and polygon geometry.'));
       return;
     }
     try {
@@ -113,7 +121,7 @@ export function createAdminAreaRouter(dependencies: {
       if (!geometries.length) throw new TypeError('Add at least one polygon.');
       const input = {
         name: parsed.data.name,
-        country: parsed.data.country,
+        countryArenaId: parsed.data.countryArenaId,
         state: parsed.data.state,
         city: parsed.data.city,
         geometries,

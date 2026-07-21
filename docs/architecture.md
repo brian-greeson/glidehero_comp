@@ -257,6 +257,12 @@ Schema changes should preserve database invariants using constraints and indexes
 
 This project uses Drizzle ORM and Drizzle Kit 1.0 release candidates. Use documentation and APIs for version 1.0 or later.
 
+Migrations use Drizzle's current folder format: each ordered directory under
+`drizzle/` contains a `migration.sql` and matching `snapshot.json`. Keep the
+directory order contiguous when adding schema changes; verify a disposable
+database with `npm run db:migrate` before deployment. The older V2
+`drizzle/meta/_journal.json` format is not used by this repository.
+
 PostgreSQL has the PostGIS extension installed. Keep geometry types and operations consistent with the existing schema and Drizzle configuration.
 
 ### Arena geometry and scoring
@@ -265,6 +271,18 @@ PostgreSQL has the PostGIS extension installed. Keep geometry types and operatio
 valid `geometry(MultiPolygon,6933)`. All Arenas use the same polygon authoring
 experience and the same search, canonical routes, boundaries, leaderboards,
 territory, and monthly/all-time behavior.
+
+The canonical `arenas` table classifies rows as `launch`, `general`, `state`, or
+`country`. Every row has an uppercase ISO-3166-1 alpha-2 `country_code`.
+`claimable_cell_count` and `claimable_cell_size` are populated only for Launch
+and General rows. The checked-in Natural Earth country artifact is reduced by
+the documented Release 2 policy to 194 Country Arenas; the Census source
+imports exactly 50 State Arenas; the launch source generates a configured 5x5
+grid for each Launch Arena. `npm run rebuild:arenas` performs the one-time,
+transactional rebuild. Its default is a dry-run; applying requires
+`--apply --confirm-delete-all-arenas` and deletes all existing rows, including
+General Arenas. It does not preserve rows, track changes, or promise a safe
+rerun.
 
 Competition claims remain global and Arena-independent. For Arena reads,
 `MonthlyCoverageService` constructs each claim-cell center as
@@ -294,8 +312,23 @@ imported holes may remain.
 Public Arena grids and Arena draft previews are generated only for the
 visible viewport using `viewportCtes`, the configured result limit, and the same
 center-point `ST_Covers` rule. The draft preview is admin-only and evaluates the
-unsaved geometry. The state importer uses the same save normalization, upserts
-the 50 states by stable Census FIPS identity, and excludes D.C. and territories.
+unsaved geometry. The state importer uses the same save normalization, imports
+the 50 states by stable Census FIPS identity once, rejects existing State
+Arenas, and excludes D.C. and territories.
+
+The admin editor creates General Arenas by default and requires selecting an
+existing Country Arena from the imported catalog. Editing an imported row
+preserves its source identity and metadata; only applicable Launch/General
+claimable denominators are recomputed with configured-grid cell centers and
+`ST_Covers`. State and Country progress is intentionally a boolean Flown-in
+state rather than a denominator.
+
+On an Arena page, competition remains the existing additive leaderboard and
+period view. The same Arena search is also available from Personal. The
+Personal card beside the leaderboard reports Launch visited plus `x/y` cells,
+General `x/y`, percentage, and next 10/25/50/75/100 milestone, or only Flown in
+for State/Country. Progress dates are kept internal to services and are not
+rendered.
 
 ## 8. External resources and adapters
 
@@ -491,6 +524,25 @@ Scripts may compose existing services and domain functions, but reusable behavio
 Add a corresponding `package.json` command when a script is intended to be run by developers or deployment tooling.
 
 Scripts should validate required inputs and make destructive or one-off behavior explicit.
+
+Release 2 achievement definitions are exhaustive in
+`src/domain/achievement/catalog.ts`. Ordinary awards are permanent and
+idempotent. The launch-tag personal-best value is written to
+`achievement_records` together with immutable `achievement_record_events` in
+one transaction; a new record is awarded only for a strict positive increase.
+The live evaluator runs after a claim rebuild while holding the per-user
+advisory transaction lock. It counts distinct configured-grid cells using
+EPSG:6933 center `ST_Covers`, ignores invalid denominators for coverage awards,
+and never revokes an existing award. Profile reads merge ordinary awards and
+record events into one latest-50 activity list without exposing raw keys or
+details.
+
+`npm run backfill:arena-achievements` is a one-time historical as-of replay.
+It defaults to dry-run, supports explicit `--apply`, acquires all relevant
+user locks in sorted order, preserves earliest source attribution, reconstructs
+strict launch-tag records, and rolls back the entire apply on a typed failure
+or ambiguous existing record. Workers must be paused and drained for the
+catalog rebuild and backfill, then restarted only after verification.
 
 ## 12. Shared type declarations
 

@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 
 // @ts-expect-error Browser assets remain JavaScript.
+import { initializeDashboard } from '../../public/scripts/dashboard.js';
+// @ts-expect-error Browser assets remain JavaScript.
 import { initializeGlobalDashboard } from '../../public/scripts/globalDashboard.js';
 // @ts-expect-error Browser assets remain JavaScript.
 import { initializePersonalDashboard } from '../../public/scripts/personalDashboard.js';
@@ -218,6 +220,41 @@ function deferred<T>() {
 }
 
 describe('Personal dashboard controller', () => {
+  it('initializes Arena search on the Personal dashboard', async () => {
+    vi.useFakeTimers();
+    try {
+      const dashboardRoot = element();
+      dashboardRoot.dataset.dashboardMode = 'personal';
+      const searchRoot = element();
+      const searchInput = element();
+      searchInput.value = 'Boulder';
+      const searchResults = element();
+      const elements = new Map<string, any>([
+        ['[data-dashboard]', dashboardRoot],
+        ['[data-arena-search]', searchRoot],
+        ['[data-arena-search-input]', searchInput],
+        ['[data-arena-search-results]', searchResults],
+      ]);
+      const documentRef = {
+        createElement: element,
+        querySelector: (selector: string) => elements.get(selector) ?? null,
+        querySelectorAll: () => [],
+      };
+      const fetchImpl = vi.fn(async () => new Response(JSON.stringify({ arenas: [] }), { status: 200 }));
+
+      initializeDashboard({ documentRef, maplibre: null, fetchImpl });
+      await searchInput.emit('input');
+      await vi.advanceTimersByTimeAsync(200);
+
+      expect(fetchImpl).toHaveBeenCalledWith('/v1/arenas?q=Boulder', expect.objectContaining({
+        credentials: 'same-origin',
+      }));
+      expect(searchResults.children[0]?.textContent).toBe('No Arenas found.');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('loads Personal territory and refreshes stats after viewport movement', async () => {
     const harness = mapHarness();
     const mapElement = {

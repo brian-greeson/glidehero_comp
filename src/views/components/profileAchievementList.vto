@@ -18,7 +18,7 @@
     <ol id="profile-achievement-list" class="profile-achievement-list" data-profile-list>
       {{ for achievement of achievements }}
         <li class="profile-achievement-item">
-          {{ include "components/profileAchievementBadge.vto" { achievementType: achievement.achievementType, badgeLabel: achievement.badgeLabel } }}
+          {{ include "components/profileAchievementBadge.vto" { achievementType: achievement.achievementType, achievementCategory: achievement.achievementCategory, badgeLabel: achievement.badgeLabel, badgeAriaLabel: achievement.badgeAriaLabel } }}
           <div class="profile-achievement-copy">
             <div class="profile-item-meta">
               <span>{{ achievement.typeLabel }}</span>

@@ -4,17 +4,17 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { igcFiles } from '../../src/db/schema.js';
 import { createAuthService } from '../../src/services/authService.js';
 import { createFlightProcessingService } from '../../src/services/flightProcessingService.js';
-import { resetAndPushTestDatabase } from './database.js';
+import { resetAndMigrateTestDatabase } from './database.js';
 
 const fixturePath = new URL('../inputs/2026-05-10-XNA-54F3F9B76F42505D1B592F21726CAF48-01.igc', import.meta.url);
 const fixture = readFileSync(fixturePath);
 const source = fixture.toString('utf8');
 const contentHash = createHash('sha256').update(fixture).digest('hex');
 
-let database: Awaited<ReturnType<typeof resetAndPushTestDatabase>> | undefined;
+let database: Awaited<ReturnType<typeof resetAndMigrateTestDatabase>> | undefined;
 
 beforeAll(async () => {
-  database = await resetAndPushTestDatabase();
+  database = await resetAndMigrateTestDatabase();
 });
 
 beforeEach(async () => {

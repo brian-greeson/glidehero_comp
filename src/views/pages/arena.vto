@@ -17,7 +17,9 @@
     <button type="button" class="sheet-handle" data-sheet-toggle aria-expanded="false"
       aria-controls="coverage-information"><span aria-hidden="true"></span><span class="sr-only"
         data-sheet-toggle-label>Expand coverage rankings</span></button>
-    <div id="coverage-information" class="dashboard-information">{{ include "components/coverageLeaderboardCard.vto" }}
+    <div id="coverage-information" class="dashboard-information">
+      {{ if arenaProgress }}{{ include "components/arenaPersonalProgress.vto" { arenaProgress } }}{{ /if }}
+      {{ include "components/coverageLeaderboardCard.vto" }}
     </div>
   </aside>
   {{ include "components/onboarding.vto" { territoryColor: currentUser.territoryColor } }}

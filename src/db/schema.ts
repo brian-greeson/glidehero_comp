@@ -137,6 +137,8 @@ export const launches = pgTable(
   ],
 );
 
+export const arenaType = pgEnum('arena_type', ['launch', 'general', 'state', 'country']);
+
 export const arenas = pgTable(
   'arenas',
   {
@@ -152,10 +154,15 @@ export const arenas = pgTable(
     area: geometryMultiPolygon6933('area').notNull(),
     externalSource: text('external_source'),
     externalId: text('external_id'),
+    arenaType: arenaType('arena_type').notNull().default('general'),
+    countryCode: text('country_code').notNull(),
+    claimableCellCount: bigint('claimable_cell_count', { mode: 'number' }),
+    claimableCellSize: integer('claimable_cell_size'),
   },
   (table) => [
     unique('arenas_source_id_unique').on(table.sourceId),
     index('arenas_area_gist_idx').using('gist', table.area),
+    check('arenas_country_code_iso2_check', sql`${table.countryCode} ~ '^[A-Z]{2}$'`),
     uniqueIndex('arenas_external_source_external_id_unique')
       .on(table.externalSource, table.externalId)
       .where(sql`${table.externalSource} IS NOT NULL AND ${table.externalId} IS NOT NULL`),
@@ -269,5 +276,46 @@ export const achievements = pgTable(
   (table) => [
     unique('achievements_user_id_achievement_key_unique').on(table.userId, table.achievementKey),
     index('achievements_user_id_earned_at_idx').on(table.userId, table.earnedAt),
+  ],
+);
+
+/** Current best value for a durable, user-scoped achievement record. */
+export const achievementRecords = pgTable(
+  'achievement_records',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    recordKey: text('record_key').notNull(),
+    bestValue: integer('best_value').notNull(),
+    sourceFlightId: uuid('source_flight_id').references(() => flights.id, { onDelete: 'set null' }),
+    earnedAt: timestamp('earned_at', { withTimezone: true, mode: 'date' }).notNull(),
+    details: jsonb('details').$type<Record<string, unknown>>().notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
+  },
+  (table) => [
+    unique('achievement_records_user_id_record_key_unique').on(table.userId, table.recordKey),
+    check('achievement_records_best_value_nonnegative', sql`${table.bestValue} > 0`),
+    index('achievement_records_user_id_updated_at_idx').on(table.userId, table.updatedAt),
+  ],
+);
+
+/** Immutable history of each strict improvement to a personal-best record. */
+export const achievementRecordEvents = pgTable(
+  'achievement_record_events',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    recordId: uuid('record_id').notNull().references(() => achievementRecords.id, { onDelete: 'cascade' }),
+    userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    sourceFlightId: uuid('source_flight_id').references(() => flights.id, { onDelete: 'set null' }),
+    value: integer('value').notNull(),
+    earnedAt: timestamp('earned_at', { withTimezone: true, mode: 'date' }).notNull(),
+    details: jsonb('details').$type<Record<string, unknown>>().notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
+  },
+  (table) => [
+    index('achievement_record_events_record_id_earned_at_idx').on(table.recordId, table.earnedAt),
+    index('achievement_record_events_user_id_earned_at_idx').on(table.userId, table.earnedAt),
+    check('achievement_record_events_value_nonnegative', sql`${table.value} > 0`),
   ],
 );

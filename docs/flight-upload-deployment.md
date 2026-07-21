@@ -18,7 +18,61 @@ Run the mutating command only with explicit authorization:
 npm run backfill:flight-progress -- --apply
 ```
 
-After successful verification, restart the flight workers. The command is rerunnable: completed flights that already have `flight_progress` are skipped, and achievement keys are unique per user.
+The flight-progress command is rerunnable: completed flights that already have
+`flight_progress` are skipped, and achievement keys are unique per user.
+
+## Release 2 Arena catalog and achievement rollout
+
+Release 2 has a deliberate, one-time operational sequence. Deploy the
+application and run the checked-in Drizzle migrations first. Then pause and
+drain the flight workers so no live claim or achievement evaluation races the
+catalog rebuild or historical replay. Run the Arena rebuild dry-run, review its
+exact Country/State/Launch counts, then run the destructive apply command with
+its explicit confirmation. The rebuild deletes every existing Arena row,
+including General Arenas; it does not preserve rows or track changes and must
+not be rerun after a successful apply:
+
+```sh
+npm run db:migrate
+npm run rebuild:arenas
+npm run rebuild:arenas -- --apply --confirm-delete-all-arenas
+```
+
+After the rebuild succeeds, run the Arena achievement backfill dry-run. It
+executes the real award path in a single transaction and rolls the transaction
+back:
+
+```sh
+npm run backfill:arena-achievements
+```
+
+Review the per-key counts, launch-tag record events, unchanged/already-earned
+count, and failures. Apply only after reviewing the output:
+
+```sh
+npm run backfill:arena-achievements -- --apply
+```
+
+The replay orders each user's completed flights by `started_at`, then
+`created_at`, then flight UUID. Each flight sees only claims from that user's
+flights at or before its position, and awards use the source flight's
+historical time. Apply is one atomic transaction; any error rolls back all
+users. The existing per-user `pg_advisory_xact_lock` is held for the duration
+of each user's replay; the backfill acquires all relevant user locks in sorted
+order before taking its completed-flight inventory. The lock serializes callers
+that use the same progression lock, while pausing/draining workers remains the
+operational guard against new flights entering during the one-time run. Existing ordinary Release 2
+awards are left permanent and idempotent. An existing
+`most_launches_tagged_one_flight` record or its events is rejected as ambiguous
+rather than silently fabricating missing record history; resolve that record
+before running the one-time apply.
+
+After successful verification, restart the flight workers. The Arena
+achievement command is deliberately one-time; do not rerun it after a
+successful apply. A run with an existing launch-tag record is rejected as
+ambiguous, and a failed apply prints a rolled-back/failed summary and exits
+nonzero. If either one-time apply fails, resolve the reported issue before
+retrying; never assume a partial rebuild or backfill is safe.
 
 Configure the private DigitalOcean Space with a CORS rule that allows:
 

@@ -220,6 +220,78 @@ describe('pilot profile renderer', () => {
     expect(zeroCellFlight.match(/<dd>0<\/dd>/g)).toHaveLength(4);
   });
 
+  it('renders Release 2 Arena categories, thresholds, and personal-best event copy accessibly', async () => {
+    const render = createPageRenderer({ mapTilerApiKey: 'maptiler-test-key' });
+    const currentUser = {
+      userId: '00000000-0000-4000-8000-000000000001',
+      sessionId: '00000000-0000-4000-8000-000000000002',
+      email: 'viewer@example.com',
+      displayName: 'Sky Pilot',
+      territoryColor: '#1769AA',
+    };
+    const html = await render({
+      currentUser,
+      page: 'profile',
+      profile: {
+        userId: currentUser.userId,
+        displayName: currentUser.displayName,
+        territoryColor: currentUser.territoryColor,
+        lifetimeUniqueCellCount: 3,
+        nextUniqueCellMilestone: 5,
+        uniqueCellsToNextMilestone: 2,
+        nextUniqueCellMilestoneProgressPercent: 60,
+        completedFlightCount: 1,
+        lifetimeDirectCellCount: 3,
+        lifetimeEnclosedCellCount: 0,
+        currentTotalCellRecord: 3,
+        currentEnclosedCellRecord: 0,
+        achievementCount: 5,
+        achievements: [
+          {
+            id: 'launch', achievementType: 'threshold', achievementCategory: 'launch', typeLabel: 'Launch Arena',
+            earnedDate: 'Jul 20, 2026', sourceFlightId: null, title: '3 Launch Arenas Visited',
+            description: 'Visit 3 Launch Arenas.', badgeLabel: '3', badgeAriaLabel: 'Launch Arena threshold achievement: 3',
+          },
+          {
+            id: 'general', achievementType: 'threshold', achievementCategory: 'general', typeLabel: 'General Arena',
+            earnedDate: 'Jul 19, 2026', sourceFlightId: null, title: '10% General Arena Coverage',
+            description: 'Reach 10% coverage in any General Arena.', badgeLabel: '10%', badgeAriaLabel: 'General Arena threshold achievement: 10%',
+          },
+          {
+            id: 'state', achievementType: 'threshold', achievementCategory: 'state', typeLabel: 'State',
+            earnedDate: 'Jul 18, 2026', sourceFlightId: null, title: '1 State Flown in',
+            description: 'Claim a cell in 1 State Arena.', badgeLabel: '1', badgeAriaLabel: 'State threshold achievement: 1',
+          },
+          {
+            id: 'country', achievementType: 'threshold', achievementCategory: 'country', typeLabel: 'Country',
+            earnedDate: 'Jul 17, 2026', sourceFlightId: null, title: '1 Country Flown in',
+            description: 'Claim a cell in 1 Country Arena.', badgeLabel: '1', badgeAriaLabel: 'Country threshold achievement: 1',
+          },
+          {
+            id: 'record-event:one', achievementType: 'record', achievementCategory: 'launch', typeLabel: 'Launch Arena personal best',
+            earnedDate: 'Jul 16, 2026', sourceFlightId: null, title: 'Most Launches Tagged During One Flight',
+            description: 'Tagged 1 Launch Arena during one flight, establishing an initial record.', badgeLabel: '1',
+            badgeAriaLabel: 'Launch Arena personal-best record: 1 tagged',
+          },
+        ],
+        recentFlights: [],
+      },
+      profileIsCurrent: true,
+    });
+
+    expect(html).toContain('3 Launch Arenas Visited');
+    expect(html).toContain('10% General Arena Coverage');
+    expect(html).toContain('1 State Flown in');
+    expect(html).toContain('1 Country Flown in');
+    expect(html).toContain('Most Launches Tagged During One Flight');
+    expect(html).toContain('Tagged 1 Launch Arena during one flight, establishing an initial record.');
+    expect(html).toContain('role="img" aria-label="Launch Arena personal-best record: 1 tagged"');
+    expect(html).toContain('Launch Arena achievements');
+    expect(html).toContain('States Flown in counts a State Arena once you claim at least one cell there.');
+    expect(html).toContain('Countries Flown in counts a Country Arena once you claim at least one cell there.');
+    expect(html).not.toContain('most_launches_tagged_one_flight');
+  });
+
   it('renders clear empty states for a pilot with no history', async () => {
     const render = createPageRenderer({ mapTilerApiKey: 'maptiler-test-key' });
     const currentUser = {

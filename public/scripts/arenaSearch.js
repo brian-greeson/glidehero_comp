@@ -2,7 +2,14 @@ import { competitionMonthFromSearch, competitionPageUrl } from './competitionPer
 
 function arenaResultLabel(arena) {
   const region = [arena.city, arena.state, arena.country].filter(Boolean).join(', ');
-  return region ? `${arena.name} — ${region}` : arena.name;
+  const typeLabel = {
+    launch: 'Launch',
+    general: 'General',
+    state: 'State',
+    country: 'Country',
+  }[arena.arenaType] ?? 'Arena';
+  const name = region ? `${arena.name} — ${region}` : arena.name;
+  return `${typeLabel} — ${name}`;
 }
 
 export function initializeArenaSearch({

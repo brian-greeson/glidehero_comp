@@ -7,10 +7,12 @@
         <div class="admin-area-system-fields">
           <label>ID<input data-field="id" readonly value="—"></label>
           <label>Source ID<input data-field="sourceId" readonly value="—"></label>
+          <label>Type<input data-field="arenaType" readonly value="—"></label>
           <label>Components<input data-field="componentCount" readonly value="0"></label>
         </div>
         <label>Name<input data-field="name" maxlength="160" required disabled></label>
-        <label>Country<input data-field="country" maxlength="120" required disabled></label>
+        <label>Country Arena<select data-field="countryArenaId" required disabled><option value="">Select a Country Arena…</option></select></label>
+        <label>Country<input data-field="country" readonly value="—"></label>
         <label>State or region<input data-field="state" maxlength="120" disabled></label>
         <label>City<input data-field="city" maxlength="120" disabled></label>
         <label class="admin-area-import">Import GeoJSON<input type="file" accept=".geojson,.json,application/geo+json,application/json" data-geojson-import disabled></label>
@@ -21,7 +23,7 @@
         <div class="admin-area-list-heading"><h2>Arenas</h2><span data-area-total>0</span></div>
         <label class="admin-area-search"><span class="sr-only">Search Arenas</span><input type="search" placeholder="Search name or location" data-area-search></label>
         <div class="admin-area-list-table" role="table" aria-label="Existing Arenas">
-          <div class="admin-area-list-columns" role="row"><button type="button" data-sort="name" role="columnheader" aria-sort="ascending">Name <span data-sort-indicator aria-hidden="true">↑</span></button><button type="button" data-sort="country" role="columnheader" aria-sort="none">Country <span data-sort-indicator aria-hidden="true"></span></button><button type="button" data-sort="state" role="columnheader" aria-sort="none">State <span data-sort-indicator aria-hidden="true"></span></button></div>
+          <div class="admin-area-list-columns" role="row"><button type="button" data-sort="name" role="columnheader" aria-sort="ascending">Name <span data-sort-indicator aria-hidden="true">↑</span></button><button type="button" data-sort="arenaType" role="columnheader" aria-sort="none">Type <span data-sort-indicator aria-hidden="true"></span></button><button type="button" data-sort="country" role="columnheader" aria-sort="none">Country <span data-sort-indicator aria-hidden="true"></span></button><button type="button" data-sort="state" role="columnheader" aria-sort="none">State <span data-sort-indicator aria-hidden="true"></span></button></div>
           <div data-area-list role="rowgroup"><p class="muted">Loading Arenas…</p></div>
         </div>
       </section>

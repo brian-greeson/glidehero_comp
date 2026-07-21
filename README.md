@@ -91,7 +91,8 @@ Grid-painted and polygon-authored Arenas use the same public routes and scoring.
 routes use a lowercase ISO country code, a name slug, and the launch source ID,
 for example `/arena/us/boulder-745`. The search box on Global and Arena pages is
 used exclusively to find Arenas by launch name, city, state, or country. The
-Personal page does not display Arena search.
+same search is available on the Personal page, with a readable Arena type label
+and no additional filters.
 
 Any
 flight that claims a cell in the Arena counts, regardless of its launch
@@ -104,6 +105,18 @@ around it. A breadcrumb below the main navigation shows `Global >> Arena Name`;
 selecting `Global` returns to the viewport-based Global competition. Arena
 leaderboards use the same additive coverage rules as Global, but their scoring
 scope is the Arena instead of the visible map.
+
+Release 2 Arenas are a single catalog with Launch, General, State, and Country
+types. Launch and General pages show the signed-in pilot's personal `x/y` cell
+progress beside the competition leaderboard; General Arenas also show a
+concise percentage and the next 10/25/50/75/100 coverage milestone for that
+Arena (the corresponding achievement is global once-any). Launch pages show
+whether the pilot has Visited and the one-time completion state. State and
+Country pages show only whether the pilot has Flown in. Progress uses the configured
+grid cell center and `ST_Covers`, so cells whose centers lie on a boundary count.
+The first Release 2 catalog rebuild is intentionally destructive and one-time;
+the checked-in country (194 policy-selected features), state (50), and launch
+sources are imported transactionally by `npm run rebuild:arenas`.
 
 ### Map routes and navigation
 
@@ -160,6 +173,7 @@ Included features:
 - Monthly competitive territory map.
 - Dynamic viewport-based leaderboard.
 - Unified grid- and polygon-authored Arena search and fixed-area leaderboards.
+- Arena personal progress and Release 2 exploration achievements.
 - Optional grid overlay and foreground live-position trail on every map.
 - Flight statistics after upload.
 - Administrative Arena, map-setting, user, and flight-management tools.
@@ -172,7 +186,7 @@ Excluded from Version 1:
 - Comments.
 - Messaging.
 - Public signed-out profiles.
-- Arena exploration achievements and leadership history.
+- Arena leadership history.
 - Pilot-facing flight editing or deletion.
 - Historical playback.
 - Support for file formats other than IGC.
@@ -232,11 +246,11 @@ reshape/delete controls, GeoJSON import, and a
 zoomed-in draft cell preview. Overlapping or edge-adjacent inputs are unioned on
 save while disconnected components and imported holes remain.
 
-Refresh launch metadata for existing launch-backed Arenas without changing their polygon:
+Refresh the checked-in launch source mirror and create Launch Arenas (Country Arenas
+must already be imported; this one-way command rejects existing Launch Arenas):
 
 ```bash
 npm run import:launches
-psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f ingest/importLaunchAreas.sql
 ```
 
 Import the 50 U.S. state Arenas from an official Census boundary GeoJSON file:
@@ -245,9 +259,23 @@ Import the 50 U.S. state Arenas from an official Census boundary GeoJSON file:
 npm run import:state-arenas -- path/to/states.geojson
 ```
 
-The importer excludes D.C. and territories, upserts by Census FIPS identity,
-preserves UUID/source IDs on rerun, and uses the same geometry normalization as
-the Arena editor. New or edited Arenas immediately include matching
+For the one-time Release 2 migration, rebuild all imported Arena types in one
+atomic operation. The command validates all three checked-in sources before it
+opens the database. It defaults to a full dry-run (the transaction is rolled
+back); applying requires both explicit flags:
+
+```bash
+npm run rebuild:arenas
+npm run rebuild:arenas -- --apply --confirm-delete-all-arenas
+```
+
+This migration intentionally deletes every existing Arena, including General
+Arenas, then inserts Country, State, and Launch Arenas. It is not an idempotent
+synchronizer and is supported for one migration run only. A positive
+`GRID_CLAIM_CELL_SIZE` and `DATABASE_URL` are required.
+
+The importer excludes D.C. and territories, uses Census FIPS identity, and
+uses the same geometry normalization as the Arena editor. New or edited Arenas immediately include matching
 historical global claims; flight parsing never assigns claims to Arenas.
 
 Open <http://localhost:3000>. Create an account, log out, and log back in.
@@ -268,10 +296,10 @@ npm run typecheck
 npm run build
 ```
 
-Integration tests drop and recreate the `public` schema in the test database, then run
-`npm run db:push -- --force` with `DATABASE_URL` set to `TEST_DATABASE_URL`.
+Integration tests drop and recreate the `public` and Drizzle migration schemas
+in the test database, then apply the checked-in migrations with
+`npm run db:migrate` using `DATABASE_URL` set to `TEST_DATABASE_URL`.
 Never point `TEST_DATABASE_URL` at development or production data.
-Never run `npm run db:push` against the development or production db.
 ## Production notes
 
 Set `ENVIRONMENT=production` so the session cookie receives the `Secure`

@@ -1,27 +1,9 @@
-const COUNTRY_CODES: Readonly<Record<string, string>> = {
-  Austria: 'at',
-  Brazil: 'br',
-  Canada: 'ca',
-  Colombia: 'co',
-  Czechia: 'cz',
-  France: 'fr',
-  Germany: 'de',
-  India: 'in',
-  Italy: 'it',
-  Liechtenstein: 'li',
-  Mexico: 'mx',
-  Portugal: 'pt',
-  Slovenia: 'si',
-  Spain: 'es',
-  Switzerland: 'ch',
-  'United Kingdom': 'gb',
-  'United States': 'us',
-};
-
-export function arenaCountryCode(country: string): string {
-  const code = COUNTRY_CODES[country];
-  if (!code) throw new Error(`No ISO country code is configured for arena country: ${country}`);
-  return code;
+export function normalizeArenaCountryCode(countryCode: string): string {
+  const normalized = countryCode.trim().toLowerCase();
+  if (!/^[a-z]{2}$/.test(normalized)) {
+    throw new Error(`Invalid ISO country code for Arena route: ${countryCode}`);
+  }
+  return normalized;
 }
 
 export function arenaSlug(name: string): string {
@@ -33,8 +15,8 @@ export function arenaSlug(name: string): string {
     .replace(/^-+|-+$/g, '') || 'arena';
 }
 
-export function arenaPath(input: { sourceId: number; name: string; country: string }): string {
-  return `/arena/${arenaCountryCode(input.country)}/${arenaSlug(input.name)}-${input.sourceId}`;
+export function arenaPath(input: { sourceId: number; name: string; countryCode: string }): string {
+  return `/arena/${normalizeArenaCountryCode(input.countryCode)}/${arenaSlug(input.name)}-${input.sourceId}`;
 }
 
 export function parseArenaSourceId(routeSlug: string): number | null {
@@ -45,13 +27,16 @@ export function parseArenaSourceId(routeSlug: string): number | null {
 }
 
 export function isCanonicalArenaRoute(
-  input: { sourceId: number; name: string; country: string },
+  input: { sourceId: number; name: string; countryCode: string },
   countryCode: string,
   routeSlug: string,
 ): boolean {
-  return arenaPath(input) === `/arena/${countryCode}/${routeSlug}`;
-}
-
-export function supportedArenaCountries(): readonly string[] {
-  return Object.keys(COUNTRY_CODES);
+  let normalizedCode: string;
+  try {
+    normalizedCode = normalizeArenaCountryCode(countryCode);
+  } catch {
+    return false;
+  }
+  if (countryCode !== normalizedCode) return false;
+  return arenaPath(input) === `/arena/${normalizedCode}/${routeSlug}`;
 }

@@ -1,13 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { readFile } from 'node:fs/promises';
-import { arenaCountryCode, arenaPath, arenaSlug, isCanonicalArenaRoute, parseArenaSourceId } from '../../src/domain/arena/arenaRoute.js';
-import { parseMysqlLaunchDump } from '../../src/domain/launch/mysqlLaunchDump.js';
+import { arenaPath, arenaSlug, isCanonicalArenaRoute, normalizeArenaCountryCode, parseArenaSourceId } from '../../src/domain/arena/arenaRoute.js';
 
 describe('arena routes', () => {
   it('builds canonical country, slug, and source-id paths', () => {
-    expect(arenaCountryCode('United States')).toBe('us');
+    expect(normalizeArenaCountryCode('XK')).toBe('xk');
     expect(arenaSlug('Böulder Ridge & West')).toBe('boulder-ridge-west');
-    expect(arenaPath({ sourceId: 745, name: 'Boulder', country: 'United States' }))
+    expect(arenaPath({ sourceId: 745, name: 'Boulder', countryCode: 'US' }))
       .toBe('/arena/us/boulder-745');
   });
 
@@ -18,19 +16,16 @@ describe('arena routes', () => {
   });
 
   it('validates the complete canonical route', () => {
-    const arena = { sourceId: 745, name: 'Boulder', country: 'United States' };
+    const arena = { sourceId: 745, name: 'Boulder', countryCode: 'US' };
     expect(isCanonicalArenaRoute(arena, 'us', 'boulder-745')).toBe(true);
+    expect(isCanonicalArenaRoute(arena, 'US', 'boulder-745')).toBe(false);
     expect(isCanonicalArenaRoute(arena, 'ca', 'boulder-745')).toBe(false);
     expect(isCanonicalArenaRoute(arena, 'us', 'wrong-745')).toBe(false);
   });
 
-  it('rejects countries without an explicit ISO mapping', () => {
-    expect(() => arenaCountryCode('Unknown')).toThrow('No ISO country code');
-  });
-
-  it('maps every country in the current launch import', async () => {
-    const rows = parseMysqlLaunchDump(await readFile('ingest/launches.sql', 'utf8'));
-    const countries = [...new Set(rows.map((row) => row.country))];
-    expect(countries.map(arenaCountryCode).every((code) => /^[a-z]{2}$/.test(code))).toBe(true);
+  it('rejects invalid route country codes', () => {
+    expect(() => normalizeArenaCountryCode('Unknown')).toThrow('Invalid ISO country code');
+    expect(() => arenaPath({ sourceId: 1, name: 'Test', countryCode: 'USA' })).toThrow('Invalid ISO country code');
+    expect(isCanonicalArenaRoute({ sourceId: 1, name: 'Test', countryCode: 'US' }, 'USA', 'test-1')).toBe(false);
   });
 });

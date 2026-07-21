@@ -70,12 +70,13 @@ describe('GridClaimService', () => {
       personalCellTotalAfter: 3,
       progressionVersion: 1,
       evaluatedAt: new Date('2026-07-20T00:00:00Z'),
+      arenaAchievements: { newlyEarned: [], alreadyEarned: 0, record: null },
     });
 
     expect(transaction).toHaveBeenCalledOnce();
     expect(deleteFrom).toHaveBeenCalledTimes(2);
     expect(where).toHaveBeenCalledTimes(2);
-    expect(execute).toHaveBeenCalledTimes(2);
+    expect(execute).toHaveBeenCalledTimes(3);
   });
 
   it('processes claims inside a caller-owned transaction', async () => {
@@ -86,7 +87,7 @@ describe('GridClaimService', () => {
 
     expect(transaction).not.toHaveBeenCalled();
     expect(deleteFrom).toHaveBeenCalledTimes(2);
-    expect(execute).toHaveBeenCalledTimes(2);
+    expect(execute).toHaveBeenCalledTimes(3);
   });
 
   it('returns full-cell viewport stats with distinct contributing flights', async () => {

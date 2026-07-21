@@ -9,12 +9,12 @@ import {
   users,
 } from '../../src/db/schema.js';
 import { createTerritoryTileService } from '../../src/services/territoryTileService.js';
-import { resetAndPushTestDatabase } from './database.js';
+import { resetAndMigrateTestDatabase } from './database.js';
 
-let database: Awaited<ReturnType<typeof resetAndPushTestDatabase>>;
+let database: Awaited<ReturnType<typeof resetAndMigrateTestDatabase>>;
 const tile = { z: 7, x: 64, y: 63 };
 
-beforeAll(async () => { database = await resetAndPushTestDatabase(); });
+beforeAll(async () => { database = await resetAndMigrateTestDatabase(); });
 beforeEach(async () => { await database.pool.query('TRUNCATE TABLE users, arenas CASCADE'); });
 afterAll(async () => { if (database) await database.pool.end(); });
 
@@ -154,9 +154,9 @@ describe('TerritoryTileService with PostGIS MVT', () => {
     await addCompetitionClaim(pilot, { x: 2, y: 0 });
     const arena = await database.pool.query<{ id: string }>(`
       INSERT INTO arenas (
-        source_id, name, country, state, city, location, altitude_meters, timezone, area
+        source_id, name, country, country_code, state, city, location, altitude_meters, timezone, area
       ) VALUES (
-        745, 'Tile Arena', 'United States', 'Colorado', 'Boulder',
+        745, 'Tile Arena', 'United States', 'US', 'Colorado', 'Boulder',
         ST_Transform(ST_SetSRID(ST_Point(500, 500), 6933), 4326), 1000, 'America/Denver',
         ST_Multi(ST_MakeEnvelope(0, 0, 1500, 1000, 6933))
       ) RETURNING id

@@ -2,6 +2,7 @@ import { eq, sql } from 'drizzle-orm';
 import type { Database } from '../db/client.js';
 import { profiles } from '../db/schema.js';
 import { nextUniqueCellMilestone } from './progressionAchievementService.js';
+import { findAchievementDefinition, type AchievementCategory, type AchievementDefinition } from '../domain/achievement/catalog.js';
 
 const territoryColorPattern = /^#[0-9a-f]{6}$/i;
 
@@ -31,12 +32,14 @@ export type PilotProfileSummary = {
 export type PilotAchievement = {
   id: string;
   achievementType: string;
+  achievementCategory?: AchievementCategory;
   typeLabel: string;
   earnedDate: string;
   sourceFlightId: string | null;
   title: string;
   description: string;
   badgeLabel: string;
+  badgeAriaLabel?: string;
 };
 
 export type PilotRecentFlight = {
@@ -83,9 +86,12 @@ type StoredPilotProfile = {
 type StoredAchievement = {
   id: string;
   achievementType: string;
+  achievementKey: string;
   sourceFlightId: string | null;
   earnedAt: Date | string;
   details: unknown;
+  isRecordEvent: boolean;
+  value: number | string | null;
 };
 
 type StoredRecentFlight = {
@@ -153,7 +159,64 @@ function cellCountText(value: number | null): string {
   return `${countText(value)} ${value === 1 ? 'cell' : 'cells'}`;
 }
 
+const achievementCategoryLabels: Record<AchievementCategory, string> = {
+  launch: 'Launch Arena',
+  general: 'General Arena',
+  state: 'State',
+  country: 'Country',
+};
+
+function catalogAchievementDisplay(row: StoredAchievement, definition: AchievementDefinition): PilotAchievement {
+  const categoryLabel = achievementCategoryLabels[definition.category];
+  const isRecord = definition.kind === 'record';
+  const badgeLabel = 'threshold' in definition
+    ? (definition.category === 'general' && definition.key.startsWith('general_coverage_')
+      ? `${definition.threshold}%`
+      : String(definition.threshold))
+    : isRecord ? String(row.value ?? detailNumber(detailsObject(row.details), 'value') ?? 'PB') : '★';
+  return {
+    id: row.id,
+    achievementType: definition.kind,
+    achievementCategory: definition.category,
+    typeLabel: isRecord ? `${categoryLabel} personal best` : categoryLabel,
+    earnedDate: displayDate(row.earnedAt),
+    sourceFlightId: row.sourceFlightId,
+    title: definition.title,
+    description: definition.description,
+    badgeLabel,
+    badgeAriaLabel: `${categoryLabel} ${isRecord ? 'personal-best' : definition.kind} achievement${'threshold' in definition ? `: ${badgeLabel}` : ''}`,
+  };
+}
+
+function recordEventDisplay(row: StoredAchievement, definition: AchievementDefinition): PilotAchievement {
+  const value = Number(row.value ?? detailNumber(detailsObject(row.details), 'value') ?? 0);
+  const previousValue = detailNumber(detailsObject(row.details), 'previousValue');
+  const launchCount = `${value} Launch Arena${value === 1 ? '' : 's'}`;
+  const description = previousValue === null
+    ? `Tagged ${launchCount} during one flight, establishing an initial record.`
+    : `Tagged ${launchCount} during one flight, improving the previous best of ${previousValue}.`;
+  return {
+    id: row.id,
+    achievementType: definition.kind,
+    achievementCategory: definition.category,
+    typeLabel: 'Launch Arena personal best',
+    earnedDate: displayDate(row.earnedAt),
+    sourceFlightId: row.sourceFlightId,
+    title: definition.title,
+    description,
+    badgeLabel: String(value),
+    badgeAriaLabel: `Launch Arena personal-best record: ${value} tagged`,
+  };
+}
+
 function achievementDisplay(row: StoredAchievement): PilotAchievement {
+  const definition = findAchievementDefinition(row.achievementKey);
+  // Record definitions are written only through achievement_record_events. Treat a
+  // malformed ordinary row as legacy data instead of presenting it as a valid event.
+  if (definition && (row.isRecordEvent || definition.kind !== 'record')) {
+    return row.isRecordEvent ? recordEventDisplay(row, definition) : catalogAchievementDisplay(row, definition);
+  }
+
   const details = detailsObject(row.details);
   const milestone = detailNumber(details, 'milestone');
   const previousRecord = detailNumber(details, 'previousRecord');
@@ -276,10 +339,9 @@ export function createProfileService(database: Database, options: { cellSize: nu
             WHERE progress.user_id = users.user_id
           ) AS "currentEnclosedCellRecord",
           (
-            SELECT COUNT(*)::integer
-            FROM achievements earned
-            WHERE earned.user_id = users.user_id
-          ) AS "achievementCount"
+            (SELECT COUNT(*) FROM achievements earned WHERE earned.user_id = users.user_id)
+            + (SELECT COUNT(*) FROM achievement_record_events event WHERE event.user_id = users.user_id)
+          )::integer AS "achievementCount"
         FROM users
         INNER JOIN profiles ON profiles.user_id = users.user_id
         WHERE users.user_id = ${userId}
@@ -289,16 +351,36 @@ export function createProfileService(database: Database, options: { cellSize: nu
       const lifetimeUniqueCellCount = Number(row.lifetimeUniqueCellCount);
       const nextMilestone = nextUniqueCellMilestone(lifetimeUniqueCellCount);
       const [achievementRows, recentFlightRows] = await Promise.all([
-        database.execute<StoredAchievement>(sql`
-          SELECT
-            id,
-            achievement_type AS "achievementType",
-            source_flight_id AS "sourceFlightId",
-            earned_at AS "earnedAt",
-            details
-          FROM achievements
-          WHERE user_id = ${userId}
-          ORDER BY earned_at DESC, id DESC
+        database.execute<StoredAchievement & { totalCount: number | string }>(sql`
+          WITH displayable AS (
+            SELECT
+              earned.id::text AS id,
+              earned.achievement_type AS "achievementType",
+              earned.achievement_key AS "achievementKey",
+              earned.source_flight_id AS "sourceFlightId",
+              earned.earned_at AS "earnedAt",
+              earned.details,
+              false AS "isRecordEvent",
+              NULL::integer AS value
+            FROM achievements earned
+            WHERE earned.user_id = ${userId}
+            UNION ALL
+            SELECT
+              ('record-event:' || event.id::text) AS id,
+              'record' AS "achievementType",
+              record.record_key AS "achievementKey",
+              event.source_flight_id AS "sourceFlightId",
+              event.earned_at AS "earnedAt",
+              event.details,
+              true AS "isRecordEvent",
+              event.value
+            FROM achievement_record_events event
+            INNER JOIN achievement_records record ON record.id = event.record_id
+            WHERE event.user_id = ${userId}
+          )
+          SELECT displayable.*, COUNT(*) OVER()::integer AS "totalCount"
+          FROM displayable
+          ORDER BY displayable."earnedAt" DESC, displayable.id DESC
           LIMIT 50
         `),
         database.execute<StoredRecentFlight>(sql`
@@ -333,7 +415,7 @@ export function createProfileService(database: Database, options: { cellSize: nu
         lifetimeEnclosedCellCount: Number(row.lifetimeEnclosedCellCount),
         currentTotalCellRecord: numberOrNull(row.currentTotalCellRecord),
         currentEnclosedCellRecord: numberOrNull(row.currentEnclosedCellRecord),
-        achievementCount: Number(row.achievementCount),
+        achievementCount: Number(achievementRows.rows[0]?.totalCount ?? row.achievementCount),
         achievements: achievementRows.rows.map(achievementDisplay),
         recentFlights: recentFlightRows.rows.map((flight) => {
           const directCellCount = Number(flight.directCellCount);

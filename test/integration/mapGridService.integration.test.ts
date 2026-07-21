@@ -1,10 +1,10 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { createMapGridService } from '../../src/services/mapGridService.js';
-import { resetAndPushTestDatabase } from './database.js';
+import { resetAndMigrateTestDatabase } from './database.js';
 
-let database: Awaited<ReturnType<typeof resetAndPushTestDatabase>>;
+let database: Awaited<ReturnType<typeof resetAndMigrateTestDatabase>>;
 
-beforeAll(async () => { database = await resetAndPushTestDatabase(); });
+beforeAll(async () => { database = await resetAndMigrateTestDatabase(); });
 beforeEach(async () => { await database.pool.query('TRUNCATE TABLE arenas CASCADE'); });
 afterAll(async () => { if (database) await database.pool.end(); });
 
@@ -39,9 +39,9 @@ describe('MapGridService with PostGIS', () => {
   it('returns viewport cells whose centers are covered by the Arena polygon', async () => {
     const arena = await database.pool.query<{ id: string }>(`
       INSERT INTO arenas (
-        source_id, name, country, state, city, location, altitude_meters, timezone, area
+        source_id, name, country, country_code, state, city, location, altitude_meters, timezone, area
       ) VALUES (
-        745, 'Flight Aid Arena', 'United States', 'Colorado', 'Boulder',
+        745, 'Flight Aid Arena', 'United States', 'US', 'Colorado', 'Boulder',
         ST_Transform(ST_SetSRID(ST_Point(500, 500), 6933), 4326), 1000, 'America/Denver',
         ST_Multi(ST_MakeEnvelope(0, 0, 2000, 1000, 6933))
       ) RETURNING id

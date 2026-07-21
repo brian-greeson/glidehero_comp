@@ -6,17 +6,37 @@ import { createDatabase } from '../../src/db/client.js';
 export function testDatabase() {
   const connectionString = process.env.TEST_DATABASE_URL;
   if (!connectionString) throw new Error('TEST_DATABASE_URL is required for integration tests.');
+  validateDisposableTestDatabase(connectionString);
   return createDatabase(connectionString);
 }
 
-export async function resetAndPushTestDatabase(): Promise<ReturnType<typeof testDatabase>> {
+export function validateDisposableTestDatabase(connectionString: string): string {
+  let databaseName: string;
+  try {
+    databaseName = decodeURIComponent(new URL(connectionString).pathname.slice(1));
+  } catch (error) {
+    throw new Error('TEST_DATABASE_URL must be a valid PostgreSQL URL.', { cause: error });
+  }
+  if (!databaseName || !/(^|[-_])test($|[-_])/i.test(databaseName)) {
+    throw new Error(`Refusing destructive test reset for non-test database "${databaseName || '<unnamed>'}".`);
+  }
+  return databaseName;
+}
+
+export async function resetAndMigrateTestDatabase(): Promise<ReturnType<typeof testDatabase>> {
   const connectionString = process.env.TEST_DATABASE_URL;
   if (!connectionString) throw new Error('TEST_DATABASE_URL is required for integration tests.');
+  const expectedDatabaseName = validateDisposableTestDatabase(connectionString);
 
   const resetPool = new pg.Pool({ connectionString });
   try {
+    const identity = await resetPool.query<{ databaseName: string }>('SELECT current_database() AS "databaseName"');
+    if (identity.rows[0]?.databaseName !== expectedDatabaseName) {
+      throw new Error(`Refusing destructive test reset: connected to "${identity.rows[0]?.databaseName ?? '<unknown>'}" instead of "${expectedDatabaseName}".`);
+    }
     await resetPool.query('DROP EXTENSION IF EXISTS postgis CASCADE');
     await resetPool.query('DROP SCHEMA IF EXISTS public CASCADE');
+    await resetPool.query('DROP SCHEMA IF EXISTS drizzle CASCADE');
     await resetPool.query('CREATE SCHEMA public');
     await resetPool.query('CREATE EXTENSION postgis');
   } finally {
@@ -26,7 +46,7 @@ export async function resetAndPushTestDatabase(): Promise<ReturnType<typeof test
   await new Promise<void>((resolve, reject) => {
     execFile(
       'npm',
-      ['run', 'db:push', '--', '--force'],
+      ['run', 'db:migrate'],
       {
         cwd: fileURLToPath(new URL('../..', import.meta.url)),
         env: {
@@ -46,7 +66,7 @@ export async function resetAndPushTestDatabase(): Promise<ReturnType<typeof test
         if (error) {
           reject(
             new Error(
-              `db:push failed.\nstdout:\n${stdout}\nstderr:\n${stderr}`,
+              `db:migrate failed.\nstdout:\n${stdout}\nstderr:\n${stderr}`,
               { cause: error },
             ),
           );

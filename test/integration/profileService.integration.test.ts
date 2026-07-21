@@ -1,13 +1,13 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { achievements, flights, flightProgress, igcFiles, personalGridClaims } from '../../src/db/schema.js';
+import { achievementRecordEvents, achievementRecords, achievements, flights, flightProgress, igcFiles, personalGridClaims } from '../../src/db/schema.js';
 import { createAuthService } from '../../src/services/authService.js';
 import { createProfileService, normalizeTerritoryColor } from '../../src/services/profileService.js';
-import { resetAndPushTestDatabase } from './database.js';
+import { resetAndMigrateTestDatabase } from './database.js';
 
-let database: Awaited<ReturnType<typeof resetAndPushTestDatabase>>;
+let database: Awaited<ReturnType<typeof resetAndMigrateTestDatabase>>;
 
 beforeAll(async () => {
-  database = await resetAndPushTestDatabase();
+  database = await resetAndMigrateTestDatabase();
 });
 
 beforeEach(async () => {
@@ -331,5 +331,128 @@ describe('profileService', () => {
     expect(profile?.recentFlights).toHaveLength(20);
     expect(profile?.achievements[0]?.title).toBe('55 Unique Cells');
     expect(profile?.recentFlights[0]?.flightId).toBe(flightIds[24]);
+  });
+
+  it('renders Release 2 catalog achievements and merges every record event into one history', async () => {
+    const auth = createAuthService(database.db, { sessionTtlSeconds: 604800 });
+    const pilot = await auth.signup({
+      email: 'release-two-achievements@example.com',
+      password: 'correct horse battery staple',
+    });
+    const profiles = createProfileService(database.db, { cellSize: 1_000 });
+    const earnedAt = (day: number) => new Date(Date.UTC(2026, 6, day, 12));
+    await database.db.insert(achievements).values([
+      { userId: pilot.user.userId, achievementType: 'special', achievementKey: 'first_flight_from_launch', earnedAt: earnedAt(1), details: {} },
+      { userId: pilot.user.userId, achievementType: 'threshold', achievementKey: 'launches_visited_3', earnedAt: earnedAt(2), details: {} },
+      { userId: pilot.user.userId, achievementType: 'special', achievementKey: 'complete_a_launch_arena', earnedAt: earnedAt(3), details: {} },
+      { userId: pilot.user.userId, achievementType: 'special', achievementKey: 'first_cells_in_general_arena', earnedAt: earnedAt(4), details: {} },
+      { userId: pilot.user.userId, achievementType: 'threshold', achievementKey: 'general_arenas_explored_1', earnedAt: earnedAt(5), details: {} },
+      { userId: pilot.user.userId, achievementType: 'threshold', achievementKey: 'general_coverage_10', earnedAt: earnedAt(6), details: {} },
+      { userId: pilot.user.userId, achievementType: 'threshold', achievementKey: 'states_flown_in_1', earnedAt: earnedAt(7), details: {} },
+      { userId: pilot.user.userId, achievementType: 'threshold', achievementKey: 'countries_flown_in_1', earnedAt: earnedAt(8), details: {} },
+      { userId: pilot.user.userId, achievementType: 'legacy', achievementKey: 'legacy:unknown', earnedAt: earnedAt(9), details: { secret: 'must not render' } },
+      { userId: pilot.user.userId, achievementType: 'record', achievementKey: 'most_launches_tagged_one_flight', earnedAt: earnedAt(9), details: { value: 99, secret: 'malformed' } },
+    ]);
+    const [record] = await database.db.insert(achievementRecords).values({
+      userId: pilot.user.userId,
+      recordKey: 'most_launches_tagged_one_flight',
+      bestValue: 3,
+      earnedAt: earnedAt(10),
+      details: { value: 3 },
+    }).returning({ id: achievementRecords.id });
+    if (!record) throw new Error('Record insert returned no row.');
+    await database.db.insert(achievementRecordEvents).values([
+      { recordId: record.id, userId: pilot.user.userId, value: 1, earnedAt: earnedAt(11), details: { value: 1 } },
+      { recordId: record.id, userId: pilot.user.userId, value: 3, earnedAt: earnedAt(12), details: { value: 3, previousValue: 1, privateDetail: 'do not render' } },
+    ]);
+
+    const profile = await profiles.getPilotProfile(pilot.user.userId);
+    expect(profile?.achievementCount).toBe(12);
+    expect(profile?.achievements).toHaveLength(12);
+    expect(profile?.achievements[0]).toEqual(expect.objectContaining({
+      id: expect.stringContaining('record-event:'),
+      title: 'Most Launches Tagged During One Flight',
+      typeLabel: 'Launch Arena personal best',
+      badgeLabel: '3',
+      description: 'Tagged 3 Launch Arenas during one flight, improving the previous best of 1.',
+    }));
+    expect(profile?.achievements[1]).toEqual(expect.objectContaining({
+      title: 'Most Launches Tagged During One Flight',
+      description: 'Tagged 1 Launch Arena during one flight, establishing an initial record.',
+    }));
+    expect(profile?.achievements.find((achievement) => achievement.title === '10% General Arena Coverage')).toEqual(expect.objectContaining({
+      typeLabel: 'General Arena',
+      badgeLabel: '10%',
+    }));
+    expect(profile?.achievements.find((achievement) => achievement.title === '1 Country Flown in')).toEqual(expect.objectContaining({
+      typeLabel: 'Country',
+      badgeLabel: '1',
+    }));
+    expect(profile?.achievements.find((achievement) => achievement.title === 'Progress Achievement')).toEqual(expect.objectContaining({
+      title: 'Progress Achievement',
+      description: 'A progression achievement earned during a flight.',
+    }));
+    expect(profile?.achievements.filter((achievement) => achievement.title === 'Progress Achievement')).toHaveLength(2);
+    expect(profile?.achievements.some((achievement) => achievement.description.includes('privateDetail'))).toBe(false);
+    expect(profile?.achievements.some((achievement) => achievement.description.includes('malformed'))).toBe(false);
+    expect(profile?.achievements.some((achievement) => achievement.title.includes('most_launches'))).toBe(false);
+  });
+
+  it('limits one mixed ordinary and record-event history globally to the newest 50 items', async () => {
+    const auth = createAuthService(database.db, { sessionTtlSeconds: 604800 });
+    const pilot = await auth.signup({
+      email: 'release-two-mixed-history@example.com',
+      password: 'correct horse battery staple',
+    });
+    const profiles = createProfileService(database.db, { cellSize: 1_000 });
+    const ordinaryIds: string[] = [];
+    const eventIds: string[] = [];
+    const allIds: string[] = [];
+    const earnedAt = (index: number) => new Date(Date.UTC(2026, 6, 1, 0, index));
+    const ordinaryRows = Array.from({ length: 30 }, (_, index) => {
+      const id = crypto.randomUUID();
+      ordinaryIds.push(id);
+      allIds[index * 2] = id;
+      return {
+        id,
+        userId: pilot.user.userId,
+        achievementType: 'legacy',
+        achievementKey: `mixed-legacy-${index}`,
+        earnedAt: earnedAt(index * 2),
+        details: {},
+      };
+    });
+    await database.db.insert(achievements).values(ordinaryRows);
+    const [record] = await database.db.insert(achievementRecords).values({
+      userId: pilot.user.userId,
+      recordKey: 'most_launches_tagged_one_flight',
+      bestValue: 30,
+      earnedAt: earnedAt(59),
+      details: { value: 30 },
+    }).returning({ id: achievementRecords.id });
+    if (!record) throw new Error('Record insert returned no row.');
+    await database.db.insert(achievementRecordEvents).values(Array.from({ length: 30 }, (_, index) => {
+      const id = crypto.randomUUID();
+      eventIds.push(id);
+      allIds[index * 2 + 1] = `record-event:${id}`;
+      return {
+        id,
+        recordId: record.id,
+        userId: pilot.user.userId,
+        value: index + 1,
+        earnedAt: earnedAt(index * 2 + 1),
+        details: index === 0 ? { value: 1 } : { value: index + 1, previousValue: index },
+      };
+    }));
+
+    const profile = await profiles.getPilotProfile(pilot.user.userId);
+    expect(profile?.achievementCount).toBe(60);
+    expect(profile?.achievements).toHaveLength(50);
+    expect(profile?.achievements.map((achievement) => achievement.id)).toEqual(allIds.slice(10).reverse());
+    expect(profile?.achievements.map((achievement) => achievement.id)).not.toContain(allIds[0]);
+    expect(profile?.achievements.map((achievement) => achievement.id)).not.toContain(allIds[1]);
+    expect(profile?.achievements.at(-1)?.id).toBe(allIds[10]);
+    expect(profile?.achievements.some((achievement) => achievement.id.startsWith('record-event:'))).toBe(true);
+    expect(profile?.achievements.some((achievement) => ordinaryIds.includes(achievement.id))).toBe(true);
   });
 });
