@@ -201,6 +201,9 @@ describe('profileService', () => {
       'unique_cells', 'launches_visited', 'general_arenas_explored', 'general_coverage', 'states_flown_in', 'countries_flown_in',
     ]);
     expect(summary?.achievementProgress[0]).toEqual(expect.objectContaining({ currentValue: 2, targetValue: 10, progressPercent: 20 }));
+    await expect(profiles.getDashboardAchievementProgress(pilot.user.userId)).resolves.toEqual(
+      summary?.achievementProgress.slice(0, 3),
+    );
 
     const emptySummary = await profiles.getPilotProfile(emptyPilot.user.userId);
     expect(emptySummary).toEqual({
@@ -332,6 +335,12 @@ describe('profileService', () => {
       expect.objectContaining({ key: 'states_flown_in', currentValue: 1, targetValue: 3 }),
       expect.objectContaining({ key: 'countries_flown_in', currentValue: 1, targetValue: 3 }),
     ]));
+    await expect(createProfileService(database.db, { cellSize: 1_000 }).getDashboardAchievementProgress(pilot.user.userId))
+      .resolves.toEqual([
+        expect.objectContaining({ key: 'general_coverage', progressPercent: 67 }),
+        expect.objectContaining({ key: 'general_arenas_explored', progressPercent: 40 }),
+        expect.objectContaining({ key: 'launches_visited', progressPercent: 33 }),
+      ]);
   });
 
   it('limits profile history to the latest 50 achievements and 20 flights', async () => {

@@ -61,6 +61,24 @@ describe('Vento page renderer', () => {
         displayName: 'Sky Pilot',
         territoryColor: '#1769AA',
       },
+      dashboardAchievementProgress: [
+        {
+          key: 'unique_cells', achievementType: 'unique_cells_milestone',
+          badgeLabel: '25', badgeAriaLabel: 'Unique cell milestone progress toward 25',
+          typeLabel: 'Unique cell milestone', title: '25 Unique Cells',
+          currentValue: 12, targetValue: 25, currentLabel: '12', targetLabel: '25', progressPercent: 48,
+          currentDescription: 'Claim 13 more cells on your Personal Map.',
+          otherDescription: 'Sky Pilot needs 13 more cells to reach this Personal Map milestone.',
+        },
+        {
+          key: 'launches_visited', achievementType: 'threshold', achievementCategory: 'launch',
+          badgeLabel: '3', badgeAriaLabel: 'Launch Arena milestone progress toward 3',
+          typeLabel: 'Launch Arena milestone', title: '3 Launch Arenas Visited',
+          currentValue: 0, targetValue: 3, currentLabel: '0', targetLabel: '3', progressPercent: 0,
+          currentDescription: 'Visit 3 more Launch Arenas.',
+          otherDescription: 'Sky Pilot needs to visit 3 more Launch Arenas.',
+        },
+      ],
     });
 
     expect(authenticated).toContain('Sky Pilot');
@@ -150,6 +168,12 @@ describe('Vento page renderer', () => {
     expect(authenticated).not.toContain('data-current-month-option');
     expect(authenticated).toContain('data-personal-stats');
     expect(authenticated).toContain('data-arena-search-input');
+    expect(authenticated).toContain('aria-label="Next achievements"');
+    expect(authenticated).toContain('href="/profile" aria-label="25 Unique Cells: 12 of 25"');
+    expect(authenticated).toContain('<span>Exploration</span>');
+    expect(authenticated).toContain('<progress max="25" value="12">48%</progress>');
+    expect(authenticated).toContain('<span>Launches</span>');
+    expect(authenticated).toContain('<progress max="3" value="0">0%</progress>');
     expect(authenticated).toContain(
       'https://api.maptiler.com/maps/outdoor-v2/style.json?key=maptiler-test-key',
     );
@@ -191,7 +215,8 @@ describe('Vento page renderer', () => {
     expect(personal).toContain('data-map-flight-aid-status');
     expect(personal).toContain('data-arena-search');
     expect(personal).toContain('data-arena-search-input');
-    expect(personal).not.toContain('competition-breadcrumb');
+    expect(personal).toContain('class="dashboard-breadcrumb"');
+    expect(personal).toContain('aria-current="page">Personal</span>');
 
     const arena = await render({
       currentUser,

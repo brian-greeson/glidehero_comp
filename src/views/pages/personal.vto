@@ -1,6 +1,7 @@
 {{ layout "layouts/appLayout.vto" }}
-  <section class="dashboard" data-dashboard data-dashboard-mode="personal">
+  <section class="dashboard has-dashboard-breadcrumb" data-dashboard data-dashboard-mode="personal">
     {{ include "components/dashboardNav.vto" { activeMode: "personal", currentPath: "/personal", currentUser, isAdmin, territoryColorSuccess, territoryColorError } }}
+    {{ include "components/dashboardBreadcrumb.vto" { activeMode: "personal", arena: undefined, dashboardAchievementProgress } }}
     <section class="map-stage" aria-label="Personal territory map">
       <div class="map-canvas" data-dashboard-map data-map-style-url="{{ mapTilerStyleUrl }}"
         data-current-user-id="{{ currentUser.userId }}" data-territory-color="{{ currentUser.territoryColor }}"

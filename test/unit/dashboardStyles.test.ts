@@ -7,11 +7,12 @@ describe('dashboard stylesheet contract', () => {
 
     expect(css).toContain('@media (max-width: 900px)');
     expect(css).toMatch(/\.dashboard-information\s*{\s*display: block;/);
-    expect(css).toContain('.competition-breadcrumb {');
-    expect(css).toMatch(/\.has-competition-breadcrumb \.map-stage\s*{\s*inset-block-start: 110px;/);
+    expect(css).toContain('.dashboard-breadcrumb {');
+    expect(css).toContain('.dashboard-achievement-item {');
+    expect(css).toMatch(/\.has-dashboard-breadcrumb \.map-stage\s*{\s*inset-block-start: 110px;/);
     expect(css).toContain('.arena-search-results {');
     expect(css).toMatch(
-      /\.has-competition-breadcrumb \.dashboard-info\s*{\s*inset-block-start: auto;/,
+      /\.has-dashboard-breadcrumb \.dashboard-info\s*{\s*inset-block-start: auto;/,
     );
     expect(css).toContain('height: 292px;');
     expect(css).toMatch(

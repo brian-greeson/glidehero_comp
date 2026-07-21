@@ -1,8 +1,8 @@
 {{ layout "layouts/appLayout.vto" }}
-<section class="dashboard competition-coverage has-competition-breadcrumb" data-dashboard data-dashboard-mode="global"
+<section class="dashboard competition-coverage has-dashboard-breadcrumb" data-dashboard data-dashboard-mode="global"
   data-competition-coverage="global">
   {{ include "components/dashboardNav.vto" { activeMode: "competitive", currentPath: "/global", currentUser, isAdmin, territoryColorSuccess, territoryColorError } }}
-  {{ include "components/competitionBreadcrumb.vto" { arena: undefined } }}
+  {{ include "components/dashboardBreadcrumb.vto" { activeMode: "competitive", arena: undefined, dashboardAchievementProgress } }}
   <section class="map-stage" aria-label="Global competition coverage map">
     <div class="map-canvas" data-territory-map data-map-style-url="{{ mapTilerStyleUrl }}"
       data-current-user-id="{{ currentUser.userId }}" data-territory-color="{{ currentUser.territoryColor }}"

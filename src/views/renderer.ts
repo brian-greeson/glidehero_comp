@@ -7,7 +7,7 @@ import type { AdminUserDetail, AdminUserSummary } from '../services/adminUserSer
 import type { ArenaDetail } from '../services/arenaService.js';
 import type { ArenaPersonalProgress } from '../services/arenaProgressService.js';
 import type { TerritoryTileConfig } from '../config/territoryTiles.js';
-import type { PilotProfileSummary } from '../services/profileService.js';
+import type { AchievementProgressCard, PilotProfileSummary } from '../services/profileService.js';
 import { createTerritoryTileSettingsService, type TerritoryTileSettingsService } from '../services/territoryTileSettingsService.js';
 
 export type PageModel = {
@@ -16,6 +16,7 @@ export type PageModel = {
   arena?: ArenaDetail;
   arenaProgress?: ArenaPersonalProgress;
   profile?: PilotProfileSummary;
+  dashboardAchievementProgress?: AchievementProgressCard[];
   profileIsCurrent?: boolean;
   loginError?: string;
   signupError?: string;
@@ -101,6 +102,7 @@ export function createPageRenderer(options: {
         arena: undefined,
         arenaProgress: undefined,
         profile: undefined,
+        dashboardAchievementProgress: [],
         profileIsCurrent: false,
         isDashboard: page === 'global' || page === 'personal' || page === 'arena',
         isErrorPage: false,

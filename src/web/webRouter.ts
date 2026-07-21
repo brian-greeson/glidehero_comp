@@ -171,6 +171,10 @@ export function createWebRouter(dependencies: {
     return Boolean(currentUser && isAdmin(currentUser.email));
   }
 
+  async function dashboardAchievementProgress(userId: string) {
+    return dependencies.profiles.getDashboardAchievementProgress(userId);
+  }
+
   router.post('/v1/igc-uploads/intents', async (req, res, next) => {
     const currentUser = res.locals.currentUser;
     if (!currentUser) {
@@ -557,32 +561,42 @@ export function createWebRouter(dependencies: {
     });
   });
 
-  router.get('/global', async (req, res) => {
+  router.get('/global', async (req, res, next) => {
     const currentUser = res.locals.currentUser;
     if (!currentUser) {
       res.redirect(302, '/');
       return;
     }
-    await render(res, dependencies.renderPage, 200, {
-      currentUser,
-      page: 'global',
-      isAdmin: isAdmin(currentUser.email),
-      territoryColorSuccess: req.query.territoryColor === 'success',
-    });
+    try {
+      await render(res, dependencies.renderPage, 200, {
+        currentUser,
+        page: 'global',
+        dashboardAchievementProgress: await dashboardAchievementProgress(currentUser.userId),
+        isAdmin: isAdmin(currentUser.email),
+        territoryColorSuccess: req.query.territoryColor === 'success',
+      });
+    } catch (error) {
+      next(error);
+    }
   });
 
-  router.get('/personal', async (req, res) => {
+  router.get('/personal', async (req, res, next) => {
     const currentUser = res.locals.currentUser;
     if (!currentUser) {
       res.redirect(302, '/');
       return;
     }
-    await render(res, dependencies.renderPage, 200, {
-      currentUser,
-      page: 'personal',
-      isAdmin: isAdmin(currentUser.email),
-      territoryColorSuccess: req.query.territoryColor === 'success',
-    });
+    try {
+      await render(res, dependencies.renderPage, 200, {
+        currentUser,
+        page: 'personal',
+        dashboardAchievementProgress: await dashboardAchievementProgress(currentUser.userId),
+        isAdmin: isAdmin(currentUser.email),
+        territoryColorSuccess: req.query.territoryColor === 'success',
+      });
+    } catch (error) {
+      next(error);
+    }
   });
 
   router.get('/profile', async (_req, res, next) => {
@@ -650,11 +664,16 @@ export function createWebRouter(dependencies: {
         next();
         return;
       }
+      const [personalArenaProgress, achievementProgress] = await Promise.all([
+        dependencies.arenaProgress.get({ arenaId: arena.id, userId: currentUser.userId }),
+        dashboardAchievementProgress(currentUser.userId),
+      ]);
       await render(res, dependencies.renderPage, 200, {
         currentUser,
         page: 'arena',
         arena,
-        arenaProgress: await dependencies.arenaProgress.get({ arenaId: arena.id, userId: currentUser.userId }),
+        arenaProgress: personalArenaProgress,
+        dashboardAchievementProgress: achievementProgress,
         isAdmin: isAdmin(currentUser.email),
         territoryColorSuccess: req.query.territoryColor === 'success',
       });

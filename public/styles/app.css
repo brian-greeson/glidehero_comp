@@ -736,13 +736,14 @@ button {
   margin: 0;
   box-shadow: 0 8px 24px rgb(0 0 0 / 0.15);
 }
-.competition-breadcrumb {
+.dashboard-breadcrumb {
   position: relative;
   z-index: 4;
   display: flex;
   height: 34px;
   align-items: center;
-  gap: 0.45rem;
+  justify-content: space-between;
+  gap: 1rem;
   padding: 0 1.75rem;
   border-bottom: 1px solid #d6dee8;
   color: #cfe7fa;
@@ -755,9 +756,61 @@ button {
   font-size: 0.82rem;
   font-weight: 700;
 }
-.competition-breadcrumb a {
-  /* color: #cfe7fa; */
+.dashboard-breadcrumb-location {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 0.45rem;
+  white-space: nowrap;
+}
+.dashboard-breadcrumb-location a {
   color: #a3bbcf;
+}
+.dashboard-achievement-progress {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 1.1rem;
+  font-style: normal;
+}
+.dashboard-achievement-item {
+  display: grid;
+  grid-template-columns: auto 5.5rem auto;
+  align-items: center;
+  gap: 0.4rem;
+  color: #eef7ff;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-decoration: none;
+}
+.dashboard-achievement-item progress {
+  width: 5.5rem;
+  height: 0.35rem;
+  overflow: hidden;
+  border: 0;
+  border-radius: 999px;
+  background: #59636e;
+}
+.dashboard-achievement-item progress::-webkit-progress-bar {
+  border-radius: 999px;
+  background: #59636e;
+}
+.dashboard-achievement-item progress::-webkit-progress-value {
+  border-radius: 999px;
+  background: var(--color-logo-aqua);
+}
+.dashboard-achievement-item progress::-moz-progress-bar {
+  border-radius: 999px;
+  background: var(--color-logo-aqua);
+}
+.dashboard-achievement-item strong {
+  color: #b8c9d8;
+  font-size: 0.68rem;
+}
+.dashboard-achievement-item:focus-visible {
+  border-radius: 0.2rem;
+  outline: 2px solid var(--color-logo-aqua);
+  outline-offset: 3px;
 }
 
 .admin-body {
@@ -972,7 +1025,7 @@ button {
   overflow: hidden;
   background: #dae8cf;
 }
-.has-competition-breadcrumb .map-stage {
+.has-dashboard-breadcrumb .map-stage {
   inset-block-start: 110px;
 }
 .map-canvas {
@@ -1092,7 +1145,7 @@ button {
   inset: 96px 20px auto;
   pointer-events: none;
 }
-.has-competition-breadcrumb .dashboard-info {
+.has-dashboard-breadcrumb .dashboard-info {
   inset-block-start: 130px;
 }
 .dashboard-information {
@@ -1485,16 +1538,25 @@ grid-template-columns: fit-content(36rem) minmax(0, 1fr);
   .map-stage {
     inset: 62px 0 0;
   }
-  .competition-breadcrumb {
+  .dashboard-breadcrumb {
     height: 32px;
     padding-inline: 0.75rem;
     white-space: nowrap;
   }
-  .competition-breadcrumb span:last-child {
+  .dashboard-breadcrumb-location span:last-child {
     overflow: hidden;
     text-overflow: ellipsis;
   }
-  .has-competition-breadcrumb .map-stage {
+  .dashboard-achievement-progress {
+    gap: 0.7rem;
+  }
+  .dashboard-achievement-item {
+    grid-template-columns: auto 4rem auto;
+  }
+  .dashboard-achievement-item progress {
+    width: 4rem;
+  }
+  .has-dashboard-breadcrumb .map-stage {
     inset-block-start: 94px;
   }
   .dashboard-info {
@@ -1511,7 +1573,7 @@ grid-template-columns: fit-content(36rem) minmax(0, 1fr);
     transition: height 0.25s ease;
     pointer-events: auto;
   }
-  .has-competition-breadcrumb .dashboard-info {
+  .has-dashboard-breadcrumb .dashboard-info {
     inset-block-start: auto;
     height: 292px;
   }
@@ -1589,12 +1651,31 @@ grid-template-columns: fit-content(36rem) minmax(0, 1fr);
     right: 12px;
     bottom: 92px;
   }
-  .has-competition-breadcrumb .map-flight-aid-status {
+  .has-dashboard-breadcrumb .map-flight-aid-status {
     bottom: 308px;
   }
   .toast {
     top: 70px;
     right: 1rem;
+  }
+}
+
+@media (max-width: 600px) {
+  .dashboard-breadcrumb-location {
+    display: none;
+  }
+  .dashboard-achievement-progress {
+    width: 100%;
+    justify-content: space-between;
+  }
+  .dashboard-achievement-item {
+    grid-template-columns: auto 2.5rem;
+  }
+  .dashboard-achievement-item progress {
+    width: 2.5rem;
+  }
+  .dashboard-achievement-item strong {
+    display: none;
   }
 }
 

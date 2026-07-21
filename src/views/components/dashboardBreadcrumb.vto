@@ -1,0 +1,22 @@
+<nav class="dashboard-breadcrumb" aria-label="Dashboard context and next achievements">
+  <div class="dashboard-breadcrumb-location">
+    {{ if activeMode === 'personal' }}
+      <span aria-current="page">Personal</span>
+    {{ else if arena }}
+      <a href="/global" data-competition-period-link="/global">Global</a><span aria-hidden="true">››</span><span aria-current="page">{{ arena.name }}</span>
+    {{ else }}
+      <span aria-current="page">Global</span>
+    {{ /if }}
+  </div>
+  {{ if dashboardAchievementProgress.length }}
+    <div class="dashboard-achievement-progress" aria-label="Next achievements">
+      {{ for milestone of dashboardAchievementProgress }}
+        <a class="dashboard-achievement-item" href="/profile" aria-label="{{ milestone.title }}: {{ milestone.currentLabel }} of {{ milestone.targetLabel }}">
+          <span>{{ if milestone.key === 'unique_cells' }}Exploration{{ else if milestone.key === 'launches_visited' }}Launches{{ else if milestone.key === 'general_arenas_explored' }}Arenas{{ else if milestone.key === 'general_coverage' }}Coverage{{ else if milestone.key === 'states_flown_in' }}States{{ else }}Countries{{ /if }}</span>
+          <progress max="{{ milestone.targetValue }}" value="{{ if milestone.currentValue === 0 }}0{{ else }}{{ milestone.currentValue }}{{ /if }}">{{ if milestone.progressPercent === 0 }}0{{ else }}{{ milestone.progressPercent }}{{ /if }}%</progress>
+          <strong>{{ milestone.currentLabel }}/{{ milestone.targetLabel }}</strong>
+        </a>
+      {{ /for }}
+    </div>
+  {{ /if }}
+</nav>

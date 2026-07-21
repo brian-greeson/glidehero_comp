@@ -5,6 +5,7 @@ import {
   milestoneProgressPercent,
   nextFixedMilestone,
   regionalMilestones,
+  selectClosestMilestones,
 } from '../../src/domain/achievement/progress.js';
 
 describe('achievement progress milestones', () => {
@@ -27,5 +28,18 @@ describe('achievement progress milestones', () => {
   it('rejects invalid progress values', () => {
     expect(() => nextFixedMilestone(-1, launchVisitMilestones)).toThrow('non-negative');
     expect(() => milestoneProgressPercent(1, 0)).toThrow('positive target');
+  });
+
+  it('selects the closest milestones by completion ratio with stable ties', () => {
+    const milestones = [
+      { key: 'exploration', currentValue: 80, targetValue: 100 },
+      { key: 'launches', currentValue: 2, targetValue: 3 },
+      { key: 'states', currentValue: 4, targetValue: 5 },
+      { key: 'countries', currentValue: 8, targetValue: 10 },
+    ];
+
+    expect(selectClosestMilestones(milestones, 3).map(({ key }) => key)).toEqual([
+      'exploration', 'states', 'countries',
+    ]);
   });
 });

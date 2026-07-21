@@ -10,6 +10,7 @@ import {
   milestoneProgressPercent,
   nextFixedMilestone,
   regionalMilestones,
+  selectClosestMilestones,
 } from '../domain/achievement/progress.js';
 import { arenaPath } from '../domain/arena/arenaRoute.js';
 
@@ -89,6 +90,7 @@ export class TerritoryColorValidationError extends Error {
 
 export interface ProfileService {
   updateTerritoryColor(input: UpdateTerritoryColorInput): Promise<void>;
+  getDashboardAchievementProgress(userId: string): Promise<AchievementProgressCard[]>;
   getPilotProfile(userId: string): Promise<PilotProfileSummary | null>;
 }
 
@@ -440,6 +442,83 @@ function buildAchievementProgress(
   return cards;
 }
 
+async function loadArenaAchievementProgress(
+  database: Database,
+  options: { cellSize: number },
+  userId: string,
+): Promise<StoredArenaAchievementProgress> {
+  const result = await database.execute<StoredArenaAchievementProgress>(sql`
+    WITH arena_cell_counts AS (
+      SELECT arena.id, arena.source_id, arena.name, arena.country_code, arena.arena_type,
+             arena.claimable_cell_count, arena.claimable_cell_size,
+             COALESCE(personal_cells.claimed_cells, 0)::integer AS claimed_cells
+      FROM arenas arena
+      LEFT JOIN LATERAL (
+        SELECT COUNT(DISTINCT (claims.x, claims.y))::integer AS claimed_cells
+        FROM user_grid_claims claims
+        WHERE claims.claim_user = ${userId}
+          AND claims.cell_size = ${options.cellSize}
+          AND claims.x BETWEEN FLOOR(ST_XMin(Box3D(arena.area)) / ${options.cellSize})::integer - 1
+                           AND CEIL(ST_XMax(Box3D(arena.area)) / ${options.cellSize})::integer + 1
+          AND claims.y BETWEEN FLOOR(ST_YMin(Box3D(arena.area)) / ${options.cellSize})::integer - 1
+                           AND CEIL(ST_YMax(Box3D(arena.area)) / ${options.cellSize})::integer + 1
+          AND ST_Covers(
+            arena.area,
+            ST_SetSRID(ST_MakePoint(
+              (claims.x + 0.5) * ${options.cellSize},
+              (claims.y + 0.5) * ${options.cellSize}
+            ), 6933)
+          )
+      ) personal_cells ON TRUE
+      WHERE arena.arena_type IN ('general', 'state', 'country')
+    ), launch_visits AS (
+      SELECT DISTINCT arena.id
+      FROM arenas arena
+      INNER JOIN flights flight
+        ON flight.user_id = ${userId}
+       AND flight.processing_status = 'completed'
+       AND flight.launch_latitude IS NOT NULL
+       AND flight.launch_longitude IS NOT NULL
+       AND ST_Covers(
+         arena.area,
+         ST_Transform(ST_SetSRID(ST_MakePoint(flight.launch_longitude, flight.launch_latitude), 4326), 6933)
+       )
+      WHERE arena.arena_type = 'launch'
+    ), best_general AS (
+      SELECT source_id, name, country_code, claimed_cells, claimable_cell_count
+      FROM arena_cell_counts
+      WHERE arena_type = 'general'
+        AND claimed_cells > 0
+        AND claimable_cell_count > 0
+        AND claimable_cell_size = ${options.cellSize}
+      ORDER BY claimed_cells::numeric / claimable_cell_count DESC, lower(name), source_id
+      LIMIT 1
+    )
+    SELECT
+      (SELECT COUNT(*)::integer FROM launch_visits) AS "launchArenasVisited",
+      COUNT(*) FILTER (WHERE arena_type = 'general' AND claimed_cells > 0)::integer AS "generalArenasExplored",
+      COUNT(*) FILTER (WHERE arena_type = 'state' AND claimed_cells > 0)::integer AS "statesFlownIn",
+      COUNT(*) FILTER (WHERE arena_type = 'country' AND claimed_cells > 0)::integer AS "countriesFlownIn",
+      (SELECT claimed_cells FROM best_general) AS "bestGeneralClaimedCells",
+      (SELECT claimable_cell_count FROM best_general) AS "bestGeneralTotalCells",
+      (SELECT source_id FROM best_general) AS "bestGeneralSourceId",
+      (SELECT name FROM best_general) AS "bestGeneralName",
+      (SELECT country_code FROM best_general) AS "bestGeneralCountryCode"
+    FROM arena_cell_counts
+  `);
+  return result.rows[0] ?? {
+    launchArenasVisited: 0,
+    generalArenasExplored: 0,
+    statesFlownIn: 0,
+    countriesFlownIn: 0,
+    bestGeneralClaimedCells: null,
+    bestGeneralTotalCells: null,
+    bestGeneralSourceId: null,
+    bestGeneralName: null,
+    bestGeneralCountryCode: null,
+  };
+}
+
 export function createProfileService(database: Database, options: { cellSize: number }): ProfileService {
   return {
     async updateTerritoryColor({ userId, territoryColor }) {
@@ -450,6 +529,31 @@ export function createProfileService(database: Database, options: { cellSize: nu
         .update(profiles)
         .set({ territoryColor: normalizedColor, updatedAt: new Date() })
         .where(eq(profiles.userId, userId));
+    },
+
+    async getDashboardAchievementProgress(userId) {
+      const result = await database.execute<{
+        displayName: string;
+        lifetimeUniqueCellCount: number | string;
+      }>(sql`
+        SELECT
+          profiles.display_name AS "displayName",
+          COUNT(DISTINCT (claims.x, claims.y))::integer AS "lifetimeUniqueCellCount"
+        FROM users
+        INNER JOIN profiles ON profiles.user_id = users.user_id
+        LEFT JOIN user_grid_claims claims
+          ON claims.claim_user = users.user_id
+         AND claims.cell_size = ${options.cellSize}
+        WHERE users.user_id = ${userId}
+        GROUP BY users.user_id, profiles.display_name
+      `);
+      const row = result.rows[0];
+      if (!row) return [];
+      const progress = buildAchievementProgress({
+        displayName: row.displayName,
+        lifetimeUniqueCellCount: Number(row.lifetimeUniqueCellCount),
+      }, await loadArenaAchievementProgress(database, options, userId));
+      return selectClosestMilestones(progress, 3);
     },
 
     async getPilotProfile(userId) {
@@ -501,7 +605,7 @@ export function createProfileService(database: Database, options: { cellSize: nu
       if (!row) return null;
       const lifetimeUniqueCellCount = Number(row.lifetimeUniqueCellCount);
       const nextMilestone = nextUniqueCellMilestone(lifetimeUniqueCellCount);
-      const [achievementRows, recentFlightRows, arenaProgressRows] = await Promise.all([
+      const [achievementRows, recentFlightRows, arenaProgress] = await Promise.all([
         database.execute<StoredAchievement & { totalCount: number | string }>(sql`
           WITH displayable AS (
             SELECT
@@ -549,73 +653,8 @@ export function createProfileService(database: Database, options: { cellSize: nu
           ORDER BY flights.started_at DESC NULLS LAST, progress.evaluated_at DESC, progress.flight_id DESC
           LIMIT 20
         `),
-        database.execute<StoredArenaAchievementProgress>(sql`
-          WITH personal_cells AS (
-            SELECT DISTINCT claims.x, claims.y
-            FROM user_grid_claims claims
-            WHERE claims.claim_user = ${userId}
-              AND claims.cell_size = ${options.cellSize}
-          ), arena_cell_counts AS (
-            SELECT arena.id, arena.source_id, arena.name, arena.country_code, arena.arena_type,
-                   arena.claimable_cell_count, arena.claimable_cell_size,
-                   COUNT(DISTINCT (personal_cells.x, personal_cells.y))
-                     FILTER (WHERE personal_cells.x IS NOT NULL AND personal_cells.y IS NOT NULL)::integer AS claimed_cells
-            FROM arenas arena
-            LEFT JOIN personal_cells ON ST_Covers(
-              arena.area,
-              ST_SetSRID(ST_MakePoint(
-                (personal_cells.x + 0.5) * ${options.cellSize},
-                (personal_cells.y + 0.5) * ${options.cellSize}
-              ), 6933)
-            )
-            GROUP BY arena.id
-          ), launch_visits AS (
-            SELECT DISTINCT arena.id
-            FROM arenas arena
-            INNER JOIN flights flight
-              ON flight.user_id = ${userId}
-             AND flight.processing_status = 'completed'
-             AND flight.launch_latitude IS NOT NULL
-             AND flight.launch_longitude IS NOT NULL
-             AND ST_Covers(
-               arena.area,
-               ST_Transform(ST_SetSRID(ST_MakePoint(flight.launch_longitude, flight.launch_latitude), 4326), 6933)
-             )
-            WHERE arena.arena_type = 'launch'
-          ), best_general AS (
-            SELECT source_id, name, country_code, claimed_cells, claimable_cell_count
-            FROM arena_cell_counts
-            WHERE arena_type = 'general'
-              AND claimed_cells > 0
-              AND claimable_cell_count > 0
-              AND claimable_cell_size = ${options.cellSize}
-            ORDER BY claimed_cells::numeric / claimable_cell_count DESC, lower(name), source_id
-            LIMIT 1
-          )
-          SELECT
-            (SELECT COUNT(*)::integer FROM launch_visits) AS "launchArenasVisited",
-            COUNT(*) FILTER (WHERE arena_type = 'general' AND claimed_cells > 0)::integer AS "generalArenasExplored",
-            COUNT(*) FILTER (WHERE arena_type = 'state' AND claimed_cells > 0)::integer AS "statesFlownIn",
-            COUNT(*) FILTER (WHERE arena_type = 'country' AND claimed_cells > 0)::integer AS "countriesFlownIn",
-            (SELECT claimed_cells FROM best_general) AS "bestGeneralClaimedCells",
-            (SELECT claimable_cell_count FROM best_general) AS "bestGeneralTotalCells",
-            (SELECT source_id FROM best_general) AS "bestGeneralSourceId",
-            (SELECT name FROM best_general) AS "bestGeneralName",
-            (SELECT country_code FROM best_general) AS "bestGeneralCountryCode"
-          FROM arena_cell_counts
-        `),
+        loadArenaAchievementProgress(database, options, userId),
       ]);
-      const arenaProgress = arenaProgressRows.rows[0] ?? {
-        launchArenasVisited: 0,
-        generalArenasExplored: 0,
-        statesFlownIn: 0,
-        countriesFlownIn: 0,
-        bestGeneralClaimedCells: null,
-        bestGeneralTotalCells: null,
-        bestGeneralSourceId: null,
-        bestGeneralName: null,
-        bestGeneralCountryCode: null,
-      };
       const achievementProgress = buildAchievementProgress({
         displayName: row.displayName,
         lifetimeUniqueCellCount,

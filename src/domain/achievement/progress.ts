@@ -15,3 +15,18 @@ export function milestoneProgressPercent(current: number, target: number): numbe
   const rounded = Math.min(100, Math.max(0, Math.round((current / target) * 100)));
   return current < target ? Math.min(99, rounded) : 100;
 }
+
+export function selectClosestMilestones<T extends { currentValue: number; targetValue: number }>(
+  milestones: readonly T[],
+  limit: number,
+): T[] {
+  return milestones
+    .map((milestone, index) => ({ milestone, index }))
+    .sort((left, right) => {
+      const progressDifference = right.milestone.currentValue / right.milestone.targetValue
+        - left.milestone.currentValue / left.milestone.targetValue;
+      return progressDifference || left.index - right.index;
+    })
+    .slice(0, Math.max(0, limit))
+    .map(({ milestone }) => milestone);
+}

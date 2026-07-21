@@ -543,6 +543,9 @@ Arenas explored, the best valid General coverage ratio, and State/Country
 Flown-in counts from configured-size Personal cells and completed flight origins.
 Pure threshold helpers select the next milestone; finished fixed tracks are
 omitted while the recurring Personal Map cell milestone remains available.
+Dashboard breadcrumbs rank the unfinished cards by completion ratio and show
+the closest three. Arena progress reads constrain each Arena lookup to the grid
+coordinates inside its bounding box before applying exact `ST_Covers` checks.
 
 `npm run backfill:arena-achievements` is a one-time historical as-of replay.
 It defaults to dry-run, supports explicit `--apply`, preserves earliest source

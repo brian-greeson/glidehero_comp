@@ -118,6 +118,7 @@ function dependencies() {
   const middleware = createCurrentUserMiddleware(auth, cookie);
   const profiles: ProfileService = {
     updateTerritoryColor: vi.fn(async () => undefined),
+    getDashboardAchievementProgress: vi.fn(async () => []),
     getPilotProfile: vi.fn(async () => null),
   };
   const gridClaim: GridClaimService = {
@@ -462,7 +463,8 @@ describe('webRouter', () => {
   });
 
   it('protects dashboard routes and renders canonical Arenas with a basic 404', async () => {
-    const { app, arenas, arenaProgress, renderPage } = dependencies();
+    const { app, arenas, arenaProgress, profiles, renderPage } = dependencies();
+    vi.mocked(profiles.getDashboardAchievementProgress).mockResolvedValue(pilotProfile.achievementProgress);
     vi.mocked(arenas.getByRoute).mockResolvedValueOnce(arena).mockResolvedValueOnce(null);
     await withServer(app, async (baseUrl) => {
       const anonymous = await fetch(`${baseUrl}/global`, { redirect: 'manual' });
@@ -473,8 +475,11 @@ describe('webRouter', () => {
         headers: { cookie: 'glidehero_session=valid-token' },
       });
       expect(found.status).toBe(200);
-      expect(renderPage).toHaveBeenCalledWith(expect.objectContaining({ page: 'arena', arena }));
+      expect(renderPage).toHaveBeenCalledWith(expect.objectContaining({
+        page: 'arena', arena, dashboardAchievementProgress: pilotProfile.achievementProgress,
+      }));
       expect(arenaProgress.get).toHaveBeenCalledWith({ arenaId: arena.id, userId: user.userId });
+      expect(profiles.getDashboardAchievementProgress).toHaveBeenCalledWith(user.userId);
 
       vi.mocked(renderPage).mockClear();
       const missing = await fetch(`${baseUrl}/arena/us/missing-999`, {
@@ -691,6 +696,7 @@ describe('webRouter', () => {
       cookie,
       profiles: {
         updateTerritoryColor: vi.fn(async () => undefined),
+        getDashboardAchievementProgress: vi.fn(async () => []),
         getPilotProfile: vi.fn(async () => null),
       },
       gridClaim: {
