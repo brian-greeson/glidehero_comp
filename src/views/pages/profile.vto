@@ -9,9 +9,9 @@
     <main class="profile-content">
       <a class="profile-back-link" href="/personal">← Back to Personal Map</a>
       {{ include "components/pilotProfileSummary.vto" { profile, profileIsCurrent } }}
+      {{ include "components/profileAchievementProgress.vto" { profile, profileIsCurrent } }}
       {{ include "components/profileAchievementHelp.vto" }}
       {{ include "components/profileAchievementList.vto" { achievements: profile.achievements, achievementCount: profile.achievementCount, profileIsCurrent } }}
-      {{ include "components/profileAchievementProgress.vto" { profile, profileIsCurrent } }}
       {{ include "components/profileRecentFlights.vto" { flights: profile.recentFlights, profileIsCurrent } }}
     </main>
   </section>
