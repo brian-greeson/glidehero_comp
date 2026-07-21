@@ -617,8 +617,29 @@ button {
 .account-popover form {
   margin-top: 0.8rem;
 }
-.account-popover input {
-  padding: 0.25rem;
+.territory-color-form {
+  gap: 0.5rem;
+}
+.territory-color-control {
+  display: flex;
+  width: fit-content;
+  align-items: center;
+  gap: 0.65rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+.account-popover .territory-color-input {
+  width: 44px;
+  height: 44px;
+  flex: 0 0 auto;
+  padding: 0.2rem;
+  border-color: var(--color-border);
+  background: var(--color-surface);
+  cursor: pointer;
+}
+.territory-color-input:focus-visible {
+  outline: 3px solid var(--color-focus-ring);
+  outline-offset: 3px;
 }
 .account-email {
   margin: 0;

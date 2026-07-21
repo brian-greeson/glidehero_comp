@@ -67,6 +67,9 @@ describe('Vento page renderer', () => {
     expect(authenticated).toContain('pilot@example.com');
     expect(authenticated).toContain('action="/logout"');
     expect(authenticated).toContain('action="/profile/territory-color"');
+    expect(authenticated).toContain('class="territory-color-control"><input class="territory-color-input"');
+    expect(authenticated).toContain('data-territory-color-input required><span>Territory color</span>');
+    expect(authenticated).not.toContain('>Save map color</button>');
     expect(authenticated).toContain('href="/profile">My Progress</a>');
     expect(authenticated).toContain('value="#1769AA"');
     expect(authenticated).not.toContain('data-competition-coverage="global"');

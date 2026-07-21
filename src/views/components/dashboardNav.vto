@@ -18,12 +18,11 @@
         <a class="profile-link" href="/profile">My Progress</a>
         {{ if isAdmin }}<a class="admin-link" href="/admin">Admin</a>{{ /if }}
         <button type="button" class="account-help-button" data-onboarding-trigger aria-controls="glide-hero-onboarding">Help &amp; walkthrough</button>
-        <form method="post" action="/profile/territory-color">
+        <form class="territory-color-form" method="post" action="/profile/territory-color">
           <input type="hidden" name="returnTo" value="{{ currentPath }}" data-competition-return-to>
-          <label>Territory color<input name="territoryColor" type="color" value="{{ currentUser.territoryColor }}" required></label>
+          <label class="territory-color-control"><input class="territory-color-input" name="territoryColor" type="color" value="{{ currentUser.territoryColor }}" data-territory-color-input required><span>Territory color</span></label>
           {{ if territoryColorSuccess }}<p class="success" role="status">Map color saved.</p>{{ /if }}
           {{ if territoryColorError }}<p class="error" role="alert">{{ territoryColorError }}</p>{{ /if }}
-          <button type="submit" class="secondary-button">Save map color</button>
         </form>
         <form method="post" action="/logout"><button type="submit" class="logout-button">Log out</button></form>
       </section>

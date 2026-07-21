@@ -34,6 +34,12 @@ describe('dashboard stylesheet contract', () => {
     expect(css).toMatch(
       /\.profile-link\s*{[^}]*display: inline-flex;[^}]*width: 100%;[^}]*min-height: 44px;[^}]*background: var\(--color-primary-strong\);[^}]*text-decoration: none;/s,
     );
+    expect(css).toMatch(
+      /\.territory-color-control\s*{[^}]*display: flex;[^}]*align-items: center;[^}]*gap: 0\.65rem;/s,
+    );
+    expect(css).toMatch(
+      /\.account-popover \.territory-color-input\s*{[^}]*width: 44px;[^}]*height: 44px;/s,
+    );
   });
 
   it('anchors the coverage claimant card around its map tap', async () => {
