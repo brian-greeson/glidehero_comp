@@ -537,6 +537,13 @@ and never revokes an existing award. Profile reads merge ordinary awards and
 record events into one latest-50 activity list without exposing raw keys or
 details.
 
+Authenticated profile reads also build an ordered, non-persistent "In progress"
+card model. One Arena aggregation calculates Launch Arenas visited, General
+Arenas explored, the best valid General coverage ratio, and State/Country
+Flown-in counts from configured-size Personal cells and completed flight origins.
+Pure threshold helpers select the next milestone; finished fixed tracks are
+omitted while the recurring Personal Map cell milestone remains available.
+
 `npm run backfill:arena-achievements` is a one-time historical as-of replay.
 It defaults to dry-run, supports explicit `--apply`, preserves earliest source
 attribution, and reconstructs strict launch-tag records. Dry-run uses one

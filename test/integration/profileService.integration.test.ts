@@ -11,7 +11,7 @@ beforeAll(async () => {
 });
 
 beforeEach(async () => {
-  await database.pool.query('TRUNCATE TABLE users CASCADE');
+  await database.pool.query('TRUNCATE TABLE arenas, users CASCADE');
 });
 
 afterAll(async () => {
@@ -138,7 +138,8 @@ describe('profileService', () => {
       },
     ]);
 
-    await expect(profiles.getPilotProfile(pilot.user.userId)).resolves.toEqual({
+    const summary = await profiles.getPilotProfile(pilot.user.userId);
+    expect(summary).toEqual({
       userId: pilot.user.userId,
       displayName: 'Summary Pilot',
       territoryColor: '#1769AA',
@@ -146,6 +147,7 @@ describe('profileService', () => {
       nextUniqueCellMilestone: 10,
       uniqueCellsToNextMilestone: 8,
       nextUniqueCellMilestoneProgressPercent: 20,
+      achievementProgress: expect.any(Array),
       completedFlightCount: 2,
       lifetimeDirectCellCount: 10,
       lifetimeEnclosedCellCount: 3,
@@ -195,7 +197,13 @@ describe('profileService', () => {
         }),
       ],
     });
-    await expect(profiles.getPilotProfile(emptyPilot.user.userId)).resolves.toEqual({
+    expect(summary?.achievementProgress.map((progress) => progress.key)).toEqual([
+      'unique_cells', 'launches_visited', 'general_arenas_explored', 'general_coverage', 'states_flown_in', 'countries_flown_in',
+    ]);
+    expect(summary?.achievementProgress[0]).toEqual(expect.objectContaining({ currentValue: 2, targetValue: 10, progressPercent: 20 }));
+
+    const emptySummary = await profiles.getPilotProfile(emptyPilot.user.userId);
+    expect(emptySummary).toEqual({
       userId: emptyPilot.user.userId,
       displayName: 'Empty Pilot',
       territoryColor: '#1769AA',
@@ -203,6 +211,7 @@ describe('profileService', () => {
       nextUniqueCellMilestone: 10,
       uniqueCellsToNextMilestone: 10,
       nextUniqueCellMilestoneProgressPercent: 0,
+      achievementProgress: expect.any(Array),
       completedFlightCount: 0,
       lifetimeDirectCellCount: 0,
       lifetimeEnclosedCellCount: 0,
@@ -212,6 +221,7 @@ describe('profileService', () => {
       achievements: [],
       recentFlights: [],
     });
+    expect(emptySummary?.achievementProgress).toHaveLength(6);
     await expect(profiles.getPilotProfile('00000000-0000-4000-8000-000000000099')).resolves.toBeNull();
   });
 
@@ -275,6 +285,53 @@ describe('profileService', () => {
       uniqueCellsToNextMilestone: 999,
       nextUniqueCellMilestoneProgressPercent: 50,
     }));
+  });
+
+  it('builds ordered Arena milestone cards from distinct Personal cells and completed launch origins', async () => {
+    const auth = createAuthService(database.db, { sessionTtlSeconds: 604800 });
+    const pilot = await auth.signup({
+      email: 'arena-progress-cards@example.com', password: 'correct horse battery staple', displayName: 'Arena Pilot',
+    });
+    const createFlight = async (label: string) => {
+      const [file] = await database.db.insert(igcFiles).values({
+        userId: pilot.user.userId, originalFilename: `${label}.igc`, contentType: 'application/vnd.fai.igc',
+        byteSize: 1, bucketKey: `profile-progress/${label}-${crypto.randomUUID()}.igc`,
+      }).returning({ id: igcFiles.id });
+      const [created] = await database.db.insert(flights).values({
+        userId: pilot.user.userId, igcFileId: file!.id,
+        contentHash: crypto.randomUUID().replaceAll('-', '').padEnd(64, '0'), processingStatus: 'completed',
+        launchLatitude: 0, launchLongitude: 0, launchTimezone: 'UTC',
+      }).returning({ id: flights.id });
+      return created!.id;
+    };
+    const firstFlight = await createFlight('first');
+    const secondFlight = await createFlight('second');
+    await database.db.insert(personalGridClaims).values([
+      { claimUser: pilot.user.userId, claimFlight: firstFlight, cellSize: 1_000, x: 0, y: 0, claimTimestamp: new Date() },
+      { claimUser: pilot.user.userId, claimFlight: secondFlight, cellSize: 1_000, x: 0, y: 0, claimTimestamp: new Date() },
+    ]);
+    const insertArena = (sourceId: number, name: string, type: string, wkt: string, total: number | null) => database.pool.query(`
+      INSERT INTO arenas (source_id, name, country, country_code, area, arena_type, claimable_cell_count, claimable_cell_size)
+      VALUES ($1, $2, 'United States', 'US', ST_Multi(ST_GeomFromText($3, 6933)), $4, $5, $6)
+    `, [sourceId, name, wkt, type, total, total === null ? null : 1_000]);
+    await insertArena(10, 'Launch', 'launch', 'POLYGON((0 0,1000 0,1000 1000,0 1000,0 0))', 1);
+    await insertArena(11, 'Best General', 'general', 'POLYGON((0 0,2000 0,2000 1000,0 1000,0 0))', 2);
+    await insertArena(12, 'Large General', 'general', 'POLYGON((0 0,2000 0,2000 2000,0 2000,0 0))', 4);
+    await insertArena(13, 'Colorado', 'state', 'POLYGON((0 0,2000 0,2000 2000,0 2000,0 0))', null);
+    await insertArena(14, 'United States', 'country', 'POLYGON((0 0,2000 0,2000 2000,0 2000,0 0))', null);
+
+    const profile = await createProfileService(database.db, { cellSize: 1_000 }).getPilotProfile(pilot.user.userId);
+
+    expect(profile?.achievementProgress.map((progress) => progress.key)).toEqual([
+      'unique_cells', 'launches_visited', 'general_arenas_explored', 'general_coverage', 'states_flown_in', 'countries_flown_in',
+    ]);
+    expect(profile?.achievementProgress).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'launches_visited', currentValue: 1, targetValue: 3 }),
+      expect.objectContaining({ key: 'general_arenas_explored', currentValue: 2, targetValue: 5 }),
+      expect.objectContaining({ key: 'general_coverage', currentValue: 50, targetValue: 75, arenaPath: '/arena/us/best-general-11' }),
+      expect.objectContaining({ key: 'states_flown_in', currentValue: 1, targetValue: 3 }),
+      expect.objectContaining({ key: 'countries_flown_in', currentValue: 1, targetValue: 3 }),
+    ]));
   });
 
   it('limits profile history to the latest 50 achievements and 20 flights', async () => {

@@ -349,6 +349,15 @@
   box-shadow: 0 6px 18px rgb(20 33 61 / 0.06);
 }
 
+.achievement-progress-list {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.achievement-progress-heading a {
+  color: inherit;
+}
+
 .profile-achievement-item {
   position: relative;
   display: flex;

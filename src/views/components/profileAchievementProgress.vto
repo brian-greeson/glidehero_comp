@@ -4,27 +4,27 @@
       <p class="admin-eyebrow">Keep exploring</p>
       <h2 id="profile-progress-heading">In progress</h2>
     </div>
-    <span class="profile-section-count">1 milestone</span>
+    <span class="profile-section-count">{{ profile.achievementProgress.length }} {{ if profile.achievementProgress.length === 1 }}milestone{{ else }}milestones{{ /if }}</span>
   </header>
-  <article class="achievement-progress-card">
-    {{ include "components/profileAchievementBadge.vto" { achievementType: 'unique_cells_milestone', badgeLabel: profile.nextUniqueCellMilestone } }}
-    <div class="achievement-progress-copy">
-      <div class="achievement-progress-heading">
-        <div>
-          <p>Unique cell milestone</p>
-          <h3>{{ profile.nextUniqueCellMilestone }} Unique Cells</h3>
+  <div class="achievement-progress-list">
+    {{ for milestone of profile.achievementProgress }}
+      <article class="achievement-progress-card" data-achievement-progress="{{ milestone.key }}">
+        {{ include "components/profileAchievementBadge.vto" { achievementType: milestone.achievementType, achievementCategory: milestone.achievementCategory, badgeLabel: milestone.badgeLabel, badgeAriaLabel: milestone.badgeAriaLabel } }}
+        <div class="achievement-progress-copy">
+          <div class="achievement-progress-heading">
+            <div>
+              <p>{{ milestone.typeLabel }}</p>
+              {{ if milestone.arenaPath }}<h3><a href="{{ milestone.arenaPath }}">{{ milestone.title }}</a></h3>{{ else }}<h3>{{ milestone.title }}</h3>{{ /if }}
+            </div>
+            <strong>{{ milestone.currentLabel }} / {{ milestone.targetLabel }}</strong>
+          </div>
+          <p>{{ if profileIsCurrent }}{{ milestone.currentDescription }}{{ else }}{{ milestone.otherDescription }}{{ /if }}</p>
+          <div class="achievement-progress-value">
+            <progress aria-label="Progress toward {{ milestone.title }}" max="{{ milestone.targetValue }}" value="{{ if milestone.currentValue === 0 }}0{{ else }}{{ milestone.currentValue }}{{ /if }}">{{ milestone.progressPercent }}%</progress>
+            <span aria-hidden="true">{{ if milestone.progressPercent === 0 }}0{{ else }}{{ milestone.progressPercent }}{{ /if }}%</span>
+          </div>
         </div>
-        <strong>{{ if profile.lifetimeUniqueCellCount === 0 }}0{{ else }}{{ profile.lifetimeUniqueCellCount }}{{ /if }} / {{ profile.nextUniqueCellMilestone }}</strong>
-      </div>
-      {{ if profileIsCurrent }}
-        <p>Claim {{ profile.uniqueCellsToNextMilestone }} more {{ if profile.uniqueCellsToNextMilestone === 1 }}cell{{ else }}cells{{ /if }} on your Personal Map.</p>
-      {{ else }}
-        <p>{{ profile.displayName }} needs {{ profile.uniqueCellsToNextMilestone }} more {{ if profile.uniqueCellsToNextMilestone === 1 }}cell{{ else }}cells{{ /if }} to reach this Personal Map milestone.</p>
-      {{ /if }}
-      <div class="achievement-progress-value">
-        <progress aria-label="Progress toward {{ profile.nextUniqueCellMilestone }} Unique Cells" max="{{ profile.nextUniqueCellMilestone }}" value="{{ profile.lifetimeUniqueCellCount }}">{{ profile.nextUniqueCellMilestoneProgressPercent }}%</progress>
-        <span aria-hidden="true">{{ if profile.nextUniqueCellMilestoneProgressPercent === 0 }}0{{ else }}{{ profile.nextUniqueCellMilestoneProgressPercent }}{{ /if }}%</span>
-      </div>
-    </div>
-  </article>
+      </article>
+    {{ /for }}
+  </div>
 </section>

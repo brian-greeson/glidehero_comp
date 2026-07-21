@@ -3,6 +3,12 @@ import type { Database } from '../db/client.js';
 import type { AchievementKey } from '../domain/achievement/catalog.js';
 import { awardAchievement, awardAchievementRecordInTransaction, type AchievementAwardResult, type AchievementRecordResult } from './achievementService.js';
 import { claimCellCenterSql } from './arenaGeometrySql.js';
+import {
+  generalCoverageMilestones,
+  generalExplorationMilestones,
+  launchVisitMilestones,
+  regionalMilestones,
+} from '../domain/achievement/progress.js';
 
 type ArenaAchievementDatabaseTransaction = Parameters<Parameters<Database['transaction']>[0]>[0];
 export type ArenaAchievementTransaction = Pick<ArenaAchievementDatabaseTransaction, 'execute' | 'insert' | 'select'>;
@@ -33,11 +39,6 @@ export type ArenaAchievementSnapshotRow = {
   firstFromLaunch: boolean;
   tagged: boolean;
 };
-
-const launchVisitThresholds = [3, 5, 10, 25, 50] as const;
-const generalExploredThresholds = [1, 5, 10, 25, 50, 100, 200] as const;
-const coverageThresholds = [10, 25, 50, 75, 100] as const;
-const regionalThresholds = [1, 3, 5, 10, 25, 50] as const;
 
 function numberOrNull(value: number | string | null): number | null {
   if (value === null) return null;
@@ -168,7 +169,7 @@ export async function awardArenaAchievementsFromSnapshotInTransaction(
   if (firstOriginArena) {
     await award('first_flight_from_launch', { arenaId: firstOriginArena.id, visitedLaunchCount: visitedLaunches });
   }
-  for (const threshold of crossedThresholds(visitedLaunches, launchVisitThresholds)) {
+  for (const threshold of crossedThresholds(visitedLaunches, launchVisitMilestones)) {
     await award(`launches_visited_${threshold}`, { visitedLaunches }, threshold);
   }
 
@@ -198,7 +199,7 @@ export async function awardArenaAchievementsFromSnapshotInTransaction(
   const generalRows = snapshot.filter((row) => row.arenaType === 'general');
   const exploredGenerals = generalRows.filter((row) => Number(row.claimedCells) > 0).length;
   if (exploredGenerals > 0) await award('first_cells_in_general_arena', { exploredArenaCount: exploredGenerals });
-  for (const threshold of crossedThresholds(exploredGenerals, generalExploredThresholds)) {
+  for (const threshold of crossedThresholds(exploredGenerals, generalExplorationMilestones)) {
     await award(`general_arenas_explored_${threshold}`, { exploredArenaCount: exploredGenerals }, threshold);
   }
   const coverage = generalRows.some((row) => {
@@ -212,7 +213,7 @@ export async function awardArenaAchievementsFromSnapshotInTransaction(
       return Math.max(best, Number(row.claimedCells) * 100 / total);
     }, 0)
     : 0;
-  for (const threshold of coverageThresholds) {
+  for (const threshold of generalCoverageMilestones) {
     const reached = generalRows.some((row) => {
       const total = numberOrNull(row.claimableCellCount);
       return total !== null && total > 0 && Number(row.claimableCellSize) === input.cellSize
@@ -233,7 +234,7 @@ export async function awardArenaAchievementsFromSnapshotInTransaction(
 
   for (const [type, prefix] of [['state', 'states_flown_in'], ['country', 'countries_flown_in']] as const) {
     const count = snapshot.filter((row) => row.arenaType === type && Number(row.claimedCells) > 0).length;
-    for (const threshold of crossedThresholds(count, regionalThresholds)) {
+    for (const threshold of crossedThresholds(count, regionalMilestones)) {
       await award(`${prefix}_${threshold}`, { arenaCount: count }, threshold);
     }
   }

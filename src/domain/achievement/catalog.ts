@@ -1,3 +1,10 @@
+import {
+  generalCoverageMilestones,
+  generalExplorationMilestones,
+  launchVisitMilestones,
+  regionalMilestones,
+} from './progress.js';
+
 /** Stable Release 2 achievement identifiers. Keep this list deliberately exhaustive. */
 export const achievementCatalog = [
   {
@@ -7,7 +14,7 @@ export const achievementCatalog = [
     category: 'launch',
     kind: 'special',
   },
-  ...([3, 5, 10, 25, 50] as const).map((threshold) => ({
+  ...launchVisitMilestones.map((threshold) => ({
     key: `launches_visited_${threshold}` as const,
     title: `${threshold} Launch Arenas Visited`,
     description: `Visit ${threshold} Launch Arenas.`,
@@ -36,7 +43,7 @@ export const achievementCatalog = [
     category: 'general',
     kind: 'special',
   },
-  ...([1, 5, 10, 25, 50, 100, 200] as const).map((threshold) => ({
+  ...generalExplorationMilestones.map((threshold) => ({
     key: `general_arenas_explored_${threshold}` as const,
     title: `${threshold} General Arena${threshold === 1 ? '' : 's'} Explored`,
     description: `Claim a cell in ${threshold} General Arena${threshold === 1 ? '' : 's'}.`,
@@ -44,7 +51,7 @@ export const achievementCatalog = [
     kind: 'threshold' as const,
     threshold,
   })),
-  ...([10, 25, 50, 75, 100] as const).map((threshold) => ({
+  ...generalCoverageMilestones.map((threshold) => ({
     key: `general_coverage_${threshold}` as const,
     title: `${threshold}% General Arena Coverage`,
     description: `Reach ${threshold}% coverage in any General Arena.`,
@@ -52,7 +59,7 @@ export const achievementCatalog = [
     kind: 'threshold' as const,
     threshold,
   })),
-  ...([1, 3, 5, 10, 25, 50] as const).map((threshold) => ({
+  ...regionalMilestones.map((threshold) => ({
     key: `states_flown_in_${threshold}` as const,
     title: `${threshold} State${threshold === 1 ? '' : 's'} Flown in`,
     description: `Claim a cell in ${threshold} State Arena${threshold === 1 ? '' : 's'}.`,
@@ -60,7 +67,7 @@ export const achievementCatalog = [
     kind: 'threshold' as const,
     threshold,
   })),
-  ...([1, 3, 5, 10, 25, 50] as const).map((threshold) => ({
+  ...regionalMilestones.map((threshold) => ({
     key: `countries_flown_in_${threshold}` as const,
     title: `${threshold} Countr${threshold === 1 ? 'y' : 'ies'} Flown in`,
     description: `Claim a cell in ${threshold} Countr${threshold === 1 ? 'y' : 'ies'} Arena${threshold === 1 ? '' : 's'}.`,

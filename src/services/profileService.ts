@@ -3,6 +3,15 @@ import type { Database } from '../db/client.js';
 import { profiles } from '../db/schema.js';
 import { nextUniqueCellMilestone } from './progressionAchievementService.js';
 import { findAchievementDefinition, type AchievementCategory, type AchievementDefinition } from '../domain/achievement/catalog.js';
+import {
+  generalCoverageMilestones,
+  generalExplorationMilestones,
+  launchVisitMilestones,
+  milestoneProgressPercent,
+  nextFixedMilestone,
+  regionalMilestones,
+} from '../domain/achievement/progress.js';
+import { arenaPath } from '../domain/arena/arenaRoute.js';
 
 const territoryColorPattern = /^#[0-9a-f]{6}$/i;
 
@@ -19,6 +28,7 @@ export type PilotProfileSummary = {
   nextUniqueCellMilestone: number;
   uniqueCellsToNextMilestone: number;
   nextUniqueCellMilestoneProgressPercent: number;
+  achievementProgress: AchievementProgressCard[];
   completedFlightCount: number;
   lifetimeDirectCellCount: number;
   lifetimeEnclosedCellCount: number;
@@ -27,6 +37,24 @@ export type PilotProfileSummary = {
   achievementCount: number;
   achievements: PilotAchievement[];
   recentFlights: PilotRecentFlight[];
+};
+
+export type AchievementProgressCard = {
+  key: 'unique_cells' | 'launches_visited' | 'general_arenas_explored' | 'general_coverage' | 'states_flown_in' | 'countries_flown_in';
+  achievementType: 'unique_cells_milestone' | 'threshold';
+  achievementCategory?: AchievementCategory;
+  badgeLabel: string;
+  badgeAriaLabel: string;
+  typeLabel: string;
+  title: string;
+  currentValue: number;
+  targetValue: number;
+  currentLabel: string;
+  targetLabel: string;
+  progressPercent: number;
+  currentDescription: string;
+  otherDescription: string;
+  arenaPath?: string;
 };
 
 export type PilotAchievement = {
@@ -102,6 +130,18 @@ type StoredRecentFlight = {
   directCellCount: number | string;
   enclosedCellCount: number | string;
   newPersonalCellCount: number | string;
+};
+
+type StoredArenaAchievementProgress = {
+  launchArenasVisited: number | string;
+  generalArenasExplored: number | string;
+  statesFlownIn: number | string;
+  countriesFlownIn: number | string;
+  bestGeneralClaimedCells: number | string | null;
+  bestGeneralTotalCells: number | string | null;
+  bestGeneralSourceId: number | string | null;
+  bestGeneralName: string | null;
+  bestGeneralCountryCode: string | null;
 };
 
 function numberOrNull(value: number | string | null | undefined): number | null {
@@ -289,6 +329,117 @@ function achievementDisplay(row: StoredAchievement): PilotAchievement {
   };
 }
 
+function countProgressCard(input: {
+  key: AchievementProgressCard['key'];
+  category?: AchievementCategory;
+  current: number;
+  target: number;
+  typeLabel: string;
+  title: string;
+  currentDescription: string;
+  otherDescription: string;
+}): AchievementProgressCard {
+  return {
+    key: input.key,
+    achievementType: input.key === 'unique_cells' ? 'unique_cells_milestone' : 'threshold',
+    ...(input.category ? { achievementCategory: input.category } : {}),
+    badgeLabel: String(input.target),
+    badgeAriaLabel: `${input.typeLabel} progress toward ${input.target}`,
+    typeLabel: input.typeLabel,
+    title: input.title,
+    currentValue: input.current,
+    targetValue: input.target,
+    currentLabel: String(input.current),
+    targetLabel: String(input.target),
+    progressPercent: milestoneProgressPercent(input.current, input.target),
+    currentDescription: input.currentDescription,
+    otherDescription: input.otherDescription,
+  };
+}
+
+function buildAchievementProgress(
+  profile: Pick<StoredPilotProfile, 'displayName'> & { lifetimeUniqueCellCount: number },
+  arenaProgress: StoredArenaAchievementProgress,
+): AchievementProgressCard[] {
+  const cards: AchievementProgressCard[] = [];
+  const uniqueTarget = nextUniqueCellMilestone(profile.lifetimeUniqueCellCount);
+  const uniqueRemaining = uniqueTarget - profile.lifetimeUniqueCellCount;
+  cards.push(countProgressCard({
+    key: 'unique_cells', current: profile.lifetimeUniqueCellCount, target: uniqueTarget,
+    typeLabel: 'Unique cell milestone', title: `${uniqueTarget} Unique Cells`,
+    currentDescription: `Claim ${uniqueRemaining} more ${uniqueRemaining === 1 ? 'cell' : 'cells'} on your Personal Map.`,
+    otherDescription: `${profile.displayName} needs ${uniqueRemaining} more ${uniqueRemaining === 1 ? 'cell' : 'cells'} to reach this Personal Map milestone.`,
+  }));
+
+  const launchCount = Number(arenaProgress.launchArenasVisited);
+  const launchTarget = nextFixedMilestone(launchCount, launchVisitMilestones);
+  if (launchTarget !== null) {
+    const remaining = launchTarget - launchCount;
+    cards.push(countProgressCard({
+      key: 'launches_visited', category: 'launch', current: launchCount, target: launchTarget,
+      typeLabel: 'Launch Arena milestone', title: `${launchTarget} Launch Arenas Visited`,
+      currentDescription: `Visit ${remaining} more Launch Arena${remaining === 1 ? '' : 's'}.`,
+      otherDescription: `${profile.displayName} needs to visit ${remaining} more Launch Arena${remaining === 1 ? '' : 's'}.`,
+    }));
+  }
+
+  const generalCount = Number(arenaProgress.generalArenasExplored);
+  const generalTarget = nextFixedMilestone(generalCount, generalExplorationMilestones);
+  if (generalTarget !== null) {
+    const remaining = generalTarget - generalCount;
+    cards.push(countProgressCard({
+      key: 'general_arenas_explored', category: 'general', current: generalCount, target: generalTarget,
+      typeLabel: 'General Arena milestone', title: `${generalTarget} General Arena${generalTarget === 1 ? '' : 's'} Explored`,
+      currentDescription: `Claim a cell in ${remaining} more General Arena${remaining === 1 ? '' : 's'}.`,
+      otherDescription: `${profile.displayName} needs to claim a cell in ${remaining} more General Arena${remaining === 1 ? '' : 's'}.`,
+    }));
+  }
+
+  const bestClaimed = Number(arenaProgress.bestGeneralClaimedCells ?? 0);
+  const bestTotal = Number(arenaProgress.bestGeneralTotalCells ?? 0);
+  const exactCoverage = bestTotal > 0 ? Math.min(100, bestClaimed * 100 / bestTotal) : 0;
+  const coverageTarget = nextFixedMilestone(exactCoverage, generalCoverageMilestones);
+  if (coverageTarget !== null) {
+    const displayedCoverage = Math.floor(exactCoverage * 10) / 10;
+    const arenaName = arenaProgress.bestGeneralName;
+    const coverageCard: AchievementProgressCard = {
+      key: 'general_coverage', achievementType: 'threshold', achievementCategory: 'general',
+      badgeLabel: `${coverageTarget}%`, badgeAriaLabel: `General Arena coverage progress toward ${coverageTarget}%`,
+      typeLabel: 'General Arena coverage', title: `${coverageTarget}% General Arena Coverage`,
+      currentValue: displayedCoverage, targetValue: coverageTarget,
+      currentLabel: `${displayedCoverage}%`, targetLabel: `${coverageTarget}%`,
+      progressPercent: milestoneProgressPercent(exactCoverage, coverageTarget),
+      currentDescription: arenaName
+        ? `Keep claiming cells in ${arenaName} to reach ${coverageTarget}% coverage.`
+        : `Claim cells in a General Arena to reach ${coverageTarget}% coverage.`,
+      otherDescription: arenaName
+        ? `${profile.displayName} is working toward ${coverageTarget}% coverage in ${arenaName}.`
+        : `${profile.displayName} needs to claim cells in a General Arena to begin this milestone.`,
+    };
+    const sourceId = Number(arenaProgress.bestGeneralSourceId);
+    if (arenaName && Number.isSafeInteger(sourceId) && sourceId > 0 && arenaProgress.bestGeneralCountryCode) {
+      coverageCard.arenaPath = arenaPath({ sourceId, name: arenaName, countryCode: arenaProgress.bestGeneralCountryCode });
+    }
+    cards.push(coverageCard);
+  }
+
+  for (const regional of [
+    { key: 'states_flown_in', category: 'state', count: Number(arenaProgress.statesFlownIn), singular: 'State', plural: 'States' },
+    { key: 'countries_flown_in', category: 'country', count: Number(arenaProgress.countriesFlownIn), singular: 'Country', plural: 'Countries' },
+  ] as const) {
+    const target = nextFixedMilestone(regional.count, regionalMilestones);
+    if (target === null) continue;
+    const remaining = target - regional.count;
+    cards.push(countProgressCard({
+      key: regional.key, category: regional.category, current: regional.count, target,
+      typeLabel: `${regional.singular} milestone`, title: `${target} ${target === 1 ? regional.singular : regional.plural} Flown in`,
+      currentDescription: `Claim a cell in ${remaining} more ${remaining === 1 ? regional.singular : regional.plural}.`,
+      otherDescription: `${profile.displayName} needs to claim a cell in ${remaining} more ${remaining === 1 ? regional.singular : regional.plural}.`,
+    }));
+  }
+  return cards;
+}
+
 export function createProfileService(database: Database, options: { cellSize: number }): ProfileService {
   return {
     async updateTerritoryColor({ userId, territoryColor }) {
@@ -350,7 +501,7 @@ export function createProfileService(database: Database, options: { cellSize: nu
       if (!row) return null;
       const lifetimeUniqueCellCount = Number(row.lifetimeUniqueCellCount);
       const nextMilestone = nextUniqueCellMilestone(lifetimeUniqueCellCount);
-      const [achievementRows, recentFlightRows] = await Promise.all([
+      const [achievementRows, recentFlightRows, arenaProgressRows] = await Promise.all([
         database.execute<StoredAchievement & { totalCount: number | string }>(sql`
           WITH displayable AS (
             SELECT
@@ -398,7 +549,77 @@ export function createProfileService(database: Database, options: { cellSize: nu
           ORDER BY flights.started_at DESC NULLS LAST, progress.evaluated_at DESC, progress.flight_id DESC
           LIMIT 20
         `),
+        database.execute<StoredArenaAchievementProgress>(sql`
+          WITH personal_cells AS (
+            SELECT DISTINCT claims.x, claims.y
+            FROM user_grid_claims claims
+            WHERE claims.claim_user = ${userId}
+              AND claims.cell_size = ${options.cellSize}
+          ), arena_cell_counts AS (
+            SELECT arena.id, arena.source_id, arena.name, arena.country_code, arena.arena_type,
+                   arena.claimable_cell_count, arena.claimable_cell_size,
+                   COUNT(DISTINCT (personal_cells.x, personal_cells.y))
+                     FILTER (WHERE personal_cells.x IS NOT NULL AND personal_cells.y IS NOT NULL)::integer AS claimed_cells
+            FROM arenas arena
+            LEFT JOIN personal_cells ON ST_Covers(
+              arena.area,
+              ST_SetSRID(ST_MakePoint(
+                (personal_cells.x + 0.5) * ${options.cellSize},
+                (personal_cells.y + 0.5) * ${options.cellSize}
+              ), 6933)
+            )
+            GROUP BY arena.id
+          ), launch_visits AS (
+            SELECT DISTINCT arena.id
+            FROM arenas arena
+            INNER JOIN flights flight
+              ON flight.user_id = ${userId}
+             AND flight.processing_status = 'completed'
+             AND flight.launch_latitude IS NOT NULL
+             AND flight.launch_longitude IS NOT NULL
+             AND ST_Covers(
+               arena.area,
+               ST_Transform(ST_SetSRID(ST_MakePoint(flight.launch_longitude, flight.launch_latitude), 4326), 6933)
+             )
+            WHERE arena.arena_type = 'launch'
+          ), best_general AS (
+            SELECT source_id, name, country_code, claimed_cells, claimable_cell_count
+            FROM arena_cell_counts
+            WHERE arena_type = 'general'
+              AND claimed_cells > 0
+              AND claimable_cell_count > 0
+              AND claimable_cell_size = ${options.cellSize}
+            ORDER BY claimed_cells::numeric / claimable_cell_count DESC, lower(name), source_id
+            LIMIT 1
+          )
+          SELECT
+            (SELECT COUNT(*)::integer FROM launch_visits) AS "launchArenasVisited",
+            COUNT(*) FILTER (WHERE arena_type = 'general' AND claimed_cells > 0)::integer AS "generalArenasExplored",
+            COUNT(*) FILTER (WHERE arena_type = 'state' AND claimed_cells > 0)::integer AS "statesFlownIn",
+            COUNT(*) FILTER (WHERE arena_type = 'country' AND claimed_cells > 0)::integer AS "countriesFlownIn",
+            (SELECT claimed_cells FROM best_general) AS "bestGeneralClaimedCells",
+            (SELECT claimable_cell_count FROM best_general) AS "bestGeneralTotalCells",
+            (SELECT source_id FROM best_general) AS "bestGeneralSourceId",
+            (SELECT name FROM best_general) AS "bestGeneralName",
+            (SELECT country_code FROM best_general) AS "bestGeneralCountryCode"
+          FROM arena_cell_counts
+        `),
       ]);
+      const arenaProgress = arenaProgressRows.rows[0] ?? {
+        launchArenasVisited: 0,
+        generalArenasExplored: 0,
+        statesFlownIn: 0,
+        countriesFlownIn: 0,
+        bestGeneralClaimedCells: null,
+        bestGeneralTotalCells: null,
+        bestGeneralSourceId: null,
+        bestGeneralName: null,
+        bestGeneralCountryCode: null,
+      };
+      const achievementProgress = buildAchievementProgress({
+        displayName: row.displayName,
+        lifetimeUniqueCellCount,
+      }, arenaProgress);
       return {
         userId: row.userId,
         displayName: row.displayName,
@@ -406,10 +627,8 @@ export function createProfileService(database: Database, options: { cellSize: nu
         lifetimeUniqueCellCount,
         nextUniqueCellMilestone: nextMilestone,
         uniqueCellsToNextMilestone: nextMilestone - lifetimeUniqueCellCount,
-        nextUniqueCellMilestoneProgressPercent: Math.min(
-          100,
-          Math.max(0, Math.round((lifetimeUniqueCellCount / nextMilestone) * 100)),
-        ),
+        nextUniqueCellMilestoneProgressPercent: milestoneProgressPercent(lifetimeUniqueCellCount, nextMilestone),
+        achievementProgress,
         completedFlightCount: Number(row.completedFlightCount),
         lifetimeDirectCellCount: Number(row.lifetimeDirectCellCount),
         lifetimeEnclosedCellCount: Number(row.lifetimeEnclosedCellCount),

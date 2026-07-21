@@ -14,6 +14,7 @@ describe('pilot profile styles', () => {
     expect(css).toMatch(/\.profile-list-toggle\[hidden\]\s*{[^}]*display:\s*none/);
     expect(css).toMatch(/\.profile-list-toggle:focus-visible\s*{[^}]*outline:\s*3px solid/);
     expect(css).toContain('.achievement-progress-value progress');
+    expect(css).toMatch(/\.achievement-progress-list\s*{[^}]*display:\s*grid;[^}]*gap:/s);
     expect(css).toContain('.achievement-badge--milestone');
     expect(css).toMatch(/\.profile-flight-stats\s*{/);
     expect(css).toContain('.profile-empty-state');

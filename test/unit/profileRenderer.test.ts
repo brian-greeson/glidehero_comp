@@ -1,6 +1,20 @@
 import { describe, expect, it } from 'vitest';
 import { createPageRenderer } from '../../src/views/renderer.js';
 
+function uniqueProgress(displayName: string, current: number, target: number) {
+  const remaining = target - current;
+  return [{
+    key: 'unique_cells' as const,
+    achievementType: 'unique_cells_milestone' as const,
+    badgeLabel: String(target), badgeAriaLabel: `Unique cell milestone progress toward ${target}`,
+    typeLabel: 'Unique cell milestone', title: `${target} Unique Cells`,
+    currentValue: current, targetValue: target, currentLabel: String(current), targetLabel: String(target),
+    progressPercent: Math.round(current / target * 100),
+    currentDescription: `Claim ${remaining} more ${remaining === 1 ? 'cell' : 'cells'} on your Personal Map.`,
+    otherDescription: `${displayName} needs ${remaining} more ${remaining === 1 ? 'cell' : 'cells'} to reach this Personal Map milestone.`,
+  }];
+}
+
 describe('pilot profile renderer', () => {
   it('renders the current and another pilot headings with the summary values', async () => {
     const render = createPageRenderer({ mapTilerApiKey: 'maptiler-test-key' });
@@ -19,6 +33,18 @@ describe('pilot profile renderer', () => {
       nextUniqueCellMilestone: 25,
       uniqueCellsToNextMilestone: 13,
       nextUniqueCellMilestoneProgressPercent: 48,
+      achievementProgress: [
+        ...uniqueProgress('Cloud Dancer', 12, 25),
+        {
+          key: 'general_coverage' as const, achievementType: 'threshold' as const, achievementCategory: 'general' as const,
+          badgeLabel: '75%', badgeAriaLabel: 'General Arena coverage progress toward 75%',
+          typeLabel: 'General Arena coverage', title: '75% General Arena Coverage',
+          currentValue: 50, targetValue: 75, currentLabel: '50%', targetLabel: '75%', progressPercent: 67,
+          currentDescription: 'Keep claiming cells in Boulder to reach 75% coverage.',
+          otherDescription: 'Cloud Dancer is working toward 75% coverage in Boulder.',
+          arenaPath: '/arena/us/boulder-745',
+        },
+      ],
       completedFlightCount: 3,
       lifetimeDirectCellCount: 20,
       lifetimeEnclosedCellCount: 4,
@@ -38,6 +64,11 @@ describe('pilot profile renderer', () => {
     expect(current).toContain('value="12"');
     expect(current).toContain('aria-label="Progress toward 25 Unique Cells"');
     expect(current).toContain('<span aria-hidden="true">48%</span>');
+    expect(current).toContain('2 milestones');
+    expect(current).toContain('data-achievement-progress="general_coverage"');
+    expect(current).toContain('href="/arena/us/boulder-745"');
+    expect(current).toContain('50% / 75%');
+    expect(current).toContain('Keep claiming cells in Boulder to reach 75% coverage.');
     expect(current).toContain('48%');
     expect(current).toContain('Achievement types');
     expect(current).toContain('How progress works');
@@ -50,6 +81,7 @@ describe('pilot profile renderer', () => {
     const other = await render({ currentUser, page: 'profile', profile, profileIsCurrent: false });
     expect(other).toContain('Cloud Dancer’s Achievements');
     expect(other).toContain('Cloud Dancer needs 13 more cells to reach this Personal Map milestone.');
+    expect(other).toContain('Cloud Dancer is working toward 75% coverage in Boulder.');
     expect(other).not.toContain('Claim 13 more cells on your Personal Map.');
     expect(other).not.toContain('your record');
     expect(other).toContain('No achievements yet.</p>');
@@ -78,6 +110,7 @@ describe('pilot profile renderer', () => {
         nextUniqueCellMilestone: 25,
         uniqueCellsToNextMilestone: 1,
         nextUniqueCellMilestoneProgressPercent: 96,
+        achievementProgress: uniqueProgress('Sky Pilot', 24, 25),
         completedFlightCount: 1,
         lifetimeDirectCellCount: 20,
         lifetimeEnclosedCellCount: 4,
@@ -111,6 +144,7 @@ describe('pilot profile renderer', () => {
       nextUniqueCellMilestone: 50,
       uniqueCellsToNextMilestone: 20,
       nextUniqueCellMilestoneProgressPercent: 60,
+      achievementProgress: uniqueProgress('Sky Pilot', 30, 50),
       completedFlightCount: 1,
       lifetimeDirectCellCount: 20,
       lifetimeEnclosedCellCount: 4,
@@ -240,6 +274,7 @@ describe('pilot profile renderer', () => {
         nextUniqueCellMilestone: 5,
         uniqueCellsToNextMilestone: 2,
         nextUniqueCellMilestoneProgressPercent: 60,
+        achievementProgress: uniqueProgress('Sky Pilot', 3, 5),
         completedFlightCount: 1,
         lifetimeDirectCellCount: 3,
         lifetimeEnclosedCellCount: 0,
@@ -312,6 +347,7 @@ describe('pilot profile renderer', () => {
         nextUniqueCellMilestone: 10,
         uniqueCellsToNextMilestone: 10,
         nextUniqueCellMilestoneProgressPercent: 0,
+        achievementProgress: uniqueProgress('Sky Pilot', 0, 10),
         completedFlightCount: 0,
         lifetimeDirectCellCount: 0,
         lifetimeEnclosedCellCount: 0,
