@@ -19,6 +19,9 @@ type BackfillLogger = Pick<Console, 'error' | 'log'>;
 export type BackfillSummary = {
   usersInspected: number;
   flightsNeedingBackfill: number;
+  flightsReplayedWithProcessedAtOrder: number;
+  legacyFlightsReplayedApproximate: number;
+  usersAffectedByApproximateOrdering: number;
   progressRowsCreated: number;
   milestoneAchievementsCreated: number;
   totalCellPersonalBestAchievementsCreated: number;
@@ -36,6 +39,7 @@ type BackfillFlight = {
   id: string;
   userId: string;
   createdAt: Date;
+  processedAt: Date | null;
   startedAt: Date | null;
   progressFlightId: string | null;
 };
@@ -48,12 +52,27 @@ type CandidateQueryRow = {
   enclosedCellCount: number | string;
 };
 
-type UserBackfillSummary = Omit<BackfillSummary, 'usersInspected' | 'usersFailed'>;
+type UserBackfillSummary = Pick<
+  BackfillSummary,
+  | 'flightsNeedingBackfill'
+  | 'progressRowsCreated'
+  | 'milestoneAchievementsCreated'
+  | 'totalCellPersonalBestAchievementsCreated'
+  | 'enclosedCellPersonalBestAchievementsCreated'
+>;
+
+type ReplayOrderingSummary = Pick<
+  BackfillSummary,
+  'flightsReplayedWithProcessedAtOrder' | 'legacyFlightsReplayedApproximate' | 'usersAffectedByApproximateOrdering'
+>;
 
 function emptySummary(): BackfillSummary {
   return {
     usersInspected: 0,
     flightsNeedingBackfill: 0,
+    flightsReplayedWithProcessedAtOrder: 0,
+    legacyFlightsReplayedApproximate: 0,
+    usersAffectedByApproximateOrdering: 0,
     progressRowsCreated: 0,
     milestoneAchievementsCreated: 0,
     totalCellPersonalBestAchievementsCreated: 0,
@@ -78,6 +97,15 @@ function parseCandidateCells(value: unknown): CandidateCell[] {
 
 function cellKey(cell: CandidateCell): string {
   return `${cell.x}:${cell.y}`;
+}
+
+function summarizeReplayOrdering(flightsForUser: BackfillFlight[]): ReplayOrderingSummary {
+  const legacyFlightsReplayedApproximate = flightsForUser.filter((flight) => flight.processedAt === null).length;
+  return {
+    flightsReplayedWithProcessedAtOrder: flightsForUser.length - legacyFlightsReplayedApproximate,
+    legacyFlightsReplayedApproximate,
+    usersAffectedByApproximateOrdering: legacyFlightsReplayedApproximate > 0 ? 1 : 0,
+  };
 }
 
 async function selectCandidateCells(
@@ -119,13 +147,19 @@ async function selectUserFlights(
       id: flights.id,
       userId: flights.userId,
       createdAt: flights.createdAt,
+      processedAt: flights.processedAt,
       startedAt: flights.startedAt,
       progressFlightId: flightProgress.flightId,
     })
     .from(flights)
     .leftJoin(flightProgress, eq(flightProgress.flightId, flights.id))
     .where(and(eq(flights.userId, userId), eq(flights.processingStatus, 'completed')))
-    .orderBy(asc(flights.userId), asc(flights.createdAt), asc(flights.id));
+    .orderBy(
+      asc(flights.userId),
+      sql`CASE WHEN ${flights.processedAt} IS NULL THEN 0 ELSE 1 END`,
+      sql`COALESCE(${flights.processedAt}, ${flights.createdAt})`,
+      asc(flights.id),
+    );
   return rows;
 }
 
@@ -188,7 +222,7 @@ async function backfillUser(
         const milestones = await progressionAchievements.awardUniqueCellMilestones(tx, {
           userId,
           sourceFlightId: flight.id,
-          earnedAt: flight.createdAt,
+          earnedAt: flight.processedAt ?? flight.createdAt,
           flightStartedAt: flight.startedAt ?? flight.createdAt,
           previousTotal,
           newTotal: personalCellTotalAfter,
@@ -199,7 +233,7 @@ async function backfillUser(
         const personalBests = await progressionAchievements.awardPersonalBestAchievements(tx, {
           userId,
           sourceFlightId: flight.id,
-          earnedAt: flight.createdAt,
+          earnedAt: flight.processedAt ?? flight.createdAt,
           flightStartedAt: flight.startedAt ?? flight.createdAt,
           directCells: candidates.directCellCount,
           enclosedCells: candidates.enclosedCellCount,
@@ -253,6 +287,11 @@ export async function runBackfill(database: Database, options: BackfillOptions):
 
   for (const userId of inventory.userIds) {
     try {
+      const replayOrdering = summarizeReplayOrdering(await selectUserFlights(database, userId));
+      summary.flightsReplayedWithProcessedAtOrder += replayOrdering.flightsReplayedWithProcessedAtOrder;
+      summary.legacyFlightsReplayedApproximate += replayOrdering.legacyFlightsReplayedApproximate;
+      summary.usersAffectedByApproximateOrdering += replayOrdering.usersAffectedByApproximateOrdering;
+
       const userSummary = await backfillUser(database, userId, options);
       summary.progressRowsCreated += options.apply ? userSummary.progressRowsCreated : userSummary.flightsNeedingBackfill;
       summary.milestoneAchievementsCreated += userSummary.milestoneAchievementsCreated;
@@ -268,10 +307,16 @@ export async function runBackfill(database: Database, options: BackfillOptions):
   return summary;
 }
 
-function printSummary(summary: BackfillSummary, apply: boolean, logger: BackfillLogger): void {
+export function printSummary(summary: BackfillSummary, apply: boolean, logger: BackfillLogger): void {
   const verb = apply ? 'created' : 'would be created';
   logger.log(`Users inspected: ${summary.usersInspected}`);
   logger.log(`Flights needing backfill: ${summary.flightsNeedingBackfill}`);
+  logger.log(`Flights replayed with recorded processedAt order: ${summary.flightsReplayedWithProcessedAtOrder}`);
+  logger.log(`Legacy flights replayed with approximate createdAt order: ${summary.legacyFlightsReplayedApproximate}`);
+  logger.log(`Users affected by approximate ordering: ${summary.usersAffectedByApproximateOrdering}`);
+  if (summary.legacyFlightsReplayedApproximate > 0) {
+    logger.log('WARNING: Legacy flights have no processedAt timestamp; their createdAt order is approximate and cannot reconstruct exact concurrent processing order.');
+  }
   logger.log(`Progress rows ${verb}: ${apply ? summary.progressRowsCreated : summary.flightsNeedingBackfill}`);
   logger.log(`Milestone achievements ${verb}: ${summary.milestoneAchievementsCreated}`);
   logger.log(`Total-cell personal bests ${verb}: ${summary.totalCellPersonalBestAchievementsCreated}`);

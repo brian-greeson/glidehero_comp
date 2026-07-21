@@ -16,6 +16,8 @@ describe('pilot profile renderer', () => {
       displayName: 'Cloud Dancer',
       territoryColor: '#A1B2C3',
       lifetimeUniqueCellCount: 12,
+      nextUniqueCellMilestone: 25,
+      uniqueCellsToNextMilestone: 13,
       completedFlightCount: 3,
       lifetimeDirectCellCount: 20,
       lifetimeEnclosedCellCount: 4,
@@ -29,6 +31,8 @@ describe('pilot profile renderer', () => {
     const current = await render({ currentUser, page: 'profile', profile: { ...profile, userId: currentUser.userId }, profileIsCurrent: true });
     expect(current).toContain('>My Progress</h1>');
     expect(current).toContain('Unique cells');
+    expect(current).toContain('Next milestone');
+    expect(current).toContain('13 more cells to reach 25.');
     expect(current).toContain('Lifetime direct cells');
     expect(current).toContain('>12</dd>');
     expect(current).toContain('>11</dd>');
@@ -39,6 +43,42 @@ describe('pilot profile renderer', () => {
 
     const other = await render({ currentUser, page: 'profile', profile, profileIsCurrent: false });
     expect(other).toContain('Cloud Dancer’s Progress');
+    expect(other).toContain('13 more cells to reach 25.');
+  });
+
+  it('renders singular next milestone copy', async () => {
+    const render = createPageRenderer({ mapTilerApiKey: 'maptiler-test-key' });
+    const currentUser = {
+      userId: '00000000-0000-4000-8000-000000000001',
+      sessionId: '00000000-0000-4000-8000-000000000002',
+      email: 'viewer@example.com',
+      displayName: 'Sky Pilot',
+      territoryColor: '#1769AA',
+    };
+    const html = await render({
+      currentUser,
+      page: 'profile',
+      profile: {
+        userId: currentUser.userId,
+        displayName: 'Sky Pilot',
+        territoryColor: '#1769AA',
+        lifetimeUniqueCellCount: 24,
+        nextUniqueCellMilestone: 25,
+        uniqueCellsToNextMilestone: 1,
+        completedFlightCount: 1,
+        lifetimeDirectCellCount: 20,
+        lifetimeEnclosedCellCount: 4,
+        currentTotalCellRecord: 24,
+        currentEnclosedCellRecord: 4,
+        achievementCount: 0,
+        achievements: [],
+        recentFlights: [],
+      },
+      profileIsCurrent: true,
+    });
+
+    expect(html).toContain('1 more cell to reach 25.');
+    expect(html).not.toContain('1 more cells to reach 25.');
   });
 
   it('renders achievement and flight history without exposing private fields', async () => {
@@ -55,6 +95,8 @@ describe('pilot profile renderer', () => {
       displayName: 'Sky Pilot',
       territoryColor: '#1769AA',
       lifetimeUniqueCellCount: 30,
+      nextUniqueCellMilestone: 50,
+      uniqueCellsToNextMilestone: 20,
       completedFlightCount: 1,
       lifetimeDirectCellCount: 20,
       lifetimeEnclosedCellCount: 4,
@@ -134,6 +176,8 @@ describe('pilot profile renderer', () => {
         displayName: 'Sky Pilot',
         territoryColor: '#1769AA',
         lifetimeUniqueCellCount: 0,
+        nextUniqueCellMilestone: 10,
+        uniqueCellsToNextMilestone: 10,
         completedFlightCount: 0,
         lifetimeDirectCellCount: 0,
         lifetimeEnclosedCellCount: 0,

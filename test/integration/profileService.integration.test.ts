@@ -143,6 +143,8 @@ describe('profileService', () => {
       displayName: 'Summary Pilot',
       territoryColor: '#1769AA',
       lifetimeUniqueCellCount: 2,
+      nextUniqueCellMilestone: 10,
+      uniqueCellsToNextMilestone: 8,
       completedFlightCount: 2,
       lifetimeDirectCellCount: 10,
       lifetimeEnclosedCellCount: 3,
@@ -197,6 +199,8 @@ describe('profileService', () => {
       displayName: 'Empty Pilot',
       territoryColor: '#1769AA',
       lifetimeUniqueCellCount: 0,
+      nextUniqueCellMilestone: 10,
+      uniqueCellsToNextMilestone: 10,
       completedFlightCount: 0,
       lifetimeDirectCellCount: 0,
       lifetimeEnclosedCellCount: 0,
@@ -207,6 +211,65 @@ describe('profileService', () => {
       recentFlights: [],
     });
     await expect(profiles.getPilotProfile('00000000-0000-4000-8000-000000000099')).resolves.toBeNull();
+  });
+
+  it('computes the next unique-cell milestone for zero, exact-threshold, and recurring totals', async () => {
+    const auth = createAuthService(database.db, { sessionTtlSeconds: 604800 });
+    const profiles = createProfileService(database.db, { cellSize: 1_000 });
+
+    const createPilotWithClaims = async (email: string, claimCount: number) => {
+      const pilot = await auth.signup({
+        email,
+        password: 'correct horse battery staple',
+      });
+      if (claimCount === 0) return pilot.user.userId;
+
+      const [igcFile] = await database.db.insert(igcFiles).values({
+        userId: pilot.user.userId,
+        originalFilename: `${email}.igc`,
+        contentType: 'application/vnd.fai.igc',
+        byteSize: 1,
+        bucketKey: `milestone/${crypto.randomUUID()}.igc`,
+      }).returning({ id: igcFiles.id });
+      if (!igcFile) throw new Error('IGC file insert returned no row.');
+      const [flight] = await database.db.insert(flights).values({
+        userId: pilot.user.userId,
+        igcFileId: igcFile.id,
+        contentHash: crypto.randomUUID().replaceAll('-', '').padEnd(64, '0'),
+        processingStatus: 'completed',
+      }).returning({ id: flights.id });
+      if (!flight) throw new Error('Flight insert returned no row.');
+
+      await database.db.insert(personalGridClaims).values(Array.from({ length: claimCount }, (_, index) => ({
+        claimUser: pilot.user.userId,
+        claimFlight: flight.id,
+        cellSize: 1_000,
+        x: index,
+        y: 0,
+        claimTimestamp: new Date(),
+      })));
+      return pilot.user.userId;
+    };
+
+    const emptyPilotId = await createPilotWithClaims('milestone-empty@example.com', 0);
+    const exactThresholdPilotId = await createPilotWithClaims('milestone-exact@example.com', 10);
+    const recurringPilotId = await createPilotWithClaims('milestone-recurring@example.com', 1_001);
+
+    await expect(profiles.getPilotProfile(emptyPilotId)).resolves.toEqual(expect.objectContaining({
+      lifetimeUniqueCellCount: 0,
+      nextUniqueCellMilestone: 10,
+      uniqueCellsToNextMilestone: 10,
+    }));
+    await expect(profiles.getPilotProfile(exactThresholdPilotId)).resolves.toEqual(expect.objectContaining({
+      lifetimeUniqueCellCount: 10,
+      nextUniqueCellMilestone: 25,
+      uniqueCellsToNextMilestone: 15,
+    }));
+    await expect(profiles.getPilotProfile(recurringPilotId)).resolves.toEqual(expect.objectContaining({
+      lifetimeUniqueCellCount: 1_001,
+      nextUniqueCellMilestone: 2_000,
+      uniqueCellsToNextMilestone: 999,
+    }));
   });
 
   it('limits profile history to the latest 50 achievements and 20 flights', async () => {

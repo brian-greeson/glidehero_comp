@@ -80,6 +80,7 @@ export const flights = pgTable(
     processingStatus: flightProcessingStatus('processing_status').notNull().default('processing'),
     processingToken: text('processing_token'),
     processingError: text('processing_error'),
+    processedAt: timestamp('processed_at', { withTimezone: true, mode: 'date' }),
     startedAt: timestamp('started_at', { withTimezone: true, mode: 'date' }),
     endedAt: timestamp('ended_at', { withTimezone: true, mode: 'date' }),
     durationSeconds: integer('duration_seconds'),
@@ -93,6 +94,7 @@ export const flights = pgTable(
     unique('flights_igc_file_id_unique').on(table.igcFileId),
     unique('flights_content_hash_unique').on(table.contentHash),
     index('flights_user_id_idx').on(table.userId),
+    index('flights_user_id_processed_at_flight_id_idx').on(table.userId, table.processedAt, table.id),
     index('flights_igc_file_id_idx').on(table.igcFileId),
   ],
 );

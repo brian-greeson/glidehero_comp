@@ -33,14 +33,15 @@ function processingDatabaseDouble(counts: Partial<{
   const values = vi.fn(() => ({ onConflictDoNothing }));
   const insert = vi.fn(() => ({ values }));
   const deleteFrom = vi.fn(() => ({ where }));
-  const transaction = vi.fn(async (callback: (tx: unknown) => Promise<unknown>) => callback({
+  const tx = {
     select,
     insert,
     delete: deleteFrom,
     execute,
-  }));
+  };
+  const transaction = vi.fn(async (callback: (tx: unknown) => Promise<unknown>) => callback(tx));
 
-  return { database: { transaction }, where, execute, deleteFrom, transaction };
+  return { database: { transaction }, tx, where, execute, deleteFrom, transaction };
 }
 
 function projectionDatabaseDouble(rows: unknown[] = []) {
@@ -74,6 +75,17 @@ describe('GridClaimService', () => {
     expect(transaction).toHaveBeenCalledOnce();
     expect(deleteFrom).toHaveBeenCalledTimes(2);
     expect(where).toHaveBeenCalledTimes(2);
+    expect(execute).toHaveBeenCalledTimes(2);
+  });
+
+  it('processes claims inside a caller-owned transaction', async () => {
+    const { database, tx, transaction, deleteFrom, execute } = processingDatabaseDouble();
+    const service = createGridClaimService(database as never, { cellSize: 1_000 });
+
+    await service.processInTransaction(tx as never, { flightId, userId, launchTimezone: 'UTC' });
+
+    expect(transaction).not.toHaveBeenCalled();
+    expect(deleteFrom).toHaveBeenCalledTimes(2);
     expect(execute).toHaveBeenCalledTimes(2);
   });
 

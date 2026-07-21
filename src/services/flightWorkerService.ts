@@ -1,9 +1,9 @@
 import { DeleteObjectCommand, GetObjectCommand, type S3 } from '@aws-sdk/client-s3';
 import { Batch, Script, TimeUnit, type GlideClient, type GlideString } from '@valkey/valkey-glide';
 import { createHash, randomUUID } from 'node:crypto';
-import { and, eq } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 import type { Database } from '../db/client.js';
-import { flights, igcFiles } from '../db/schema.js';
+import { flightProgress, flights, igcFiles } from '../db/schema.js';
 import type { FlightProcessingService } from './flightProcessingService.js';
 import type { FlightProcessingOutcome } from './flightProcessingService.js';
 import {
@@ -16,6 +16,8 @@ import {
 const STALE_JOB_MS = 60_000;
 const HEARTBEAT_MS = 10_000;
 const genericFailure = 'We could not process this flight. Clear it and upload it again.';
+const completedWithoutProgressFailure =
+  'Flight processing completed without progression data. An administrator must reprocess this flight.';
 const acknowledgedDeletionKey = 'glidehero:acknowledged-flight-job-deletions';
 const staleRecoveryLeaseKey = 'glidehero:flight-upload-stale-recovery-lease';
 const cleanupLeaseKey = 'glidehero:flight-upload-cleanup-lease';
@@ -124,6 +126,9 @@ export function createFlightWorkerService(
         status: flights.processingStatus,
         processingToken: flights.processingToken,
         processingError: flights.processingError,
+        hasProgress: sql<boolean>`EXISTS (
+          SELECT 1 FROM ${flightProgress} WHERE ${flightProgress.flightId} = ${flights.id}
+        )`,
       })
       .from(igcFiles)
       .leftJoin(flights, eq(flights.igcFileId, igcFiles.id))
@@ -156,8 +161,8 @@ export function createFlightWorkerService(
         ...job,
         igcFileId: existing.igcFileId,
         flightId: existing.flightId,
-        status: 'completed',
-        error: undefined,
+        status: existing.hasProgress ? 'completed' : 'failed',
+        error: existing.hasProgress ? undefined : completedWithoutProgressFailure,
         updatedAt: Date.now(),
       });
     }

@@ -1,0 +1,2 @@
+ALTER TABLE "flights" ADD COLUMN "processed_at" timestamp with time zone;--> statement-breakpoint
+CREATE INDEX "flights_user_id_processed_at_flight_id_idx" ON "flights" ("user_id","processed_at","flight_id");

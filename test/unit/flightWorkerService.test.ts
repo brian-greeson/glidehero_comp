@@ -293,7 +293,7 @@ describe('FlightWorkerService', () => {
     const limit = vi.fn(async () => {
       reads += 1;
       if (reads === 1) return [];
-      return [{ igcFileId: 'file-1', flightId: 'flight-1', status: 'completed', processingToken: null, processingError: null }];
+      return [{ igcFileId: 'file-1', flightId: 'flight-1', status: 'completed', processingToken: null, processingError: null, hasProgress: true }];
     });
     const deleteWhere = vi.fn(async () => undefined);
     const database = {
@@ -359,7 +359,7 @@ describe('FlightWorkerService', () => {
     const limit = vi.fn(async () => {
       reads += 1;
       if (reads === 1) return [];
-      return [{ igcFileId: 'file-1', flightId: 'flight-1', status: 'completed', processingToken: null, processingError: null }];
+      return [{ igcFileId: 'file-1', flightId: 'flight-1', status: 'completed', processingToken: null, processingError: null, hasProgress: true }];
     });
     const database = {
       select: vi.fn(() => ({ from: vi.fn(() => ({ leftJoin: vi.fn(() => ({ where: vi.fn(() => ({ limit })) })) })) })),
@@ -398,7 +398,7 @@ describe('FlightWorkerService', () => {
 
   it('reconciles a committed flight after the original worker crashes before its terminal queue write', async () => {
     const limit = vi.fn(async () => [{
-      igcFileId: 'file-1', flightId: 'flight-1', status: 'completed', processingToken: null, processingError: null,
+      igcFileId: 'file-1', flightId: 'flight-1', status: 'completed', processingToken: null, processingError: null, hasProgress: true,
     }]);
     const database = {
       select: vi.fn(() => ({ from: vi.fn(() => ({ leftJoin: vi.fn(() => ({ where: vi.fn(() => ({ limit })) })) })) })),
@@ -421,6 +421,42 @@ describe('FlightWorkerService', () => {
     await worker.recoverStale();
 
     expect(queue.reconcileTerminalJob).toHaveBeenCalledWith(expect.objectContaining({ status: 'completed', flightId: 'flight-1' }));
+    expect(queue.failStaleJob).not.toHaveBeenCalled();
+    expect(valkey.xack).toHaveBeenCalledOnce();
+  });
+
+  it('reports a completed flight without progression as an administrator reprocess failure', async () => {
+    const limit = vi.fn(async () => [{
+      igcFileId: 'file-1', flightId: 'flight-1', status: 'completed', processingToken: null, processingError: null,
+      hasProgress: false,
+    }]);
+    const database = {
+      select: vi.fn(() => ({ from: vi.fn(() => ({ leftJoin: vi.fn(() => ({ where: vi.fn(() => ({ limit })) })) })) })),
+    };
+    const stale = { ...job, status: 'processing' as const, processingToken: 'token-1', heartbeatAt: 1 };
+    const queue = {
+      getJob: vi.fn(async () => stale),
+      failStaleJob: vi.fn(async () => true),
+      reconcileTerminalJob: vi.fn(async () => true),
+    };
+    const valkey = {
+      xautoclaim: vi.fn(async () => ['0-0', { '1-0': [['jobId', job.id]] }]),
+      xack: vi.fn(async (..._args: unknown[]) => 1),
+      xdel: vi.fn(async () => 1),
+    };
+    const worker = createFlightWorkerService(database as never, valkey as never, queue as never, { process: vi.fn() }, {
+      s3Client: { send: vi.fn() } as never, bucketName: 'flights', consumerName: 'worker-2',
+    });
+
+    await worker.recoverStale();
+
+    expect(queue.reconcileTerminalJob).toHaveBeenCalledWith(expect.objectContaining({
+      status: 'failed',
+      error: expect.stringContaining('administrator'),
+    }));
+    expect(queue.reconcileTerminalJob).toHaveBeenCalledWith(expect.objectContaining({
+      error: expect.stringContaining('reprocess'),
+    }));
     expect(queue.failStaleJob).not.toHaveBeenCalled();
     expect(valkey.xack).toHaveBeenCalledOnce();
   });
@@ -473,7 +509,7 @@ describe('FlightWorkerService', () => {
       selects += 1;
       return [{
         igcFileId: 'file-1', flightId: 'flight-1', status: databaseStatus,
-        processingToken: databaseStatus === 'processing' ? 'token-1' : null, processingError: null,
+        processingToken: databaseStatus === 'processing' ? 'token-1' : null, processingError: null, hasProgress: true,
       }];
     });
     const whereUpdate = vi.fn(async () => {

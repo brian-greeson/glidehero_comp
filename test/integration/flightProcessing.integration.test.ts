@@ -47,6 +47,53 @@ function processor() {
   });
 }
 
+async function installInsertFailureTrigger(table: 'competition_grid_claims' | 'flight_progress', message: string) {
+  if (!database) throw new Error('Test database was not initialized.');
+  const suffix = randomUUID().replaceAll('-', '');
+  const functionName = `test_${suffix}_fn`;
+  const triggerName = `test_${suffix}_trigger`;
+  await database.pool.query(`
+    CREATE FUNCTION "${functionName}"() RETURNS trigger
+    LANGUAGE plpgsql AS $$
+    BEGIN
+      RAISE EXCEPTION '${message.replaceAll("'", "''")}';
+    END;
+    $$;
+    CREATE TRIGGER "${triggerName}"
+    BEFORE INSERT ON ${table}
+    FOR EACH ROW EXECUTE FUNCTION "${functionName}"();
+  `);
+  return async () => {
+    await database?.pool.query(`DROP TRIGGER IF EXISTS "${triggerName}" ON ${table}`);
+    await database?.pool.query(`DROP FUNCTION IF EXISTS "${functionName}"()`);
+  };
+}
+
+async function persistedProcessingState(igcFileId: string) {
+  if (!database) throw new Error('Test database was not initialized.');
+  const result = await database.pool.query<{
+    processing_status: string;
+    processed_at: Date | null;
+    track_point_count: number;
+    personal_claim_count: number;
+    competition_claim_count: number;
+    progress_count: number;
+    achievement_count: number;
+  }>(
+    `SELECT f.processing_status,
+            f.processed_at,
+            (SELECT count(*)::int FROM track_points WHERE flight_id = f.flight_id) AS track_point_count,
+            (SELECT count(*)::int FROM user_grid_claims WHERE claim_flight = f.flight_id) AS personal_claim_count,
+            (SELECT count(*)::int FROM competition_grid_claims WHERE claim_flight = f.flight_id) AS competition_claim_count,
+            (SELECT count(*)::int FROM flight_progress WHERE flight_id = f.flight_id) AS progress_count,
+            (SELECT count(*)::int FROM achievements WHERE source_flight_id = f.flight_id) AS achievement_count
+     FROM flights f
+     WHERE f.igc_file_id = $1`,
+    [igcFileId],
+  );
+  return result.rows;
+}
+
 describe('FlightProcessingService with a real IGC file', () => {
   it('stores every fix and processes personal and competition claims', async () => {
     if (!database) throw new Error('Test database was not initialized.');
@@ -75,6 +122,7 @@ describe('FlightProcessingService with a real IGC file', () => {
       last_fix: Date;
     }>(
       `SELECT f.processing_status,
+              f.processed_at,
               f.launch_timezone,
               (SELECT count(*)::int FROM user_grid_claims ugc WHERE ugc.claim_flight = f.flight_id) AS grid_claim_count,
               (SELECT count(*)::int FROM competition_grid_claims cgc WHERE cgc.claim_flight = f.flight_id) AS competition_claim_count,
@@ -95,6 +143,7 @@ describe('FlightProcessingService with a real IGC file', () => {
     expect(persisted.rows).toEqual([
       expect.objectContaining({
         processing_status: 'completed',
+        processed_at: expect.any(Date),
         launch_timezone: 'America/Denver',
         grid_claim_count: expect.any(Number),
         competition_claim_count: expect.any(Number),
@@ -142,5 +191,71 @@ describe('FlightProcessingService with a real IGC file', () => {
       'SELECT count(*)::int AS flight_count FROM flights',
     );
     expect(counts.rows).toEqual([{ flight_count: 1 }]);
+  }, 60_000);
+
+  it('does not complete a flight or retain partial work when progression persistence fails', async () => {
+    if (!database) throw new Error('Test database was not initialized.');
+    const auth = createAuthService(database.db, { sessionTtlSeconds: 60 });
+    const pilot = await auth.signup({ email: 'progression-failure@example.com', password: 'correct horse battery staple' });
+    const stored = await storeFile(pilot.user.userId, 'flights/progression-failure.igc', 'progression-failure.igc');
+    const removeTrigger = await installInsertFailureTrigger('flight_progress', 'test progression persistence failure');
+
+    try {
+      await expect(processor().process({
+        ownerUserId: pilot.user.userId,
+        igcFileId: stored.id,
+        bucketKey: 'flights/progression-failure.igc',
+        contentHash: createHash('sha256').update(fixture).digest('hex').replace(/^./, 'b'),
+        processingToken: randomUUID(),
+        source,
+      })).rejects.toThrow();
+
+      const persisted = await persistedProcessingState(stored.id);
+      expect(persisted).toHaveLength(1);
+      expect(persisted[0]?.processing_status).not.toBe('completed');
+      expect(persisted[0]).toMatchObject({
+        processed_at: null,
+        track_point_count: 0,
+        personal_claim_count: 0,
+        competition_claim_count: 0,
+        progress_count: 0,
+        achievement_count: 0,
+      });
+    } finally {
+      await removeTrigger();
+    }
+  }, 60_000);
+
+  it('does not complete a flight or retain partial work when competition persistence fails', async () => {
+    if (!database) throw new Error('Test database was not initialized.');
+    const auth = createAuthService(database.db, { sessionTtlSeconds: 60 });
+    const pilot = await auth.signup({ email: 'competition-failure@example.com', password: 'correct horse battery staple' });
+    const stored = await storeFile(pilot.user.userId, 'flights/competition-failure.igc', 'competition-failure.igc');
+    const removeTrigger = await installInsertFailureTrigger('competition_grid_claims', 'test competition persistence failure');
+
+    try {
+      await expect(processor().process({
+        ownerUserId: pilot.user.userId,
+        igcFileId: stored.id,
+        bucketKey: 'flights/competition-failure.igc',
+        contentHash: createHash('sha256').update(fixture).digest('hex').replace(/^./, 'c'),
+        processingToken: randomUUID(),
+        source,
+      })).rejects.toThrow();
+
+      const persisted = await persistedProcessingState(stored.id);
+      expect(persisted).toHaveLength(1);
+      expect(persisted[0]?.processing_status).not.toBe('completed');
+      expect(persisted[0]).toMatchObject({
+        processed_at: null,
+        track_point_count: 0,
+        personal_claim_count: 0,
+        competition_claim_count: 0,
+        progress_count: 0,
+        achievement_count: 0,
+      });
+    } finally {
+      await removeTrigger();
+    }
   }, 60_000);
 });

@@ -10,7 +10,9 @@ Before a production backfill, pause and drain the flight workers so no new fligh
 npm run backfill:flight-progress
 ```
 
-Review the reported counts. Run the mutating command only with explicit authorization:
+Review the reported counts, including the number of completed flights replayed with recorded `processedAt` order and the number of legacy flights replayed in approximate `createdAt` order. The dry-run and apply commands use the same ordering inventory, so the dry-run exposes the full scope before `--apply`. A warning is printed whenever legacy flights are present. For flights created before processing timestamps were recorded, exact processing completion order cannot be reconstructed when flights were processed concurrently; the backfill uses deterministic `createdAt`/ID ordering as an approximation.
+
+Run the mutating command only with explicit authorization:
 
 ```sh
 npm run backfill:flight-progress -- --apply

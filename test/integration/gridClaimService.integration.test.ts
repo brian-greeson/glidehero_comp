@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { eq } from 'drizzle-orm';
-import { competitionGridClaims, flightProgress, flights, igcFiles, personalGridClaims as userGridClaims, trackPoints, users } from '../../src/db/schema.js';
+import { achievements, competitionGridClaims, flightProgress, flights, igcFiles, personalGridClaims as userGridClaims, trackPoints, users } from '../../src/db/schema.js';
 import { createGridClaimService } from '../../src/services/gridClaimService.js';
 import { createAdminFlightService } from '../../src/services/adminFlightService.js';
 import { resetAndPushTestDatabase } from './database.js';
@@ -104,6 +104,12 @@ async function storedCompetitionCells(cellSize: number) {
 async function storedProgression(flightId: string) {
   const [progression] = await database.db.select().from(flightProgress).where(eq(flightProgress.flightId, flightId));
   return progression;
+}
+
+async function storedAchievements(userId: string) {
+  return database.db.select().from(achievements)
+    .where(eq(achievements.userId, userId))
+    .orderBy(achievements.achievementKey);
 }
 
 async function persistClaimCells(
@@ -218,6 +224,40 @@ describe('GridClaimService with PostGIS', () => {
       evaluatedAt: firstResult.evaluatedAt,
       updatedAt: expect.any(Date),
     });
+  });
+
+  it('reprocesses a completed flight without progression and restores its initial achievements', async () => {
+    const flight = await persistFlight([[100, 100], [10_100, 100]]);
+    const service = createGridClaimService(database.db, { cellSize: 1_000 });
+
+    expect(await storedProgression(flight.flightId)).toBeUndefined();
+    expect(await storedAchievements(flight.userId)).toEqual([]);
+
+    const first = await service.reprocess({ flightId: flight.flightId });
+
+    expect(first).toMatchObject({
+      status: 'completed',
+      result: {
+        directCellCount: 11,
+        enclosedCellCount: 0,
+        progressionVersion: 1,
+      },
+    });
+    expect(await storedProgression(flight.flightId)).toMatchObject({
+      progressionVersion: 1,
+      directCellCount: 11,
+    });
+    const firstAchievements = await storedAchievements(flight.userId);
+    expect(firstAchievements.map((row) => row.achievementType).sort()).toEqual([
+      'personal_best_total_cells',
+      'unique_cells_milestone',
+    ]);
+
+    await expect(service.reprocess({ flightId: flight.flightId })).resolves.toMatchObject({
+      status: 'completed',
+      result: { progressionVersion: 2 },
+    });
+    expect(await storedAchievements(flight.userId)).toEqual(firstAchievements);
   });
 
   it('aggregates personal viewport stats by distinct cells and contributing flights', async () => {
@@ -656,6 +696,17 @@ describe('GridClaimService with PostGIS', () => {
     expect(await storedCells(1_000)).toEqual(personalBefore);
     expect(await storedCompetitionCells(1_000)).toEqual(competitionBefore);
     expect(await storedProgression(flight.flightId)).toEqual(progressionBefore);
+  });
+
+  it('rolls back Personal claims and progression when Competition rebuilding fails', async () => {
+    const flight = await persistFlight([[100, 100], [900, 100]], new Date(Date.UTC(2026, 0, 1)), 'Invalid/Timezone');
+    const service = createGridClaimService(database.db, { cellSize: 1_000 });
+
+    await expect(service.process(flight)).rejects.toThrow();
+
+    expect(await database.db.select().from(userGridClaims).where(eq(userGridClaims.claimFlight, flight.flightId))).toEqual([]);
+    expect(await database.db.select().from(flightProgress).where(eq(flightProgress.flightId, flight.flightId))).toEqual([]);
+    expect(await database.db.select().from(competitionGridClaims).where(eq(competitionGridClaims.claimFlight, flight.flightId))).toEqual([]);
   });
 
 });

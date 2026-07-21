@@ -2,6 +2,9 @@
   <article class="profile-summary-card">
     <dl><dt>Unique cells</dt><dd>{{ profile.lifetimeUniqueCellCount }}</dd></dl>
   </article>
+  <article class="profile-summary-card profile-milestone-card">
+    <dl><dt>Next milestone</dt><dd>{{ profile.uniqueCellsToNextMilestone }} more {{ if profile.uniqueCellsToNextMilestone === 1 }}cell{{ else }}cells{{ /if }} to reach {{ profile.nextUniqueCellMilestone }}.</dd></dl>
+  </article>
   <article class="profile-summary-card">
     <dl><dt>Completed flights</dt><dd>{{ profile.completedFlightCount }}</dd></dl>
   </article>

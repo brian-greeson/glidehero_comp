@@ -38,6 +38,7 @@ export type UploadProgress = {
   total: number;
   finished: number;
   completed: number;
+  completedIds: string[];
   queued: number;
   processing: number;
   failed: number;
@@ -311,15 +312,24 @@ export function createFlightUploadQueueService(
   }
 
   async function readProgress(userId: string): Promise<UploadProgress> {
-    const [total, queued, processing, completed, duplicate, failed] = await Promise.all([
+    const [total, queued, processing, completed, completedIds, duplicate, failed] = await Promise.all([
       valkey.zcard(userJobsKey(userId)),
       valkey.zcard(userJobsByStatusKey(userId, 'queued')),
       valkey.zcard(userJobsByStatusKey(userId, 'processing')),
       valkey.zcard(userJobsByStatusKey(userId, 'completed')),
+      valkey.zrange(userJobsByStatusKey(userId, 'completed'), { start: 0, end: -1 }),
       valkey.zcard(userJobsByStatusKey(userId, 'duplicate')),
       valkey.zcard(userJobsByStatusKey(userId, 'failed')),
     ]);
-    return { total, finished: completed + duplicate + failed, completed, queued, processing, failed };
+    return {
+      total,
+      finished: completed + duplicate + failed,
+      completed,
+      completedIds: completedIds.map(String),
+      queued,
+      processing,
+      failed,
+    };
   }
 
   async function retireSuccessfulJob(userId: string, id: string, expectedStatus: 'completed' | 'duplicate'): Promise<boolean> {
@@ -511,7 +521,15 @@ export function createFlightUploadQueueService(
           ...duplicateIds.map((id) => retireSuccessfulJob(userId, String(id), 'duplicate')),
         ]);
         if (retired.every(Boolean)) {
-          return { total: 0, finished: 0, completed: completedIds.length, queued: 0, processing: 0, failed: 0 };
+          return {
+            total: 0,
+            finished: 0,
+            completed: completedIds.length,
+            completedIds: completedIds.map(String),
+            queued: 0,
+            processing: 0,
+            failed: 0,
+          };
         }
         return readProgress(userId);
       }

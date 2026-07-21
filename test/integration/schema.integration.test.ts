@@ -51,6 +51,7 @@ describe('authentication schema', () => {
       { column_name: 'launch_latitude', is_nullable: 'YES' },
       { column_name: 'launch_longitude', is_nullable: 'YES' },
       { column_name: 'launch_timezone', is_nullable: 'YES' },
+      { column_name: 'processed_at', is_nullable: 'YES' },
       { column_name: 'processing_error', is_nullable: 'YES' },
       { column_name: 'processing_status', is_nullable: 'NO' },
       { column_name: 'processing_token', is_nullable: 'YES' },
@@ -58,6 +59,38 @@ describe('authentication schema', () => {
       { column_name: 'updated_at', is_nullable: 'NO' },
       { column_name: 'user_id', is_nullable: 'NO' },
     ]);
+  });
+
+  it('stores nullable flight completion timestamps with per-user completion ordering support', async () => {
+    const columns = await database.pool.query<{
+      column_name: string;
+      data_type: string;
+      is_nullable: string;
+      udt_name: string;
+      column_default: string | null;
+    }>(
+      `SELECT column_name, data_type, is_nullable, udt_name, column_default
+       FROM information_schema.columns
+       WHERE table_schema = 'public' AND table_name = 'flights' AND column_name = 'processed_at'`,
+    );
+    expect(columns.rows).toEqual([
+      {
+        column_name: 'processed_at',
+        data_type: 'timestamp with time zone',
+        is_nullable: 'YES',
+        udt_name: 'timestamptz',
+        column_default: null,
+      },
+    ]);
+
+    const indexes = await database.pool.query<{ indexname: string; indexdef: string }>(
+      `SELECT indexname, indexdef
+       FROM pg_indexes
+       WHERE schemaname = 'public' AND tablename = 'flights'
+         AND indexname = 'flights_user_id_processed_at_flight_id_idx'`,
+    );
+    expect(indexes.rows).toHaveLength(1);
+    expect(indexes.rows[0]?.indexdef).toContain('(user_id, processed_at, flight_id)');
   });
 
   it('stores achievement history with unique keys, profile ordering, and deletion semantics', async () => {

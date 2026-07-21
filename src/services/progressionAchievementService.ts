@@ -5,15 +5,25 @@ import { achievements, flightProgress } from '../db/schema.js';
 export const uniqueCellsAchievementType = 'unique_cells_milestone' as const;
 
 const fixedUniqueCellMilestones = [10, 25, 50, 100, 200, 500, 1_000] as const;
+const recurringUniqueCellMilestoneStep = 1_000;
+
+export function nextUniqueCellMilestone(currentTotal: number): number {
+  const fixedMilestone = fixedUniqueCellMilestones.find((milestone) => milestone > currentTotal);
+  if (fixedMilestone !== undefined) return fixedMilestone;
+
+  const firstRecurringMilestone = fixedUniqueCellMilestones.at(-1)! + recurringUniqueCellMilestoneStep;
+  if (currentTotal < firstRecurringMilestone) return firstRecurringMilestone;
+
+  return (Math.floor(currentTotal / recurringUniqueCellMilestoneStep) + 1) * recurringUniqueCellMilestoneStep;
+}
 
 export function uniqueCellMilestonesCrossed(previousTotal: number, newTotal: number): number[] {
   if (newTotal <= previousTotal) return [];
 
-  const milestones: number[] = fixedUniqueCellMilestones.filter(
-    (milestone) => milestone > previousTotal && milestone <= newTotal,
-  );
-  for (let milestone = 2_000; milestone <= newTotal; milestone += 1_000) {
-    if (milestone > previousTotal) milestones.push(milestone);
+  const milestones: number[] = [];
+  for (let milestone = nextUniqueCellMilestone(previousTotal); milestone <= newTotal;) {
+    milestones.push(milestone);
+    milestone = nextUniqueCellMilestone(milestone);
   }
   return milestones;
 }

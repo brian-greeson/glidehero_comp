@@ -555,6 +555,53 @@ describe('FlightUploadQueueService', () => {
     });
   });
 
+  it('reports only completed IDs for a partial user batch', async () => {
+    const valkey = new FakeValkey();
+    const service = createFlightUploadQueueService(valkey as never, {
+      s3Client: {} as never, bucketName: 'flights', presign: vi.fn(async () => 'signed'),
+    });
+    const completed = await service.createIntent({ userId: 'user-1', originalFilename: 'done.igc', contentType: '', byteSize: 10 });
+    const duplicate = await service.createIntent({ userId: 'user-1', originalFilename: 'duplicate.igc', contentType: '', byteSize: 10 });
+    const failed = await service.createIntent({ userId: 'user-1', originalFilename: 'failed.igc', contentType: '', byteSize: 10 });
+    await service.createIntent({ userId: 'user-1', originalFilename: 'pending.igc', contentType: '', byteSize: 10 });
+    await service.saveJob({ ...(await service.getJob(completed.id))!, status: 'completed', updatedAt: Date.now() });
+    await service.saveJob({ ...(await service.getJob(duplicate.id))!, status: 'duplicate', updatedAt: Date.now() });
+    await service.saveJob({ ...(await service.getJob(failed.id))!, status: 'failed', error: 'bad track', updatedAt: Date.now() });
+
+    expect(await service.progress('user-1')).toMatchObject({
+      total: 4,
+      finished: 3,
+      completed: 1,
+      completedIds: [completed.id],
+      failed: 1,
+    });
+    expect(await service.getJob(completed.id)).not.toBeNull();
+  });
+
+  it('returns completed IDs captured before all-success retirement and isolates users', async () => {
+    const valkey = new FakeValkey();
+    const service = createFlightUploadQueueService(valkey as never, {
+      s3Client: {} as never, bucketName: 'flights', presign: vi.fn(async () => 'signed'),
+    });
+    const completed = await service.createIntent({ userId: 'user-1', originalFilename: 'done.igc', contentType: '', byteSize: 10 });
+    const duplicate = await service.createIntent({ userId: 'user-1', originalFilename: 'duplicate.igc', contentType: '', byteSize: 10 });
+    const otherUser = await service.createIntent({ userId: 'user-2', originalFilename: 'other.igc', contentType: '', byteSize: 10 });
+    await service.saveJob({ ...(await service.getJob(completed.id))!, status: 'completed', updatedAt: Date.now() });
+    await service.saveJob({ ...(await service.getJob(duplicate.id))!, status: 'duplicate', updatedAt: Date.now() });
+    await service.saveJob({ ...(await service.getJob(otherUser.id))!, status: 'completed', updatedAt: Date.now() });
+
+    expect(await service.progress('user-1')).toMatchObject({
+      total: 0,
+      finished: 0,
+      completed: 1,
+      completedIds: [completed.id],
+      failed: 0,
+    });
+    expect(await service.getDisposition(completed.id)).toBe('retired');
+    expect(await service.getDisposition(duplicate.id)).toBe('retired');
+    expect(await service.getJob(otherUser.id)).not.toBeNull();
+  });
+
   it('clears eligible failed jobs individually without losing other results', async () => {
     const valkey = new FakeValkey();
     const service = createFlightUploadQueueService(valkey as never, {

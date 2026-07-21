@@ -1,7 +1,26 @@
 import { describe, expect, it } from 'vitest';
-import { uniqueCellMilestonesCrossed } from '../../src/services/progressionAchievementService.js';
+import {
+  nextUniqueCellMilestone,
+  uniqueCellMilestonesCrossed,
+} from '../../src/services/progressionAchievementService.js';
 
 describe('unique cell milestone thresholds', () => {
+  it.each([
+    [0, 10],
+    [9, 10],
+    [10, 25],
+    [24, 25],
+    [25, 50],
+    [999, 1_000],
+    [1_000, 2_000],
+    [1_001, 2_000],
+    [1_999, 2_000],
+    [2_000, 3_000],
+    [1_000_000, 1_001_000],
+  ])('returns the first threshold strictly greater than %i', (currentTotal, expected) => {
+    expect(nextUniqueCellMilestone(currentTotal)).toBe(expected);
+  });
+
   it('awards nothing below the first threshold', () => {
     expect(uniqueCellMilestonesCrossed(0, 9)).toEqual([]);
   });

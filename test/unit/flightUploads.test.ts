@@ -62,7 +62,7 @@ function uploadHarness(initialTotal, fetchImplementation) {
   let nextIntentId = 1;
   const defaultFetch = async (url, options = {}) => {
     if (String(url) === '/v1/igc-upload-progress') {
-      return { ok: true, json: async () => ({ total: progressTotal, finished: 0, completed: 0, queued: progressTotal, processing: 0, failed: 0 }) };
+      return { ok: true, json: async () => ({ total: progressTotal, finished: 0, completed: 0, completedIds: [], queued: progressTotal, processing: 0, failed: 0 }) };
     }
     if (String(url) === '/v1/igc-uploads/intents') {
       const id = `intent-${nextIntentId++}`;
@@ -414,13 +414,121 @@ describe('flight upload active-file capacity', () => {
     await vi.waitFor(() => expect(harness.xhr.instances).toHaveLength(1));
     harness.xhr.instances[0].succeed();
     await vi.waitFor(() => expect(harness.selectors.get('[data-upload-overall]').textContent).toBe('1/1'));
-    progress = { total: 1, finished: 1, queued: 0, processing: 0, failed: 0 };
+    progress = { total: 0, finished: 0, completed: 1, completedIds: ['intent-1'], queued: 0, processing: 0, failed: 0 };
     harness.timers.find((timer) => timer.delay === 5_000)();
 
     await vi.waitFor(() => expect(link.hidden).toBe(false));
     expect(link.getAttribute?.('href')).toBe('/profile');
     expect(harness.selectors.get('[data-upload-dialog]').open).toBe(true);
     expect(harness.windowRef.location.reload).not.toHaveBeenCalled();
+  });
+
+  it('keeps a completion signal from a stale response without overwriting newer aggregate state', async () => {
+    const progressRequests = [];
+    const harness = uploadHarness(0, (url, options, fallback) => {
+      if (String(url) !== '/v1/igc-upload-progress') return fallback(url, options);
+      let resolve;
+      const response = new Promise((resolveResponse) => { resolve = resolveResponse; });
+      progressRequests.push({ resolve });
+      return response;
+    });
+    const link = harness.selectors.get('[data-upload-progress-link]');
+    const dialog = harness.selectors.get('[data-upload-dialog]');
+    const count = harness.selectors.get('[data-flight-progress-count]');
+
+    harness.selectors.get('[data-upload-trigger]').dispatch('click');
+    await vi.waitFor(() => expect(progressRequests).toHaveLength(1));
+    progressRequests[0].resolve({
+      ok: true,
+      json: async () => ({ total: 0, finished: 0, completed: 0, completedIds: [], queued: 0, processing: 0, failed: 0 }),
+    });
+    harness.select(harness.uploadInput, files(1, 'out-of-order'));
+    await vi.waitFor(() => expect(harness.xhr.instances).toHaveLength(1));
+    harness.xhr.instances[0].succeed();
+    await vi.waitFor(() => expect(harness.selectors.get('[data-upload-overall]').textContent).toBe('1/1'));
+
+    harness.timers.find((timer) => timer.delay === 5_000)();
+    await vi.waitFor(() => expect(progressRequests).toHaveLength(2));
+    harness.selectors.get('[data-upload-trigger]').dispatch('click');
+    await vi.waitFor(() => expect(progressRequests).toHaveLength(3));
+
+    progressRequests[2].resolve({
+      ok: true,
+      json: async () => ({ total: 5, finished: 4, completed: 4, completedIds: [], queued: 1, processing: 0, failed: 0 }),
+    });
+    await vi.waitFor(() => expect(count.textContent).toBe('4/5'));
+    expect(dialog.open).toBe(true);
+    expect(link.hidden).toBe(true);
+
+    progressRequests[1].resolve({
+      ok: true,
+      json: async () => ({ total: 1, finished: 0, completed: 1, completedIds: ['intent-1'], queued: 0, processing: 0, failed: 0 }),
+    });
+    await vi.waitFor(() => expect(link.hidden).toBe(false));
+    expect(count.textContent).toBe('4/5');
+  });
+
+  it('does not let an earlier larger completed batch suppress a matching completion', async () => {
+    let progress = { total: 10, finished: 10, completed: 10, completedIds: Array.from({ length: 10 }, (_, index) => `old-${index}`), queued: 0, processing: 0, failed: 0 };
+    const harness = uploadHarness(0, (url, options, fallback) => (
+      String(url) === '/v1/igc-upload-progress'
+        ? { ok: true, json: async () => progress }
+        : fallback(url, options)
+    ));
+    const link = harness.selectors.get('[data-upload-progress-link]');
+
+    harness.select(harness.uploadInput, files(1, 'new-batch'));
+    await vi.waitFor(() => expect(harness.xhr.instances).toHaveLength(1));
+    harness.xhr.instances[0].succeed();
+    await vi.waitFor(() => expect(harness.selectors.get('[data-upload-overall]').textContent).toBe('1/1'));
+    progress = { total: 0, finished: 0, completed: 1, completedIds: ['intent-1'], queued: 0, processing: 0, failed: 0 };
+    harness.timers.find((timer) => timer.delay === 5_000)();
+
+    await vi.waitFor(() => expect(link.hidden).toBe(false));
+  });
+
+  it('does not show a profile link for an unrelated completed ID', async () => {
+    let progress = { total: 0, finished: 0, completed: 0, completedIds: [], queued: 0, processing: 0, failed: 0 };
+    const harness = uploadHarness(0, (url, options, fallback) => (
+      String(url) === '/v1/igc-upload-progress'
+        ? { ok: true, json: async () => progress }
+        : fallback(url, options)
+    ));
+    const link = harness.selectors.get('[data-upload-progress-link]');
+
+    harness.select(harness.uploadInput, files(1, 'unrelated'));
+    await vi.waitFor(() => expect(harness.xhr.instances).toHaveLength(1));
+    harness.xhr.instances[0].succeed();
+    await vi.waitFor(() => expect(harness.selectors.get('[data-upload-overall]').textContent).toBe('1/1'));
+    progress = { total: 0, finished: 0, completed: 1, completedIds: ['other-intent'], queued: 0, processing: 0, failed: 0 };
+    harness.timers.find((timer) => timer.delay === 5_000)();
+
+    await vi.waitFor(() => expect(link.hidden).toBe(true));
+  });
+
+  it('hides an old profile link when reopening a clean modal', async () => {
+    let progress = { total: 0, finished: 0, completed: 0, completedIds: [], queued: 0, processing: 0, failed: 0 };
+    const harness = uploadHarness(0, (url, options, fallback) => (
+      String(url) === '/v1/igc-upload-progress'
+        ? { ok: true, json: async () => progress }
+        : fallback(url, options)
+    ));
+    const link = harness.selectors.get('[data-upload-progress-link]');
+    const dialog = harness.selectors.get('[data-upload-dialog]');
+
+    harness.select(harness.uploadInput, files(1, 'reopen'));
+    await vi.waitFor(() => expect(harness.xhr.instances).toHaveLength(1));
+    harness.xhr.instances[0].succeed();
+    await vi.waitFor(() => expect(harness.selectors.get('[data-upload-overall]').textContent).toBe('1/1'));
+    progress = { total: 0, finished: 0, completed: 1, completedIds: ['intent-1'], queued: 0, processing: 0, failed: 0 };
+    harness.timers.find((timer) => timer.delay === 5_000)();
+    await vi.waitFor(() => expect(link.hidden).toBe(false));
+
+    harness.selectors.get('[data-upload-close]').dispatch('click');
+    expect(dialog.open).toBe(false);
+    harness.selectors.get('[data-upload-trigger]').dispatch('click');
+    expect(dialog.open).toBe(true);
+    expect(link.hidden).toBe(true);
   });
 
   it('does not show a profile link for a failed-only cycle and keeps closing manual', async () => {
@@ -437,7 +545,7 @@ describe('flight upload active-file capacity', () => {
     await vi.waitFor(() => expect(harness.xhr.instances).toHaveLength(1));
     harness.xhr.instances[0].succeed();
     await vi.waitFor(() => expect(harness.selectors.get('[data-upload-overall]').textContent).toBe('1/1'));
-    progress = { total: 1, finished: 1, queued: 0, processing: 0, failed: 1 };
+    progress = { total: 1, finished: 1, completed: 0, completedIds: [], queued: 0, processing: 0, failed: 1 };
     harness.timers.find((timer) => timer.delay === 5_000)();
 
     await vi.waitFor(() => expect(link.hidden).toBe(true));
@@ -459,7 +567,7 @@ describe('flight upload active-file capacity', () => {
     await vi.waitFor(() => expect(harness.xhr.instances).toHaveLength(1));
     harness.xhr.instances[0].succeed();
     await vi.waitFor(() => expect(harness.selectors.get('[data-upload-overall]').textContent).toBe('1/1'));
-    progress = { total: 0, finished: 0, completed: 0, queued: 0, processing: 0, failed: 0 };
+    progress = { total: 0, finished: 0, completed: 0, completedIds: [], queued: 0, processing: 0, failed: 0 };
     harness.timers.find((timer) => timer.delay === 5_000)();
 
     await vi.waitFor(() => expect(link.hidden).toBe(true));

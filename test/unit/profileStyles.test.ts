@@ -7,6 +7,7 @@ describe('pilot profile styles', () => {
 
     expect(css).toMatch(/\.profile-summary\s*{[^}]*display:\s*grid;[^}]*grid-template-columns:\s*repeat\(3/s);
     expect(css).toMatch(/\.profile-summary-card\s*{[^}]*border:\s*1px solid/);
+    expect(css).toMatch(/\.profile-milestone-card\s+dd\s*{[^}]*line-height:\s*1\.3/);
     expect(css).toMatch(/\.profile-back-link:focus-visible\s*{[^}]*outline:\s*3px solid/);
     expect(css).toContain('.profile-achievement-list,');
     expect(css).toMatch(/\.profile-flight-stats\s*{/);

@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { eq } from 'drizzle-orm';
+import { asc, eq, sql } from 'drizzle-orm';
 import { achievements, flights, flightProgress, igcFiles, trackPoints, users } from '../../src/db/schema.js';
-import { runBackfill } from '../../src/scripts/backfillFlightProgress.js';
+import { printSummary, runBackfill } from '../../src/scripts/backfillFlightProgress.js';
 import { resetAndPushTestDatabase } from './database.js';
 
 type ProjectedCoordinate = readonly [x: number, y: number];
@@ -48,6 +48,7 @@ async function createLineFlight(
   startX: number,
   endX: number,
   createdAt: Date,
+  processedAt: Date | null = null,
 ) {
   const [igcFile] = await database.db.insert(igcFiles).values({
     userId,
@@ -66,6 +67,7 @@ async function createLineFlight(
     launchTimezone: 'UTC',
     startedAt: createdAt,
     endedAt: new Date(createdAt.getTime() + 1_000),
+    processedAt,
     createdAt,
     updatedAt: createdAt,
   }).returning({ id: flights.id });
@@ -92,7 +94,11 @@ async function storedProgress(userId: string) {
   }).from(flightProgress)
     .innerJoin(flights, eq(flights.id, flightProgress.flightId))
     .where(eq(flightProgress.userId, userId))
-    .orderBy(flights.createdAt, flights.id);
+    .orderBy(
+      sql`CASE WHEN ${flights.processedAt} IS NULL THEN 0 ELSE 1 END`,
+      sql`COALESCE(${flights.processedAt}, ${flights.createdAt})`,
+      asc(flights.id),
+    );
 }
 
 async function storedAchievements(userId: string) {
@@ -114,6 +120,9 @@ describe('flight-progress backfill with PostgreSQL', () => {
     expect(dryRun).toMatchObject({
       usersInspected: 2,
       flightsNeedingBackfill: 3,
+      flightsReplayedWithProcessedAtOrder: 0,
+      legacyFlightsReplayedApproximate: 3,
+      usersAffectedByApproximateOrdering: 2,
       progressRowsCreated: 3,
       milestoneAchievementsCreated: 3,
       totalCellPersonalBestAchievementsCreated: 3,
@@ -127,12 +136,23 @@ describe('flight-progress backfill with PostgreSQL', () => {
     expect(applied).toMatchObject({
       usersInspected: 2,
       flightsNeedingBackfill: 3,
+      flightsReplayedWithProcessedAtOrder: 0,
+      legacyFlightsReplayedApproximate: 3,
+      usersAffectedByApproximateOrdering: 2,
       progressRowsCreated: 3,
       milestoneAchievementsCreated: 3,
       totalCellPersonalBestAchievementsCreated: 3,
       enclosedCellPersonalBestAchievementsCreated: 0,
       usersFailed: 0,
     });
+    const dryRunOutput: string[] = [];
+    printSummary(dryRun, false, {
+      log: (message: string) => dryRunOutput.push(message),
+      error: () => undefined,
+    });
+    expect(dryRunOutput).toContain(
+      'WARNING: Legacy flights have no processedAt timestamp; their createdAt order is approximate and cannot reconstruct exact concurrent processing order.',
+    );
 
     const alphaProgress = await storedProgress(alpha.id);
     expect(alphaProgress).toHaveLength(2);
@@ -188,7 +208,14 @@ describe('flight-progress backfill with PostgreSQL', () => {
 
     try {
       const result = await runBackfill(database.db, { apply: true, cellSize: 1_000 });
-      expect(result).toMatchObject({ usersInspected: 2, progressRowsCreated: 1, usersFailed: 1 });
+      expect(result).toMatchObject({
+        usersInspected: 2,
+        flightsReplayedWithProcessedAtOrder: 0,
+        legacyFlightsReplayedApproximate: 2,
+        usersAffectedByApproximateOrdering: 2,
+        progressRowsCreated: 1,
+        usersFailed: 1,
+      });
       expect(await storedProgress(failingUser.id)).toEqual([]);
       expect(await storedAchievements(failingUser.id)).toEqual([]);
       expect(await storedProgress(successfulUser.id)).toHaveLength(1);
@@ -197,5 +224,139 @@ describe('flight-progress backfill with PostgreSQL', () => {
       await database.pool.query('DROP TRIGGER backfill_test_failure_trigger ON flight_progress');
       await database.pool.query('DROP FUNCTION backfill_test_failure()');
     }
+  });
+
+  it('replays timestamped flights in processed order for progression totals and milestones', async () => {
+    const user = await createUser('processed-order');
+    const base = new Date('2026-03-01T00:00:00Z');
+    const processedLater = await createLineFlight(
+      user.id,
+      100,
+      29_100,
+      new Date(base.getTime() + 1_000),
+      new Date(base.getTime() + 2_000),
+    );
+    const processedEarlier = await createLineFlight(
+      user.id,
+      100,
+      8_100,
+      new Date(base.getTime() + 2_000),
+      new Date(base.getTime() + 1_000),
+    );
+
+    const result = await runBackfill(database.db, { apply: true, cellSize: 1_000 });
+    expect(result).toMatchObject({
+      flightsNeedingBackfill: 2,
+      flightsReplayedWithProcessedAtOrder: 2,
+      legacyFlightsReplayedApproximate: 0,
+      usersAffectedByApproximateOrdering: 0,
+      progressRowsCreated: 2,
+      milestoneAchievementsCreated: 2,
+      totalCellPersonalBestAchievementsCreated: 2,
+      usersFailed: 0,
+    });
+    expect(await storedProgress(user.id)).toEqual([
+      { flightId: processedEarlier, newPersonalCellCount: 9, personalCellTotalAfter: 9 },
+      { flightId: processedLater, newPersonalCellCount: 21, personalCellTotalAfter: 30 },
+    ]);
+
+    const userAchievements = await storedAchievements(user.id);
+    expect(userAchievements.map((row) => row.achievementKey)).toEqual([
+      'personal-best-total-cells:' + processedEarlier,
+      'personal-best-total-cells:' + processedLater,
+      'unique-cells:10',
+      'unique-cells:25',
+    ]);
+    expect(userAchievements.filter((row) => row.achievementType === 'unique_cells_milestone').map((row) => row.sourceFlightId))
+      .toEqual([processedLater, processedLater]);
+  });
+
+  it('orders legacy flights before timestamped flights deterministically', async () => {
+    const user = await createUser('mixed-order');
+    const base = new Date('2026-04-01T00:00:00Z');
+    const legacySmall = await createLineFlight(
+      user.id,
+      100,
+      8_100,
+      new Date(base.getTime() + 1_000),
+    );
+    const legacyLarge = await createLineFlight(
+      user.id,
+      100,
+      29_100,
+      new Date(base.getTime() + 1_000),
+    );
+    const timestamped = await createLineFlight(
+      user.id,
+      100,
+      39_100,
+      new Date(base.getTime() + 3_000),
+      new Date(base.getTime() - 1_000),
+    );
+
+    const result = await runBackfill(database.db, { apply: true, cellSize: 1_000 });
+    expect(result).toMatchObject({
+      flightsNeedingBackfill: 3,
+      flightsReplayedWithProcessedAtOrder: 1,
+      legacyFlightsReplayedApproximate: 2,
+      usersAffectedByApproximateOrdering: 1,
+      progressRowsCreated: 3,
+      usersFailed: 0,
+    });
+    const legacyRows = legacySmall < legacyLarge
+      ? [
+        { flightId: legacySmall, newPersonalCellCount: 9, personalCellTotalAfter: 9 },
+        { flightId: legacyLarge, newPersonalCellCount: 21, personalCellTotalAfter: 30 },
+      ]
+      : [
+        { flightId: legacyLarge, newPersonalCellCount: 30, personalCellTotalAfter: 30 },
+        { flightId: legacySmall, newPersonalCellCount: 0, personalCellTotalAfter: 30 },
+      ];
+    expect(await storedProgress(user.id)).toEqual([
+      ...legacyRows,
+      { flightId: timestamped, newPersonalCellCount: 10, personalCellTotalAfter: 40 },
+    ]);
+  });
+
+  it('counts all completed flights replayed for a user with missing progress', async () => {
+    const user = await createUser('replay-inventory');
+    const base = new Date('2026-05-01T00:00:00Z');
+    const existingProgressFlight = await createLineFlight(
+      user.id,
+      100,
+      8_100,
+      base,
+    );
+    await createLineFlight(
+      user.id,
+      100,
+      29_100,
+      new Date(base.getTime() + 1_000),
+    );
+    await database.db.insert(flightProgress).values({
+      flightId: existingProgressFlight,
+      userId: user.id,
+      directCellCount: 9,
+      enclosedCellCount: 0,
+      newPersonalCellCount: 9,
+      personalCellTotalAfter: 9,
+    });
+
+    const dryRun = await runBackfill(database.db, { apply: false, cellSize: 1_000 });
+    const applied = await runBackfill(database.db, { apply: true, cellSize: 1_000 });
+    expect(dryRun).toMatchObject({
+      flightsNeedingBackfill: 1,
+      flightsReplayedWithProcessedAtOrder: 0,
+      legacyFlightsReplayedApproximate: 2,
+      usersAffectedByApproximateOrdering: 1,
+      progressRowsCreated: 1,
+    });
+    expect(applied).toMatchObject({
+      flightsNeedingBackfill: 1,
+      flightsReplayedWithProcessedAtOrder: 0,
+      legacyFlightsReplayedApproximate: 2,
+      usersAffectedByApproximateOrdering: 1,
+      progressRowsCreated: 1,
+    });
   });
 });

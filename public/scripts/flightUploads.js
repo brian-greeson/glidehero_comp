@@ -57,7 +57,6 @@ export function initializeFlightUploads(documentRef = document, windowRef = glob
   let initialProgressResolved = false;
   let progressPollTimer = null;
   let progressRequestId = 0;
-  let successfulProgressBaseline = null;
 
   function showProgressLink() {
     if (progressLink) progressLink.hidden = false;
@@ -176,14 +175,11 @@ export function initializeFlightUploads(documentRef = document, windowRef = glob
     const intentIdsBeforeRequest = new Set(currentIntentIds);
     try {
       const progress = await jsonRequest('/v1/igc-upload-progress');
+      const completedIds = Array.isArray(progress.completedIds) ? progress.completedIds : [];
+      if (completedIds.some((id) => currentIntentIds.has(id))) showProgressLink();
       if (requestId !== progressRequestId) return;
       serverTotal = progress.total;
       serverFinished = progress.finished;
-      const successfulProgress = typeof progress.completed === 'number'
-        ? Math.max(0, progress.completed)
-        : Math.max(0, progress.finished - progress.failed);
-      if (successfulProgressBaseline === null) successfulProgressBaseline = successfulProgress;
-      if (currentReservations.size > 0 && successfulProgress > successfulProgressBaseline) showProgressLink();
       for (const id of intentIdsBeforeRequest) {
         if (currentIntentIds.has(id)) representedIntentIds.add(id);
       }
@@ -225,7 +221,6 @@ export function initializeFlightUploads(documentRef = document, windowRef = glob
   function openUploadDialog() {
     if (!uploadDialog.open && currentReservations.size === 0) {
       progressLink?.setAttribute('hidden', '');
-      successfulProgressBaseline = null;
     }
     if (!uploadDialog.open) uploadDialog.showModal();
     void refreshProgress();

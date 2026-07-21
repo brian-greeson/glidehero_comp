@@ -36,6 +36,8 @@ const pilotProfile = {
   displayName: 'Cloud Dancer',
   territoryColor: '#A1B2C3',
   lifetimeUniqueCellCount: 12,
+  nextUniqueCellMilestone: 25,
+  uniqueCellsToNextMilestone: 13,
   completedFlightCount: 3,
   lifetimeDirectCellCount: 20,
   lifetimeEnclosedCellCount: 4,
@@ -216,7 +218,7 @@ describe('webRouter', () => {
       complete: vi.fn(async () => undefined),
       cancel: vi.fn(async () => true),
       progress: vi.fn(async () => ({
-        total: 2, finished: 1, queued: 1, processing: 0, failed: 1,
+        total: 2, finished: 1, completed: 1, completedIds: ['done-1'], queued: 1, processing: 0, failed: 1,
       })),
       listJobs: vi.fn(async () => ({
         total: 2, page: 1, pageSize: 100,
@@ -260,7 +262,9 @@ describe('webRouter', () => {
       expect(await cancelled.json()).toEqual({ removed: true });
       expect(uploadQueue.cancel).toHaveBeenCalledWith({ userId: user.userId, id: '00000000-0000-4000-8000-000000000030' });
 
-      expect((await fetch(`${baseUrl}/v1/igc-upload-progress`, { headers })).status).toBe(200);
+      const progress = await fetch(`${baseUrl}/v1/igc-upload-progress`, { headers });
+      expect(progress.status).toBe(200);
+      expect(await progress.json()).toMatchObject({ completedIds: ['done-1'] });
       const details = await fetch(`${baseUrl}/v1/igc-upload-jobs?page=1`, { headers });
       expect((await details.json() as { jobs: unknown[] }).jobs).toHaveLength(1);
       expect(uploadQueue.listJobs).toHaveBeenCalledWith(user.userId, { page: 1, pageSize: 100 });
@@ -764,6 +768,7 @@ describe('webRouter', () => {
 
       expect(response.status).toBe(200);
       expect(html).toContain('Cloud Dancer’s Progress');
+      expect(html).toContain('13 more cells to reach 25.');
       expect(html).toContain('12');
       expect(html).toContain('href="/personal"');
       expect(html).not.toContain('cloud-dancer@example.com');

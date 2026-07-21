@@ -1,5 +1,5 @@
 import { GetObjectCommand, type S3 } from '@aws-sdk/client-s3';
-import { and, DrizzleQueryError, eq } from 'drizzle-orm';
+import { and, DrizzleQueryError, eq, sql } from 'drizzle-orm';
 import type { Database } from '../db/client.js';
 import { flights, trackPoints } from '../db/schema.js';
 import { resolveLaunchTimeZone } from '../domain/competition/launchTimeZone.js';
@@ -107,12 +107,9 @@ export function createFlightProcessingService(
 
       try {
         await database.transaction(async (tx) => {
-          const updated = await tx
+          const fenced = await tx
             .update(flights)
             .set({
-              processingStatus: 'completed',
-              processingToken: null,
-              processingError: null,
               startedAt: parsed.startedAt,
               endedAt: parsed.endedAt,
               durationSeconds: parsed.durationSeconds,
@@ -127,19 +124,39 @@ export function createFlightProcessingService(
               eq(flights.processingToken, input.processingToken),
             ))
             .returning({ id: flights.id });
-          if (!updated.length) throw new ProcessingFenceLostError();
+          if (!fenced.length) throw new ProcessingFenceLostError();
           for (let start = 0; start < parsed.points.length; start += TRACK_POINT_INSERT_BATCH_SIZE) {
             await tx
               .insert(trackPoints)
               .values(parsed.points.slice(start, start + TRACK_POINT_INSERT_BATCH_SIZE).map((point) => ({ flightId: flight.id, ...point })));
           }
+
+          await gridClaim.processInTransaction(tx, {
+            flightId: flight.id,
+            userId: input.ownerUserId,
+            launchTimezone,
+          });
+
+          const completed = await tx
+            .update(flights)
+            .set({
+              processingStatus: 'completed',
+              processingToken: null,
+              processingError: null,
+              processedAt: sql`clock_timestamp()`,
+            })
+            .where(and(
+              eq(flights.id, flight.id),
+              eq(flights.processingStatus, 'processing'),
+              eq(flights.processingToken, input.processingToken),
+            ))
+            .returning({ id: flights.id });
+          if (!completed.length) throw new ProcessingFenceLostError();
         });
       } catch (error) {
         if (error instanceof ProcessingFenceLostError) return { status: 'superseded', flightId: flight.id };
         throw error;
       }
-
-      await gridClaim.process({ flightId: flight.id, userId: input.ownerUserId, launchTimezone });
 
       return { status: 'completed', flightId: flight.id };
     },

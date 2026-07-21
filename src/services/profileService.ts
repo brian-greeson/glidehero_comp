@@ -1,6 +1,7 @@
 import { eq, sql } from 'drizzle-orm';
 import type { Database } from '../db/client.js';
 import { profiles } from '../db/schema.js';
+import { nextUniqueCellMilestone } from './progressionAchievementService.js';
 
 const territoryColorPattern = /^#[0-9a-f]{6}$/i;
 
@@ -14,6 +15,8 @@ export type PilotProfileSummary = {
   displayName: string;
   territoryColor: string;
   lifetimeUniqueCellCount: number;
+  nextUniqueCellMilestone: number;
+  uniqueCellsToNextMilestone: number;
   completedFlightCount: number;
   lifetimeDirectCellCount: number;
   lifetimeEnclosedCellCount: number;
@@ -269,6 +272,8 @@ export function createProfileService(database: Database, options: { cellSize: nu
       `);
       const row = result.rows[0];
       if (!row) return null;
+      const lifetimeUniqueCellCount = Number(row.lifetimeUniqueCellCount);
+      const nextMilestone = nextUniqueCellMilestone(lifetimeUniqueCellCount);
       const [achievementRows, recentFlightRows] = await Promise.all([
         database.execute<StoredAchievement>(sql`
           SELECT
@@ -302,7 +307,9 @@ export function createProfileService(database: Database, options: { cellSize: nu
         userId: row.userId,
         displayName: row.displayName,
         territoryColor: row.territoryColor,
-        lifetimeUniqueCellCount: Number(row.lifetimeUniqueCellCount),
+        lifetimeUniqueCellCount,
+        nextUniqueCellMilestone: nextMilestone,
+        uniqueCellsToNextMilestone: nextMilestone - lifetimeUniqueCellCount,
         completedFlightCount: Number(row.completedFlightCount),
         lifetimeDirectCellCount: Number(row.lifetimeDirectCellCount),
         lifetimeEnclosedCellCount: Number(row.lifetimeEnclosedCellCount),

@@ -99,6 +99,10 @@
   font-variant-numeric: tabular-nums;
   font-weight: 850;
 }
+.profile-milestone-card dd {
+  font-size: clamp(1.15rem, 2.5vw, 1.65rem);
+  line-height: 1.3;
+}
 .profile-color-value {
   display: flex;
   align-items: center;

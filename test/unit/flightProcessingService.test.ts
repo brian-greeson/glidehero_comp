@@ -3,14 +3,14 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createFlightProcessingService, duplicateFlightMessage } from '../../src/services/flightProcessingService.js';
 import { createGridClaimService } from '../../src/services/gridClaimService.js';
 
-const gridClaim = vi.hoisted(() => ({ process: vi.fn() }));
+const gridClaim = vi.hoisted(() => ({ processInTransaction: vi.fn() }));
 
 vi.mock('../../src/services/gridClaimService.js', () => ({
   createGridClaimService: vi.fn(() => gridClaim),
 }));
 
 afterEach(() => {
-  gridClaim.process.mockReset();
+  gridClaim.processInTransaction.mockReset();
 });
 
 const ownerUserId = '00000000-0000-4000-8000-000000000001';
@@ -51,11 +51,19 @@ function databaseDouble(options: { events?: string[]; transactionError?: Error; 
   });
   const transaction = vi.fn(async (callback: (tx: unknown) => Promise<void>) => {
     options.events?.push('ingest-started');
-    await callback({
-      insert: vi.fn(() => ({ values: txInsertValues })),
-      update: vi.fn(() => ({ set: txUpdateSet })),
-    });
-    options.events?.push('ingest-committed');
+    const insertedPointsBefore = insertedPoints.length;
+    const flightUpdatesBefore = flightUpdates.length;
+    try {
+      await callback({
+        insert: vi.fn(() => ({ values: txInsertValues })),
+        update: vi.fn(() => ({ set: txUpdateSet })),
+      });
+      options.events?.push('ingest-committed');
+    } catch (error) {
+      insertedPoints.splice(insertedPointsBefore);
+      flightUpdates.splice(flightUpdatesBefore);
+      throw error;
+    }
   });
   const database = {
     insert: vi.fn(() => ({ values: insertFlightValues })),
@@ -75,7 +83,7 @@ describe('FlightProcessingService', () => {
     const events: string[] = [];
     const { database, insertedPoints, flightUpdates, insertFlightValues, transaction } = databaseDouble({ events });
     const send = vi.fn(async () => objectBody(validIgc));
-    gridClaim.process.mockImplementation(async () => {
+    gridClaim.processInTransaction.mockImplementation(async () => {
       events.push('grid-claim-processed');
       return {
         flightId,
@@ -102,28 +110,35 @@ describe('FlightProcessingService', () => {
       expect.objectContaining({ input: expect.objectContaining({ Bucket: 'glidehero-files', Key: bucketKey }) }),
     );
     expect(transaction).toHaveBeenCalledOnce();
-    expect(gridClaim.process).toHaveBeenCalledWith({
-      flightId,
-      userId: ownerUserId,
-      launchTimezone: 'America/Denver',
-    });
+    expect(gridClaim.processInTransaction).toHaveBeenCalledWith(
+      expect.anything(),
+      { flightId, userId: ownerUserId, launchTimezone: 'America/Denver' },
+    );
     expect(events).toEqual([
       'ingest-started',
-      'ingest-committed',
       'grid-claim-processed',
+      'ingest-committed',
     ]);
     expect(insertedPoints).toEqual([
       expect.objectContaining({ flightId, sequenceNumber: 0, latitude: 40, longitude: -105 }),
       expect.objectContaining({ flightId, sequenceNumber: 1 }),
     ]);
-    expect(flightUpdates).toContainEqual(expect.objectContaining({
-      processingStatus: 'completed',
-      processingError: null,
-      durationSeconds: 4,
-      launchLatitude: 40,
-      launchLongitude: -105,
-      launchTimezone: 'America/Denver',
-    }));
+    expect(flightUpdates).toEqual([
+      expect.objectContaining({
+        durationSeconds: 4,
+        launchLatitude: 40,
+        launchLongitude: -105,
+        launchTimezone: 'America/Denver',
+      }),
+      expect.objectContaining({
+        processingStatus: 'completed',
+        processingToken: null,
+        processingError: null,
+        processedAt: expect.objectContaining({
+          queryChunks: [expect.objectContaining({ value: ['clock_timestamp()'] })],
+        }),
+      }),
+    ]);
   });
 
   it('keeps the flight and source when parsing fails', async () => {
@@ -146,6 +161,7 @@ describe('FlightProcessingService', () => {
       processingToken: null,
       processingError: 'This IGC file has no valid GPS fixes to process.',
     });
+    expect(flightUpdates.every((update) => !('processedAt' in update))).toBe(true);
     expect(insertedPoints).toEqual([]);
     expect(transaction).not.toHaveBeenCalled();
   });
@@ -169,6 +185,7 @@ describe('FlightProcessingService', () => {
       processingToken: null,
       processingError: 'We could not read your uploaded IGC file. Please upload it again.',
     });
+    expect(flightUpdates.every((update) => !('processedAt' in update))).toBe(true);
     expect(insertedPoints).toEqual([]);
     expect(transaction).not.toHaveBeenCalled();
   });
@@ -199,14 +216,14 @@ describe('FlightProcessingService', () => {
 
     expect(transaction).toHaveBeenCalledOnce();
     expect(insertedPoints).toEqual([]);
-    expect(gridClaim.process).not.toHaveBeenCalled();
+    expect(gridClaim.processInTransaction).not.toHaveBeenCalled();
   });
 
-  it('keeps the committed flight when GridClaim fails for a later retry', async () => {
+  it('rolls back the completed flight and track work when GridClaim fails', async () => {
     const claimError = new Error('PostGIS unavailable');
-    const { database, flightUpdates, transaction } = databaseDouble();
+    const { database, insertedPoints, flightUpdates, transaction } = databaseDouble();
     const send = vi.fn(async () => objectBody(validIgc));
-    gridClaim.process.mockImplementation(async () => { throw claimError; });
+    gridClaim.processInTransaction.mockImplementation(async () => { throw claimError; });
     const service = createFlightProcessingService(database as never, {
       bucketName: 'glidehero-files',
       s3Client: { send } as never,
@@ -216,13 +233,12 @@ describe('FlightProcessingService', () => {
     await expect(service.process({ ownerUserId, igcFileId, bucketKey, contentHash: 'a'.repeat(64), processingToken })).rejects.toBe(claimError);
 
     expect(transaction).toHaveBeenCalledOnce();
-    expect(gridClaim.process).toHaveBeenCalledWith({
-      flightId,
-      userId: ownerUserId,
-      launchTimezone: 'America/Denver',
-    });
-    expect(flightUpdates).toContainEqual(expect.objectContaining({ processingStatus: 'completed' }));
-    expect(flightUpdates).not.toContainEqual(expect.objectContaining({ processingStatus: 'failed' }));
+    expect(gridClaim.processInTransaction).toHaveBeenCalledWith(
+      expect.anything(),
+      { flightId, userId: ownerUserId, launchTimezone: 'America/Denver' },
+    );
+    expect(insertedPoints).toEqual([]);
+    expect(flightUpdates).not.toContainEqual(expect.objectContaining({ processingStatus: 'completed' }));
   });
 
   it('converts the content-hash unique conflict to a duplicate outcome before reading the source', async () => {

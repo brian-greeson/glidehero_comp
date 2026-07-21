@@ -17,6 +17,9 @@ export type GridClaimProcessResult = {
   evaluatedAt: Date;
 };
 
+type DatabaseTransaction = Parameters<Parameters<Database['transaction']>[0]>[0];
+export type GridClaimTransaction = Pick<DatabaseTransaction, 'select' | 'delete' | 'insert' | 'execute'>;
+
 export interface GridClaimService {
   process(input: { flightId: string; userId: string; launchTimezone: string }): Promise<GridClaimProcessResult>;
   reprocess(input: { flightId: string }): Promise<
@@ -25,6 +28,13 @@ export interface GridClaimService {
     | { status: 'not_completed' }
   >;
   getViewportStats(input: ViewportBounds & { userId: string }): Promise<ViewportStats>;
+}
+
+export interface TransactionalGridClaimService extends GridClaimService {
+  processInTransaction(
+    transaction: GridClaimTransaction,
+    input: { flightId: string; userId: string; launchTimezone: string },
+  ): Promise<GridClaimProcessResult>;
 }
 
 type StoredViewportStats = ViewportStats;
@@ -39,7 +49,49 @@ export function createGridClaimService(
   database: Database,
   options: { cellSize: number },
   progressionAchievements: ProgressionAchievementService = createProgressionAchievementService(),
-): GridClaimService {
+): TransactionalGridClaimService {
+  async function processInTransaction(
+    transaction: GridClaimTransaction,
+    input: { flightId: string; userId: string; launchTimezone: string },
+    evaluateAchievements = true,
+  ): Promise<GridClaimProcessResult> {
+    await lockUserProgression(transaction, input.userId);
+    const [flight] = await transaction
+      .select({ startedAt: flights.startedAt, createdAt: flights.createdAt })
+      .from(flights)
+      .where(eq(flights.id, input.flightId));
+    await transaction.delete(personalGridClaims).where(and(
+      eq(personalGridClaims.claimFlight, input.flightId),
+      eq(personalGridClaims.cellSize, options.cellSize),
+    ));
+    await transaction.delete(competitionGridClaims).where(and(
+      eq(competitionGridClaims.claimFlight, input.flightId),
+      eq(competitionGridClaims.cellSize, options.cellSize),
+    ));
+
+    const result = await rebuildGridClaims(transaction, input, options.cellSize);
+    if (evaluateAchievements && result.progressionVersion === 1 && flight) {
+      await progressionAchievements.awardUniqueCellMilestones(transaction, {
+        userId: input.userId,
+        sourceFlightId: input.flightId,
+        earnedAt: result.evaluatedAt,
+        flightStartedAt: flight.startedAt ?? flight.createdAt,
+        previousTotal: result.personalCellTotalAfter - result.newPersonalCellCount,
+        newTotal: result.personalCellTotalAfter,
+        newCells: result.newPersonalCellCount,
+      });
+      await progressionAchievements.awardPersonalBestAchievements(transaction, {
+        userId: input.userId,
+        sourceFlightId: input.flightId,
+        earnedAt: result.evaluatedAt,
+        flightStartedAt: flight.startedAt ?? flight.createdAt,
+        directCells: result.directCellCount,
+        enclosedCells: result.enclosedCellCount,
+      });
+    }
+    return result;
+  }
+
   return {
     async getViewportStats({ userId, west, south, east, north }) {
       const result = await database.execute<StoredViewportStats>(sql`
@@ -73,44 +125,9 @@ export function createGridClaimService(
       return result.rows[0] ?? emptyViewportStats();
     },
     async process(input) {
-      return database.transaction(async (tx) => {
-        await lockUserProgression(tx, input.userId);
-        const [flight] = await tx
-          .select({ startedAt: flights.startedAt, createdAt: flights.createdAt })
-          .from(flights)
-          .where(eq(flights.id, input.flightId));
-        await tx.delete(personalGridClaims).where(and(
-          eq(personalGridClaims.claimFlight, input.flightId),
-          eq(personalGridClaims.cellSize, options.cellSize),
-        ));
-        await tx.delete(competitionGridClaims).where(and(
-          eq(competitionGridClaims.claimFlight, input.flightId),
-          eq(competitionGridClaims.cellSize, options.cellSize),
-        ));
-
-        const result = await rebuildGridClaims(tx, input, options.cellSize);
-        if (result.progressionVersion === 1 && flight) {
-          await progressionAchievements.awardUniqueCellMilestones(tx, {
-            userId: input.userId,
-            sourceFlightId: input.flightId,
-            earnedAt: result.evaluatedAt,
-            flightStartedAt: flight.startedAt ?? flight.createdAt,
-            previousTotal: result.personalCellTotalAfter - result.newPersonalCellCount,
-            newTotal: result.personalCellTotalAfter,
-            newCells: result.newPersonalCellCount,
-          });
-          await progressionAchievements.awardPersonalBestAchievements(tx, {
-            userId: input.userId,
-            sourceFlightId: input.flightId,
-            earnedAt: result.evaluatedAt,
-            flightStartedAt: flight.startedAt ?? flight.createdAt,
-            directCells: result.directCellCount,
-            enclosedCells: result.enclosedCellCount,
-          });
-        }
-        return result;
-      });
+      return database.transaction((tx) => processInTransaction(tx, input));
     },
+    processInTransaction,
     async reprocess({ flightId }) {
       return database.transaction(async (tx) => {
         const [flight] = await tx
@@ -125,11 +142,11 @@ export function createGridClaimService(
         await lockUserProgression(tx, flight.userId);
         await tx.delete(personalGridClaims).where(eq(personalGridClaims.claimFlight, flightId));
         await tx.delete(competitionGridClaims).where(eq(competitionGridClaims.claimFlight, flightId));
-        const result = await rebuildGridClaims(tx, {
+        const result = await processInTransaction(tx, {
           flightId,
           userId: flight.userId,
           launchTimezone: flight.launchTimezone,
-        }, options.cellSize);
+        });
         return { status: 'completed' as const, result };
       });
     },
