@@ -29,9 +29,8 @@ describe('Vento page renderer', () => {
     expect(anonymous).toContain(
       '<link rel="icon" type="image/png" sizes="192x192" href="/android-chrome-192x192.png">',
     );
-    expect(anonymous).toContain('Turn every flight into progress.');
-    expect(anonymous).toContain('Upload your flights. Expand your Personal Map.');
-    expect(anonymous).toContain('Set new records. Compete when you want.');
+    expect(anonymous).toContain('Paint the sky with your friends.');
+    expect(anonymous).not.toContain('Compete when you want.');
     expect(anonymous).toContain('Start building your Personal Map.');
     expect(anonymous).toContain('class="landing" data-auth-landing data-auth-initial="login"');
     expect(anonymous).toContain('<script type="module" src="/scripts/landing.js"></script>');
