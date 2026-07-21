@@ -1,7 +1,11 @@
 import { sql } from 'drizzle-orm';
 import type { Database } from '../db/client.js';
 import { extractPolygonGeometries, type PolygonGeometry } from '../domain/arena/geoJson.js';
-import { normalizedArenaGeometrySql } from './arenaGeometrySql.js';
+import { claimableCellCountSql, normalizedArenaGeometrySql } from './arenaGeometrySql.js';
+import {
+  createArenaLeadershipReconciliationService,
+  type ArenaLeadershipReconciliationService,
+} from './arenaLeadershipReconciliationService.js';
 
 const STATE_ABBREVIATIONS = new Set([
   'AL', 'AK', 'AZ', 'AR', 'CA', 'CO', 'CT', 'DE', 'FL', 'GA', 'HI', 'ID', 'IL', 'IN', 'IA', 'KS', 'KY', 'LA',
@@ -21,6 +25,10 @@ export type StateArenaDefinition = {
 };
 export type StateArenaImportSummary = { imported: number };
 type DatabaseTransaction = Parameters<Parameters<Database['transaction']>[0]>[0];
+type ImportOptions = {
+  arenaLeadership?: ArenaLeadershipReconciliationService;
+  reconcile?: boolean;
+};
 
 export function stateArenaSourceId(fips: string): number {
   if (!/^\d{2}$/.test(fips)) throw new TypeError(`State FIPS must be a two-digit code: ${fips}.`);
@@ -77,15 +85,28 @@ type GeometryCheck = {
 export async function importStateArenas(
   database: Database,
   states: StateArenaDefinition[],
+  cellSize?: number,
+  arenaLeadership?: ArenaLeadershipReconciliationService,
 ): Promise<StateArenaImportSummary> {
-  return database.transaction((transaction) => importStateArenasInTransaction(transaction, states));
+  if (cellSize === undefined || !Number.isFinite(cellSize) || cellSize <= 0) {
+    throw new RangeError('State Arena importer requires a positive grid cell size.');
+  }
+  const leadership = arenaLeadership ?? createArenaLeadershipReconciliationService(database, { cellSize });
+  return database.transaction((transaction) => importStateArenasInTransaction(transaction, states, cellSize, {
+    arenaLeadership: leadership,
+  }));
 }
 
 /** Import into a caller-owned transaction (used by the one-time rebuild). */
 export async function importStateArenasInTransaction(
   transaction: DatabaseTransaction,
   states: StateArenaDefinition[],
+  cellSize?: number,
+  options: ImportOptions = {},
 ): Promise<StateArenaImportSummary> {
+  if (cellSize === undefined || !Number.isFinite(cellSize) || cellSize <= 0) {
+    throw new RangeError('State Arena importer requires a positive grid cell size.');
+  }
   if (states.length === 0) throw new RangeError('State Arena source is empty.');
 
   const sourceIds = states.map((state) => stateArenaSourceId(state.fips));
@@ -134,18 +155,36 @@ export async function importStateArenasInTransaction(
     }
 
     for (const state of states) {
-      await transaction.execute(sql`
+      const inserted = await transaction.execute<{ id: string }>(sql`
+        WITH normalized AS (
+          SELECT ${normalizedArenaGeometrySql(state.geometries)} AS area
+        ), counted AS (
+          SELECT area, ${claimableCellCountSql({ area: sql`normalized.area`, cellSize: sql`${cellSize}` })} AS count
+          FROM normalized
+        )
         INSERT INTO arenas (
           source_id, name, country, country_code, state, area,
           external_source, external_id, arena_type,
           claimable_cell_count, claimable_cell_size
         )
-        VALUES (
-          ${stateArenaSourceId(state.fips)}, ${state.name}, 'United States', 'US', ${state.name},
-          ${normalizedArenaGeometrySql(state.geometries)}, ${CENSUS_STATE_ARENA_SOURCE}, ${state.fips}, 'state',
-          NULL, NULL
-        )
+        SELECT ${stateArenaSourceId(state.fips)}, ${state.name}, 'United States', 'US', ${state.name},
+          counted.area, ${CENSUS_STATE_ARENA_SOURCE}, ${state.fips}, 'state', counted.count, ${cellSize}
+        FROM counted
+        WHERE counted.count > 0
+        RETURNING id
       `);
+      if (!inserted.rows[0]) throw new RangeError(`State ${state.abbreviation} does not contain a claimable grid cell at size ${cellSize}.`);
+    }
+
+    if (options.reconcile !== false) {
+      const leadership = options.arenaLeadership;
+      if (!leadership) throw new Error('Arena leadership dependencies are not configured.');
+      const ids = await transaction.execute<{ id: string }>(sql`
+        SELECT id FROM arenas
+        WHERE arena_type = 'state'
+          AND source_id IN (${sql.join(sourceIds.map((sourceId) => sql`${sourceId}`), sql`, `)})
+      `);
+      await leadership.reconcileInTransaction(transaction, { arenaIds: ids.rows.map((row) => row.id) });
     }
 
     return { imported: states.length };

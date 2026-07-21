@@ -1,5 +1,5 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { eq } from 'drizzle-orm';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { and, eq, sql } from 'drizzle-orm';
 import { achievementRecordEvents, achievementRecords, achievements, competitionGridClaims, flightProgress, flights, igcFiles, personalGridClaims as userGridClaims, trackPoints, users } from '../../src/db/schema.js';
 import { createGridClaimService } from '../../src/services/gridClaimService.js';
 import type { ArenaAchievementService } from '../../src/services/arenaAchievementService.js';
@@ -126,6 +126,18 @@ async function persistClaimCells(
     claimUser: claim.userId,
     claimTimestamp: new Date(Date.UTC(2026, 0, 1)),
   })));
+}
+
+async function persistArena(input: { sourceId: number; name: string; arenaType: 'launch' | 'general' | 'state' | 'country'; shape: string }) {
+  const result = await database.pool.query<{ id: string }>(
+    `INSERT INTO arenas (source_id, name, country, country_code, area, arena_type)
+     VALUES ($1, $2, 'United States', 'US', ST_Multi(ST_GeomFromText($3, 6933)), $4)
+     RETURNING id`,
+    [input.sourceId, input.name, input.shape, input.arenaType],
+  );
+  const id = result.rows[0]?.id;
+  if (!id) throw new Error('Arena insert returned no row.');
+  return id;
 }
 
 describe('GridClaimService with PostGIS', () => {
@@ -493,7 +505,7 @@ describe('GridClaimService with PostGIS', () => {
     ]));
   });
 
-  it('stores the newest endpoint timestamp when multiple segments directly claim one cell', async () => {
+  it('keeps the Personal latest visit while Competition stores the first direct claim', async () => {
     const recordedAt = new Date(Date.UTC(2026, 0, 1, 0, 0, 0));
     const flight = await persistFlight([[100, 100], [900, 100], [100, 100]], recordedAt);
     const service = createGridClaimService(database.db, { cellSize: 1_000 });
@@ -505,6 +517,12 @@ describe('GridClaimService with PostGIS', () => {
       y: 0,
       claimFlight: flight.flightId,
       claimTimestamp: new Date(recordedAt.getTime() + 2_000),
+    }]);
+    expect(await storedCompetitionCells(1_000)).toMatchObject([{
+      x: 0,
+      y: 0,
+      claimFlight: flight.flightId,
+      claimTimestamp: new Date(recordedAt.getTime() + 1_000),
     }]);
   });
 
@@ -740,6 +758,178 @@ describe('GridClaimService with PostGIS', () => {
     expect(records).toHaveLength(1);
     expect(records[0]?.bestValue).toBe(3);
     expect(events.map((event) => event.value)).toEqual([3]);
+  });
+
+  it('reconciles new or earlier canonical claims across overlapping eligible Arenas and excludes Launch Arenas', async () => {
+    const first = await persistFlight([[100, 100], [1_900, 100]], new Date(Date.UTC(2026, 0, 2)));
+    const general = await persistArena({
+      sourceId: 10_001,
+      name: 'Overlapping General',
+      arenaType: 'general',
+      shape: 'POLYGON((0 0,2000 0,2000 1000,0 1000,0 0))',
+    });
+    const state = await persistArena({
+      sourceId: 10_002,
+      name: 'Overlapping State',
+      arenaType: 'state',
+      shape: 'POLYGON((0 0,1000 0,1000 1000,0 1000,0 0))',
+    });
+    const country = await persistArena({
+      sourceId: 10_003,
+      name: 'Overlapping Country',
+      arenaType: 'country',
+      shape: 'POLYGON((1000 0,2000 0,2000 1000,1000 1000,1000 0))',
+    });
+    await persistArena({
+      sourceId: 10_004,
+      name: 'Overlapping Launch',
+      arenaType: 'launch',
+      shape: 'POLYGON((0 0,2000 0,2000 1000,0 1000,0 0))',
+    });
+    const calls: string[][] = [];
+    const leadership = {
+      reconcile: vi.fn(),
+      reconcileInTransaction: vi.fn(async (_transaction: unknown, input: { arenaIds: string[] }) => {
+        calls.push(input.arenaIds);
+        return { arenas: [], eventsBuilt: 0, achievements: { newlyEarned: [], alreadyEarned: 0 } };
+      }),
+    };
+    const service = createGridClaimService(database.db, { cellSize: 1_000 }, undefined, undefined, leadership);
+
+    await service.process(first);
+    expect(calls).toEqual([[...new Set([general, state, country])].sort()]);
+
+    const laterRepeat = await persistFlight([[100, 100], [900, 100]], new Date(Date.UTC(2026, 0, 3)), 'UTC', first.userId);
+    await service.process(laterRepeat);
+    expect(calls).toHaveLength(1);
+
+    const earlierRepeat = await persistFlight([[100, 100], [900, 100]], new Date(Date.UTC(2026, 0, 1)), 'UTC', first.userId);
+    await service.process(earlierRepeat);
+    expect(calls).toEqual([
+      [...new Set([general, state, country])].sort(),
+      [general, state].sort(),
+    ]);
+  });
+
+  it('rolls back claims and progression when leadership reconciliation fails', async () => {
+    const flight = await persistFlight([[100, 100], [900, 100]]);
+    await persistArena({
+      sourceId: 10_005,
+      name: 'Failing Leadership Arena',
+      arenaType: 'general',
+      shape: 'POLYGON((0 0,1000 0,1000 1000,0 1000,0 0))',
+    });
+    const failure = new Error('forced leadership failure');
+    const leadership = {
+      reconcile: vi.fn(),
+      reconcileInTransaction: vi.fn(async () => { throw failure; }),
+    };
+    const service = createGridClaimService(database.db, { cellSize: 1_000 }, undefined, undefined, leadership);
+
+    await expect(service.process(flight)).rejects.toBe(failure);
+    expect(await database.db.select().from(userGridClaims).where(eq(userGridClaims.claimFlight, flight.flightId))).toEqual([]);
+    expect(await database.db.select().from(competitionGridClaims).where(eq(competitionGridClaims.claimFlight, flight.flightId))).toEqual([]);
+    expect(await storedProgression(flight.flightId)).toBeUndefined();
+  });
+
+  it('reconciles the old and rebuilt Arena memberships when a completed flight is reprocessed', async () => {
+    const flight = await persistFlight([[100, 100], [900, 100]]);
+    await persistArena({
+      sourceId: 10_006,
+      name: 'Reprocess Arena',
+      arenaType: 'general',
+      shape: 'POLYGON((0 0,1000 0,1000 1000,0 1000,0 0))',
+    });
+    const calls: string[][] = [];
+    const leadership = {
+      reconcile: vi.fn(),
+      reconcileInTransaction: vi.fn(async (_transaction: unknown, input: { arenaIds: string[] }) => {
+        calls.push(input.arenaIds);
+        return { arenas: [], eventsBuilt: 0, achievements: { newlyEarned: [], alreadyEarned: 0 } };
+      }),
+    };
+    const service = createGridClaimService(database.db, { cellSize: 1_000 }, undefined, undefined, leadership);
+
+    await service.process(flight);
+    await expect(service.reprocess({ flightId: flight.flightId })).resolves.toMatchObject({ status: 'completed' });
+    expect(calls).toHaveLength(2);
+    expect(calls[1]).toEqual(calls[0]);
+  });
+
+  it('rolls back rebuilt claims, progression, and leadership writes when correction reconciliation fails', async () => {
+    const flight = await persistFlight([[100, 100], [900, 100]]);
+    const rollbackArena = await persistArena({
+      sourceId: 10_009,
+      name: 'Reprocess rollback Arena',
+      arenaType: 'general',
+      shape: 'POLYGON((0 0,1000 0,1000 1000,0 1000,0 0))',
+    });
+    const initialService = createGridClaimService(database.db, { cellSize: 1_000 });
+    await initialService.process(flight);
+    const oldPersonal = await storedCells(1_000);
+    const oldCompetition = await storedCompetitionCells(1_000);
+    const oldProgression = await storedProgression(flight.flightId);
+    const statesBeforeFailure = await database.db.execute(sql`SELECT * FROM arena_leadership_states WHERE arena_id = ${rollbackArena}`);
+    const failure = new Error('forced reprocess correction failure');
+    const leadership = {
+      reconcile: vi.fn(),
+      reconcileInTransaction: vi.fn(async (transaction: { execute: (query: unknown) => Promise<unknown> }) => {
+        await transaction.execute(sql`
+          INSERT INTO arena_leadership_states (
+            arena_id, arena_type, leading_cell_count, next_rank_cell_count,
+            last_reconciled_at
+          ) VALUES (${rollbackArena}, 'general', 1, 0, now())
+        `);
+        throw failure;
+      }),
+    };
+    const service = createGridClaimService(database.db, { cellSize: 1_000 }, undefined, undefined, leadership as never);
+
+    await expect(service.reprocess({ flightId: flight.flightId })).rejects.toThrow();
+    expect(await storedCells(1_000)).toEqual(oldPersonal);
+    expect(await storedCompetitionCells(1_000)).toEqual(oldCompetition);
+    expect(await storedProgression(flight.flightId)).toEqual(oldProgression);
+    const statesAfterFailure = await database.db.execute(sql`SELECT * FROM arena_leadership_states WHERE arena_id = ${rollbackArena}`);
+    expect(statesAfterFailure.rows).toEqual(statesBeforeFailure.rows);
+    expect(leadership.reconcileInTransaction).toHaveBeenCalledOnce();
+  });
+
+  it('reconciles the sorted union of old and new Arena memberships exactly once during reprocessing', async () => {
+    const flight = await persistFlight([[10_100, 100], [10_900, 100]]);
+    const oldArena = await persistArena({
+      sourceId: 10_007,
+      name: 'Old correction Arena',
+      arenaType: 'general',
+      shape: 'POLYGON((10000 0,11000 0,11000 1000,10000 1000,10000 0))',
+    });
+    const newArena = await persistArena({
+      sourceId: 10_008,
+      name: 'New correction Arena',
+      arenaType: 'state',
+      shape: 'POLYGON((11000 0,12000 0,12000 1000,11000 1000,11000 0))',
+    });
+    const calls: string[][] = [];
+    const leadership = {
+      reconcile: vi.fn(),
+      reconcileInTransaction: vi.fn(async (_transaction: unknown, input: { arenaIds: string[] }) => {
+        calls.push(input.arenaIds);
+        return { arenas: [], eventsBuilt: 0, achievements: { newlyEarned: [], alreadyEarned: 0 } };
+      }),
+    };
+    const service = createGridClaimService(database.db, { cellSize: 1_000 }, undefined, undefined, leadership);
+
+    await service.process(flight);
+    calls.length = 0;
+    const points = await toWgs84([[11_100, 100], [11_900, 100]]);
+    for (const [sequenceNumber, point] of points.entries()) {
+      await database.db.update(trackPoints).set({
+        latitude: point.latitude,
+        longitude: point.longitude,
+      }).where(and(eq(trackPoints.flightId, flight.flightId), eq(trackPoints.sequenceNumber, sequenceNumber)));
+    }
+
+    await expect(service.reprocess({ flightId: flight.flightId })).resolves.toMatchObject({ status: 'completed' });
+    expect(calls).toEqual([[oldArena, newArena].sort()]);
   });
 
 });

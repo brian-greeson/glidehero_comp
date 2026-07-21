@@ -1,7 +1,8 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { eq } from 'drizzle-orm';
-import { flights, igcFiles, personalGridClaims, trackPoints, users } from '../../src/db/schema.js';
+import { achievements, arenaCurrentLeaders, arenaLeadershipEvents, competitionGridClaims, flights, igcFiles, personalGridClaims, trackPoints, users } from '../../src/db/schema.js';
 import { createAdminFlightService } from '../../src/services/adminFlightService.js';
+import { createArenaLeadershipReconciliationService } from '../../src/services/arenaLeadershipReconciliationService.js';
 import { resetAndMigrateTestDatabase } from './database.js';
 
 let database: Awaited<ReturnType<typeof resetAndMigrateTestDatabase>>;
@@ -24,6 +25,16 @@ async function storedFlight(
     startedAt: new Date('2026-07-14T12:00:00Z'),
   }).returning();
   return { user: user!, file: file!, flight: flight!, bucketKey };
+}
+
+async function storedArena(input: { sourceId: number; arenaType: 'launch' | 'general' }) {
+  const result = await database.pool.query<{ id: string }>(
+    `INSERT INTO arenas (source_id, name, country, country_code, area, arena_type)
+     VALUES ($1, $2, 'United States', 'US', ST_Multi(ST_GeomFromText('POLYGON((0 0,1000 0,1000 1000,0 1000,0 0))', 6933)), $3)
+     RETURNING id`,
+    [input.sourceId, `Admin test ${input.sourceId}`, input.arenaType],
+  );
+  return result.rows[0]!.id;
 }
 
 function serviceHarness(send = vi.fn(async (_command: unknown) => ({}))) {
@@ -106,11 +117,93 @@ describe('adminFlightService management', () => {
 
     await expect(service.deleteAllUserFlights(first.user.id)).resolves.toEqual({ deleted: 2, skipped: 1, failed: 1 });
     expect(deleteAttempt).toBe(3);
-    expect(uploadQueue.removeTerminalJobsForFlight).toHaveBeenCalledTimes(2);
+    expect(uploadQueue.removeTerminalJobsForFlight).toHaveBeenCalledTimes(3);
     const remaining = await database.db.select({ status: flights.processingStatus }).from(flights)
       .where(eq(flights.userId, first.user.id));
     expect(remaining).toHaveLength(2);
     expect(remaining.filter(({ status }) => status === 'processing')).toHaveLength(1);
     expect(remaining.filter(({ status }) => status !== 'processing')).toHaveLength(1);
+  });
+
+  it('reconciles all eligible Arenas intersecting deleted competition cells and excludes Launch Arenas', async () => {
+    const stored = await storedFlight();
+    const general = await storedArena({ sourceId: 20_001, arenaType: 'general' });
+    await storedArena({ sourceId: 20_002, arenaType: 'launch' });
+    await database.db.insert(competitionGridClaims).values({
+      competitionMonth: '2026-07-01', cellSize: 1_000, x: 0, y: 0,
+      claimFlight: stored.flight.id, claimUser: stored.user.id, claimTimestamp: new Date('2026-07-14T12:00:00Z'),
+    });
+    const leadership = { reconcile: vi.fn(), reconcileInTransaction: vi.fn(async () => ({
+      arenas: [], eventsBuilt: 0, achievements: { newlyEarned: [], alreadyEarned: 0 },
+    })) };
+    const { send, uploadQueue } = serviceHarness();
+    const service = createAdminFlightService(database.db, { reprocess: vi.fn() }, {
+      s3Client: { send } as never, bucketName: 'flights', uploadQueue,
+    }, { arenaLeadership: leadership, cellSize: 1_000 });
+
+    await expect(service.deleteFlight({ userId: stored.user.id, flightId: stored.flight.id })).resolves.toBe('deleted');
+    expect(leadership.reconcileInTransaction).toHaveBeenCalledWith(expect.anything(), { arenaIds: [general] });
+    expect(await database.db.select().from(competitionGridClaims)).toEqual([]);
+  });
+
+  it('rolls back flight deletion when Arena reconciliation fails', async () => {
+    const stored = await storedFlight();
+    await storedArena({ sourceId: 20_003, arenaType: 'general' });
+    await database.db.insert(competitionGridClaims).values({
+      competitionMonth: '2026-07-01', cellSize: 1_000, x: 0, y: 0,
+      claimFlight: stored.flight.id, claimUser: stored.user.id, claimTimestamp: new Date('2026-07-14T12:00:00Z'),
+    });
+    const failure = new Error('forced deletion reconciliation failure');
+    const leadership = { reconcile: vi.fn(), reconcileInTransaction: vi.fn(async () => { throw failure; }) };
+    const { send, uploadQueue } = serviceHarness();
+    const service = createAdminFlightService(database.db, { reprocess: vi.fn() }, {
+      s3Client: { send } as never, bucketName: 'flights', uploadQueue,
+    }, { arenaLeadership: leadership, cellSize: 1_000 });
+
+    await expect(service.deleteFlight({ userId: stored.user.id, flightId: stored.flight.id })).rejects.toBe(failure);
+    expect(await database.db.select({ id: flights.id }).from(flights).where(eq(flights.id, stored.flight.id))).toEqual([{ id: stored.flight.id }]);
+    expect(await database.db.select().from(competitionGridClaims)).toHaveLength(1);
+    expect(uploadQueue.removeTerminalJobsForFlight).not.toHaveBeenCalled();
+    expect(send).not.toHaveBeenCalled();
+  });
+
+  it('canonically rebuilds leadership on deletion and preserves the earned award with a null source flight', async () => {
+    const leader = await storedFlight();
+    const remaining = await storedFlight();
+    const general = await storedArena({ sourceId: 20_004, arenaType: 'general' });
+    await storedArena({ sourceId: 20_005, arenaType: 'launch' });
+    await database.db.insert(competitionGridClaims).values([
+      {
+        competitionMonth: '2026-07-01', cellSize: 1_000, x: 0, y: 0,
+        claimFlight: leader.flight.id, claimUser: leader.user.id, claimTimestamp: new Date('2026-07-14T12:00:00Z'),
+      },
+      {
+        competitionMonth: '2026-07-01', cellSize: 1_000, x: 0, y: 0,
+        claimFlight: remaining.flight.id, claimUser: remaining.user.id, claimTimestamp: new Date('2026-07-15T12:00:00Z'),
+      },
+    ]);
+    const leadership = createArenaLeadershipReconciliationService(database.db, { cellSize: 1_000 });
+    await leadership.reconcile({ arenaIds: [general] });
+    const [earnedBefore] = await database.db.select({ sourceFlightId: achievements.sourceFlightId })
+      .from(achievements)
+      .where(eq(achievements.userId, leader.user.id));
+    expect(earnedBefore?.sourceFlightId).toBe(leader.flight.id);
+
+    const { send, uploadQueue } = serviceHarness();
+    const service = createAdminFlightService(database.db, { reprocess: vi.fn() }, {
+      s3Client: { send } as never, bucketName: 'flights', uploadQueue,
+    }, { arenaLeadership: leadership, cellSize: 1_000 });
+    await expect(service.deleteFlight({ userId: leader.user.id, flightId: leader.flight.id })).resolves.toBe('deleted');
+
+    const current = await database.db.select({ userId: arenaCurrentLeaders.userId })
+      .from(arenaCurrentLeaders)
+      .where(eq(arenaCurrentLeaders.arenaId, general));
+    expect(current).toEqual([{ userId: remaining.user.id }]);
+    expect(await database.db.select().from(arenaLeadershipEvents).where(eq(arenaLeadershipEvents.arenaId, general)))
+      .toEqual(expect.arrayContaining([expect.objectContaining({ userId: remaining.user.id, eventType: 'took' })]));
+    const [earnedAfter] = await database.db.select({ sourceFlightId: achievements.sourceFlightId })
+      .from(achievements)
+      .where(eq(achievements.userId, leader.user.id));
+    expect(earnedAfter?.sourceFlightId).toBeNull();
   });
 });

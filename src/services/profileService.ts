@@ -38,6 +38,19 @@ export type PilotProfileSummary = {
   achievementCount: number;
   achievements: PilotAchievement[];
   recentFlights: PilotRecentFlight[];
+  currentArenaLeaderships: PilotArenaLeadership[];
+};
+
+export type PilotArenaLeadership = {
+  arenaId: string;
+  arenaName: string;
+  arenaType: 'general' | 'state' | 'country';
+  arenaPath: string;
+  status: 'sole' | 'joint';
+  cellsClaimed: number;
+  coveragePercent: number;
+  leadMarginCells: number;
+  leadingSince: string;
 };
 
 export type AchievementProgressCard = {
@@ -134,6 +147,20 @@ type StoredRecentFlight = {
   newPersonalCellCount: number | string;
 };
 
+type StoredArenaLeadership = {
+  arenaId: string;
+  sourceId: number | string;
+  arenaName: string;
+  countryCode: string;
+  arenaType: 'general' | 'state' | 'country';
+  cellsClaimed: number | string;
+  tookLeadAt: Date | string;
+  leadingCellCount: number | string;
+  nextRankCellCount: number | string;
+  leaderCount: number | string;
+  coveragePercent: number | string;
+};
+
 type StoredArenaAchievementProgress = {
   launchArenasVisited: number | string;
   generalArenasExplored: number | string;
@@ -157,6 +184,40 @@ function displayDate(value: Date | string | null): string {
   return new Intl.DateTimeFormat('en-US', {
     year: 'numeric', month: 'short', day: 'numeric', timeZone: 'UTC',
   }).format(date);
+}
+
+function loadCurrentArenaLeaderships(
+  database: Database,
+  options: { cellSize: number },
+  userId: string,
+): Promise<{ rows: StoredArenaLeadership[] }> {
+  return database.execute<StoredArenaLeadership>(sql`
+    SELECT
+      current_leader.arena_id AS "arenaId",
+      arena.source_id AS "sourceId",
+      arena.name AS "arenaName",
+      arena.country_code AS "countryCode",
+      arena.arena_type AS "arenaType",
+      current_leader.cells_claimed AS "cellsClaimed",
+      current_leader.took_lead_at AS "tookLeadAt",
+      state.leading_cell_count AS "leadingCellCount",
+      state.next_rank_cell_count AS "nextRankCellCount",
+      current_leader.leader_count AS "leaderCount",
+      FLOOR(LEAST(100, current_leader.cells_claimed * 100.0 / arena.claimable_cell_count) * 10) / 10 AS "coveragePercent"
+    FROM (
+      SELECT leaders.*, COUNT(*) OVER (PARTITION BY leaders.arena_id)::integer AS leader_count
+      FROM arena_current_leaders leaders
+    ) current_leader
+    INNER JOIN arena_leadership_states state ON state.arena_id = current_leader.arena_id
+    INNER JOIN arenas arena ON arena.id = current_leader.arena_id
+    WHERE current_leader.user_id = ${userId}
+      AND arena.arena_type IN ('general', 'state', 'country')
+      AND state.arena_type = arena.arena_type
+      AND arena.claimable_cell_count IS NOT NULL
+      AND arena.claimable_cell_count > 0
+      AND arena.claimable_cell_size = ${options.cellSize}
+    ORDER BY current_leader.took_lead_at DESC, lower(arena.name), arena.source_id, arena.id
+  `);
 }
 
 function displayDistance(value: number | string | null): string {
@@ -206,11 +267,21 @@ const achievementCategoryLabels: Record<AchievementCategory, string> = {
   general: 'General Arena',
   state: 'State',
   country: 'Country',
+  leadership: 'Arena Leadership',
 };
 
 function catalogAchievementDisplay(row: StoredAchievement, definition: AchievementDefinition): PilotAchievement {
   const categoryLabel = achievementCategoryLabels[definition.category];
   const isRecord = definition.kind === 'record';
+  const details = detailsObject(row.details);
+  const arenaName = typeof details.arenaName === 'string' && details.arenaName.trim().length > 0
+    ? details.arenaName.trim()
+    : null;
+  const isLeadership = definition.key === 'took_lead_in_arena' || definition.key === 'reclaimed_lead_in_arena';
+  const title = isLeadership && arenaName
+    ? `${definition.key === 'took_lead_in_arena' ? 'Took' : 'Reclaimed'} the Lead in ${arenaName}`
+    : definition.title;
+  const description = isLeadership && arenaName ? `${title}.` : definition.description;
   const badgeLabel = 'threshold' in definition
     ? (definition.category === 'general' && definition.key.startsWith('general_coverage_')
       ? `${definition.threshold}%`
@@ -223,8 +294,8 @@ function catalogAchievementDisplay(row: StoredAchievement, definition: Achieveme
     typeLabel: isRecord ? `${categoryLabel} personal best` : categoryLabel,
     earnedDate: displayDate(row.earnedAt),
     sourceFlightId: row.sourceFlightId,
-    title: definition.title,
-    description: definition.description,
+    title,
+    description,
     badgeLabel,
     badgeAriaLabel: `${categoryLabel} ${isRecord ? 'personal-best' : definition.kind} achievement${'threshold' in definition ? `: ${badgeLabel}` : ''}`,
   };
@@ -605,7 +676,7 @@ export function createProfileService(database: Database, options: { cellSize: nu
       if (!row) return null;
       const lifetimeUniqueCellCount = Number(row.lifetimeUniqueCellCount);
       const nextMilestone = nextUniqueCellMilestone(lifetimeUniqueCellCount);
-      const [achievementRows, recentFlightRows, arenaProgress] = await Promise.all([
+      const [achievementRows, recentFlightRows, arenaProgress, currentArenaLeadershipRows] = await Promise.all([
         database.execute<StoredAchievement & { totalCount: number | string }>(sql`
           WITH displayable AS (
             SELECT
@@ -654,6 +725,7 @@ export function createProfileService(database: Database, options: { cellSize: nu
           LIMIT 20
         `),
         loadArenaAchievementProgress(database, options, userId),
+        loadCurrentArenaLeaderships(database, options, userId),
       ]);
       const achievementProgress = buildAchievementProgress({
         displayName: row.displayName,
@@ -689,6 +761,21 @@ export function createProfileService(database: Database, options: { cellSize: nu
             newPersonalCellCount: Number(flight.newPersonalCellCount),
           };
         }),
+        currentArenaLeaderships: currentArenaLeadershipRows.rows.map((leadership) => ({
+          arenaId: leadership.arenaId,
+          arenaName: leadership.arenaName,
+          arenaType: leadership.arenaType,
+          arenaPath: arenaPath({
+            sourceId: Number(leadership.sourceId),
+            name: leadership.arenaName,
+            countryCode: leadership.countryCode,
+          }),
+          status: Number(leadership.leaderCount) > 1 ? 'joint' : 'sole',
+          cellsClaimed: Number(leadership.cellsClaimed),
+          coveragePercent: Number(leadership.coveragePercent),
+          leadMarginCells: Number(leadership.leadingCellCount) - Number(leadership.nextRankCellCount),
+          leadingSince: displayDate(leadership.tookLeadAt),
+        })),
       };
     },
   };

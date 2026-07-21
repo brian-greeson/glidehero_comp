@@ -37,6 +37,20 @@ export const achievementCatalog = [
     kind: 'record',
   },
   {
+    key: 'took_lead_in_arena',
+    title: 'Took the Lead in an Arena',
+    description: 'Take the lead in an Arena.',
+    category: 'leadership',
+    kind: 'special',
+  },
+  {
+    key: 'reclaimed_lead_in_arena',
+    title: 'Reclaimed the Lead in an Arena',
+    description: 'Reclaim the lead in an Arena after losing it.',
+    category: 'leadership',
+    kind: 'special',
+  },
+  {
     key: 'first_cells_in_general_arena',
     title: 'First Cells in a General Arena',
     description: 'Claim your first cell in a General Arena.',

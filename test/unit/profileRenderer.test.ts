@@ -53,6 +53,7 @@ describe('pilot profile renderer', () => {
       achievementCount: 2,
       achievements: [],
       recentFlights: [],
+      currentArenaLeaderships: [],
     };
 
     const current = await render({ currentUser, page: 'profile', profile: { ...profile, userId: currentUser.userId }, profileIsCurrent: true });
@@ -119,6 +120,7 @@ describe('pilot profile renderer', () => {
         achievementCount: 0,
         achievements: [],
         recentFlights: [],
+        currentArenaLeaderships: [],
       },
       profileIsCurrent: true,
     });
@@ -193,6 +195,7 @@ describe('pilot profile renderer', () => {
         totalCellCount: 24,
         newPersonalCellCount: 17,
       }],
+      currentArenaLeaderships: [],
     };
 
     const html = await render({ currentUser, page: 'profile', profile, profileIsCurrent: true });
@@ -310,6 +313,7 @@ describe('pilot profile renderer', () => {
           },
         ],
         recentFlights: [],
+        currentArenaLeaderships: [],
       },
       profileIsCurrent: true,
     });
@@ -322,6 +326,7 @@ describe('pilot profile renderer', () => {
     expect(html).toContain('Tagged 1 Launch Arena during one flight, establishing an initial record.');
     expect(html).toContain('role="img" aria-label="Launch Arena personal-best record: 1 tagged"');
     expect(html).toContain('Launch Arena achievements');
+    expect(html).toContain('Arena leadership achievements');
     expect(html).toContain('States Flown in counts a State Arena once you claim at least one cell there.');
     expect(html).toContain('Countries Flown in counts a Country Arena once you claim at least one cell there.');
     expect(html).not.toContain('most_launches_tagged_one_flight');
@@ -356,6 +361,7 @@ describe('pilot profile renderer', () => {
         achievementCount: 0,
         achievements: [],
         recentFlights: [],
+        currentArenaLeaderships: [],
       },
       profileIsCurrent: true,
     });

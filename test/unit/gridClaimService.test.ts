@@ -11,7 +11,7 @@ function processingDatabaseDouble(counts: Partial<{
   personalCellTotalAfter: number;
   progressionVersion: number;
   evaluatedAt: Date;
-}> = {}) {
+}> = {}, options: { executeRows?: unknown[][] } = {}) {
   const storedCounts = {
     directCellCount: 3,
     enclosedCellCount: 0,
@@ -28,7 +28,10 @@ function processingDatabaseDouble(counts: Partial<{
   }]);
   const selectFrom = vi.fn(() => ({ where: selectWhere }));
   const select = vi.fn(() => ({ from: selectFrom }));
-  const execute = vi.fn(async (_query: unknown) => ({ rows: [storedCounts] }));
+  let executeIndex = 0;
+  const execute = vi.fn(async (_query: unknown) => ({
+    rows: options.executeRows?.[executeIndex++] ?? [storedCounts],
+  }));
   const onConflictDoNothing = vi.fn(async () => undefined);
   const values = vi.fn(() => ({ onConflictDoNothing }));
   const insert = vi.fn(() => ({ values }));
@@ -76,7 +79,7 @@ describe('GridClaimService', () => {
     expect(transaction).toHaveBeenCalledOnce();
     expect(deleteFrom).toHaveBeenCalledTimes(2);
     expect(where).toHaveBeenCalledTimes(2);
-    expect(execute).toHaveBeenCalledTimes(3);
+    expect(execute).toHaveBeenCalledTimes(4);
   });
 
   it('processes claims inside a caller-owned transaction', async () => {
@@ -87,7 +90,7 @@ describe('GridClaimService', () => {
 
     expect(transaction).not.toHaveBeenCalled();
     expect(deleteFrom).toHaveBeenCalledTimes(2);
-    expect(execute).toHaveBeenCalledTimes(3);
+    expect(execute).toHaveBeenCalledTimes(4);
   });
 
   it('returns full-cell viewport stats with distinct contributing flights', async () => {
@@ -106,5 +109,89 @@ describe('GridClaimService', () => {
       east: 1,
       north: 1,
     })).resolves.toEqual(stats);
+  });
+
+  it('incrementally applies a flight to sorted unique eligible Arenas', async () => {
+    const arenaIds = [
+      '00000000-0000-4000-8000-000000000003',
+      '00000000-0000-4000-8000-000000000001',
+      '00000000-0000-4000-8000-000000000003',
+    ];
+    const { database, tx } = processingDatabaseDouble({}, {
+      executeRows: [
+        [],
+        [{ directCellCount: 1, enclosedCellCount: 0, newPersonalCellCount: 1, personalCellTotalAfter: 1, progressionVersion: 1, evaluatedAt: new Date('2026-07-20T00:00:00Z') }],
+        arenaIds.map((arenaId) => ({ arenaId })),
+      ],
+    });
+    const reconcileInTransaction = vi.fn(async () => ({
+      arenas: [],
+      eventsBuilt: 0,
+      achievements: { newlyEarned: [], alreadyEarned: 0 },
+    }));
+    const applyFlightInTransaction = vi.fn(async () => ({
+      arenas: [],
+      eventsBuilt: 0,
+      achievements: { newlyEarned: [], alreadyEarned: 0 },
+    }));
+    const arenaAchievements = {
+      evaluateInTransaction: vi.fn(async () => ({ newlyEarned: [], alreadyEarned: 0, record: null })),
+    };
+    const service = createGridClaimService(
+      database as never,
+      { cellSize: 1_000 },
+      undefined,
+      arenaAchievements,
+      { reconcile: vi.fn(), reconcileInTransaction, applyFlightInTransaction } as never,
+    );
+
+    await service.processInTransaction(tx as never, { flightId, userId, launchTimezone: 'UTC' });
+
+    expect(applyFlightInTransaction).toHaveBeenCalledWith(expect.anything(), {
+      arenaIds: [arenaIds[1], arenaIds[0]],
+      flightId,
+    });
+    expect(reconcileInTransaction).not.toHaveBeenCalled();
+  });
+
+  it('does not reconcile when no newly claimed cell intersects an eligible Arena', async () => {
+    const { database, tx } = processingDatabaseDouble({}, {
+      executeRows: [
+        [],
+        [{ directCellCount: 1, enclosedCellCount: 0, newPersonalCellCount: 0, personalCellTotalAfter: 1, progressionVersion: 2, evaluatedAt: new Date('2026-07-20T00:00:00Z') }],
+        [],
+      ],
+    });
+    const reconcileInTransaction = vi.fn();
+    const arenaAchievements = {
+      evaluateInTransaction: vi.fn(async () => ({ newlyEarned: [], alreadyEarned: 0, record: null })),
+    };
+    const service = createGridClaimService(
+      database as never,
+      { cellSize: 1_000 },
+      undefined,
+      arenaAchievements,
+      { reconcile: vi.fn(), reconcileInTransaction } as never,
+    );
+
+    await service.processInTransaction(tx as never, { flightId, userId, launchTimezone: 'UTC' });
+
+    expect(reconcileInTransaction).not.toHaveBeenCalled();
+  });
+
+  it('suppresses leadership evaluation during reprocessing', async () => {
+    const { database, tx } = processingDatabaseDouble();
+    const reconcileInTransaction = vi.fn();
+    const service = createGridClaimService(
+      database as never,
+      { cellSize: 1_000 },
+      undefined,
+      undefined,
+      { reconcile: vi.fn(), reconcileInTransaction } as never,
+    );
+
+    await service.processInTransaction(tx as never, { flightId, userId, launchTimezone: 'UTC' }, { evaluateLeadership: false });
+
+    expect(reconcileInTransaction).not.toHaveBeenCalled();
   });
 });

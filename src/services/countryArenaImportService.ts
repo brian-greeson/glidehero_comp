@@ -4,10 +4,19 @@ import {
   NATURAL_EARTH_COUNTRY_SOURCE,
   type CountryArenaDefinition,
 } from '../domain/arena/countryGeoJson.js';
-import { normalizedArenaGeometrySql } from './arenaGeometrySql.js';
+import { claimableCellCountSql, normalizedArenaGeometrySql } from './arenaGeometrySql.js';
+import {
+  createArenaLeadershipReconciliationService,
+  type ArenaLeadershipReconciliationService,
+} from './arenaLeadershipReconciliationService.js';
 
 export type CountryArenaImportSummary = { imported: number };
 type DatabaseTransaction = Parameters<Parameters<Database['transaction']>[0]>[0];
+
+type ImportOptions = {
+  arenaLeadership?: ArenaLeadershipReconciliationService;
+  reconcile?: boolean;
+};
 
 type GeometryCheck = {
   areaIsNull: boolean;
@@ -26,15 +35,28 @@ type GeometryCheck = {
 export async function importCountryArenas(
   database: Database,
   countries: CountryArenaDefinition[],
+  cellSize?: number,
+  arenaLeadership?: ArenaLeadershipReconciliationService,
 ): Promise<CountryArenaImportSummary> {
-  return database.transaction((transaction) => importCountryArenasInTransaction(transaction, countries));
+  if (cellSize === undefined || !Number.isFinite(cellSize) || cellSize <= 0) {
+    throw new RangeError('Country Arena importer requires a positive grid cell size.');
+  }
+  const leadership = arenaLeadership ?? createArenaLeadershipReconciliationService(database, { cellSize });
+  return database.transaction((transaction) => importCountryArenasInTransaction(transaction, countries, cellSize, {
+    arenaLeadership: leadership,
+  }));
 }
 
 /** Import into a caller-owned transaction (used by the one-time rebuild). */
 export async function importCountryArenasInTransaction(
   transaction: DatabaseTransaction,
   countries: CountryArenaDefinition[],
+  cellSize?: number,
+  options: ImportOptions = {},
 ): Promise<CountryArenaImportSummary> {
+  if (cellSize === undefined || !Number.isFinite(cellSize) || cellSize <= 0) {
+    throw new RangeError('Country Arena importer requires a positive grid cell size.');
+  }
   if (countries.length === 0) throw new RangeError('Country Arena source is empty.');
 
   const sourceIds = new Set<number>();
@@ -77,19 +99,36 @@ export async function importCountryArenasInTransaction(
     }
 
     for (const country of countries) {
-      await transaction.execute(sql`
+      const inserted = await transaction.execute<{ id: string }>(sql`
+        WITH normalized AS (
+          SELECT ${normalizedArenaGeometrySql([country.geometry])} AS area
+        ), counted AS (
+          SELECT area, ${claimableCellCountSql({ area: sql`normalized.area`, cellSize: sql`${cellSize}` })} AS count
+          FROM normalized
+        )
         INSERT INTO arenas (
           source_id, name, country, country_code, area,
           external_source, external_id, arena_type,
           claimable_cell_count, claimable_cell_size
         )
-        VALUES (
-          ${country.sourceId}, ${country.name}, ${country.name}, ${country.isoCode},
-          ${normalizedArenaGeometrySql([country.geometry])},
-          ${NATURAL_EARTH_COUNTRY_SOURCE}, ${country.sovereignId}, 'country',
-          NULL, NULL
-        )
+        SELECT ${country.sourceId}, ${country.name}, ${country.name}, ${country.isoCode}, counted.area,
+          ${NATURAL_EARTH_COUNTRY_SOURCE}, ${country.sovereignId}, 'country', counted.count, ${cellSize}
+        FROM counted
+        WHERE counted.count > 0
+        RETURNING id
       `);
+      if (!inserted.rows[0]) throw new RangeError(`Country ${country.isoCode} does not contain a claimable grid cell at size ${cellSize}.`);
+    }
+
+    if (options.reconcile !== false) {
+      const leadership = options.arenaLeadership;
+      if (!leadership) throw new Error('Arena leadership dependencies are not configured.');
+      const ids = await transaction.execute<{ id: string }>(sql`
+        SELECT id FROM arenas
+        WHERE arena_type = 'country'
+          AND source_id IN (${sql.join([...sourceIds].map((sourceId) => sql`${sourceId}`), sql`, `)})
+      `);
+      await leadership.reconcileInTransaction(transaction, { arenaIds: ids.rows.map((row) => row.id) });
     }
 
     return { imported: countries.length };

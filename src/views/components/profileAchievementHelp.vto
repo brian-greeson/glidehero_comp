@@ -19,6 +19,10 @@
         <div><h3>Launch Arena achievements</h3><p>Visit Launch Arenas, start your first flight from one, and complete every cell in one.</p></div>
       </article>
       <article>
+        {{ include "components/profileAchievementBadge.vto" { achievementType: 'special', achievementCategory: 'leadership', badgeLabel: '★', badgeAriaLabel: 'Arena Leadership achievement' } }}
+        <div><h3>Arena leadership achievements</h3><p>Take or reclaim the lead in a General, State, or Country Arena.</p></div>
+      </article>
+      <article>
         {{ include "components/profileAchievementBadge.vto" { achievementType: 'threshold', achievementCategory: 'general', badgeLabel: '10', badgeAriaLabel: 'General Arena achievement' } }}
         <div><h3>General Arena achievements</h3><p>Claim cells in General Arenas and reach coverage milestones in any one Arena.</p></div>
       </article>

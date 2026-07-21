@@ -1,0 +1,3 @@
+ALTER TABLE "arena_leadership_states" ADD COLUMN "last_claim_timestamp" timestamp with time zone;--> statement-breakpoint
+ALTER TABLE "arena_leadership_states" ADD COLUMN "last_claim_source_flight_id" uuid;--> statement-breakpoint
+ALTER TABLE "arena_leadership_states" ADD CONSTRAINT "arena_leadership_states_qXT0fhrOAwEW_fkey" FOREIGN KEY ("last_claim_source_flight_id") REFERENCES "flights"("flight_id") ON DELETE SET NULL;

@@ -9,6 +9,7 @@ import { importCountryArenasInTransaction } from '../services/countryArenaImport
 import { importLaunchArenasInTransaction, normalizeLaunchCountryName, LAUNCH_COUNTRY_ALIASES } from '../services/launchArenaImportService.js';
 import { importStateArenasInTransaction, parseStateArenaGeoJson } from '../services/stateArenaImportService.js';
 import type { Database } from '../db/client.js';
+import { createArenaLeadershipReconciliationService } from '../services/arenaLeadershipReconciliationService.js';
 
 const CONFIRM_FLAG = '--confirm-delete-all-arenas';
 const APPLY_FLAG = '--apply';
@@ -105,7 +106,7 @@ async function verifyRebuild(transaction: Parameters<Parameters<Database['transa
       (SELECT COUNT(*) FROM arenas WHERE country_code !~ '^[A-Z]{2}$' OR country_code <> UPPER(country_code)) AS "badIso",
       (SELECT COUNT(*) FROM arenas WHERE area IS NULL OR ST_IsEmpty(area) OR NOT ST_IsValid(area) OR ST_GeometryType(area) <> 'ST_MultiPolygon' OR ST_SRID(area) <> 6933) AS "badGeometry",
       (SELECT COUNT(*) FROM arenas WHERE arena_type = 'launch' AND (claimable_cell_count <> 25 OR claimable_cell_size <> ${cellSize})) AS "badClaims",
-      (SELECT COUNT(*) FROM arenas WHERE arena_type IN ('state', 'country') AND (claimable_cell_count IS NOT NULL OR claimable_cell_size IS NOT NULL)) AS "badStateCountryClaims"
+      (SELECT COUNT(*) FROM arenas WHERE arena_type IN ('state', 'country') AND (claimable_cell_count IS NULL OR claimable_cell_count <= 0 OR claimable_cell_size <> ${cellSize})) AS "badStateCountryClaims"
   `);
   const result = checks.rows[0];
   if (!result || Object.values(result).some((value) => Number(value) !== 0)) throw new Error(`Arena rebuild verification failed: ${JSON.stringify(result)}.`);
@@ -114,14 +115,20 @@ async function verifyRebuild(transaction: Parameters<Parameters<Database['transa
 export async function rebuildArenas(database: Database, countries: ReturnType<typeof parseCountryArenaGeoJson>, states: ReturnType<typeof parseStateArenaGeoJson>, launches: ReturnType<typeof parseMysqlLaunchDump>, cellSize: number, apply: boolean): Promise<RebuildSummary> {
   let summary: RebuildSummary | undefined;
   try {
+    const arenaLeadership = createArenaLeadershipReconciliationService(database, { cellSize });
     await database.transaction(async (transaction) => {
       const deletedResult = await transaction.execute<{ count: number }>(sql`SELECT COUNT(*)::integer AS count FROM arenas`);
       const deleted = deletedResult.rows[0]?.count ?? 0;
       await transaction.execute(sql`DELETE FROM arenas`);
       await transaction.execute(sql`ALTER SEQUENCE arena_source_id_seq RESTART WITH 10000`);
-      const country = await importCountryArenasInTransaction(transaction, countries);
-      const state = await importStateArenasInTransaction(transaction, states);
+      const country = await importCountryArenasInTransaction(transaction, countries, cellSize, { reconcile: false });
+      const state = await importStateArenasInTransaction(transaction, states, cellSize, { reconcile: false });
       const launch = await importLaunchArenasInTransaction(transaction, launches, cellSize);
+      const eligibleIds = await transaction.execute<{ id: string }>(sql`
+        SELECT id FROM arenas WHERE arena_type IN ('country', 'state')
+        ORDER BY id
+      `);
+      await arenaLeadership.reconcileInTransaction(transaction, { arenaIds: eligibleIds.rows.map((row) => row.id) });
       await verifyRebuild(transaction, { country: country.imported, state: state.imported, launch: launch.imported }, cellSize);
       summary = { deleted, inserted: { country: country.imported, state: state.imported, launch: launch.imported, general: 0 }, refreshedLaunches: launch.refreshed, dryRun: !apply };
       if (!apply) throw new DryRunRollback(summary);

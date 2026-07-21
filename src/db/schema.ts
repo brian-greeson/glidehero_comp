@@ -1,4 +1,4 @@
-import { bigint, boolean, check, customType, date, doublePrecision, index, integer, jsonb, numeric, pgEnum, pgSequence, pgTable, primaryKey, text, timestamp, unique, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
+import { bigint, boolean, check, customType, date, doublePrecision, foreignKey, index, integer, jsonb, numeric, pgEnum, pgSequence, pgTable, primaryKey, text, timestamp, unique, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 
 const geometryPoint4326 = customType<{ data: string; driverData: string }>({
@@ -161,6 +161,7 @@ export const arenas = pgTable(
   },
   (table) => [
     unique('arenas_source_id_unique').on(table.sourceId),
+    unique('arenas_id_arena_type_unique').on(table.id, table.arenaType),
     index('arenas_area_gist_idx').using('gist', table.area),
     check('arenas_country_code_iso2_check', sql`${table.countryCode} ~ '^[A-Z]{2}$'`),
     uniqueIndex('arenas_external_source_external_id_unique')
@@ -172,6 +173,83 @@ export const arenas = pgTable(
 export const arenaSourceIdSequence = pgSequence('arena_source_id_seq', {
   startWith: 10_000,
 });
+
+export const arenaLeadershipEventType = pgEnum('arena_leadership_event_type', ['took', 'reclaimed', 'lost']);
+
+/** Canonical per-Arena leadership snapshot used by profile and reconciliation reads. */
+export const arenaLeadershipStates = pgTable(
+  'arena_leadership_states',
+  {
+    arenaId: uuid('arena_id').primaryKey(),
+    arenaType: arenaType('arena_type').notNull(),
+    leadingCellCount: integer('leading_cell_count').notNull().default(0),
+    nextRankCellCount: integer('next_rank_cell_count').notNull().default(0),
+    lastReconciledAt: timestamp('last_reconciled_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
+    lastReconciliationKey: text('last_reconciliation_key'),
+    lastClaimTimestamp: timestamp('last_claim_timestamp', { withTimezone: true, mode: 'date' }),
+    lastClaimSourceFlightId: uuid('last_claim_source_flight_id').references(() => flights.id, { onDelete: 'set null' }),
+  },
+  (table) => [
+    foreignKey({
+      name: 'arena_leadership_states_arena_id_arena_type_fkey',
+      columns: [table.arenaId, table.arenaType],
+      foreignColumns: [arenas.id, arenas.arenaType],
+    }).onDelete('cascade'),
+    check(
+      'arena_leadership_states_eligible_arena_type_check',
+      sql`${table.arenaType} IN ('general', 'state', 'country')`,
+    ),
+    check('arena_leadership_states_leading_cell_count_nonnegative', sql`${table.leadingCellCount} >= 0`),
+    check('arena_leadership_states_next_rank_cell_count_nonnegative', sql`${table.nextRankCellCount} >= 0`),
+    index('arena_leadership_states_arena_type_idx').on(table.arenaType),
+  ],
+);
+
+/** Current rank-one pilots for an Arena. Multiple rows represent a joint lead. */
+export const arenaCurrentLeaders = pgTable(
+  'arena_current_leaders',
+  {
+    arenaId: uuid('arena_id').notNull().references(() => arenaLeadershipStates.arenaId, { onDelete: 'cascade' }),
+    userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    cellsClaimed: integer('cells_claimed').notNull(),
+    tookLeadAt: timestamp('took_lead_at', { withTimezone: true, mode: 'date' }).notNull(),
+    decisiveSourceFlightId: uuid('decisive_source_flight_id').references(() => flights.id, { onDelete: 'set null' }),
+    decisiveCellSize: integer('decisive_cell_size').notNull(),
+    decisiveCellX: integer('decisive_cell_x').notNull(),
+    decisiveCellY: integer('decisive_cell_y').notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.arenaId, table.userId] }),
+    check('arena_current_leaders_cells_claimed_positive', sql`${table.cellsClaimed} > 0`),
+    check('arena_current_leaders_decisive_cell_size_positive', sql`${table.decisiveCellSize} > 0`),
+    index('arena_current_leaders_user_id_took_lead_at_idx').on(table.userId, table.tookLeadAt),
+    index('arena_current_leaders_arena_id_took_lead_at_idx').on(table.arenaId, table.tookLeadAt),
+  ],
+);
+
+/** Deterministic, replayable internal history of Arena rank-one transitions. */
+export const arenaLeadershipEvents = pgTable(
+  'arena_leadership_events',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    eventKey: text('event_key').notNull(),
+    arenaId: uuid('arena_id').notNull().references(() => arenaLeadershipStates.arenaId, { onDelete: 'cascade' }),
+    userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    eventType: arenaLeadershipEventType('event_type').notNull(),
+    claimTimestamp: timestamp('claim_timestamp', { withTimezone: true, mode: 'date' }).notNull(),
+    sourceFlightId: uuid('source_flight_id').references(() => flights.id, { onDelete: 'set null' }),
+    cellSize: integer('cell_size').notNull(),
+    cellX: integer('cell_x').notNull(),
+    cellY: integer('cell_y').notNull(),
+  },
+  (table) => [
+    unique('arena_leadership_events_event_key_unique').on(table.eventKey),
+    index('arena_leadership_events_arena_id_claim_timestamp_idx').on(table.arenaId, table.claimTimestamp),
+    index('arena_leadership_events_arena_id_user_id_claim_timestamp_idx').on(table.arenaId, table.userId, table.claimTimestamp),
+    index('arena_leadership_events_source_flight_id_idx').on(table.sourceFlightId),
+    check('arena_leadership_events_cell_size_positive', sql`${table.cellSize} > 0`),
+  ],
+);
 
 export const trackPoints = pgTable(
   'track_points',

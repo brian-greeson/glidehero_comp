@@ -38,7 +38,7 @@ export async function rebuildGridClaims(
       FROM candidate_events
     ),
     competition_cells AS (
-      SELECT competition_month, x, y, MAX(claim_timestamp) AS claim_timestamp
+      SELECT competition_month, x, y, MIN(claim_timestamp) AS claim_timestamp
       FROM competition_events
       GROUP BY competition_month, x, y
     ),

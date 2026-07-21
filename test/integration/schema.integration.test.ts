@@ -25,6 +25,9 @@ describe('authentication schema', () => {
       'achievement_records',
       'achievements',
       'app_sessions',
+      'arena_current_leaders',
+      'arena_leadership_events',
+      'arena_leadership_states',
       'arenas',
       'competition_grid_claims',
       'donations',
@@ -285,6 +288,7 @@ describe('authentication schema', () => {
     expect(indexes.rows.map((row) => row.indexname)).toEqual([
       'arenas_area_gist_idx',
       'arenas_external_source_external_id_unique',
+      'arenas_id_arena_type_unique',
       'arenas_pkey',
       'arenas_source_id_unique',
     ]);
@@ -300,6 +304,81 @@ describe('authentication schema', () => {
        ORDER BY enumsortorder`,
     );
     expect(enumValues.rows.map(({ enumlabel }) => enumlabel)).toEqual(['launch', 'general', 'state', 'country']);
+  });
+
+  it('persists eligible Arena leadership snapshots, joint leaders, and replay-safe events', async () => {
+    const stateColumns = await database.pool.query<{ column_name: string; data_type: string; is_nullable: string; column_default: string | null }>(
+      `SELECT column_name, data_type, is_nullable, column_default
+       FROM information_schema.columns
+       WHERE table_schema = 'public' AND table_name = 'arena_leadership_states'
+       ORDER BY column_name`,
+    );
+    expect(stateColumns.rows).toEqual([
+      { column_name: 'arena_id', data_type: 'uuid', is_nullable: 'NO', column_default: null },
+      { column_name: 'arena_type', data_type: 'USER-DEFINED', is_nullable: 'NO', column_default: null },
+      { column_name: 'last_claim_source_flight_id', data_type: 'uuid', is_nullable: 'YES', column_default: null },
+      { column_name: 'last_claim_timestamp', data_type: 'timestamp with time zone', is_nullable: 'YES', column_default: null },
+      { column_name: 'last_reconciled_at', data_type: 'timestamp with time zone', is_nullable: 'NO', column_default: 'now()' },
+      { column_name: 'last_reconciliation_key', data_type: 'text', is_nullable: 'YES', column_default: null },
+      { column_name: 'leading_cell_count', data_type: 'integer', is_nullable: 'NO', column_default: '0' },
+      { column_name: 'next_rank_cell_count', data_type: 'integer', is_nullable: 'NO', column_default: '0' },
+    ]);
+
+    const constraints = await database.pool.query<{ conname: string; definition: string }>(
+      `SELECT conname, pg_get_constraintdef(oid) AS definition
+       FROM pg_constraint
+       WHERE conrelid IN ('arena_leadership_states'::regclass, 'arena_current_leaders'::regclass, 'arena_leadership_events'::regclass)
+       ORDER BY conname`,
+    );
+    expect(constraints.rows).toEqual(expect.arrayContaining([
+      { conname: 'arena_leadership_states_eligible_arena_type_check', definition: "CHECK ((arena_type = ANY (ARRAY['general'::arena_type, 'state'::arena_type, 'country'::arena_type])))" },
+      { conname: 'arena_leadership_states_leading_cell_count_nonnegative', definition: 'CHECK ((leading_cell_count >= 0))' },
+      { conname: 'arena_leadership_states_next_rank_cell_count_nonnegative', definition: 'CHECK ((next_rank_cell_count >= 0))' },
+      { conname: 'arena_current_leaders_cells_claimed_positive', definition: 'CHECK ((cells_claimed > 0))' },
+      { conname: 'arena_current_leaders_pkey', definition: 'PRIMARY KEY (arena_id, user_id)' },
+      { conname: 'arena_leadership_events_event_key_unique', definition: 'UNIQUE (event_key)' },
+    ]));
+
+    const foreignKeys = await database.pool.query<{ table_name: string; referenced_table: string; column_name: string; confdeltype: string }>(
+      `SELECT local_table.relname AS table_name,
+              referenced.relname AS referenced_table,
+              local.attname AS column_name,
+              constraint_row.confdeltype
+       FROM pg_constraint constraint_row
+       INNER JOIN pg_class local_table ON local_table.oid = constraint_row.conrelid
+       INNER JOIN pg_class referenced ON referenced.oid = constraint_row.confrelid
+       INNER JOIN LATERAL unnest(constraint_row.conkey) WITH ORDINALITY AS local_key(attnum, position) ON true
+       INNER JOIN pg_attribute local
+         ON local.attrelid = constraint_row.conrelid AND local.attnum = local_key.attnum
+       WHERE constraint_row.conrelid IN ('arena_leadership_states'::regclass, 'arena_current_leaders'::regclass, 'arena_leadership_events'::regclass)
+         AND constraint_row.contype = 'f'
+       ORDER BY table_name, column_name`,
+    );
+    expect(foreignKeys.rows).toEqual(expect.arrayContaining([
+      { table_name: 'arena_current_leaders', referenced_table: 'arena_leadership_states', column_name: 'arena_id', confdeltype: 'c' },
+      { table_name: 'arena_current_leaders', referenced_table: 'flights', column_name: 'decisive_source_flight_id', confdeltype: 'n' },
+      { table_name: 'arena_current_leaders', referenced_table: 'users', column_name: 'user_id', confdeltype: 'c' },
+      { table_name: 'arena_leadership_events', referenced_table: 'arena_leadership_states', column_name: 'arena_id', confdeltype: 'c' },
+      { table_name: 'arena_leadership_events', referenced_table: 'flights', column_name: 'source_flight_id', confdeltype: 'n' },
+      { table_name: 'arena_leadership_events', referenced_table: 'users', column_name: 'user_id', confdeltype: 'c' },
+      { table_name: 'arena_leadership_states', referenced_table: 'flights', column_name: 'last_claim_source_flight_id', confdeltype: 'n' },
+    ]));
+
+    const indexes = await database.pool.query<{ indexname: string }>(
+      `SELECT indexname FROM pg_indexes
+       WHERE schemaname = 'public' AND tablename IN ('arena_current_leaders', 'arena_leadership_events')
+       ORDER BY indexname`,
+    );
+    expect(indexes.rows.map((row) => row.indexname)).toEqual([
+      'arena_current_leaders_arena_id_took_lead_at_idx',
+      'arena_current_leaders_pkey',
+      'arena_current_leaders_user_id_took_lead_at_idx',
+      'arena_leadership_events_arena_id_claim_timestamp_idx',
+      'arena_leadership_events_arena_id_user_id_claim_timestamp_idx',
+      'arena_leadership_events_event_key_unique',
+      'arena_leadership_events_pkey',
+      'arena_leadership_events_source_flight_id_idx',
+    ]);
   });
 
   it('stores permanent personal grid contributions with a cascading pilot and flight identity', async () => {

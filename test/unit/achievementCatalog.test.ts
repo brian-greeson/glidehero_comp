@@ -5,13 +5,14 @@ import {
   validateAchievementValue,
 } from '../../src/domain/achievement/catalog.js';
 
-describe('Release 2 achievement catalog', () => {
+describe('achievement catalog', () => {
   it('contains exactly the approved keys and thresholds', () => {
     expect(achievementCatalog.map((definition) => definition.key)).toEqual([
       'first_flight_from_launch',
       'launches_visited_3', 'launches_visited_5', 'launches_visited_10', 'launches_visited_25', 'launches_visited_50',
       'complete_a_launch_arena',
       'most_launches_tagged_one_flight',
+      'took_lead_in_arena', 'reclaimed_lead_in_arena',
       'first_cells_in_general_arena',
       'general_arenas_explored_1', 'general_arenas_explored_5', 'general_arenas_explored_10',
       'general_arenas_explored_25', 'general_arenas_explored_50', 'general_arenas_explored_100', 'general_arenas_explored_200',

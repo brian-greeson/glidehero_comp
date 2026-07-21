@@ -1,0 +1,34 @@
+<section class="profile-section" aria-labelledby="profile-arena-leadership-heading">
+  <header class="profile-section-heading">
+    <div>
+      <p class="admin-eyebrow">Arena standing</p>
+      <h2 id="profile-arena-leadership-heading">Current Arena Leaderships</h2>
+    </div>
+    <span class="profile-section-count">{{ profile.currentArenaLeaderships.length }} {{ if profile.currentArenaLeaderships.length === 1 }}leadership{{ else }}leaderships{{ /if }}</span>
+  </header>
+  {{ if profile.currentArenaLeaderships.length === 0 }}
+    <p class="profile-empty-state">{{ if profileIsCurrent }}You are not currently leading any Arenas.{{ else }}This pilot is not currently leading any Arenas.{{ /if }}</p>
+  {{ else }}
+    <ol id="profile-arena-leadership-list" class="profile-arena-leadership-list" data-profile-list>
+      {{ for leadership of profile.currentArenaLeaderships }}
+        <li class="profile-arena-leadership-item">
+          <div class="profile-arena-leadership-heading">
+            <div>
+              <p class="profile-arena-leadership-type">{{ if leadership.arenaType === 'general' }}General{{ else if leadership.arenaType === 'state' }}State{{ else }}Country{{ /if }} Arena · {{ if leadership.status === 'sole' }}Sole leader{{ else }}Joint leader{{ /if }}</p>
+              <h3><a href="{{ leadership.arenaPath }}">{{ leadership.arenaName }}</a></h3>
+            </div>
+          </div>
+          <dl class="profile-arena-leadership-stats">
+            <div><dt>Cells</dt><dd>{{ if leadership.cellsClaimed === 0 }}0{{ else }}{{ leadership.cellsClaimed }}{{ /if }}</dd></div>
+            <div><dt>Coverage</dt><dd>{{ if leadership.coveragePercent === 0 }}0{{ else }}{{ leadership.coveragePercent }}{{ /if }}%</dd></div>
+            <div><dt>Lead in cells</dt><dd>{{ if leadership.leadMarginCells === 0 }}0{{ else }}{{ leadership.leadMarginCells }}{{ /if }}</dd></div>
+          </dl>
+          <p class="profile-arena-leadership-date">Leading since <time>{{ leadership.leadingSince }}</time></p>
+        </li>
+      {{ /for }}
+    </ol>
+    {{ if profile.currentArenaLeaderships.length > 3 }}
+      <button type="button" class="profile-list-toggle" data-profile-list-toggle data-show-all-label="Show all" data-show-fewer-label="Show fewer" aria-controls="profile-arena-leadership-list" aria-expanded="false" hidden>Show all</button>
+    {{ /if }}
+  {{ /if }}
+</section>

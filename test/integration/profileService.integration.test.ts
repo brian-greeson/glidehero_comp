@@ -196,6 +196,7 @@ describe('profileService', () => {
           newPersonalCellCount: 5,
         }),
       ],
+      currentArenaLeaderships: [],
     });
     expect(summary?.achievementProgress.map((progress) => progress.key)).toEqual([
       'unique_cells', 'launches_visited', 'general_arenas_explored', 'general_coverage', 'states_flown_in', 'countries_flown_in',
@@ -223,9 +224,84 @@ describe('profileService', () => {
       achievementCount: 0,
       achievements: [],
       recentFlights: [],
+      currentArenaLeaderships: [],
     });
     expect(emptySummary?.achievementProgress).toHaveLength(6);
     await expect(profiles.getPilotProfile('00000000-0000-4000-8000-000000000099')).resolves.toBeNull();
+  });
+
+  it('reads persisted current Arena leaderships with stable ordering and floored coverage', async () => {
+    const auth = createAuthService(database.db, { sessionTtlSeconds: 604800 });
+    const pilot = await auth.signup({
+      email: 'leadership-profile@example.com',
+      password: 'correct horse battery staple',
+      displayName: 'Leadership Pilot',
+    });
+    const jointPilot = await auth.signup({
+      email: 'joint-leadership-profile@example.com',
+      password: 'correct horse battery staple',
+      displayName: 'Joint Pilot',
+    });
+    const profiles = createProfileService(database.db, { cellSize: 1_000 });
+    const soleArena = crypto.randomUUID();
+    const jointArena = crypto.randomUUID();
+    const launchArena = crypto.randomUUID();
+    const invalidArena = crypto.randomUUID();
+    const shape = 'MULTIPOLYGON (((0 0, 1000 0, 1000 1000, 0 1000, 0 0)))';
+    await database.pool.query(
+      `INSERT INTO arenas
+        (id, source_id, name, country, country_code, area, arena_type, claimable_cell_count, claimable_cell_size)
+       VALUES
+        ($1, 101, 'Zeta State', 'United States', 'US', ST_GeomFromText($5, 6933), 'state', 1000, 1000),
+        ($2, 102, 'Alpha General', 'United States', 'US', ST_GeomFromText($5, 6933), 'general', 1000, 1000),
+        ($3, 103, 'Launch Excluded', 'United States', 'US', ST_GeomFromText($5, 6933), 'launch', 100, 1000),
+        ($4, 104, 'Invalid Denominator', 'United States', 'US', ST_GeomFromText($5, 6933), 'country', 0, 1000)`,
+      [soleArena, jointArena, launchArena, invalidArena, shape],
+    );
+    await database.pool.query(
+      `INSERT INTO arena_leadership_states (arena_id, arena_type, leading_cell_count, next_rank_cell_count)
+       VALUES ($1, 'state', 7, 0), ($2, 'general', 123, 121), ($3, 'country', 2, 1)`,
+     [soleArena, jointArena, invalidArena],
+    );
+    await database.pool.query(
+      `INSERT INTO arena_current_leaders
+        (arena_id, user_id, cells_claimed, took_lead_at, decisive_cell_size, decisive_cell_x, decisive_cell_y)
+       VALUES
+        ($1, $4, 7, '2026-07-19T12:00:00Z', 1000, 1, 1),
+        ($2, $4, 123, '2026-07-20T12:00:00Z', 5, 1000, 1),
+        ($2, $5, 123, '2026-07-18T12:00:00Z', 1000, 2, 2),
+        ($3, $4, 2, '2026-07-21T12:00:00Z', 1000, 3, 3)`,
+      [soleArena, jointArena, invalidArena, pilot.user.userId, jointPilot.user.userId],
+    );
+
+    const profile = await profiles.getPilotProfile(pilot.user.userId);
+    expect(profile?.currentArenaLeaderships).toEqual([
+      expect.objectContaining({
+        arenaId: jointArena,
+        arenaName: 'Alpha General',
+        arenaType: 'general',
+        arenaPath: '/arena/us/alpha-general-102',
+        status: 'joint',
+        cellsClaimed: 123,
+        coveragePercent: 12.3,
+        leadMarginCells: 2,
+        leadingSince: 'Jul 20, 2026',
+      }),
+      expect.objectContaining({
+        arenaId: soleArena,
+        arenaName: 'Zeta State',
+        arenaType: 'state',
+        status: 'sole',
+        cellsClaimed: 7,
+        coveragePercent: 0.7,
+        leadMarginCells: 7,
+        leadingSince: 'Jul 19, 2026',
+      }),
+    ]);
+    expect(profile?.currentArenaLeaderships).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ arenaId: launchArena }),
+      expect.objectContaining({ arenaId: invalidArena }),
+    ]));
   });
 
   it('computes the next unique-cell milestone for zero, exact-threshold, and recurring totals', async () => {
@@ -462,6 +538,40 @@ describe('profileService', () => {
     expect(profile?.achievements.some((achievement) => achievement.description.includes('privateDetail'))).toBe(false);
     expect(profile?.achievements.some((achievement) => achievement.description.includes('malformed'))).toBe(false);
     expect(profile?.achievements.some((achievement) => achievement.title.includes('most_launches'))).toBe(false);
+  });
+
+  it('renders Arena leadership achievements with the Arena name', async () => {
+    const auth = createAuthService(database.db, { sessionTtlSeconds: 604800 });
+    const pilot = await auth.signup({
+      email: 'arena-leadership-profile@example.com',
+      password: 'correct horse battery staple',
+    });
+    await database.db.insert(achievements).values([
+      {
+        userId: pilot.user.userId,
+        achievementType: 'special',
+        achievementKey: 'took_lead_in_arena',
+        earnedAt: new Date('2026-07-01T12:00:00Z'),
+        details: { arenaId: crypto.randomUUID(), arenaName: 'Colorado' },
+      },
+      {
+        userId: pilot.user.userId,
+        achievementType: 'special',
+        achievementKey: 'reclaimed_lead_in_arena',
+        earnedAt: new Date('2026-07-02T12:00:00Z'),
+        details: { arenaId: crypto.randomUUID(), arenaName: 'Colorado' },
+      },
+    ]);
+
+    const profile = await createProfileService(database.db, { cellSize: 1_000 }).getPilotProfile(pilot.user.userId);
+    expect(profile?.achievements.map((achievement) => achievement.title)).toEqual([
+      'Reclaimed the Lead in Colorado',
+      'Took the Lead in Colorado',
+    ]);
+    expect(profile?.achievements[0]).toMatchObject({
+      typeLabel: 'Arena Leadership',
+      description: 'Reclaimed the Lead in Colorado.',
+    });
   });
 
   it('limits one mixed ordinary and record-event history globally to the newest 50 items', async () => {

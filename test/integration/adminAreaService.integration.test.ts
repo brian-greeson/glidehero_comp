@@ -109,13 +109,14 @@ describe('admin Arena service with PostGIS', () => {
     expect(stored.rows[0]).toEqual({ country: 'United States', country_code: 'US' });
   });
 
-  it('keeps State and Country claimable columns null on save', async () => {
+  it('persists exact State denominator metadata on save', async () => {
     const countryId = await seedCountry();
     const state = await database.pool.query<{ id: string }>(`INSERT INTO arenas (source_id, name, country, country_code, area, arena_type, claimable_cell_count, claimable_cell_size) VALUES (2000000001, 'Colorado', 'United States', 'US', ST_Multi(ST_Transform(ST_MakeEnvelope(0, 0, .01, .01, 4326), 6933)), 'state', 4, 500) RETURNING id`);
     const service = createAdminAreaService(database.db, { cellSize: 1_000 });
     await service.update(state.rows[0]!.id, { ...baseArea(countryId), name: 'Colorado Updated' });
     const stored = await database.pool.query('SELECT claimable_cell_count, claimable_cell_size FROM arenas WHERE id = $1', [state.rows[0]!.id]);
-    expect(stored.rows[0]).toEqual({ claimable_cell_count: null, claimable_cell_size: null });
+    expect(Number(stored.rows[0]!.claimable_cell_count)).toBeGreaterThan(0);
+    expect(stored.rows[0]!.claimable_cell_size).toBe(1_000);
   });
 
   it('uses ST_Covers for a boundary cell center', async () => {

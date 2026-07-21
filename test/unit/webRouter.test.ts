@@ -56,6 +56,7 @@ const pilotProfile = {
   achievementCount: 2,
   achievements: [],
   recentFlights: [],
+  currentArenaLeaderships: [],
 };
 
 const arena = {

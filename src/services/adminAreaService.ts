@@ -1,8 +1,12 @@
 import { sql } from 'drizzle-orm';
 import type { PolygonGeometry } from '../domain/arena/geoJson.js';
 import type { Database } from '../db/client.js';
-import { normalizedArenaGeometrySql } from './arenaGeometrySql.js';
+import { claimableCellCountSql, normalizedArenaGeometrySql } from './arenaGeometrySql.js';
 import { viewportCtes, type ViewportBounds } from './viewportGrid.js';
+import {
+  createArenaLeadershipReconciliationService,
+  type ArenaLeadershipReconciliationService,
+} from './arenaLeadershipReconciliationService.js';
 
 export type AdminAreaSummary = {
   id: string;
@@ -66,14 +70,18 @@ type PreviewRow = {
 
 const MAX_EDITOR_GRID_CELLS = 10_000;
 
-export function createAdminAreaService(database: Database, options: { cellSize: number }): AdminAreaService {
+export function createAdminAreaService(
+  database: Database,
+  options: { cellSize: number },
+  arenaLeadership: ArenaLeadershipReconciliationService = createArenaLeadershipReconciliationService(database, options),
+): AdminAreaService {
   const { cellSize } = options;
 
-  async function resolveCountry(countryArenaId: string): Promise<AdminCountryOption> {
+  async function resolveCountry(executor: Pick<Database, 'execute'>, countryArenaId: string): Promise<AdminCountryOption> {
     if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(countryArenaId)) {
       throw new RangeError('Select a valid Country Arena.');
     }
-    const result = await database.execute<AdminCountryOption>(sql`
+    const result = await executor.execute<AdminCountryOption>(sql`
       SELECT id, source_id::double precision AS "sourceId", name, UPPER(country_code) AS "countryCode"
       FROM arenas
       WHERE id = ${countryArenaId} AND arena_type = 'country'
@@ -150,21 +158,28 @@ export function createAdminAreaService(database: Database, options: { cellSize: 
     get,
 
     async create(input) {
-      const country = await resolveCountry(input.countryArenaId);
-      const result = await database.execute<{ id: string }>(sql`
-        WITH geometry AS (SELECT ${normalizedArenaGeometrySql(input.geometries)} AS area)
-        INSERT INTO arenas (source_id, name, country, country_code, state, city, area, arena_type,
-          claimable_cell_count, claimable_cell_size)
-        SELECT nextval('arena_source_id_seq'), ${input.name}, ${country.name}, ${country.countryCode},
-          ${input.state || null}, ${input.city || null}, geometry.area, 'general',
-          (SELECT COUNT(*)::bigint FROM ST_SquareGrid(${cellSize}, geometry.area) AS grid(geom, x, y)
-            WHERE ST_Covers(geometry.area, ST_SetSRID(ST_MakePoint((grid.x + 0.5) * ${cellSize},
-              (grid.y + 0.5) * ${cellSize}), 6933))), ${cellSize}
-        FROM geometry
-        WHERE geometry.area IS NOT NULL AND NOT ST_IsEmpty(geometry.area) AND ST_IsValid(geometry.area)
-        RETURNING id
-      `);
-      const id = result.rows[0]?.id;
+      const id = await database.transaction(async (transaction) => {
+        const country = await resolveCountry(transaction, input.countryArenaId);
+        const result = await transaction.execute<{ id: string }>(sql`
+          WITH geometry AS (SELECT ${normalizedArenaGeometrySql(input.geometries)} AS area),
+          counted AS (
+            SELECT area, ${claimableCellCountSql({ area: sql`geometry.area`, cellSize: sql`${cellSize}` })} AS count
+            FROM geometry
+          )
+          INSERT INTO arenas (source_id, name, country, country_code, state, city, area, arena_type,
+            claimable_cell_count, claimable_cell_size)
+          SELECT nextval('arena_source_id_seq'), ${input.name}, ${country.name}, ${country.countryCode},
+            ${input.state || null}, ${input.city || null}, counted.area, 'general', counted.count, ${cellSize}
+          FROM counted
+          WHERE counted.area IS NOT NULL AND NOT ST_IsEmpty(counted.area) AND ST_IsValid(counted.area)
+            AND counted.count > 0
+          RETURNING id
+        `);
+        const createdId = result.rows[0]?.id;
+        if (!createdId) throw new RangeError('Arena geometry must contain at least one valid polygon and one claimable grid cell.');
+        await arenaLeadership.reconcileInTransaction(transaction, { arenaIds: [createdId] });
+        return createdId;
+      });
       if (!id) throw new RangeError('Arena geometry must contain at least one valid polygon.');
       const saved = await get(id);
       if (!saved) throw new Error('Unable to reload Arena.');
@@ -172,26 +187,36 @@ export function createAdminAreaService(database: Database, options: { cellSize: 
     },
 
     async update(id, input) {
-      const country = await resolveCountry(input.countryArenaId);
-      const result = await database.execute<{ id: string }>(sql`
-        WITH geometry AS (SELECT ${normalizedArenaGeometrySql(input.geometries)} AS area)
-        UPDATE arenas
-        SET name = ${input.name},
-          country = CASE WHEN arenas.arena_type = 'country' THEN arenas.country ELSE ${country.name} END,
-          country_code = CASE WHEN arenas.arena_type = 'country' THEN arenas.country_code ELSE ${country.countryCode} END,
-          state = ${input.state || null},
-          city = ${input.city || null}, area = geometry.area,
-          claimable_cell_count = CASE WHEN arenas.arena_type IN ('general', 'launch') THEN
-            (SELECT COUNT(*)::bigint FROM ST_SquareGrid(${cellSize}, geometry.area) AS grid(geom, x, y)
-              WHERE ST_Covers(geometry.area, ST_SetSRID(ST_MakePoint((grid.x + 0.5) * ${cellSize},
-                (grid.y + 0.5) * ${cellSize}), 6933))) ELSE NULL END,
-          claimable_cell_size = CASE WHEN arenas.arena_type IN ('general', 'launch') THEN CAST(${cellSize} AS integer) ELSE NULL END
-        FROM geometry
-        WHERE arenas.id = ${id}
-          AND geometry.area IS NOT NULL AND NOT ST_IsEmpty(geometry.area) AND ST_IsValid(geometry.area)
-        RETURNING arenas.id
-      `);
-      return result.rows[0] ? get(id) : null;
+      const updated = await database.transaction(async (transaction) => {
+        const country = await resolveCountry(transaction, input.countryArenaId);
+        const result = await transaction.execute<{ id: string; arenaType: AdminAreaSummary['arenaType'] }>(sql`
+          WITH geometry AS (SELECT ${normalizedArenaGeometrySql(input.geometries)} AS area),
+          counted AS (
+            SELECT area, ${claimableCellCountSql({ area: sql`geometry.area`, cellSize: sql`${cellSize}` })} AS count
+            FROM geometry
+          )
+          UPDATE arenas
+          SET name = ${input.name},
+            country = CASE WHEN arenas.arena_type = 'country' THEN arenas.country ELSE ${country.name} END,
+            country_code = CASE WHEN arenas.arena_type = 'country' THEN arenas.country_code ELSE ${country.countryCode} END,
+            state = ${input.state || null},
+            city = ${input.city || null}, area = counted.area,
+            claimable_cell_count = counted.count,
+            claimable_cell_size = CAST(${cellSize} AS integer)
+          FROM counted
+          WHERE arenas.id = ${id}
+            AND counted.area IS NOT NULL AND NOT ST_IsEmpty(counted.area) AND ST_IsValid(counted.area)
+            AND counted.count > 0
+          RETURNING arenas.id, arenas.arena_type AS "arenaType"
+        `);
+        const row = result.rows[0];
+        if (!row) return null;
+        if (row.arenaType !== 'launch') {
+          await arenaLeadership.reconcileInTransaction(transaction, { arenaIds: [row.id] });
+        }
+        return row;
+      });
+      return updated ? get(id) : null;
     },
 
     async preview(bounds, geometries) {

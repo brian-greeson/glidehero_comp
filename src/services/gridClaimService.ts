@@ -5,6 +5,11 @@ import { emptyViewportStats, type ViewportStats } from '../domain/territory/view
 import { rebuildGridClaims } from './gridClaimRebuild.js';
 import { createProgressionAchievementService, type ProgressionAchievementService } from './progressionAchievementService.js';
 import { createArenaAchievementService, type ArenaAchievementEvaluation, type ArenaAchievementService } from './arenaAchievementService.js';
+import {
+  createArenaLeadershipReconciliationService,
+  type ArenaLeadershipReconciliationService,
+} from './arenaLeadershipReconciliationService.js';
+import { findEligibleArenaIdsForCompetitionFlight } from './arenaClaimImpact.js';
 import { viewportCtes, type ViewportBounds } from './viewportGrid.js';
 
 export type GridClaimProcessResult = {
@@ -36,6 +41,7 @@ export interface TransactionalGridClaimService extends GridClaimService {
   processInTransaction(
     transaction: GridClaimTransaction,
     input: { flightId: string; userId: string; launchTimezone: string },
+    options?: { evaluateAchievements?: boolean; evaluateLeadership?: boolean },
   ): Promise<GridClaimProcessResult>;
 }
 
@@ -52,12 +58,15 @@ export function createGridClaimService(
   options: { cellSize: number },
   progressionAchievements: ProgressionAchievementService = createProgressionAchievementService(),
   arenaAchievements: ArenaAchievementService = createArenaAchievementService(),
+  arenaLeadership: ArenaLeadershipReconciliationService = createArenaLeadershipReconciliationService(database, options),
 ): TransactionalGridClaimService {
   async function processInTransaction(
     transaction: GridClaimTransaction,
     input: { flightId: string; userId: string; launchTimezone: string },
-    evaluateAchievements = true,
+    evaluationOptions: { evaluateAchievements?: boolean; evaluateLeadership?: boolean } = {},
   ): Promise<GridClaimProcessResult> {
+    const evaluateAchievements = evaluationOptions.evaluateAchievements ?? true;
+    const evaluateLeadership = evaluationOptions.evaluateLeadership ?? true;
     await lockUserProgression(transaction, input.userId);
     const [flight] = await transaction
       .select({ startedAt: flights.startedAt, createdAt: flights.createdAt })
@@ -91,6 +100,20 @@ export function createGridClaimService(
         directCells: result.directCellCount,
         enclosedCells: result.enclosedCellCount,
       });
+    }
+    if (evaluateLeadership) {
+      const arenaIds = await findEligibleArenaIdsForCompetitionFlight(transaction, {
+        flightId: input.flightId,
+        cellSize: options.cellSize,
+        newlyUniqueOnly: true,
+      });
+      if (arenaIds.length > 0) {
+        if (arenaLeadership.applyFlightInTransaction) {
+          await arenaLeadership.applyFlightInTransaction(transaction, { arenaIds, flightId: input.flightId });
+        } else {
+          await arenaLeadership.reconcileInTransaction(transaction, { arenaIds });
+        }
+      }
     }
     result.arenaAchievements = flight && evaluateAchievements
       ? await arenaAchievements.evaluateInTransaction(transaction, {
@@ -151,13 +174,26 @@ export function createGridClaimService(
         }
 
         await lockUserProgression(tx, flight.userId);
+        const oldArenaIds = await findEligibleArenaIdsForCompetitionFlight(tx, {
+          flightId,
+          cellSize: options.cellSize,
+        });
         await tx.delete(personalGridClaims).where(eq(personalGridClaims.claimFlight, flightId));
         await tx.delete(competitionGridClaims).where(eq(competitionGridClaims.claimFlight, flightId));
         const result = await processInTransaction(tx, {
           flightId,
           userId: flight.userId,
           launchTimezone: flight.launchTimezone,
+        }, { evaluateLeadership: false });
+        const newArenaIds = await findEligibleArenaIdsForCompetitionFlight(tx, {
+          flightId,
+          cellSize: options.cellSize,
         });
+        const arenaIds = [...new Set([...oldArenaIds, ...newArenaIds])]
+          .sort((left, right) => left.localeCompare(right));
+        if (arenaIds.length > 0) {
+          await arenaLeadership.reconcileInTransaction(tx, { arenaIds });
+        }
         return { status: 'completed' as const, result };
       });
     },

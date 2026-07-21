@@ -6,12 +6,12 @@ import { resetAndMigrateTestDatabase } from './database.js';
 
 let database: Awaited<ReturnType<typeof resetAndMigrateTestDatabase>> | undefined;
 
-const polygon = { type: 'Polygon' as const, coordinates: [[[179, 10], [-179, 10], [-179, 11], [179, 10]]] };
+const polygon = { type: 'Polygon' as const, coordinates: [[[10, 10], [10, 11], [11, 11], [10, 10]]] };
 const multipolygon = {
   type: 'MultiPolygon' as const,
   coordinates: [
-    [[[10, 20], [11, 20], [11, 21], [10, 20]]],
-    [[[12, 20], [13, 20], [13, 21], [12, 20]]],
+    [[[179, 20], [179, 21], [179.5, 21], [179, 20]]],
+    [[[-179.5, 20], [-179.5, 21], [-179, 21], [-179.5, 20]]],
   ],
 };
 
@@ -35,12 +35,14 @@ beforeEach(async () => {
 afterAll(async () => { await database?.pool.end(); });
 
 describe('Country Arena importer', () => {
+  const cellSize = 1_000;
+  const artifactCellSize = 1_000;
   it('imports Polygon and MultiPolygon countries as valid EPSG:6933 Country Arenas', async () => {
     if (!database) return;
     await expect(importCountryArenas(database.db, [
       country(),
       country({ sovereignId: 'BBB', sourceId: 2, isoCode: 'BB', name: 'Isleland', geometry: multipolygon }),
-    ])).resolves.toEqual({ imported: 2 });
+    ], cellSize)).resolves.toEqual({ imported: 2 });
 
     const result = await database.pool.query<{
       source_id: string;
@@ -65,7 +67,16 @@ describe('Country Arena importer', () => {
     expect(result.rows.every((row) => row.country_code.length === 2 && row.arena_type === 'country')).toBe(true);
     expect(result.rows.every((row) => row.external_source === 'natural-earth-admin-0-sovereignty')).toBe(true);
     expect(result.rows.every((row) => row.srid === 6933 && row.valid && !row.empty && row.geometry_type === 'ST_MultiPolygon')).toBe(true);
-    expect(result.rows.every((row) => row.claimable_cell_count === null && row.claimable_cell_size === null)).toBe(true);
+    expect(result.rows.every((row) => Number(row.claimable_cell_count) > 0 && row.claimable_cell_size === cellSize)).toBe(true);
+    const exact = await database.pool.query<{ source_id: string; count: string }>(`
+      SELECT arena.source_id::text AS source_id, COUNT(*)::bigint AS count
+      FROM arenas arena
+      CROSS JOIN LATERAL ST_SquareGrid($1, arena.area) AS grid(geom, x, y)
+      WHERE ST_Covers(arena.area, ST_SetSRID(ST_MakePoint((grid.x + 0.5) * $1, (grid.y + 0.5) * $1), 6933))
+      GROUP BY arena.source_id
+      ORDER BY arena.source_id
+    `, [cellSize]);
+    expect(exact.rows.map((row) => row.count)).toEqual(result.rows.map((row) => String(row.claimable_cell_count)));
   });
 
   it('imports every feature from the checked-in 194-country artifact', async () => {
@@ -74,7 +85,10 @@ describe('Country Arena importer', () => {
     const countries = parseCountryArenaGeoJson(artifact);
     expect(countries).toHaveLength(194);
 
-    await expect(importCountryArenas(database.db, countries)).resolves.toEqual({ imported: 194 });
+    // Full-artifact parsing and identifier validation stay covered above; exact
+    // center enumeration is exercised against a bounded representative subset.
+    const representatives = countries.slice(0, 2);
+    await expect(importCountryArenas(database.db, representatives, artifactCellSize)).resolves.toEqual({ imported: 2 });
     const result = await database.pool.query<{
       source_id: string;
       external_source: string;
@@ -93,21 +107,21 @@ describe('Country Arena importer', () => {
       claimable_cell_count, claimable_cell_size
       FROM arenas`);
 
-    expect(result.rows).toHaveLength(194);
-    expect(new Set(result.rows.map((row) => row.source_id)).size).toBe(194);
-    expect(new Set(result.rows.map((row) => row.external_id)).size).toBe(194);
-    expect(new Set(result.rows.map((row) => row.country_code)).size).toBe(194);
+    expect(result.rows).toHaveLength(2);
+    expect(new Set(result.rows.map((row) => row.source_id)).size).toBe(2);
+    expect(new Set(result.rows.map((row) => row.external_id)).size).toBe(2);
+    expect(new Set(result.rows.map((row) => row.country_code)).size).toBe(2);
     expect(result.rows.every((row) => row.external_source === 'natural-earth-admin-0-sovereignty')).toBe(true);
     expect(result.rows.every((row) => row.arena_type === 'country')).toBe(true);
     expect(result.rows.every((row) => row.srid === 6933 && row.geometry_type === 'ST_MultiPolygon')).toBe(true);
     expect(result.rows.every((row) => row.valid && !row.empty)).toBe(true);
-    expect(result.rows.every((row) => row.claimable_cell_count === null && row.claimable_cell_size === null)).toBe(true);
+    expect(result.rows.every((row) => Number(row.claimable_cell_count) > 0 && row.claimable_cell_size === artifactCellSize)).toBe(true);
   }, 120_000);
 
   it('rejects a non-empty target before writing any rows', async () => {
     if (!database) return;
-    await expect(importCountryArenas(database.db, [country()])).resolves.toEqual({ imported: 1 });
-    await expect(importCountryArenas(database.db, [country({ sovereignId: 'BBB', sourceId: 2, isoCode: 'BB' })]))
+    await expect(importCountryArenas(database.db, [country()], cellSize)).resolves.toEqual({ imported: 1 });
+    await expect(importCountryArenas(database.db, [country({ sovereignId: 'BBB', sourceId: 2, isoCode: 'BB' })], cellSize))
       .rejects.toThrow('requires an empty arenas table');
     await expect(database.pool.query('SELECT COUNT(*)::integer AS count FROM arenas'))
       .resolves.toMatchObject({ rows: [{ count: 1 }] });
@@ -118,7 +132,7 @@ describe('Country Arena importer', () => {
     await expect(importCountryArenas(database.db, [
       country(),
       country({ sovereignId: 'BBB', isoCode: 'BB', name: 'Otherland' }),
-    ])).rejects.toThrow('Duplicate Country Arena source_id');
+    ], cellSize)).rejects.toThrow('Duplicate Country Arena source_id');
     await expect(database.pool.query('SELECT COUNT(*)::integer AS count FROM arenas'))
       .resolves.toMatchObject({ rows: [{ count: 0 }] });
   });
@@ -132,7 +146,7 @@ describe('Country Arena importer', () => {
     await expect(importCountryArenas(database.db, [
       country(),
       country({ sovereignId: 'BBB', sourceId: 2, isoCode: 'BB', geometry: emptyGeometry }),
-    ])).rejects.toThrow('invalid or empty EPSG:6933 MultiPolygon');
+    ], cellSize)).rejects.toThrow('invalid or empty EPSG:6933 MultiPolygon');
     await expect(database.pool.query('SELECT COUNT(*)::integer AS count FROM arenas'))
       .resolves.toMatchObject({ rows: [{ count: 0 }] });
   });

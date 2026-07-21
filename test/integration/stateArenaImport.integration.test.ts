@@ -19,6 +19,7 @@ beforeEach(async () => {
 afterAll(async () => { await database?.pool.end(); });
 
 describe('State Arena importer', () => {
+  const cellSize = 1_000;
   it('imports the checked-in fifty-state Census artifact as valid EPSG:6933 State Arenas', async () => {
     if (!database) return;
     const artifact = JSON.parse(readFileSync(new URL('../../ingest/states.geojson', import.meta.url), 'utf8')) as unknown;
@@ -31,7 +32,8 @@ describe('State Arena importer', () => {
     const countrySourceIds = new Set(countryArtifact.features.map((feature) => feature.properties?.source_id));
     expect(states.every((state) => !countrySourceIds.has(stateArenaSourceId(state.fips)))).toBe(true);
 
-    await expect(importStateArenas(database.db, states)).resolves.toEqual({ imported: 50 });
+    const representatives = states.filter((state) => ['CO', 'NY'].includes(state.abbreviation));
+    await expect(importStateArenas(database.db, representatives, cellSize)).resolves.toEqual({ imported: 2 });
     const result = await database.pool.query<{
       source_id: string;
       external_id: string;
@@ -50,23 +52,24 @@ describe('State Arena importer', () => {
       claimable_cell_count, claimable_cell_size
       FROM arenas ORDER BY external_id`);
 
-    expect(result.rows).toHaveLength(50);
-    expect(new Set(result.rows.map((row) => row.external_id)).size).toBe(50);
+    expect(result.rows).toHaveLength(2);
+    expect(new Set(result.rows.map((row) => row.external_id)).size).toBe(2);
     expect(result.rows.every((row) => row.country === 'United States' && row.country_code === 'US')).toBe(true);
     expect(result.rows.every((row) => row.arena_type === 'state')).toBe(true);
     expect(result.rows.every((row) => row.srid === 6933 && row.valid && !row.empty && row.geometry_type === 'ST_MultiPolygon')).toBe(true);
     expect(result.rows.every((row) => Number(row.source_id) === stateArenaSourceId(row.external_id))).toBe(true);
-    expect(result.rows.every((row) => row.claimable_cell_count === null && row.claimable_cell_size === null)).toBe(true);
+    expect(result.rows.every((row) => Number(row.claimable_cell_count) > 0 && row.claimable_cell_size === cellSize)).toBe(true);
   }, 120_000);
 
   it('rejects a rerun without modifying the existing State Arenas', async () => {
     if (!database) return;
     const artifact = JSON.parse(readFileSync(new URL('../../ingest/states.geojson', import.meta.url), 'utf8')) as unknown;
     const states = parseStateArenaGeoJson(artifact);
-    await importStateArenas(database.db, states);
-    await expect(importStateArenas(database.db, states)).rejects.toThrow('no existing State Arenas');
+    const representatives = states.filter((state) => ['CO', 'NY'].includes(state.abbreviation));
+    await importStateArenas(database.db, representatives, cellSize);
+    await expect(importStateArenas(database.db, representatives, cellSize)).rejects.toThrow('no existing State Arenas');
     await expect(database.pool.query('SELECT COUNT(*)::integer AS count FROM arenas'))
-      .resolves.toMatchObject({ rows: [{ count: 50 }] });
+      .resolves.toMatchObject({ rows: [{ count: 2 }] });
   }, 120_000);
 
   it('rejects a deterministic source-ID collision with a non-State Arena', async () => {
@@ -81,7 +84,7 @@ describe('State Arena importer', () => {
         ST_Multi(ST_SetSRID(ST_GeomFromText('POLYGON((0 0, 0 1, 1 1, 0 0))'), 6933)), 'general')
     `, [sourceId]);
 
-    await expect(importStateArenas(database.db, [state])).rejects.toThrow('source ID collision');
+    await expect(importStateArenas(database.db, [state], cellSize)).rejects.toThrow('source ID collision');
     await expect(database.pool.query<{ source_id: string; arena_type: string }>(
       'SELECT source_id, arena_type FROM arenas',
     )).resolves.toMatchObject({ rows: [{ source_id: String(sourceId), arena_type: 'general' }] });
@@ -98,7 +101,7 @@ describe('State Arena importer', () => {
         ST_Multi(ST_SetSRID(ST_GeomFromText('POLYGON((0 0, 0 1, 1 1, 0 0))'), 6933)), 'general', $1, $2)
     `, [CENSUS_STATE_ARENA_SOURCE, state.fips]);
 
-    await expect(importStateArenas(database.db, [state])).rejects.toThrow('Census FIPS collision');
+    await expect(importStateArenas(database.db, [state], cellSize)).rejects.toThrow('Census FIPS collision');
     await expect(database.pool.query<{ source_id: string; arena_type: string; external_id: string }>(
       'SELECT source_id, arena_type, external_id FROM arenas',
     )).resolves.toMatchObject({ rows: [{ source_id: '999', arena_type: 'general', external_id: state.fips }] });
@@ -116,7 +119,7 @@ describe('State Arena importer', () => {
       geometry: { type: 'Polygon', coordinates: [[[0, 0], [0, 0], [0, 0], [0, 0]]] },
     };
     const states = parseStateArenaGeoJson({ ...artifact, features });
-    await expect(importStateArenas(database.db, states)).rejects.toThrow('invalid or empty EPSG:6933 MultiPolygon');
+    await expect(importStateArenas(database.db, states, cellSize)).rejects.toThrow('invalid or empty EPSG:6933 MultiPolygon');
     await expect(database.pool.query('SELECT COUNT(*)::integer AS count FROM arenas'))
       .resolves.toMatchObject({ rows: [{ count: 0 }] });
   }, 120_000);

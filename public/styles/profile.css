@@ -297,7 +297,8 @@
 }
 
 .profile-achievement-list,
-.profile-flight-list {
+.profile-flight-list,
+.profile-arena-leadership-list {
   display: grid;
   gap: 0.85rem;
   margin: 0;
@@ -340,8 +341,13 @@
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
+.profile-arena-leadership-list {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
 .profile-achievement-item,
 .profile-flight-item,
+.profile-arena-leadership-item,
 .achievement-progress-card {
   border: 1px solid #d7e2ed;
   border-radius: 0.9rem;
@@ -366,6 +372,66 @@
   align-items: center;
   padding: 1.25rem;
   text-align: center;
+}
+
+.profile-arena-leadership-item {
+  min-width: 0;
+  padding: 1.15rem;
+}
+
+.profile-arena-leadership-heading h3 {
+  margin: 0.35rem 0 0;
+  color: var(--color-text-strong);
+  font-size: 1.15rem;
+}
+
+.profile-arena-leadership-heading h3 a {
+  color: inherit;
+}
+
+.profile-arena-leadership-type {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.profile-arena-leadership-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.7rem;
+  margin: 1rem 0 0;
+}
+
+.profile-arena-leadership-stats div {
+  padding-top: 0.7rem;
+  border-top: 1px solid var(--color-border);
+}
+
+.profile-arena-leadership-stats dt {
+  color: var(--color-text-muted);
+  font-size: 0.72rem;
+}
+
+.profile-arena-leadership-stats dd {
+  margin: 0.25rem 0 0;
+  color: var(--color-text-strong);
+  font-size: 1.05rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 800;
+}
+
+.profile-arena-leadership-date {
+  margin: 1rem 0 0;
+  color: var(--color-text-muted);
+  font-size: 0.82rem;
+}
+
+.profile-arena-leadership-date time {
+  color: var(--color-text-strong);
+  font-weight: 800;
 }
 
 .achievement-badge {
@@ -600,6 +666,10 @@
   .profile-achievement-list {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+
+  .profile-arena-leadership-list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 @media (max-width: 700px) {
@@ -662,6 +732,10 @@
   }
 
   .profile-achievement-list {
+    grid-template-columns: 1fr;
+  }
+
+  .profile-arena-leadership-list {
     grid-template-columns: 1fr;
   }
 

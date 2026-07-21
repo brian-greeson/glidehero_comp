@@ -11,6 +11,7 @@ import { createAdminUserService } from './services/adminUserService.js';
 import { createArenaService } from './services/arenaService.js';
 import { createArenaProgressService } from './services/arenaProgressService.js';
 import { createGridClaimService } from './services/gridClaimService.js';
+import { createArenaLeadershipReconciliationService } from './services/arenaLeadershipReconciliationService.js';
 import { createFlightUploadQueueService } from './services/flightUploadQueueService.js';
 import { createFailedFlightCleanupService } from './services/failedFlightCleanupService.js';
 import { createProfileService } from './services/profileService.js';
@@ -33,8 +34,9 @@ const auth = createAuthService(db, { sessionTtlSeconds: config.sessionTtlSeconds
 const donations = createDonationService(db);
 const s3Client = createBucketClient(config);
 const valkey = await createValkeyClient(config.valkeyUrl);
-const gridClaim = createGridClaimService(db, { cellSize: config.gridClaimCellSize });
-const adminAreas = createAdminAreaService(db, { cellSize: config.gridClaimCellSize });
+const arenaLeadership = createArenaLeadershipReconciliationService(db, { cellSize: config.gridClaimCellSize });
+const gridClaim = createGridClaimService(db, { cellSize: config.gridClaimCellSize }, undefined, undefined, arenaLeadership);
+const adminAreas = createAdminAreaService(db, { cellSize: config.gridClaimCellSize }, arenaLeadership);
 const arenas = createArenaService(db, { cellSize: config.gridClaimCellSize });
 const arenaProgress = createArenaProgressService(db, { cellSize: config.gridClaimCellSize });
 const monthlyCoverage = createMonthlyCoverageService(db, { cellSize: config.gridClaimCellSize });
@@ -51,7 +53,7 @@ const adminFlights = createAdminFlightService(db, gridClaim, {
   s3Client,
   bucketName: config.bucket.bucketName,
   uploadQueue,
-});
+}, { arenaLeadership, cellSize: config.gridClaimCellSize });
 const adminUsers = createAdminUserService(db, {
   uploadQueue,
   s3Client,

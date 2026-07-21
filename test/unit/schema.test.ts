@@ -1,6 +1,6 @@
 import { getTableConfig } from 'drizzle-orm/pg-core';
 import { describe, expect, it } from 'vitest';
-import { arenas, launches } from '../../src/db/schema.js';
+import { arenaCurrentLeaders, arenaLeadershipEvents, arenaLeadershipStates, arenas, launches } from '../../src/db/schema.js';
 
 describe('launch schema', () => {
   it('preserves the source launch fields and lookup indexes', () => {
@@ -36,9 +36,50 @@ describe('Arena schema', () => {
     ]);
     expect(config.uniqueConstraints.map((constraint) => constraint.name)).toEqual([
       'arenas_source_id_unique',
+      'arenas_id_arena_type_unique',
     ]);
     expect(config.checks.map((checkConstraint) => checkConstraint.name)).toEqual([
       'arenas_country_code_iso2_check',
+    ]);
+  });
+});
+
+describe('Arena leadership schema', () => {
+  it('stores one eligible Arena snapshot with nonnegative rank counts', () => {
+    const config = getTableConfig(arenaLeadershipStates);
+
+    expect(config.columns.map((column) => column.name)).toEqual([
+      'arena_id', 'arena_type', 'leading_cell_count', 'next_rank_cell_count',
+      'last_reconciled_at', 'last_reconciliation_key', 'last_claim_timestamp',
+      'last_claim_source_flight_id',
+    ]);
+    expect(config.indexes.map((index) => index.config.name)).toEqual([
+      'arena_leadership_states_arena_type_idx',
+    ]);
+    expect(config.checks.map((constraint) => constraint.name)).toEqual([
+      'arena_leadership_states_eligible_arena_type_check',
+      'arena_leadership_states_leading_cell_count_nonnegative',
+      'arena_leadership_states_next_rank_cell_count_nonnegative',
+    ]);
+  });
+
+  it('supports joint current leaders and deterministic transition identities', () => {
+    const currentLeaders = getTableConfig(arenaCurrentLeaders);
+    expect(currentLeaders.primaryKeys).toHaveLength(1);
+    expect(currentLeaders.primaryKeys[0]?.columns.map((column) => column.name)).toEqual(['arena_id', 'user_id']);
+    expect(currentLeaders.checks.map((constraint) => constraint.name)).toEqual([
+      'arena_current_leaders_cells_claimed_positive',
+      'arena_current_leaders_decisive_cell_size_positive',
+    ]);
+
+    const events = getTableConfig(arenaLeadershipEvents);
+    expect(events.uniqueConstraints.map((constraint) => constraint.name)).toEqual([
+      'arena_leadership_events_event_key_unique',
+    ]);
+    expect(events.indexes.map((index) => index.config.name)).toEqual([
+      'arena_leadership_events_arena_id_claim_timestamp_idx',
+      'arena_leadership_events_arena_id_user_id_claim_timestamp_idx',
+      'arena_leadership_events_source_flight_id_idx',
     ]);
   });
 });
