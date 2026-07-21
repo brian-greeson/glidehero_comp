@@ -2,7 +2,7 @@
 
 ## WorkTrees
 
-worktrees are created in the .worktrees directory in the project root. The environment setup scripts create an isolated db per worktree. Use npm run db:push to update changes in the worktree database. The db is shared between agents working in the same worktree.
+worktrees are created in the .worktrees directory in the project root. The environment setup scripts create an isolated db per worktree. Use `npm run db:migrate` to update changes in the worktree database. The db is shared between agents working in the same worktree. Never use `npm run db:push`
 
 ## Drizzle
 

@@ -203,7 +203,7 @@ npm install
 createdb glidehero
 psql glidehero -c 'CREATE EXTENSION postgis'
 cp .env.example .env
-npm run db:push -- --force
+npm run db:migrate
 ```
 
 Fill in the Valkey, object-storage, and MapTiler values in `.env` before
@@ -271,7 +271,7 @@ npm run build
 Integration tests drop and recreate the `public` schema in the test database, then run
 `npm run db:push -- --force` with `DATABASE_URL` set to `TEST_DATABASE_URL`.
 Never point `TEST_DATABASE_URL` at development or production data.
-
+Never run `npm run db:push` against the development or production db.
 ## Production notes
 
 Set `ENVIRONMENT=production` so the session cookie receives the `Secure`

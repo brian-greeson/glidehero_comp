@@ -253,7 +253,7 @@ Configures Drizzle Kit, including PostGIS handling.
 
 Put structural database definitions in this layer. Put feature queries and transactional workflows in services.
 
-Schema changes should preserve database invariants using constraints and indexes where appropriate. Verify schema changes with `npm run db:push` against the worktree database.
+Schema changes should preserve database invariants using constraints and indexes where appropriate. Verify schema changes with `npm run db:migrate` against the worktree database.
 
 This project uses Drizzle ORM and Drizzle Kit 1.0 release candidates. Use documentation and APIs for version 1.0 or later.
 

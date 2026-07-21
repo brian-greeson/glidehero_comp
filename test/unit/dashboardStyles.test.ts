@@ -31,6 +31,9 @@ describe('dashboard stylesheet contract', () => {
     );
     expect(css).toMatch(/\.flight-upload-panel footer\s*{[^}]*flex-wrap:\s*wrap;[^}]*gap:/);
     expect(css).toContain('.leaderboard-profile-link');
+    expect(css).toMatch(
+      /\.profile-link\s*{[^}]*display: inline-flex;[^}]*width: 100%;[^}]*min-height: 44px;[^}]*background: var\(--color-primary-strong\);[^}]*text-decoration: none;/s,
+    );
   });
 
   it('anchors the coverage claimant card around its map tap', async () => {
