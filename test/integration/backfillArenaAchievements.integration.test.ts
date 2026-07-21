@@ -73,17 +73,36 @@ describe('Release 2 Arena achievement backfill with PostgreSQL', () => {
       sourceFlightId: second, earnedAt: new Date('2025-01-01T00:00:00Z'), details: { old: true },
     });
 
-    const dry = await runArenaAchievementBackfill(database.db, { apply: false, cellSize: 1_000 });
+    const dryLog: string[] = [];
+    const dry = await runArenaAchievementBackfill(database.db, {
+      apply: false,
+      cellSize: 1_000,
+      batchSize: 1,
+      logger: { log: (line) => dryLog.push(line), error: () => undefined },
+    });
     expect(dry.flightsExamined).toBe(4);
     expect(dry.achievementCounts.first_flight_from_launch).toBe(2);
     expect(dry.launchTagRecordEvents).toBe(2);
     expect(dry.unchangedOrAlreadyEarned).toBe(1);
+    expect(dryLog).toContain('Updating user 1 / 2');
+    expect(dryLog).toContain('Updating user 2 / 2');
+    expect(dryLog.filter((line) => line.startsWith('Precomputing Arena membership for user'))).toHaveLength(2);
+    expect(dryLog).toContain('Processing flight batch 1 / 3');
+    expect(dryLog).toContain('Processing flight batch 1 / 1');
     expect(await database.db.select().from(achievementRecords)).toHaveLength(0);
     expect(await database.db.select().from(achievementRecordEvents)).toHaveLength(0);
 
-    const applied = await runArenaAchievementBackfill(database.db, { apply: true, cellSize: 1_000 });
+    const applyLog: string[] = [];
+    const applied = await runArenaAchievementBackfill(database.db, {
+      apply: true,
+      cellSize: 1_000,
+      batchSize: 1,
+      logger: { log: (line) => applyLog.push(line), error: () => undefined },
+    });
     expect(applied.failures).toBe(0);
     expect(applied.unchangedOrAlreadyEarned).toBe(1);
+    expect(applyLog.filter((line) => line.startsWith('Precomputing Arena membership for user'))).toHaveLength(2);
+    expect(applyLog).toContain('Processing flight batch 2 / 3');
     const awards = await database.db.select().from(achievements).where(eq(achievements.userId, firstUser));
     expect(awards.find((row) => row.achievementKey === 'first_flight_from_launch')?.sourceFlightId).toBe(first);
     expect(awards.find((row) => row.achievementKey === 'complete_a_launch_arena')?.sourceFlightId).toBe(first);
@@ -147,17 +166,45 @@ describe('Release 2 Arena achievement backfill with PostgreSQL', () => {
     const id = await user('failure');
     await flight(id, 'one', '2026-04-01T00:00:00Z', '2026-04-01T00:00:00Z');
     let calls = 0;
-    await expect(runArenaAchievementBackfill(database.db, {
+    const failure = runArenaAchievementBackfill(database.db, {
       apply: true,
       cellSize: 1_000,
       evaluate: async () => {
         calls += 1;
         throw new Error('injected evaluator failure');
       },
-    })).rejects.toThrow('rolled back');
+    });
+    await expect(failure).rejects.toThrow('backfill failed');
+    await expect(failure).rejects.toMatchObject({ committedBatchesMayRemain: false });
     expect(calls).toBe(1);
     expect(await database.db.select().from(achievements)).toHaveLength(0);
     expect(await database.db.select().from(achievementRecords)).toHaveLength(0);
     expect(await database.db.select().from(achievementRecordEvents)).toHaveLength(0);
+  });
+
+  it('keeps earlier committed batches when a later batch fails', async () => {
+    const id = await user('partial-failure');
+    const first = await flight(id, 'one', '2026-06-01T00:00:00Z', '2026-06-01T00:00:00Z');
+    const second = await flight(id, 'two', '2026-06-02T00:00:00Z', '2026-06-02T00:00:00Z');
+    await arena(30, 'launch', 'POLYGON((0 0,1000 0,1000 1000,0 1000,0 0))', 1, 1_000);
+    await database.db.insert(personalGridClaims).values([
+      { cellSize: 1_000, x: 0, y: 0, claimFlight: first, claimUser: id, claimTimestamp: new Date('2026-06-01T00:00:00Z') },
+      { cellSize: 1_000, x: 0, y: 0, claimFlight: second, claimUser: id, claimTimestamp: new Date('2026-06-02T00:00:00Z') },
+    ]);
+    let calls = 0;
+    const result = runArenaAchievementBackfill(database.db, {
+      apply: true,
+      cellSize: 1_000,
+      batchSize: 1,
+      evaluate: async (transaction, input) => {
+        calls += 1;
+        if (calls === 2) throw new Error('later batch failed');
+        return evaluateArenaAchievementsInTransaction(transaction, input);
+      },
+    });
+
+    await expect(result).rejects.toMatchObject({ committedBatchesMayRemain: true });
+    expect(await database.db.select().from(achievements).where(eq(achievements.userId, id))).not.toHaveLength(0);
+    expect(await database.db.select().from(achievementRecords).where(eq(achievementRecords.userId, id))).toHaveLength(1);
   });
 });

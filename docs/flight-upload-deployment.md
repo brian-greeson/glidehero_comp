@@ -39,27 +39,30 @@ npm run rebuild:arenas -- --apply --confirm-delete-all-arenas
 ```
 
 After the rebuild succeeds, run the Arena achievement backfill dry-run. It
-executes the real award path in a single transaction and rolls the transaction
-back:
+executes the real award path in one rollback-only transaction per user:
 
 ```sh
 npm run backfill:arena-achievements
 ```
 
-Review the per-key counts, launch-tag record events, unchanged/already-earned
-count, and failures. Apply only after reviewing the output:
+Review the per-user and per-flight-batch progress messages, per-key counts,
+launch-tag record events, unchanged/already-earned count, and failures. Apply
+only after reviewing the output:
 
 ```sh
 npm run backfill:arena-achievements -- --apply
 ```
 
-The replay orders each user's completed flights by `started_at`, then
+Apply commits up to 100 flights per transaction by default. Set
+`ARENA_ACHIEVEMENT_BACKFILL_BATCH_SIZE` to a smaller positive integer when a
+shorter transaction is needed. The replay orders each user's completed flights by `started_at`, then
 `created_at`, then flight UUID. Each flight sees only claims from that user's
 flights at or before its position, and awards use the source flight's
-historical time. Apply is one atomic transaction; any error rolls back all
-users. The existing per-user `pg_advisory_xact_lock` is held for the duration
-of each user's replay; the backfill acquires all relevant user locks in sorted
-order before taking its completed-flight inventory. The lock serializes callers
+historical time. Before processing a user, the command spatially maps that
+user's historical claims and flight origins to Arenas once, then replays those
+memberships in memory instead of repeating the spatial joins for every flight.
+The existing per-user `pg_advisory_xact_lock` is reacquired for
+each batch transaction. The lock serializes callers
 that use the same progression lock, while pausing/draining workers remains the
 operational guard against new flights entering during the one-time run. Existing ordinary Release 2
 awards are left permanent and idempotent. An existing
@@ -70,9 +73,10 @@ before running the one-time apply.
 After successful verification, restart the flight workers. The Arena
 achievement command is deliberately one-time; do not rerun it after a
 successful apply. A run with an existing launch-tag record is rejected as
-ambiguous, and a failed apply prints a rolled-back/failed summary and exits
-nonzero. If either one-time apply fails, resolve the reported issue before
-retrying; never assume a partial rebuild or backfill is safe.
+ambiguous. Preflight failures occur before any flight batch commits, but a later
+apply failure leaves earlier successful batches committed and exits nonzero.
+Resolve or restore that partial state before retrying; the one-time backfill does
+not automatically resume it.
 
 Configure the private DigitalOcean Space with a CORS rule that allows:
 

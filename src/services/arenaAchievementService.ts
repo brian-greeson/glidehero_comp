@@ -23,7 +23,7 @@ export type ArenaAchievementEvaluationInput = {
   historicalFlightIds?: readonly string[];
 };
 
-type ArenaSnapshotRow = {
+export type ArenaAchievementSnapshotRow = {
   id: string;
   arenaType: 'launch' | 'general' | 'state' | 'country';
   claimableCellCount: number | string | null;
@@ -65,7 +65,7 @@ export async function evaluateArenaAchievementsInTransaction(
       ? sql`AND FALSE`
       : sql`AND flight.flight_id IN (${sql.join(historicalIds, sql`, `)})`
     : sql``;
-  const rows = await database.execute<ArenaSnapshotRow>(sql`
+  const rows = await database.execute<ArenaAchievementSnapshotRow>(sql`
     WITH personal_cells AS (
       SELECT DISTINCT claims.x, claims.y
       FROM user_grid_claims claims
@@ -138,7 +138,15 @@ export async function evaluateArenaAchievementsInTransaction(
     LEFT JOIN current_tags ON current_tags.id = arena.id
   `);
 
-  const snapshot = rows.rows;
+  return awardArenaAchievementsFromSnapshotInTransaction(database, input, rows.rows);
+}
+
+/** Applies the Release 2 catalog to an already calculated as-of Arena snapshot. */
+export async function awardArenaAchievementsFromSnapshotInTransaction(
+  database: ArenaAchievementTransaction,
+  input: ArenaAchievementEvaluationInput,
+  snapshot: readonly ArenaAchievementSnapshotRow[],
+): Promise<ArenaAchievementEvaluation> {
   const newlyEarned: AchievementKey[] = [];
   let alreadyEarned = 0;
   const award = async (key: string, details: Record<string, unknown>, value?: number) => {

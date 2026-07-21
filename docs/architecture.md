@@ -538,11 +538,16 @@ record events into one latest-50 activity list without exposing raw keys or
 details.
 
 `npm run backfill:arena-achievements` is a one-time historical as-of replay.
-It defaults to dry-run, supports explicit `--apply`, acquires all relevant
-user locks in sorted order, preserves earliest source attribution, reconstructs
-strict launch-tag records, and rolls back the entire apply on a typed failure
-or ambiguous existing record. Workers must be paused and drained for the
-catalog rebuild and backfill, then restarted only after verification.
+It defaults to dry-run, supports explicit `--apply`, preserves earliest source
+attribution, and reconstructs strict launch-tag records. Dry-run uses one
+rollback-only transaction per user. Apply uses bounded flight batches (100 by
+default, configurable with `ARENA_ACHIEVEMENT_BACKFILL_BATCH_SIZE`) and reacquires
+the per-user progression lock for every batch transaction. A backfill-specific
+replay loads cell-to-Arena and origin-to-Launch membership once per user and
+maintains cumulative Arena state in memory; the live evaluator remains unchanged.
+A typed failure says
+whether earlier batches may remain committed. Workers must be paused and drained
+for the catalog rebuild and backfill, then restarted only after verification.
 
 ## 12. Shared type declarations
 
