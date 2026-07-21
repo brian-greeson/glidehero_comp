@@ -25,6 +25,7 @@ const envSchema = z.object({
     .pipe(z.string().min(1)),
   MAPTILER_API_KEY: z.string().min(1),
   GRID_CLAIM_CELL_SIZE: z.coerce.number().int().min(1),
+  KOFI_VERIFICATION_TOKEN: z.string().min(1),
   ADMIN_EMAILS: z.string().optional(),
 });
 
@@ -38,6 +39,7 @@ export type AppConfig = {
   sessionTtlSeconds: number;
   mapTilerApiKey: string;
   gridClaimCellSize: number;
+  kofiVerificationToken: string;
   adminEmails: string[];
   bucket: {
     bucketSecret: string;
@@ -60,6 +62,7 @@ export function parseConfig(env: NodeJS.ProcessEnv): AppConfig {
     sessionTtlSeconds: parsed.SESSION_TTL_SECONDS,
     mapTilerApiKey: parsed.MAPTILER_API_KEY,
     gridClaimCellSize: parsed.GRID_CLAIM_CELL_SIZE,
+    kofiVerificationToken: parsed.KOFI_VERIFICATION_TOKEN,
     adminEmails: [
       ...new Set(
         (parsed.ADMIN_EMAILS ?? '')

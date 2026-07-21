@@ -1,4 +1,4 @@
-import { bigint, check, customType, date, doublePrecision, index, integer, jsonb, pgEnum, pgSequence, pgTable, primaryKey, text, timestamp, unique, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
+import { bigint, boolean, check, customType, date, doublePrecision, index, integer, jsonb, numeric, pgEnum, pgSequence, pgTable, primaryKey, text, timestamp, unique, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 
 const geometryPoint4326 = customType<{ data: string; driverData: string }>({
@@ -317,5 +317,29 @@ export const achievementRecordEvents = pgTable(
     index('achievement_record_events_record_id_earned_at_idx').on(table.recordId, table.earnedAt),
     index('achievement_record_events_user_id_earned_at_idx').on(table.userId, table.earnedAt),
     check('achievement_record_events_value_nonnegative', sql`${table.value} > 0`),
+  ],
+);
+
+/** Immutable record of each accepted Ko-fi donation webhook. */
+export const donations = pgTable(
+  'donations',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    messageId: text('message_id').notNull(),
+    kofiTransactionId: text('kofi_transaction_id'),
+    paymentTimestamp: timestamp('payment_timestamp', { withTimezone: true, mode: 'date' }).notNull(),
+    paymentType: text('payment_type').notNull(),
+    amount: numeric('amount', { precision: 12, scale: 2 }).notNull(),
+    currency: text('currency').notNull(),
+    isPublic: boolean('is_public').notNull(),
+    isSubscriptionPayment: boolean('is_subscription_payment').notNull(),
+    isFirstSubscriptionPayment: boolean('is_first_subscription_payment').notNull(),
+    payload: jsonb('payload').$type<Record<string, unknown>>().notNull(),
+    receivedAt: timestamp('received_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
+  },
+  (table) => [
+    unique('donations_message_id_unique').on(table.messageId),
+    index('donations_kofi_transaction_id_idx').on(table.kofiTransactionId),
+    check('donations_amount_nonnegative', sql`${table.amount} >= 0`),
   ],
 );

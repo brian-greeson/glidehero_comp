@@ -24,10 +24,13 @@ import { createAdminUserRouter } from './web/adminUserRouter.js';
 import { createCurrentUserMiddleware } from './web/currentUserMiddleware.js';
 import { createSessionCookie } from './web/sessionCookie.js';
 import { createWebRouter } from './web/webRouter.js';
+import { createDonationRouter } from './routes/donationRouter.js';
+import { createDonationService } from './services/donationService.js';
 
 const config = parseConfig(process.env);
 const { db } = createDatabase(config.databaseUrl);
 const auth = createAuthService(db, { sessionTtlSeconds: config.sessionTtlSeconds });
+const donations = createDonationService(db);
 const s3Client = createBucketClient(config);
 const valkey = await createValkeyClient(config.valkeyUrl);
 const gridClaim = createGridClaimService(db, { cellSize: config.gridClaimCellSize });
@@ -65,6 +68,7 @@ const cookie = createSessionCookie({
   maxAgeSeconds: config.sessionTtlSeconds,
 });
 const webMiddleware = [
+  createDonationRouter({ donations, verificationToken: config.kofiVerificationToken }),
   createCurrentUserMiddleware(auth, cookie),
   createAdminAreaRouter({
     adminEmails: config.adminEmails,

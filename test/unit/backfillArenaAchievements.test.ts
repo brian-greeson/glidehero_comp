@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseArenaAchievementBackfillArgs, printArenaAchievementBackfillSummary } from '../../src/scripts/backfillArenaAchievements.js';
+import { parseArenaAchievementBackfillArgs, printArenaAchievementBackfillSummary, runArenaAchievementBackfill } from '../../src/scripts/backfillArenaAchievements.js';
 
 describe('Arena achievement backfill CLI', () => {
   it('defaults to dry-run and accepts apply or explicit dry-run', () => {
@@ -14,6 +14,13 @@ describe('Arena achievement backfill CLI', () => {
     expect(() => parseArenaAchievementBackfillArgs(['--dry-run', '--dry-run'])).toThrow('Duplicate');
     expect(() => parseArenaAchievementBackfillArgs(['--wat'])).toThrow('Unknown argument');
     expect(() => parseArenaAchievementBackfillArgs(['--help', '--apply'])).toThrow('cannot be combined');
+  });
+
+  it('rejects invalid transaction batch sizes before accessing the database', async () => {
+    await expect(runArenaAchievementBackfill({} as never, { apply: true, cellSize: 1_000, batchSize: 0 }))
+      .rejects.toThrow('batch size must be a positive integer');
+    await expect(runArenaAchievementBackfill({} as never, { apply: true, cellSize: 1_000, batchSize: 1.5 }))
+      .rejects.toThrow('batch size must be a positive integer');
   });
 
   it('has no import side effects and prints a concise deterministic summary', () => {
@@ -33,5 +40,16 @@ describe('Arena achievement backfill CLI', () => {
     expect(lines).toContain('Flights examined: 3');
     expect(lines).toContain('Launch-tag record events: 2');
     expect(lines).toContain('Unchanged/already earned: 4');
+
+    const failedLines: string[] = [];
+    printArenaAchievementBackfillSummary({
+      usersExamined: 2,
+      flightsExamined: 3,
+      achievementCounts: {} as never,
+      launchTagRecordEvents: 1,
+      unchangedOrAlreadyEarned: 0,
+      failures: 1,
+    }, true, { log: (line: string) => failedLines.push(line), error: () => undefined }, true);
+    expect(failedLines[0]).toContain('Failed/partial apply');
   });
 });

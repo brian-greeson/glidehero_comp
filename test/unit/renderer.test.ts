@@ -41,6 +41,12 @@ describe('Vento page renderer', () => {
     );
     expect(anonymous).toContain('action="/login"');
     expect(anonymous).toContain('action="/signup"');
+    expect(anonymous).toContain('aria-label="Support GlideHero"');
+    expect(anonymous).toContain('https://storage.ko-fi.com/cdn/widget/Widget_2.js');
+    expect(anonymous).toContain("kofiwidget2.init('Support GlideHero', '#06758a', 'U6U0I4TSK');");
+    expect(anonymous).toContain('https://ko-fi.com/U6U0I4TSK');
+    expect(anonymous).not.toContain('Widget_1.js');
+    expect(anonymous.indexOf('action="/signup"')).toBeLessThan(anonymous.indexOf('aria-label="Support GlideHero"'));
     expect(anonymous).not.toContain('data-onboarding-trigger');
     expect(anonymous).not.toContain('data-onboarding-dialog');
     expect(anonymous).not.toContain('action="/logout"');
@@ -115,6 +121,12 @@ describe('Vento page renderer', () => {
     expect(authenticated).toContain('data-upload-close aria-label="Close upload status"');
     expect(authenticated).toContain('href="/profile" hidden>View achievements</a>');
     expect(authenticated).toContain('Choose flights<input data-upload-more-input');
+    expect(authenticated).toContain('aria-label="Support GlideHero"');
+    expect(authenticated).toContain('https://storage.ko-fi.com/cdn/widget/Widget_2.js');
+    expect(authenticated).toContain("kofiwidget2.init('Support GlideHero', '#06758a', 'U6U0I4TSK');");
+    expect(authenticated).toContain('https://ko-fi.com/U6U0I4TSK');
+    expect(authenticated).not.toContain('Widget_1.js');
+    expect(authenticated.indexOf('Help &amp; walkthrough')).toBeLessThan(authenticated.indexOf('aria-label="Support GlideHero"'));
     expect(authenticated).toContain('accept=".igc,.zip"');
     expect(authenticated).not.toContain('data-upload-input');
     expect(authenticated.indexOf('data-account-popover')).toBeLessThan(

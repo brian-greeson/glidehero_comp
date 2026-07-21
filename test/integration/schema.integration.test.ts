@@ -27,6 +27,7 @@ describe('authentication schema', () => {
       'app_sessions',
       'arenas',
       'competition_grid_claims',
+      'donations',
       'flight_progress',
       'flights',
       'igc_files',
@@ -168,6 +169,60 @@ describe('authentication schema', () => {
     ]);
     expect(indexes.rows.find(({ indexname }) => indexname === 'achievements_user_id_earned_at_idx')?.indexdef)
       .toContain('(user_id, earned_at)');
+  });
+
+  it('stores Ko-fi donations with required fields, idempotency, and amount bounds', async () => {
+    const columns = await database.pool.query<{
+      column_name: string;
+      data_type: string;
+      is_nullable: string;
+      column_default: string | null;
+    }>(
+      `SELECT column_name, data_type, is_nullable, column_default
+       FROM information_schema.columns
+       WHERE table_schema = 'public' AND table_name = 'donations'
+       ORDER BY column_name`,
+    );
+    expect(columns.rows).toEqual([
+      { column_name: 'amount', data_type: 'numeric', is_nullable: 'NO', column_default: null },
+      { column_name: 'currency', data_type: 'text', is_nullable: 'NO', column_default: null },
+      { column_name: 'id', data_type: 'uuid', is_nullable: 'NO', column_default: 'gen_random_uuid()' },
+      { column_name: 'is_first_subscription_payment', data_type: 'boolean', is_nullable: 'NO', column_default: null },
+      { column_name: 'is_public', data_type: 'boolean', is_nullable: 'NO', column_default: null },
+      { column_name: 'is_subscription_payment', data_type: 'boolean', is_nullable: 'NO', column_default: null },
+      { column_name: 'kofi_transaction_id', data_type: 'text', is_nullable: 'YES', column_default: null },
+      { column_name: 'message_id', data_type: 'text', is_nullable: 'NO', column_default: null },
+      { column_name: 'payload', data_type: 'jsonb', is_nullable: 'NO', column_default: null },
+      { column_name: 'payment_timestamp', data_type: 'timestamp with time zone', is_nullable: 'NO', column_default: null },
+      { column_name: 'payment_type', data_type: 'text', is_nullable: 'NO', column_default: null },
+      { column_name: 'received_at', data_type: 'timestamp with time zone', is_nullable: 'NO', column_default: 'now()' },
+    ]);
+
+    const constraints = await database.pool.query<{ conname: string; definition: string }>(
+      `SELECT conname, pg_get_constraintdef(oid) AS definition
+       FROM pg_constraint
+       WHERE conrelid = 'donations'::regclass
+       ORDER BY conname`,
+    );
+    expect(constraints.rows).toEqual(expect.arrayContaining([
+      { conname: 'donations_amount_nonnegative', definition: 'CHECK ((amount >= (0)::numeric))' },
+      { conname: 'donations_message_id_unique', definition: 'UNIQUE (message_id)' },
+      { conname: 'donations_pkey', definition: 'PRIMARY KEY (id)' },
+    ]));
+
+    const indexes = await database.pool.query<{ indexname: string; indexdef: string }>(
+      `SELECT indexname, indexdef
+       FROM pg_indexes
+       WHERE schemaname = 'public' AND tablename = 'donations'
+       ORDER BY indexname`,
+    );
+    expect(indexes.rows.map((row) => row.indexname)).toEqual([
+      'donations_kofi_transaction_id_idx',
+      'donations_message_id_unique',
+      'donations_pkey',
+    ]);
+    expect(indexes.rows.find(({ indexname }) => indexname === 'donations_kofi_transaction_id_idx')?.indexdef)
+      .toContain('(kofi_transaction_id)');
   });
 
   it('stores canonical Arena polygons and optional launch metadata', async () => {

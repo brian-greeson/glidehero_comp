@@ -60,6 +60,7 @@ export async function resetAndMigrateTestDatabase(): Promise<ReturnType<typeof t
           BUCKET_FOLDER: 'glidehero-test',
           MAPTILER_API_KEY: 'maptiler-test-key',
           GRID_CLAIM_CELL_SIZE: '1000',
+          KOFI_VERIFICATION_TOKEN: 'kofi-test-token',
         },
       },
       (error, stdout, stderr) => {

@@ -11,12 +11,19 @@ export type AppDependencies = {
 };
 
 function isApiRequest(req: Request): boolean {
-  return req.path === '/v1' || req.path.startsWith('/v1/') || req.path.startsWith('/admin/api/');
+  return req.path === '/v1'
+    || req.path.startsWith('/v1/')
+    || req.path.startsWith('/admin/api/')
+    || req.path.startsWith('/donations/');
 }
 
 function errorStatus(error: unknown): number {
   if (error instanceof AppError && Number.isInteger(error.status) && error.status >= 400 && error.status <= 599) {
     return error.status;
+  }
+  if (error && typeof error === 'object') {
+    const status = 'status' in error ? error.status : 'statusCode' in error ? error.statusCode : undefined;
+    if (typeof status === 'number' && Number.isInteger(status) && status >= 400 && status <= 599) return status;
   }
   return 500;
 }
@@ -62,11 +69,15 @@ export function createApp(dependencies: AppDependencies = {}) {
     }
 
     const status = errorStatus(error);
-    if (!(error instanceof AppError)) console.error(error);
+    const isDonationRequest = req.path.startsWith('/donations/');
+    const isDonationParserError = isDonationRequest && status >= 400 && status < 500;
+    if (!(error instanceof AppError) && !isDonationParserError) console.error(error);
 
     if (isApiRequest(req)) {
-      if (error instanceof AppError) {
-        res.status(status).json({ error: { code: error.code, message: error.message } });
+      if (error instanceof AppError || (isDonationRequest && status !== 500)) {
+        const code = error instanceof AppError ? error.code : 'invalid_request';
+        const message = error instanceof AppError ? error.message : 'Invalid request.';
+        res.status(status).json({ error: { code, message } });
         return;
       }
       res.status(500).json({ error: { code: 'server_error', message: 'Internal server error.' } });

@@ -18,6 +18,7 @@
         <a class="profile-link" href="/profile">Achievements</a>
         {{ if isAdmin }}<a class="admin-link" href="/admin">Admin</a>{{ /if }}
         <button type="button" class="account-help-button" data-onboarding-trigger aria-controls="glide-hero-onboarding">Help &amp; walkthrough</button>
+        {{ include "components/supportGlideHero.vto" }}
         <form class="territory-color-form" method="post" action="/profile/territory-color">
           <input type="hidden" name="returnTo" value="{{ currentPath }}" data-competition-return-to>
           <label class="territory-color-control"><input class="territory-color-input" name="territoryColor" type="color" value="{{ currentUser.territoryColor }}" data-territory-color-input required><span>Territory color</span></label>

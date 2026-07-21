@@ -13,6 +13,7 @@ describe('parseConfig', () => {
       BUCKET_FOLDER: '/glidehero-dev/',
       MAPTILER_API_KEY: 'maptiler-test-key',
       GRID_CLAIM_CELL_SIZE: '1000',
+      KOFI_VERIFICATION_TOKEN: 'kofi-test-token',
     })).toEqual({
       databaseUrl: 'postgres://localhost/glidehero',
       valkeyUrl: 'redis://localhost:6379',
@@ -23,6 +24,7 @@ describe('parseConfig', () => {
       sessionTtlSeconds: 604800,
       mapTilerApiKey: 'maptiler-test-key',
       gridClaimCellSize: 1000,
+      kofiVerificationToken: 'kofi-test-token',
       adminEmails: [],
       bucket: {
         bucketSecret: 'secret',
@@ -48,6 +50,21 @@ describe('parseConfig', () => {
       BUCKET_URL: 'https://s3.example.test',
       BUCKET_FOLDER: 'glidehero-dev',
       GRID_CLAIM_CELL_SIZE: '1000',
+      KOFI_VERIFICATION_TOKEN: 'kofi-test-token',
+    })).toThrow();
+  });
+
+  it('requires a Ko-fi verification token', () => {
+    expect(() => parseConfig({
+      DATABASE_URL: 'postgres://localhost/glidehero',
+      VALKEY_URL: 'redis://localhost:6379',
+      BUCKET_SECRET: 'secret',
+      BUCKET_ID: 'id',
+      BUCKET_NAME: 'glidehero-files',
+      BUCKET_URL: 'https://s3.example.test',
+      BUCKET_FOLDER: 'glidehero-dev',
+      MAPTILER_API_KEY: 'maptiler-test-key',
+      GRID_CLAIM_CELL_SIZE: '1000',
     })).toThrow();
   });
 
@@ -61,6 +78,7 @@ describe('parseConfig', () => {
       BUCKET_URL: 'https://s3.example.test',
       BUCKET_FOLDER: 'glidehero-dev',
       MAPTILER_API_KEY: 'maptiler-test-key',
+      KOFI_VERIFICATION_TOKEN: 'kofi-test-token',
     };
 
     expect(() => parseConfig(env)).toThrow();
@@ -82,6 +100,7 @@ describe('parseConfig', () => {
         BUCKET_FOLDER: 'glidehero-production',
         MAPTILER_API_KEY: 'maptiler-test-key',
         GRID_CLAIM_CELL_SIZE: '1000',
+        KOFI_VERIFICATION_TOKEN: 'kofi-test-token',
       }),
     ).toMatchObject({ environment: 'production', isProduction: true });
   });
@@ -97,6 +116,7 @@ describe('parseConfig', () => {
       BUCKET_FOLDER: 'glidehero-dev',
       MAPTILER_API_KEY: 'maptiler-test-key',
       GRID_CLAIM_CELL_SIZE: '1000',
+      KOFI_VERIFICATION_TOKEN: 'kofi-test-token',
       ADMIN_EMAILS: ' Admin@example.com, ,second@example.com,ADMIN@example.com ',
     });
 
