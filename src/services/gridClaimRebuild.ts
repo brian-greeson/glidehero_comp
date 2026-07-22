@@ -44,16 +44,15 @@ export async function rebuildGridClaims(
     ),
     personal_inserted AS (
       INSERT INTO user_grid_claims (
-        cell_size,
         x,
         y,
         claim_flight,
         claim_user,
         claim_timestamp
       )
-      SELECT ${cellSize}, x, y, ${input.flightId}, ${input.userId}, claim_timestamp
+      SELECT x, y, ${input.flightId}, ${input.userId}, claim_timestamp
       FROM personal_cells
-      ON CONFLICT (claim_user, cell_size, x, y, claim_flight) DO UPDATE
+      ON CONFLICT (claim_user, x, y, claim_flight) DO UPDATE
       SET
         claim_timestamp = EXCLUDED.claim_timestamp
       RETURNING x, y
@@ -61,7 +60,6 @@ export async function rebuildGridClaims(
     competition_inserted AS (
       INSERT INTO competition_grid_claims (
         competition_month,
-        cell_size,
         x,
         y,
         claim_flight,
@@ -70,14 +68,13 @@ export async function rebuildGridClaims(
       )
       SELECT
         competition_month,
-        ${cellSize},
         x,
         y,
         ${input.flightId},
         ${input.userId},
         claim_timestamp
       FROM competition_cells
-      ON CONFLICT (competition_month, cell_size, x, y, claim_flight) DO UPDATE
+      ON CONFLICT (competition_month, x, y, claim_flight) DO UPDATE
       SET
         claim_user = EXCLUDED.claim_user,
         claim_timestamp = EXCLUDED.claim_timestamp
@@ -90,7 +87,6 @@ export async function rebuildGridClaims(
         SELECT 1
         FROM user_grid_claims existing_claims
         WHERE existing_claims.claim_user = ${input.userId}
-          AND existing_claims.cell_size = ${cellSize}
           AND existing_claims.x = personal_cells.x
           AND existing_claims.y = personal_cells.y
           AND existing_claims.claim_flight <> ${input.flightId}
@@ -100,7 +96,6 @@ export async function rebuildGridClaims(
       SELECT existing_claims.x, existing_claims.y
       FROM user_grid_claims existing_claims
       WHERE existing_claims.claim_user = ${input.userId}
-        AND existing_claims.cell_size = ${cellSize}
       UNION
       SELECT x, y
       FROM personal_inserted

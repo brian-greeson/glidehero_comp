@@ -13,6 +13,7 @@ import {
   type EligibleArenaType,
 } from '../domain/arena/leadership.js';
 import { awardAchievement } from './achievementService.js';
+import { arenaCellOwnershipPredicateSql } from './arenaGeometrySql.js';
 
 type DatabaseTransaction = Parameters<Parameters<Database['transaction']>[0]>[0];
 export type ArenaLeadershipTransaction = Pick<DatabaseTransaction, 'execute' | 'insert' | 'select'>;
@@ -32,7 +33,6 @@ type StoredLeader = {
   cellsClaimed: number;
   tookLeadAt: Date | string;
   sourceFlightId: string;
-  cellSize: number;
   cellX: number;
   cellY: number;
   competitionMonth: string;
@@ -91,7 +91,6 @@ function reconciliationKey(arenaId: string, claims: readonly ArenaLeadershipClai
       claim.claimTimestamp.toISOString(),
       claim.sourceFlightId,
       claim.competitionMonth,
-      claim.cellSize,
       claim.cellX,
       claim.cellY,
     ].join('|')),
@@ -177,30 +176,26 @@ export function createArenaLeadershipReconciliationService(database: Database, o
 
     const arenaIdList = sql.join(arenas.map((arena) => sql`${arena.arenaId}`), sql`, `);
     const claimResult = await transaction.execute<StoredClaim>(sql`
-      SELECT DISTINCT ON (arena.id, claim.claim_user, claim.cell_size, claim.x, claim.y)
+      SELECT DISTINCT ON (arena.id, claim.claim_user, claim.x, claim.y)
         arena.id AS "arenaId",
         claim.claim_user AS "userId",
         claim.claim_timestamp AS "claimTimestamp",
         claim.claim_flight AS "sourceFlightId",
         claim.competition_month AS "competitionMonth",
-        claim.cell_size AS "cellSize",
         claim.x AS "cellX",
         claim.y AS "cellY"
       FROM arenas arena
-      INNER JOIN competition_grid_claims claim
-        ON claim.cell_size = ${options.cellSize}
-       AND ST_Covers(
-         arena.area,
-         ST_SetSRID(ST_MakePoint(
-           (claim.x + 0.5) * claim.cell_size,
-           (claim.y + 0.5) * claim.cell_size
-         ), 6933)
-       )
+      INNER JOIN competition_grid_claims claim ON ${arenaCellOwnershipPredicateSql({
+        arenaId: sql`arena.id`,
+        arenaType: sql`arena.arena_type`,
+        externalId: sql`arena.external_id`,
+        area: sql`arena.area`,
+        cellCenter: sql`ST_SetSRID(ST_MakePoint((claim.x + 0.5) * ${options.cellSize}, (claim.y + 0.5) * ${options.cellSize}), 6933)`,
+      })}
       WHERE arena.id IN (${arenaIdList})
       ORDER BY
         arena.id,
         claim.claim_user,
-        claim.cell_size,
         claim.x,
         claim.y,
         claim.claim_timestamp,
@@ -242,10 +237,10 @@ export function createArenaLeadershipReconciliationService(database: Database, o
         await transaction.execute(sql`
           INSERT INTO arena_current_leaders (
             arena_id, user_id, cells_claimed, took_lead_at,
-            decisive_source_flight_id, decisive_cell_size, decisive_cell_x, decisive_cell_y
+            decisive_source_flight_id, decisive_cell_x, decisive_cell_y
           ) VALUES ${sql.join(replay.currentLeaders.map((leader) => sql`(
             ${arena.arenaId}, ${leader.userId}, ${leader.cellsClaimed}, ${leader.tookLeadAt},
-            ${leader.sourceFlightId}, ${leader.cellSize}, ${leader.cellX}, ${leader.cellY}
+            ${leader.sourceFlightId}, ${leader.cellX}, ${leader.cellY}
           )`), sql`, `)}
         `);
       }
@@ -253,10 +248,10 @@ export function createArenaLeadershipReconciliationService(database: Database, o
         await transaction.execute(sql`
           INSERT INTO arena_leadership_events (
             event_key, arena_id, user_id, event_type, claim_timestamp,
-            source_flight_id, cell_size, cell_x, cell_y
+            source_flight_id, cell_x, cell_y
           ) VALUES ${sql.join(replay.events.map((event) => sql`(
             ${event.eventKey}, ${arena.arenaId}, ${event.userId}, ${event.eventType}, ${event.claimTimestamp},
-            ${event.sourceFlightId}, ${event.cellSize}, ${event.cellX}, ${event.cellY}
+            ${event.sourceFlightId}, ${event.cellX}, ${event.cellY}
           )`), sql`, `)}
         `);
       }
@@ -311,33 +306,31 @@ export function createArenaLeadershipReconciliationService(database: Database, o
     const stateByArena = new Map(stateResult.rows.map((state) => [state.arenaId, state]));
     const claimResult = await transaction.execute<StoredClaim>(sql`
       WITH flight_claims AS (
-        SELECT DISTINCT ON (claim.claim_user, claim.cell_size, claim.x, claim.y)
+        SELECT DISTINCT ON (claim.claim_user, claim.x, claim.y)
           claim.claim_user, claim.claim_timestamp, claim.claim_flight,
-          claim.competition_month, claim.cell_size, claim.x, claim.y
+          claim.competition_month, claim.x, claim.y
         FROM competition_grid_claims claim
         WHERE claim.claim_flight = ${input.flightId}
-          AND claim.cell_size = ${options.cellSize}
-        ORDER BY claim.claim_user, claim.cell_size, claim.x, claim.y,
+        ORDER BY claim.claim_user, claim.x, claim.y,
           claim.claim_timestamp, claim.competition_month
       )
       SELECT arena.id AS "arenaId", claim.claim_user AS "userId",
         claim.claim_timestamp AS "claimTimestamp", claim.claim_flight AS "sourceFlightId",
-        claim.competition_month AS "competitionMonth", claim.cell_size AS "cellSize",
+        claim.competition_month AS "competitionMonth",
         claim.x AS "cellX", claim.y AS "cellY"
       FROM arenas arena
-      INNER JOIN flight_claims claim ON ST_Covers(
-        arena.area,
-        ST_SetSRID(ST_MakePoint(
-          (claim.x + 0.5) * claim.cell_size,
-          (claim.y + 0.5) * claim.cell_size
-        ), 6933)
-      )
+      INNER JOIN flight_claims claim ON ${arenaCellOwnershipPredicateSql({
+        arenaId: sql`arena.id`,
+        arenaType: sql`arena.arena_type`,
+        externalId: sql`arena.external_id`,
+        area: sql`arena.area`,
+        cellCenter: sql`ST_SetSRID(ST_MakePoint((claim.x + 0.5) * ${options.cellSize}, (claim.y + 0.5) * ${options.cellSize}), 6933)`,
+      })}
       WHERE arena.id IN (${sql.join(arenas.map((arena) => sql`${arena.arenaId}`), sql`, `)})
         AND NOT EXISTS (
           SELECT 1
           FROM competition_grid_claims previous
           WHERE previous.claim_user = claim.claim_user
-            AND previous.cell_size = claim.cell_size
             AND previous.x = claim.x AND previous.y = claim.y
             AND previous.claim_flight <> ${input.flightId}
             AND (
@@ -371,12 +364,36 @@ export function createArenaLeadershipReconciliationService(database: Database, o
     const qualifyingEvents = [...(fallback.qualifyingEvents ?? [])];
     let eventsBuilt = fallback.eventsBuilt;
 
+    const incrementalUserIds = [...new Set(normalizedClaims
+      .filter((claim) => incrementalArenas.some((arena) => arena.arenaId === claim.arenaId))
+      .map((claim) => claim.userId))];
+    const incrementalTotals = new Map<string, number>();
+    if (incrementalArenas.length > 0 && incrementalUserIds.length > 0) {
+      const incrementalArenaIds = sql.join(incrementalArenas.map((arena) => sql`${arena.arenaId}`), sql`, `);
+      const incrementalUsers = sql.join(incrementalUserIds.map((userId) => sql`${userId}`), sql`, `);
+      const totalsResult = await transaction.execute<{ arenaId: string; userId: string; count: number | string }>(sql`
+        SELECT arena.id AS "arenaId", claim.claim_user AS "userId", COUNT(DISTINCT (claim.x, claim.y))::integer AS count
+        FROM competition_grid_claims claim
+        INNER JOIN arenas arena ON arena.id IN (${incrementalArenaIds})
+          AND ${arenaCellOwnershipPredicateSql({
+            arenaId: sql`arena.id`,
+            arenaType: sql`arena.arena_type`,
+            externalId: sql`arena.external_id`,
+            area: sql`arena.area`,
+            cellCenter: sql`ST_SetSRID(ST_MakePoint((claim.x + 0.5) * ${options.cellSize}, (claim.y + 0.5) * ${options.cellSize}), 6933)`,
+          })}
+        WHERE claim.claim_user IN (${incrementalUsers})
+        GROUP BY arena.id, claim.claim_user
+      `);
+      for (const row of totalsResult.rows) incrementalTotals.set(`${row.arenaId}:${row.userId}`, Number(row.count));
+    }
+
     for (const arena of incrementalArenas) {
       const state = stateByArena.get(arena.arenaId)!;
       const claims = claimsForArena(normalizedClaims, arena.arenaId).sort(compareArenaLeadershipClaims);
       const storedLeaders = await transaction.execute<StoredLeader>(sql`
         SELECT user_id AS "userId", cells_claimed AS "cellsClaimed", took_lead_at AS "tookLeadAt",
-          decisive_source_flight_id AS "sourceFlightId", decisive_cell_size AS "cellSize",
+          decisive_source_flight_id AS "sourceFlightId",
           decisive_cell_x AS "cellX", decisive_cell_y AS "cellY", ''::text AS "competitionMonth"
         FROM arena_current_leaders WHERE arena_id = ${arena.arenaId}
       `);
@@ -388,7 +405,6 @@ export function createArenaLeadershipReconciliationService(database: Database, o
         claimTimestamp: new Date(leader.tookLeadAt),
         sourceFlightId: leader.sourceFlightId,
         competitionMonth: leader.competitionMonth,
-        cellSize: leader.cellSize,
         cellX: leader.cellX,
         cellY: leader.cellY,
       }]));
@@ -399,17 +415,7 @@ export function createArenaLeadershipReconciliationService(database: Database, o
       const newCounts = new Map<string, number>();
       for (const claim of claims) newCounts.set(claim.userId, (newCounts.get(claim.userId) ?? 0) + 1);
       for (const [userId, added] of newCounts) {
-        const countResult = await transaction.execute<{ count: number | string }>(sql`
-          SELECT COUNT(DISTINCT (claim.x, claim.y))::integer AS count
-          FROM competition_grid_claims claim
-          INNER JOIN arenas arena ON arena.id = ${arena.arenaId}
-            AND ST_Covers(arena.area, ST_SetSRID(ST_MakePoint(
-              (claim.x + 0.5) * claim.cell_size,
-              (claim.y + 0.5) * claim.cell_size
-            ), 6933))
-          WHERE claim.claim_user = ${userId} AND claim.cell_size = ${options.cellSize}
-        `);
-        totals.set(userId, Number(countResult.rows[0]?.count ?? 0) - added);
+        totals.set(userId, (incrementalTotals.get(`${arena.arenaId}:${userId}`) ?? 0) - added);
       }
       const endedTenures = new Map<string, boolean>();
       const events: ArenaLeadershipReplayEvent[] = [];
@@ -458,11 +464,14 @@ export function createArenaLeadershipReconciliationService(database: Database, o
             SELECT DISTINCT claim.claim_user, claim.x, claim.y
             FROM competition_grid_claims claim
             INNER JOIN arenas arena ON arena.id = ${arena.arenaId}
-              AND ST_Covers(arena.area, ST_SetSRID(ST_MakePoint(
-                (claim.x + 0.5) * claim.cell_size,
-                (claim.y + 0.5) * claim.cell_size
-              ), 6933))
-            WHERE claim.cell_size = ${options.cellSize}
+              AND ${arenaCellOwnershipPredicateSql({
+                arenaId: sql`arena.id`,
+                arenaType: sql`arena.arena_type`,
+                externalId: sql`arena.external_id`,
+                area: sql`arena.area`,
+                cellCenter: sql`ST_SetSRID(ST_MakePoint((claim.x + 0.5) * ${options.cellSize}, (claim.y + 0.5) * ${options.cellSize}), 6933)`,
+              })}
+            WHERE TRUE
           ), totals AS (
             SELECT claim_user, COUNT(*)::integer AS cells FROM pilot_cells GROUP BY claim_user
           )
@@ -488,10 +497,10 @@ export function createArenaLeadershipReconciliationService(database: Database, o
         await transaction.execute(sql`
           INSERT INTO arena_current_leaders (
             arena_id, user_id, cells_claimed, took_lead_at,
-            decisive_source_flight_id, decisive_cell_size, decisive_cell_x, decisive_cell_y
+            decisive_source_flight_id, decisive_cell_x, decisive_cell_y
           ) VALUES ${sql.join([...leaders.values()].map((leader) => sql`(
             ${arena.arenaId}, ${leader.userId}, ${leader.cellsClaimed}, ${leader.tookLeadAt},
-            ${leader.sourceFlightId}, ${leader.cellSize}, ${leader.cellX}, ${leader.cellY}
+            ${leader.sourceFlightId}, ${leader.cellX}, ${leader.cellY}
           )`), sql`, `)}
         `);
       }
@@ -499,10 +508,10 @@ export function createArenaLeadershipReconciliationService(database: Database, o
         await transaction.execute(sql`
           INSERT INTO arena_leadership_events (
             event_key, arena_id, user_id, event_type, claim_timestamp,
-            source_flight_id, cell_size, cell_x, cell_y
+            source_flight_id, cell_x, cell_y
           ) VALUES ${sql.join(events.map((event) => sql`(
             ${event.eventKey}, ${arena.arenaId}, ${event.userId}, ${event.eventType}, ${event.claimTimestamp},
-            ${event.sourceFlightId}, ${event.cellSize}, ${event.cellX}, ${event.cellY}
+            ${event.sourceFlightId}, ${event.cellX}, ${event.cellY}
           )`), sql`, `)} ON CONFLICT (event_key) DO NOTHING
         `);
       }

@@ -1,7 +1,7 @@
 import { sql } from 'drizzle-orm';
 import type { Database } from '../db/client.js';
 import { extractPolygonGeometries, type PolygonGeometry } from '../domain/arena/geoJson.js';
-import { claimableCellCountSql, normalizedArenaGeometrySql } from './arenaGeometrySql.js';
+import { normalizedArenaGeometrySql } from './arenaGeometrySql.js';
 import {
   createArenaLeadershipReconciliationService,
   type ArenaLeadershipReconciliationService,
@@ -158,22 +158,17 @@ export async function importStateArenasInTransaction(
       const inserted = await transaction.execute<{ id: string }>(sql`
         WITH normalized AS (
           SELECT ${normalizedArenaGeometrySql(state.geometries)} AS area
-        ), counted AS (
-          SELECT area, ${claimableCellCountSql({ area: sql`normalized.area`, cellSize: sql`${cellSize}` })} AS count
-          FROM normalized
         )
         INSERT INTO arenas (
           source_id, name, country, country_code, state, area,
-          external_source, external_id, arena_type,
-          claimable_cell_count, claimable_cell_size
+          external_source, external_id, arena_type
         )
         SELECT ${stateArenaSourceId(state.fips)}, ${state.name}, 'United States', 'US', ${state.name},
-          counted.area, ${CENSUS_STATE_ARENA_SOURCE}, ${state.fips}, 'state', counted.count, ${cellSize}
-        FROM counted
-        WHERE counted.count > 0
+          normalized.area, ${CENSUS_STATE_ARENA_SOURCE}, ${state.fips}, 'state'
+        FROM normalized
         RETURNING id
       `);
-      if (!inserted.rows[0]) throw new RangeError(`State ${state.abbreviation} does not contain a claimable grid cell at size ${cellSize}.`);
+      if (!inserted.rows[0]) throw new RangeError(`State ${state.abbreviation} could not be inserted.`);
     }
 
     if (options.reconcile !== false) {

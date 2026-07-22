@@ -38,11 +38,12 @@ async function flight(userId: string, label: string, startedAt: string, createdA
   return row.id;
 }
 
-async function arena(sourceId: number, type: 'launch' | 'general' | 'state' | 'country', wkt: string, denominator: number | null, size: number | null): Promise<void> {
+async function arena(sourceId: number, type: 'launch' | 'general' | 'state' | 'country', wkt: string, denominator: number | null, _size: number | null): Promise<void> {
+  const externalId = type === 'state' || type === 'country' ? String(sourceId) : null;
   await database.pool.query(`INSERT INTO arenas
-    (source_id, name, country, country_code, area, arena_type, claimable_cell_count, claimable_cell_size)
+    (source_id, name, country, country_code, area, arena_type, external_id, claimable_cell_count)
     VALUES ($1, $2, 'United States', 'US', ST_Multi(ST_GeomFromText($3, 6933)), $4, $5, $6)`,
-  [sourceId, `${type}-${sourceId}`, wkt, type, denominator, size]);
+  [sourceId, `${type}-${sourceId}`, wkt, type, externalId, denominator]);
 }
 
 describe('Release 2 Arena achievement backfill with PostgreSQL', () => {
@@ -61,9 +62,9 @@ describe('Release 2 Arena achievement backfill with PostgreSQL', () => {
     await arena(4, 'state', 'POLYGON((0 0,1000 0,1000 1000,0 1000,0 0))', null, null);
     await arena(5, 'country', 'POLYGON((0 0,1000 0,1000 1000,0 1000,0 0))', null, null);
     await database.db.insert(personalGridClaims).values([
-      { cellSize: 1_000, x: 0, y: 0, claimFlight: first, claimUser: firstUser, claimTimestamp: new Date('2026-01-01T00:00:00Z') },
-      { cellSize: 1_000, x: 0, y: 0, claimFlight: second, claimUser: firstUser, claimTimestamp: new Date('2026-02-02T00:00:00Z') },
-      { cellSize: 1_000, x: 1, y: 0, claimFlight: second, claimUser: firstUser, claimTimestamp: new Date('2026-02-02T00:00:00Z') },
+      { x: 0, y: 0, claimFlight: first, claimUser: firstUser, claimTimestamp: new Date('2026-01-01T00:00:00Z') },
+      { x: 0, y: 0, claimFlight: second, claimUser: firstUser, claimTimestamp: new Date('2026-02-02T00:00:00Z') },
+      { x: 1, y: 0, claimFlight: second, claimUser: firstUser, claimTimestamp: new Date('2026-02-02T00:00:00Z') },
     ]);
     await database.db.insert(achievements).values({
       userId: firstUser, achievementType: 'legacy', achievementKey: 'legacy_old', earnedAt: new Date('2025-01-01T00:00:00Z'), details: {},
@@ -132,12 +133,12 @@ describe('Release 2 Arena achievement backfill with PostgreSQL', () => {
     await arena(21, 'launch', 'POLYGON((1000 0,2000 0,2000 1000,1000 1000,1000 0))', null, null);
     await arena(22, 'general', 'POLYGON((0 0,2000 0,2000 1000,0 1000,0 0))', 2, 1_000);
     await database.db.insert(personalGridClaims).values([
-      { cellSize: 1_000, x: 0, y: 0, claimFlight: liveFirst, claimUser: liveUser, claimTimestamp: new Date('2026-05-01T00:00:00Z') },
-      { cellSize: 1_000, x: 0, y: 0, claimFlight: liveSecond, claimUser: liveUser, claimTimestamp: new Date('2026-05-01T00:00:00Z') },
-      { cellSize: 1_000, x: 1, y: 0, claimFlight: liveSecond, claimUser: liveUser, claimTimestamp: new Date('2026-05-01T00:00:00Z') },
-      { cellSize: 1_000, x: 0, y: 0, claimFlight: replayFirst, claimUser: replayUser, claimTimestamp: new Date('2026-05-01T00:00:00Z') },
-      { cellSize: 1_000, x: 0, y: 0, claimFlight: replaySecond, claimUser: replayUser, claimTimestamp: new Date('2026-05-01T00:00:00Z') },
-      { cellSize: 1_000, x: 1, y: 0, claimFlight: replaySecond, claimUser: replayUser, claimTimestamp: new Date('2026-05-01T00:00:00Z') },
+      { x: 0, y: 0, claimFlight: liveFirst, claimUser: liveUser, claimTimestamp: new Date('2026-05-01T00:00:00Z') },
+      { x: 0, y: 0, claimFlight: liveSecond, claimUser: liveUser, claimTimestamp: new Date('2026-05-01T00:00:00Z') },
+      { x: 1, y: 0, claimFlight: liveSecond, claimUser: liveUser, claimTimestamp: new Date('2026-05-01T00:00:00Z') },
+      { x: 0, y: 0, claimFlight: replayFirst, claimUser: replayUser, claimTimestamp: new Date('2026-05-01T00:00:00Z') },
+      { x: 0, y: 0, claimFlight: replaySecond, claimUser: replayUser, claimTimestamp: new Date('2026-05-01T00:00:00Z') },
+      { x: 1, y: 0, claimFlight: replaySecond, claimUser: replayUser, claimTimestamp: new Date('2026-05-01T00:00:00Z') },
     ]);
     const liveIds: string[] = [];
     for (const [sourceFlightId, ids] of [[liveFirst, [liveFirst]], [liveSecond, [liveFirst, liveSecond]]] as const) {
@@ -188,8 +189,8 @@ describe('Release 2 Arena achievement backfill with PostgreSQL', () => {
     const second = await flight(id, 'two', '2026-06-02T00:00:00Z', '2026-06-02T00:00:00Z');
     await arena(30, 'launch', 'POLYGON((0 0,1000 0,1000 1000,0 1000,0 0))', 1, 1_000);
     await database.db.insert(personalGridClaims).values([
-      { cellSize: 1_000, x: 0, y: 0, claimFlight: first, claimUser: id, claimTimestamp: new Date('2026-06-01T00:00:00Z') },
-      { cellSize: 1_000, x: 0, y: 0, claimFlight: second, claimUser: id, claimTimestamp: new Date('2026-06-02T00:00:00Z') },
+      { x: 0, y: 0, claimFlight: first, claimUser: id, claimTimestamp: new Date('2026-06-01T00:00:00Z') },
+      { x: 0, y: 0, claimFlight: second, claimUser: id, claimTimestamp: new Date('2026-06-02T00:00:00Z') },
     ]);
     let calls = 0;
     const result = runArenaAchievementBackfill(database.db, {

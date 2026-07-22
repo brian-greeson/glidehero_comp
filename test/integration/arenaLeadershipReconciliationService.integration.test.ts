@@ -50,12 +50,12 @@ async function seed() {
   );
   await database.pool.query(
     `INSERT INTO competition_grid_claims
-       (competition_month, cell_size, x, y, claim_flight, claim_user, claim_timestamp)
+       (competition_month, x, y, claim_flight, claim_user, claim_timestamp)
      VALUES
-       ('2026-01-01', $3, 0, 0, $1, $4, '2026-01-01T00:00:00Z'),
-       ('2026-01-01', $3, 1, 0, $1, $4, '2026-01-01T00:00:00Z'),
-       ('2026-01-01', $3, 2, 0, $2, $5, '2026-01-02T00:00:00Z')`,
-    [flightA, flightB, cellSize, userA.rows[0]?.id, userB.rows[0]?.id],
+       ('2026-01-01', 0, 0, $1, $3, '2026-01-01T00:00:00Z'),
+       ('2026-01-01', 1, 0, $1, $3, '2026-01-01T00:00:00Z'),
+       ('2026-01-01', 2, 0, $2, $4, '2026-01-02T00:00:00Z')`,
+    [flightA, flightB, userA.rows[0]?.id, userB.rows[0]?.id],
   );
   return { general, launch, userA: userA.rows[0]?.id, userB: userB.rows[0]?.id };
 }
@@ -75,9 +75,9 @@ async function addClaimFlight(userId: string, input: { x: number; timestamp: str
   );
   await database.pool.query(
     `INSERT INTO competition_grid_claims
-       (competition_month, cell_size, x, y, claim_flight, claim_user, claim_timestamp)
-     VALUES ('2026-01-01', $1, $2, 0, $3, $4, $5)`,
-    [cellSize, input.x, flightId, userId, input.timestamp],
+       (competition_month, x, y, claim_flight, claim_user, claim_timestamp)
+     VALUES ('2026-01-01', $1, 0, $2, $3, $4)`,
+    [input.x, flightId, userId, input.timestamp],
   );
   return flightId;
 }
@@ -166,5 +166,31 @@ describe('Arena leadership reconciliation', () => {
     );
     expect(events.rows.map(({ event_type }) => event_type)).toEqual(['took', 'took', 'lost']);
     expect(events.rows.some(({ event_key }) => event_key === initialEvents.rows[0]?.event_key)).toBe(true);
+  });
+
+  it('applies exclusive State/Country ownership while preserving cross-type and General overlap', async () => {
+    const seeded = await seed();
+    const stateLow = crypto.randomUUID();
+    const stateHigh = crypto.randomUUID();
+    const countryLow = crypto.randomUUID();
+    const countryHigh = crypto.randomUUID();
+    const shape = 'MULTIPOLYGON (((0 0, 3000 0, 3000 3000, 0 3000, 0 0)))';
+    await database.pool.query(`
+      INSERT INTO arenas (id, source_id, name, country, country_code, area, arena_type, external_id)
+      VALUES
+        ($1, 11, 'State Low', 'United States', 'US', ST_GeomFromText($5, 6933), 'state', 'A-state'),
+        ($2, 12, 'State High', 'United States', 'US', ST_GeomFromText($5, 6933), 'state', 'B-state'),
+        ($3, 13, 'Country Low', 'United States', 'US', ST_GeomFromText($5, 6933), 'country', 'A-country'),
+        ($4, 14, 'Country High', 'United States', 'US', ST_GeomFromText($5, 6933), 'country', 'B-country')`,
+      [stateLow, stateHigh, countryLow, countryHigh, shape],
+    );
+    const service = createArenaLeadershipReconciliationService(database.db, { cellSize });
+    const result = await service.reconcile({ arenaIds: [stateLow, stateHigh, countryLow, countryHigh, seeded.general] });
+    const summaries = new Map(result.arenas.map((arena) => [arena.arenaId, arena]));
+    expect(summaries.get(stateLow)?.leadingCellCount).toBe(2);
+    expect(summaries.get(countryLow)?.leadingCellCount).toBe(2);
+    expect(summaries.get(stateHigh)?.leadingCellCount).toBe(0);
+    expect(summaries.get(countryHigh)?.leadingCellCount).toBe(0);
+    expect(summaries.get(seeded.general)?.leadingCellCount).toBe(2);
   });
 });

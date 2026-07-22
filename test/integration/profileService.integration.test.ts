@@ -103,10 +103,9 @@ describe('profileService', () => {
     const secondFlight = await createFlight(2);
 
     await database.db.insert(personalGridClaims).values([
-      { claimUser: pilot.user.userId, claimFlight: firstFlight, cellSize: 1_000, x: 1, y: 2, claimTimestamp: new Date() },
-      { claimUser: pilot.user.userId, claimFlight: secondFlight, cellSize: 1_000, x: 1, y: 2, claimTimestamp: new Date() },
-      { claimUser: pilot.user.userId, claimFlight: secondFlight, cellSize: 1_000, x: 3, y: 4, claimTimestamp: new Date() },
-      { claimUser: pilot.user.userId, claimFlight: secondFlight, cellSize: 2_000, x: 99, y: 99, claimTimestamp: new Date() },
+      { claimUser: pilot.user.userId, claimFlight: firstFlight, x: 1, y: 2, claimTimestamp: new Date() },
+      { claimUser: pilot.user.userId, claimFlight: secondFlight, x: 1, y: 2, claimTimestamp: new Date() },
+      { claimUser: pilot.user.userId, claimFlight: secondFlight, x: 3, y: 4, claimTimestamp: new Date() },
     ]);
     await database.db.insert(flightProgress).values([
       {
@@ -250,12 +249,12 @@ describe('profileService', () => {
     const shape = 'MULTIPOLYGON (((0 0, 1000 0, 1000 1000, 0 1000, 0 0)))';
     await database.pool.query(
       `INSERT INTO arenas
-        (id, source_id, name, country, country_code, area, arena_type, claimable_cell_count, claimable_cell_size)
+        (id, source_id, name, country, country_code, area, arena_type, external_id, claimable_cell_count)
        VALUES
-        ($1, 101, 'Zeta State', 'United States', 'US', ST_GeomFromText($5, 6933), 'state', 1000, 1000),
-        ($2, 102, 'Alpha General', 'United States', 'US', ST_GeomFromText($5, 6933), 'general', 1000, 1000),
-        ($3, 103, 'Launch Excluded', 'United States', 'US', ST_GeomFromText($5, 6933), 'launch', 100, 1000),
-        ($4, 104, 'Invalid Denominator', 'United States', 'US', ST_GeomFromText($5, 6933), 'country', 0, 1000)`,
+        ($1, 101, 'Zeta State', 'United States', 'US', ST_GeomFromText($5, 6933), 'state', 'state-101', 1000),
+        ($2, 102, 'Alpha General', 'United States', 'US', ST_GeomFromText($5, 6933), 'general', NULL, 1000),
+        ($3, 103, 'Launch Excluded', 'United States', 'US', ST_GeomFromText($5, 6933), 'launch', NULL, 100),
+        ($4, 104, 'Invalid Denominator', 'United States', 'US', ST_GeomFromText($5, 6933), 'country', 'country-104', 0)`,
       [soleArena, jointArena, launchArena, invalidArena, shape],
     );
     await database.pool.query(
@@ -265,17 +264,28 @@ describe('profileService', () => {
     );
     await database.pool.query(
       `INSERT INTO arena_current_leaders
-        (arena_id, user_id, cells_claimed, took_lead_at, decisive_cell_size, decisive_cell_x, decisive_cell_y)
+        (arena_id, user_id, cells_claimed, took_lead_at, decisive_cell_x, decisive_cell_y)
        VALUES
-        ($1, $4, 7, '2026-07-19T12:00:00Z', 1000, 1, 1),
-        ($2, $4, 123, '2026-07-20T12:00:00Z', 5, 1000, 1),
-        ($2, $5, 123, '2026-07-18T12:00:00Z', 1000, 2, 2),
-        ($3, $4, 2, '2026-07-21T12:00:00Z', 1000, 3, 3)`,
+        ($1, $4, 7, '2026-07-19T12:00:00Z', 1, 1),
+        ($2, $4, 123, '2026-07-20T12:00:00Z', 1000, 1),
+        ($2, $5, 123, '2026-07-18T12:00:00Z', 2, 2),
+        ($3, $4, 2, '2026-07-21T12:00:00Z', 3, 3)`,
       [soleArena, jointArena, invalidArena, pilot.user.userId, jointPilot.user.userId],
     );
 
     const profile = await profiles.getPilotProfile(pilot.user.userId);
     expect(profile?.currentArenaLeaderships).toEqual([
+      expect.objectContaining({
+        arenaId: invalidArena,
+        arenaName: 'Invalid Denominator',
+        arenaType: 'country',
+        arenaPath: '/arena/us/invalid-denominator-104',
+        status: 'sole',
+        cellsClaimed: 2,
+        coveragePercent: null,
+        leadMarginCells: 1,
+        leadingSince: 'Jul 21, 2026',
+      }),
       expect.objectContaining({
         arenaId: jointArena,
         arenaName: 'Alpha General',
@@ -291,16 +301,16 @@ describe('profileService', () => {
         arenaId: soleArena,
         arenaName: 'Zeta State',
         arenaType: 'state',
+        arenaPath: '/arena/us/zeta-state-101',
         status: 'sole',
         cellsClaimed: 7,
-        coveragePercent: 0.7,
+        coveragePercent: null,
         leadMarginCells: 7,
         leadingSince: 'Jul 19, 2026',
       }),
     ]);
     expect(profile?.currentArenaLeaderships).not.toEqual(expect.arrayContaining([
       expect.objectContaining({ arenaId: launchArena }),
-      expect.objectContaining({ arenaId: invalidArena }),
     ]));
   });
 
@@ -386,13 +396,13 @@ describe('profileService', () => {
     const firstFlight = await createFlight('first');
     const secondFlight = await createFlight('second');
     await database.db.insert(personalGridClaims).values([
-      { claimUser: pilot.user.userId, claimFlight: firstFlight, cellSize: 1_000, x: 0, y: 0, claimTimestamp: new Date() },
-      { claimUser: pilot.user.userId, claimFlight: secondFlight, cellSize: 1_000, x: 0, y: 0, claimTimestamp: new Date() },
+      { claimUser: pilot.user.userId, claimFlight: firstFlight, x: 0, y: 0, claimTimestamp: new Date() },
+      { claimUser: pilot.user.userId, claimFlight: secondFlight, x: 0, y: 0, claimTimestamp: new Date() },
     ]);
     const insertArena = (sourceId: number, name: string, type: string, wkt: string, total: number | null) => database.pool.query(`
-      INSERT INTO arenas (source_id, name, country, country_code, area, arena_type, claimable_cell_count, claimable_cell_size)
+      INSERT INTO arenas (source_id, name, country, country_code, area, arena_type, external_id, claimable_cell_count)
       VALUES ($1, $2, 'United States', 'US', ST_Multi(ST_GeomFromText($3, 6933)), $4, $5, $6)
-    `, [sourceId, name, wkt, type, total, total === null ? null : 1_000]);
+    `, [sourceId, name, wkt, type, ['state', 'country'].includes(type) ? `${type}-${sourceId}` : null, total]);
     await insertArena(10, 'Launch', 'launch', 'POLYGON((0 0,1000 0,1000 1000,0 1000,0 0))', 1);
     await insertArena(11, 'Best General', 'general', 'POLYGON((0 0,2000 0,2000 1000,0 1000,0 0))', 2);
     await insertArena(12, 'Large General', 'general', 'POLYGON((0 0,2000 0,2000 2000,0 2000,0 0))', 4);

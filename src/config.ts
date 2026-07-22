@@ -24,7 +24,6 @@ const envSchema = z.object({
     .transform((folder) => folder.replace(/^\/+|\/+$/g, ''))
     .pipe(z.string().min(1)),
   MAPTILER_API_KEY: z.string().min(1),
-  GRID_CLAIM_CELL_SIZE: z.coerce.number().int().min(1),
   KOFI_VERIFICATION_TOKEN: z.string().min(1),
   ADMIN_EMAILS: z.string().optional(),
 });
@@ -61,7 +60,7 @@ export function parseConfig(env: NodeJS.ProcessEnv): AppConfig {
     sessionCookieName: parsed.SESSION_COOKIE_NAME,
     sessionTtlSeconds: parsed.SESSION_TTL_SECONDS,
     mapTilerApiKey: parsed.MAPTILER_API_KEY,
-    gridClaimCellSize: parsed.GRID_CLAIM_CELL_SIZE,
+    gridClaimCellSize: 500,
     kofiVerificationToken: parsed.KOFI_VERIFICATION_TOKEN,
     adminEmails: [
       ...new Set(

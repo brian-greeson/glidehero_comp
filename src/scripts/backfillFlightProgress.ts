@@ -334,8 +334,7 @@ async function main(): Promise<void> {
   if (args.length > 0 && !apply) throw new Error(`Unknown argument: ${args[0] ?? ''}\n\n${usage}`);
   const databaseUrl = process.env.DATABASE_URL;
   if (!databaseUrl) throw new Error('DATABASE_URL is required.');
-  const cellSize = Number(process.env.GRID_CLAIM_CELL_SIZE);
-  if (!Number.isInteger(cellSize) || cellSize < 1) throw new Error('GRID_CLAIM_CELL_SIZE must be a positive integer.');
+  const cellSize = 500;
 
   const { db, pool } = createDatabase(databaseUrl);
   try {

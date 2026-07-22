@@ -4,7 +4,7 @@ import {
   NATURAL_EARTH_COUNTRY_SOURCE,
   type CountryArenaDefinition,
 } from '../domain/arena/countryGeoJson.js';
-import { claimableCellCountSql, normalizedArenaGeometrySql } from './arenaGeometrySql.js';
+import { normalizedArenaGeometrySql } from './arenaGeometrySql.js';
 import {
   createArenaLeadershipReconciliationService,
   type ArenaLeadershipReconciliationService,
@@ -102,22 +102,17 @@ export async function importCountryArenasInTransaction(
       const inserted = await transaction.execute<{ id: string }>(sql`
         WITH normalized AS (
           SELECT ${normalizedArenaGeometrySql([country.geometry])} AS area
-        ), counted AS (
-          SELECT area, ${claimableCellCountSql({ area: sql`normalized.area`, cellSize: sql`${cellSize}` })} AS count
-          FROM normalized
         )
         INSERT INTO arenas (
           source_id, name, country, country_code, area,
-          external_source, external_id, arena_type,
-          claimable_cell_count, claimable_cell_size
+          external_source, external_id, arena_type
         )
-        SELECT ${country.sourceId}, ${country.name}, ${country.name}, ${country.isoCode}, counted.area,
-          ${NATURAL_EARTH_COUNTRY_SOURCE}, ${country.sovereignId}, 'country', counted.count, ${cellSize}
-        FROM counted
-        WHERE counted.count > 0
+        SELECT ${country.sourceId}, ${country.name}, ${country.name}, ${country.isoCode}, normalized.area,
+          ${NATURAL_EARTH_COUNTRY_SOURCE}, ${country.sovereignId}, 'country'
+        FROM normalized
         RETURNING id
       `);
-      if (!inserted.rows[0]) throw new RangeError(`Country ${country.isoCode} does not contain a claimable grid cell at size ${cellSize}.`);
+      if (!inserted.rows[0]) throw new RangeError(`Country ${country.isoCode} could not be inserted.`);
     }
 
     if (options.reconcile !== false) {

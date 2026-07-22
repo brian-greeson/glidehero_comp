@@ -45,11 +45,10 @@ describe('State Arena importer', () => {
       empty: boolean;
       geometry_type: string;
       claimable_cell_count: number | null;
-      claimable_cell_size: number | null;
     }>(`SELECT source_id, external_id, country, country_code, arena_type,
       ST_SRID(area)::integer AS srid, ST_IsValid(area) AS valid,
       ST_IsEmpty(area) AS empty, ST_GeometryType(area) AS geometry_type,
-      claimable_cell_count, claimable_cell_size
+      claimable_cell_count
       FROM arenas ORDER BY external_id`);
 
     expect(result.rows).toHaveLength(2);
@@ -58,7 +57,7 @@ describe('State Arena importer', () => {
     expect(result.rows.every((row) => row.arena_type === 'state')).toBe(true);
     expect(result.rows.every((row) => row.srid === 6933 && row.valid && !row.empty && row.geometry_type === 'ST_MultiPolygon')).toBe(true);
     expect(result.rows.every((row) => Number(row.source_id) === stateArenaSourceId(row.external_id))).toBe(true);
-    expect(result.rows.every((row) => Number(row.claimable_cell_count) > 0 && row.claimable_cell_size === cellSize)).toBe(true);
+    expect(result.rows.every((row) => row.claimable_cell_count === null)).toBe(true);
   }, 120_000);
 
   it('rejects a rerun without modifying the existing State Arenas', async () => {

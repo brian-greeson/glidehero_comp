@@ -44,13 +44,13 @@ async function seed() {
   const shapeOne = 'MULTIPOLYGON (((0 0, 1000 0, 1000 5000, 0 5000, 0 0)))';
   const shapeTwo = 'MULTIPOLYGON (((1000 0, 3000 0, 3000 3000, 1000 3000, 1000 0)))';
   await database.pool.query(`INSERT INTO arenas (id, source_id, name, country, country_code, area, arena_type) VALUES ($1, 1, 'Later batch', 'United States', 'US', ST_GeomFromText($4, 6933), 'general'), ($2, 2, 'Earlier batch', 'United States', 'US', ST_GeomFromText($5, 6933), 'general'), ($3, 3, 'Launch only', 'United States', 'US', ST_GeomFromText($4, 6933), 'launch')`, [arenaOne, arenaTwo, launch, shapeOne, shapeTwo]);
-  await database.pool.query(`INSERT INTO competition_grid_claims (competition_month, cell_size, x, y, claim_flight, claim_user, claim_timestamp) VALUES
-    ('2026-01-01', $3, 0, 0, $1, $6, '2026-01-03T00:00:00Z'),
-    ('2026-01-01', $3, 1, 0, $2, $6, '2026-01-01T00:00:00Z'),
-    ('2026-01-01', $3, 0, 1, $4, $7, '2026-01-04T00:00:00Z'),
-    ('2026-01-01', $3, 0, 2, $5, $7, '2026-01-05T00:00:00Z'),
-    ('2026-01-01', $3, 0, 3, $8, $6, '2026-01-07T00:00:00Z'),
-    ('2026-01-01', $3, 0, 4, $8, $6, '2026-01-07T00:00:00Z')`, [flightIds[0], flightIds[1], cellSize, rivalFlightIds[0], rivalFlightIds[1], user, rival, flightIds[2]]);
+  await database.pool.query(`INSERT INTO competition_grid_claims (competition_month, x, y, claim_flight, claim_user, claim_timestamp) VALUES
+    ('2026-01-01', 0, 0, $1, $5, '2026-01-03T00:00:00Z'),
+    ('2026-01-01', 1, 0, $2, $5, '2026-01-01T00:00:00Z'),
+    ('2026-01-01', 0, 1, $3, $6, '2026-01-04T00:00:00Z'),
+    ('2026-01-01', 0, 2, $4, $6, '2026-01-05T00:00:00Z'),
+    ('2026-01-01', 0, 3, $7, $5, '2026-01-07T00:00:00Z'),
+    ('2026-01-01', 0, 4, $7, $5, '2026-01-07T00:00:00Z')`, [flightIds[0], flightIds[1], rivalFlightIds[0], rivalFlightIds[1], user, rival, flightIds[2]]);
   return { user, rival, flightIds, rivalFlightIds };
 }
 
@@ -71,9 +71,9 @@ describe('Arena leadership backfill', () => {
       );
     }
     await database.pool.query(
-      `INSERT INTO competition_grid_claims (competition_month, cell_size, x, y, claim_flight, claim_user, claim_timestamp)
-       VALUES ('2026-01-01', $1, 0, 0, $2, $3, $4)`,
-      [cellSize, flight, user, new Date(recordedAt.getTime() + 2_000)],
+      `INSERT INTO competition_grid_claims (competition_month, x, y, claim_flight, claim_user, claim_timestamp)
+       VALUES ('2026-01-01', 0, 0, $1, $2, $3)`,
+      [flight, user, new Date(recordedAt.getTime() + 2_000)],
     );
     await database.pool.query(
       `INSERT INTO arenas (source_id, name, country, country_code, area, arena_type)
@@ -100,6 +100,28 @@ describe('Arena leadership backfill', () => {
     expect((await database.pool.query('SELECT count(*)::int AS count FROM arena_leadership_states')).rows[0].count).toBe(0);
     expect((await database.pool.query('SELECT count(*)::int AS count FROM achievements')).rows[0].count).toBe(0);
     expect((await database.pool.query('SELECT count(*)::int AS count FROM arenas WHERE claimable_cell_count IS NOT NULL')).rows[0].count).toBe(0);
+  });
+
+  it('reconciles denominators only for General Arenas', async () => {
+    await database.pool.query(`
+      INSERT INTO arenas (source_id, name, country, country_code, area, arena_type, external_id, claimable_cell_count)
+      VALUES
+        (21, 'General denominator', 'United States', 'US', ST_GeomFromText('MULTIPOLYGON (((0 0, 1000 0, 1000 1000, 0 1000, 0 0)))', 6933), 'general', NULL, NULL),
+        (22, 'State denominator ignored', 'United States', 'US', ST_GeomFromText('MULTIPOLYGON (((0 0, 1000 0, 1000 1000, 0 1000, 0 0)))', 6933), 'state', 'state-test-22', 77),
+        (23, 'Country denominator ignored', 'United States', 'US', ST_GeomFromText('MULTIPOLYGON (((0 0, 1000 0, 1000 1000, 0 1000, 0 0)))', 6933), 'country', 'country-test-23', 88)
+    `);
+
+    const summary = await runArenaLeadershipBackfill(database.db, { apply: true, cellSize, batchSize: 10 });
+    expect(summary.denominatorsPopulated).toBe(1);
+    expect(summary.denominatorsChanged).toBe(1);
+    const counts = await database.pool.query<{ arena_type: string; claimable_cell_count: number | null }>(
+      `SELECT arena_type, claimable_cell_count::integer FROM arenas ORDER BY source_id`,
+    );
+    expect(counts.rows).toEqual([
+      { arena_type: 'general', claimable_cell_count: 1 },
+      { arena_type: 'state', claimable_cell_count: 77 },
+      { arena_type: 'country', claimable_cell_count: 88 },
+    ]);
   });
 
   it('applies canonical history, chooses the earliest cross-batch award, excludes Launch, and reruns idempotently', async () => {
@@ -144,7 +166,7 @@ describe('Arena leadership backfill', () => {
     const jointArena = '00000000-0000-4000-8000-000000000005';
     const shape = 'MULTIPOLYGON (((5000 0, 6000 0, 6000 1000, 5000 1000, 5000 0)))';
     await database.pool.query(`INSERT INTO arenas (id, source_id, name, country, country_code, area, arena_type) VALUES ($1, 5, 'Joint', 'United States', 'US', ST_GeomFromText($2, 6933), 'general')`, [jointArena, shape]);
-    await database.pool.query(`INSERT INTO competition_grid_claims (competition_month, cell_size, x, y, claim_flight, claim_user, claim_timestamp) VALUES ('2026-01-01', $3, 5, 0, $1, $4, '2026-02-01T00:00:00Z'), ('2026-01-01', $3, 5, 0, $2, $5, '2026-02-01T00:00:00Z')`, [seeded.flightIds[0], seeded.rivalFlightIds[0], cellSize, seeded.user, seeded.rival]);
+    await database.pool.query(`INSERT INTO competition_grid_claims (competition_month, x, y, claim_flight, claim_user, claim_timestamp) VALUES ('2026-01-01', 5, 0, $1, $3, '2026-02-01T00:00:00Z'), ('2026-01-01', 5, 0, $2, $4, '2026-02-01T00:00:00Z')`, [seeded.flightIds[0], seeded.rivalFlightIds[0], seeded.user, seeded.rival]);
     const summary = await runArenaLeadershipBackfill(database.db, { apply: false, cellSize, batchSize: 10 });
     expect(summary.currentJointLeaders).toBe(2);
   });

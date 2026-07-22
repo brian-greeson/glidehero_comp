@@ -15,7 +15,7 @@ const CONFIRM_FLAG = '--confirm-delete-all-arenas';
 const APPLY_FLAG = '--apply';
 const DRY_RUN_FLAG = '--dry-run';
 const HELP_FLAG = '--help';
-const DEFAULT_CELL_SIZE = process.env.GRID_CLAIM_CELL_SIZE;
+const DEFAULT_CELL_SIZE = 500;
 
 export type RebuildOptions = { apply: boolean; countryPath: string; statePath: string; launchPath: string };
 export type RebuildSummary = {
@@ -67,11 +67,7 @@ export function parseRebuildArgs(argv: string[]): RebuildOptions {
 }
 
 function cellSizeFromEnvironment(): number {
-  const raw = process.env.GRID_CLAIM_CELL_SIZE ?? DEFAULT_CELL_SIZE;
-  if (!raw || !/^\d+$/.test(raw) || Number(raw) <= 0) {
-    throw new Error('GRID_CLAIM_CELL_SIZE must be a positive integer.');
-  }
-  return Number(raw);
+  return DEFAULT_CELL_SIZE;
 }
 
 function validateLaunchSource(rows: ReturnType<typeof parseMysqlLaunchDump>, countries: ReturnType<typeof parseCountryArenaGeoJson>): void {
@@ -98,15 +94,14 @@ async function verifyRebuild(transaction: Parameters<Parameters<Database['transa
   if (actual.get('country') !== expected.country || actual.get('state') !== expected.state || actual.get('launch') !== expected.launch || (actual.get('general') ?? 0) !== 0 || actual.size !== 3) {
     throw new Error(`Arena type counts do not match sources: ${JSON.stringify(Object.fromEntries(actual))}.`);
   }
-  const checks = await transaction.execute<{ duplicateSources: number; duplicateExternal: number; missingExternal: number; badIso: number; badGeometry: number; badClaims: number; badStateCountryClaims: number }>(sql`
+  const checks = await transaction.execute<{ duplicateSources: number; duplicateExternal: number; missingExternal: number; badIso: number; badGeometry: number; badClaims: number }>(sql`
     SELECT
       (SELECT COUNT(*) - COUNT(DISTINCT source_id) FROM arenas) AS "duplicateSources",
       (SELECT COUNT(*) FROM (SELECT external_source, external_id FROM arenas WHERE external_source IS NOT NULL AND external_id IS NOT NULL GROUP BY external_source, external_id HAVING COUNT(*) > 1) duplicates) AS "duplicateExternal",
       (SELECT COUNT(*) FROM arenas WHERE arena_type IN ('country', 'state', 'launch') AND (external_source IS NULL OR external_id IS NULL)) AS "missingExternal",
       (SELECT COUNT(*) FROM arenas WHERE country_code !~ '^[A-Z]{2}$' OR country_code <> UPPER(country_code)) AS "badIso",
       (SELECT COUNT(*) FROM arenas WHERE area IS NULL OR ST_IsEmpty(area) OR NOT ST_IsValid(area) OR ST_GeometryType(area) <> 'ST_MultiPolygon' OR ST_SRID(area) <> 6933) AS "badGeometry",
-      (SELECT COUNT(*) FROM arenas WHERE arena_type = 'launch' AND (claimable_cell_count <> 25 OR claimable_cell_size <> ${cellSize})) AS "badClaims",
-      (SELECT COUNT(*) FROM arenas WHERE arena_type IN ('state', 'country') AND (claimable_cell_count IS NULL OR claimable_cell_count <= 0 OR claimable_cell_size <> ${cellSize})) AS "badStateCountryClaims"
+      (SELECT COUNT(*) FROM arenas WHERE arena_type = 'launch' AND claimable_cell_count <> 25) AS "badClaims"
   `);
   const result = checks.rows[0];
   if (!result || Object.values(result).some((value) => Number(value) !== 0)) throw new Error(`Arena rebuild verification failed: ${JSON.stringify(result)}.`);

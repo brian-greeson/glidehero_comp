@@ -20,7 +20,7 @@
           </div>
           <dl class="profile-arena-leadership-stats">
             <div><dt>Cells</dt><dd>{{ if leadership.cellsClaimed === 0 }}0{{ else }}{{ leadership.cellsClaimed }}{{ /if }}</dd></div>
-            <div><dt>Coverage</dt><dd>{{ if leadership.coveragePercent === 0 }}0{{ else }}{{ leadership.coveragePercent }}{{ /if }}%</dd></div>
+            {{ if leadership.coveragePercent !== null }}<div><dt>Coverage</dt><dd>{{ if leadership.coveragePercent === 0 }}0{{ else }}{{ leadership.coveragePercent }}{{ /if }}%</dd></div>{{ /if }}
             <div><dt>Lead in cells</dt><dd>{{ if leadership.leadMarginCells === 0 }}0{{ else }}{{ leadership.leadMarginCells }}{{ /if }}</dd></div>
           </dl>
           <p class="profile-arena-leadership-date">Leading since <time>{{ leadership.leadingSince }}</time></p>

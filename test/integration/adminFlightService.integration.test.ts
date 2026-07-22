@@ -74,7 +74,7 @@ describe('adminFlightService management', () => {
       longitude: -105, gpsAltitudeMeters: 1000, pressureAltitudeMeters: 1000,
     });
     await database.db.insert(personalGridClaims).values({
-      cellSize: 1000, x: 0, y: 0, claimFlight: stored.flight.id, claimUser: stored.user.id, claimTimestamp: new Date(),
+      x: 0, y: 0, claimFlight: stored.flight.id, claimUser: stored.user.id, claimTimestamp: new Date(),
     });
     const { service, send, uploadQueue } = serviceHarness();
     await expect(service.deleteFlight({ userId: stored.user.id, flightId: stored.flight.id })).resolves.toBe('deleted');
@@ -130,7 +130,7 @@ describe('adminFlightService management', () => {
     const general = await storedArena({ sourceId: 20_001, arenaType: 'general' });
     await storedArena({ sourceId: 20_002, arenaType: 'launch' });
     await database.db.insert(competitionGridClaims).values({
-      competitionMonth: '2026-07-01', cellSize: 1_000, x: 0, y: 0,
+      competitionMonth: '2026-07-01', x: 0, y: 0,
       claimFlight: stored.flight.id, claimUser: stored.user.id, claimTimestamp: new Date('2026-07-14T12:00:00Z'),
     });
     const leadership = { reconcile: vi.fn(), reconcileInTransaction: vi.fn(async () => ({
@@ -150,7 +150,7 @@ describe('adminFlightService management', () => {
     const stored = await storedFlight();
     await storedArena({ sourceId: 20_003, arenaType: 'general' });
     await database.db.insert(competitionGridClaims).values({
-      competitionMonth: '2026-07-01', cellSize: 1_000, x: 0, y: 0,
+      competitionMonth: '2026-07-01', x: 0, y: 0,
       claimFlight: stored.flight.id, claimUser: stored.user.id, claimTimestamp: new Date('2026-07-14T12:00:00Z'),
     });
     const failure = new Error('forced deletion reconciliation failure');
@@ -174,11 +174,11 @@ describe('adminFlightService management', () => {
     await storedArena({ sourceId: 20_005, arenaType: 'launch' });
     await database.db.insert(competitionGridClaims).values([
       {
-        competitionMonth: '2026-07-01', cellSize: 1_000, x: 0, y: 0,
+        competitionMonth: '2026-07-01', x: 0, y: 0,
         claimFlight: leader.flight.id, claimUser: leader.user.id, claimTimestamp: new Date('2026-07-14T12:00:00Z'),
       },
       {
-        competitionMonth: '2026-07-01', cellSize: 1_000, x: 0, y: 0,
+        competitionMonth: '2026-07-01', x: 0, y: 0,
         claimFlight: remaining.flight.id, claimUser: remaining.user.id, claimTimestamp: new Date('2026-07-15T12:00:00Z'),
       },
     ]);

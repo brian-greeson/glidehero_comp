@@ -2,7 +2,7 @@ import { sql } from 'drizzle-orm';
 import type { Database } from '../db/client.js';
 import type { MapGridCellFeature, MapGridGeoJson } from '../domain/territory/mapGridGeoJson.js';
 import { viewportCtes, type ViewportBounds } from './viewportGrid.js';
-import { claimCellCenterSql } from './arenaGeometrySql.js';
+import { arenaCellOwnershipPredicateSql, claimCellCenterSql } from './arenaGeometrySql.js';
 
 type StoredCell = {
   x: number;
@@ -65,7 +65,7 @@ export function createMapGridService(
           CROSS JOIN LATERAL ST_SquareGrid(${cellSize}, viewport.geometry) AS grid(geom, x, y)
           WHERE arena.id = ${arenaId}
             AND ST_Intersects(grid.geom, viewport.geometry)
-            AND ST_Covers(arena.area, ${claimCellCenterSql({ x: sql`grid.x`, y: sql`grid.y`, cellSize: sql`${cellSize}` })})
+            AND ${arenaCellOwnershipPredicateSql({ arenaId: sql`arena.id`, arenaType: sql`arena.arena_type`, externalId: sql`arena.external_id`, area: sql`arena.area`, cellCenter: claimCellCenterSql({ x: sql`grid.x`, y: sql`grid.y`, cellSize: sql`${cellSize}` }) })}
         )
         SELECT x, y, ST_AsGeoJSON(ST_Transform(geom, 4326))::jsonb AS geometry
         FROM cells ORDER BY x, y LIMIT ${maxViewportCells + 1}

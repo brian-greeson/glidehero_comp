@@ -157,16 +157,22 @@ export const arenas = pgTable(
     arenaType: arenaType('arena_type').notNull().default('general'),
     countryCode: text('country_code').notNull(),
     claimableCellCount: bigint('claimable_cell_count', { mode: 'number' }),
-    claimableCellSize: integer('claimable_cell_size'),
   },
   (table) => [
     unique('arenas_source_id_unique').on(table.sourceId),
     unique('arenas_id_arena_type_unique').on(table.id, table.arenaType),
     index('arenas_area_gist_idx').using('gist', table.area),
     check('arenas_country_code_iso2_check', sql`${table.countryCode} ~ '^[A-Z]{2}$'`),
+    check(
+      'arenas_state_country_external_id_required',
+      sql`${table.arenaType} NOT IN ('state', 'country') OR (${table.externalId} IS NOT NULL AND btrim(${table.externalId}) <> '')`,
+    ),
     uniqueIndex('arenas_external_source_external_id_unique')
       .on(table.externalSource, table.externalId)
       .where(sql`${table.externalSource} IS NOT NULL AND ${table.externalId} IS NOT NULL`),
+    uniqueIndex('arenas_arena_type_external_id_state_country_unique')
+      .on(table.arenaType, table.externalId)
+      .where(sql`${table.arenaType} IN ('state', 'country')`),
   ],
 );
 
@@ -214,14 +220,12 @@ export const arenaCurrentLeaders = pgTable(
     cellsClaimed: integer('cells_claimed').notNull(),
     tookLeadAt: timestamp('took_lead_at', { withTimezone: true, mode: 'date' }).notNull(),
     decisiveSourceFlightId: uuid('decisive_source_flight_id').references(() => flights.id, { onDelete: 'set null' }),
-    decisiveCellSize: integer('decisive_cell_size').notNull(),
     decisiveCellX: integer('decisive_cell_x').notNull(),
     decisiveCellY: integer('decisive_cell_y').notNull(),
   },
   (table) => [
     primaryKey({ columns: [table.arenaId, table.userId] }),
     check('arena_current_leaders_cells_claimed_positive', sql`${table.cellsClaimed} > 0`),
-    check('arena_current_leaders_decisive_cell_size_positive', sql`${table.decisiveCellSize} > 0`),
     index('arena_current_leaders_user_id_took_lead_at_idx').on(table.userId, table.tookLeadAt),
     index('arena_current_leaders_arena_id_took_lead_at_idx').on(table.arenaId, table.tookLeadAt),
   ],
@@ -238,7 +242,6 @@ export const arenaLeadershipEvents = pgTable(
     eventType: arenaLeadershipEventType('event_type').notNull(),
     claimTimestamp: timestamp('claim_timestamp', { withTimezone: true, mode: 'date' }).notNull(),
     sourceFlightId: uuid('source_flight_id').references(() => flights.id, { onDelete: 'set null' }),
-    cellSize: integer('cell_size').notNull(),
     cellX: integer('cell_x').notNull(),
     cellY: integer('cell_y').notNull(),
   },
@@ -247,7 +250,6 @@ export const arenaLeadershipEvents = pgTable(
     index('arena_leadership_events_arena_id_claim_timestamp_idx').on(table.arenaId, table.claimTimestamp),
     index('arena_leadership_events_arena_id_user_id_claim_timestamp_idx').on(table.arenaId, table.userId, table.claimTimestamp),
     index('arena_leadership_events_source_flight_id_idx').on(table.sourceFlightId),
-    check('arena_leadership_events_cell_size_positive', sql`${table.cellSize} > 0`),
   ],
 );
 
@@ -272,7 +274,6 @@ export const trackPoints = pgTable(
 export const personalGridClaims = pgTable(
   'user_grid_claims',
   {
-    cellSize: integer('cell_size').notNull(),
     x: integer('x').notNull(),
     y: integer('y').notNull(),
     claimFlight: uuid('claim_flight').notNull().references(() => flights.id, { onDelete: 'cascade' }),
@@ -280,8 +281,8 @@ export const personalGridClaims = pgTable(
     claimTimestamp: timestamp('claim_timestamp', { withTimezone: true, mode: 'date' }).notNull(),
   },
   (table) => [
-    primaryKey({ columns: [table.claimUser, table.cellSize, table.x, table.y, table.claimFlight] }),
-    index('user_grid_claims_claim_user_cell_size_idx').on(table.claimUser, table.cellSize),
+    primaryKey({ columns: [table.claimUser, table.x, table.y, table.claimFlight] }),
+    index('user_grid_claims_claim_user_idx').on(table.claimUser),
     index('user_grid_claims_claim_flight_idx').on(table.claimFlight),
   ],
 );
@@ -290,7 +291,6 @@ export const competitionGridClaims = pgTable(
   'competition_grid_claims',
   {
     competitionMonth: date('competition_month', { mode: 'string' }).notNull(),
-    cellSize: integer('cell_size').notNull(),
     x: integer('x').notNull(),
     y: integer('y').notNull(),
     claimFlight: uuid('claim_flight').notNull().references(() => flights.id, { onDelete: 'cascade' }),
@@ -298,16 +298,14 @@ export const competitionGridClaims = pgTable(
     claimTimestamp: timestamp('claim_timestamp', { withTimezone: true, mode: 'date' }).notNull(),
   },
   (table) => [
-    primaryKey({ columns: [table.competitionMonth, table.cellSize, table.x, table.y, table.claimFlight] }),
+    primaryKey({ columns: [table.competitionMonth, table.x, table.y, table.claimFlight] }),
     index('competition_grid_claims_month_cell_timestamp_idx').on(
       table.competitionMonth,
-      table.cellSize,
       table.x,
       table.y,
       table.claimTimestamp,
     ),
     index('competition_grid_claims_cell_history_idx').on(
-      table.cellSize,
       table.x,
       table.y,
       table.competitionMonth,

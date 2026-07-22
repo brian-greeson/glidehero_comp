@@ -38,17 +38,18 @@ async function flight(userId: string, launchProjected?: [number, number]) {
   return id;
 }
 
-async function arena(type: string, sourceId: number, options: { total?: number; size?: number; minX?: number; minY?: number; width?: number; height?: number } = {}) {
+async function arena(type: string, sourceId: number, options: { total?: number | null; size?: number; minX?: number; minY?: number; width?: number; height?: number } = {}) {
   const size = options.size ?? 1_000;
   const minX = options.minX ?? 0;
   const minY = options.minY ?? 0;
   const maxX = minX + (options.width ?? 2) * size;
   const maxY = minY + (options.height ?? 2) * size;
+  const externalId = type === 'state' || type === 'country' ? String(sourceId) : null;
   const result = await database.pool.query<{ id: string }>(
-    `INSERT INTO arenas (source_id, name, country, country_code, area, arena_type, claimable_cell_count, claimable_cell_size)
+    `INSERT INTO arenas (source_id, name, country, country_code, area, arena_type, external_id, claimable_cell_count)
      VALUES ($1, $2, 'Testland', 'TT', ST_Multi(ST_GeomFromText($3, 6933)), $4, $5, $6)
      RETURNING id`,
-    [sourceId, `${type}-${sourceId}`, `POLYGON((${minX} ${minY}, ${maxX} ${minY}, ${maxX} ${maxY}, ${minX} ${maxY}, ${minX} ${minY}))`, type, type === 'state' || type === 'country' ? null : options.total ?? 4, type === 'state' || type === 'country' ? null : size],
+    [sourceId, `${type}-${sourceId}`, `POLYGON((${minX} ${minY}, ${maxX} ${minY}, ${maxX} ${maxY}, ${minX} ${maxY}, ${minX} ${minY}))`, type, externalId, type === 'state' || type === 'country' ? null : options.total === undefined ? 4 : options.total],
   );
   return result.rows[0]!.id;
 }
@@ -56,8 +57,8 @@ async function arena(type: string, sourceId: number, options: { total?: number; 
 async function claim(userId: string, flightId: string, cells: Array<[number, number]>, claimTimestamp = new Date()) {
   for (const [x, y] of cells) {
     await database.pool.query(
-      `INSERT INTO user_grid_claims (cell_size, x, y, claim_flight, claim_user, claim_timestamp)
-       VALUES (1000, $1, $2, $3, $4, $5)`, [x, y, flightId, userId, claimTimestamp],
+      `INSERT INTO user_grid_claims (x, y, claim_flight, claim_user, claim_timestamp)
+       VALUES ($1, $2, $3, $4, $5)`, [x, y, flightId, userId, claimTimestamp],
     );
   }
 }
@@ -113,10 +114,10 @@ describe('ArenaProgressService with PostGIS', () => {
     await expect(service.get({ arenaId: launchId, userId: pilot })).resolves.toMatchObject({ kind: 'launch', visited: false, firstProgressDate: expect.any(Date), mostRecentProgressDate: expect.any(Date) });
   });
 
-  it('rejects missing or mismatched stored grid metadata', async () => {
+  it('rejects missing or invalid stored denominator metadata', async () => {
     const service = createArenaProgressService(database.db, { cellSize: 1_000 });
     const pilot = await user('invalid@example.com');
-    const id = await arena('general', 6, { total: 4, size: 500 });
+    const id = await arena('general', 6, { total: null });
     await expect(service.get({ arenaId: id, userId: pilot })).rejects.toThrow('invalid claimable grid metadata');
   });
 });

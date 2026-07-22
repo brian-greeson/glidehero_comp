@@ -12,7 +12,7 @@ import {
   type ArenaAchievementSnapshotRow,
   type ArenaAchievementTransaction,
 } from '../services/arenaAchievementService.js';
-import { claimCellCenterSql } from '../services/arenaGeometrySql.js';
+import { arenaCellOwnershipPredicateSql, claimCellCenterSql } from '../services/arenaGeometrySql.js';
 import { achievementCatalog, type AchievementKey } from '../domain/achievement/catalog.js';
 
 const APPLY = '--apply';
@@ -99,7 +99,7 @@ type HistoricalFlight = {
 
 type BackfillArenaCatalogRow = Pick<
   ArenaAchievementSnapshotRow,
-  'id' | 'arenaType' | 'claimableCellCount' | 'claimableCellSize'
+  'id' | 'arenaType' | 'claimableCellCount'
 >;
 type BackfillCellMembership = { flightId: string; arenaId: string; x: number; y: number };
 type BackfillOriginMembership = { flightId: string; arenaId: string };
@@ -141,8 +141,8 @@ class ArenaBackfillReplay {
 
 async function loadArenaCatalog(database: Database): Promise<BackfillArenaCatalogRow[]> {
   const result = await database.execute<BackfillArenaCatalogRow>(sql`
-    SELECT id, arena_type AS "arenaType", claimable_cell_count AS "claimableCellCount",
-           claimable_cell_size AS "claimableCellSize"
+    SELECT id, arena_type AS "arenaType",
+           CASE WHEN arena_type IN ('launch', 'general') THEN claimable_cell_count ELSE NULL END AS "claimableCellCount"
     FROM arenas
   `);
   return result.rows;
@@ -165,12 +165,8 @@ async function precomputeArenaReplay(
     SELECT claims.claim_flight AS "flightId", arena.id AS "arenaId", claims.x, claims.y
     FROM user_grid_claims claims
     INNER JOIN selected_flights ON selected_flights.flight_id = claims.claim_flight
-    INNER JOIN arenas arena ON ST_Covers(
-      arena.area,
-      ${claimCellCenterSql({ x: sql`claims.x`, y: sql`claims.y`, cellSize: sql`claims.cell_size` })}
-    )
+    INNER JOIN arenas arena ON ${arenaCellOwnershipPredicateSql({ arenaId: sql`arena.id`, arenaType: sql`arena.arena_type`, externalId: sql`arena.external_id`, area: sql`arena.area`, cellCenter: claimCellCenterSql({ x: sql`claims.x`, y: sql`claims.y`, cellSize: sql`${cellSize}` }) })}
     WHERE claims.claim_user = ${userId}
-      AND claims.cell_size = ${cellSize}
   `);
   const origins = await database.execute<BackfillOriginMembership>(sql`
     WITH selected_flights AS (
@@ -410,9 +406,7 @@ async function main(): Promise<void> {
   if (args.help) { console.log(usage); return; }
   const databaseUrl = process.env.DATABASE_URL;
   if (!databaseUrl) throw new Error('DATABASE_URL is required.');
-  const rawCellSize = process.env.GRID_CLAIM_CELL_SIZE;
-  const cellSize = Number(rawCellSize);
-  if (!Number.isInteger(cellSize) || cellSize < 1) throw new Error('GRID_CLAIM_CELL_SIZE must be a positive integer.');
+  const cellSize = 500;
   const rawBatchSize = process.env.ARENA_ACHIEVEMENT_BACKFILL_BATCH_SIZE;
   const batchSize = rawBatchSize === undefined ? DEFAULT_FLIGHT_BATCH_SIZE : Number(rawBatchSize);
   if (!Number.isSafeInteger(batchSize) || batchSize < 1) throw new Error('ARENA_ACHIEVEMENT_BACKFILL_BATCH_SIZE must be a positive integer.');

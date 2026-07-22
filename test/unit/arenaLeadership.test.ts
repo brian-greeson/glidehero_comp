@@ -35,7 +35,6 @@ function claim(input: Omit<Partial<ArenaLeadershipClaim>, 'claimTimestamp'> & {
     claimTimestamp: new Date(input.claimTimestamp ?? '2026-01-01T00:00:00.000Z'),
     sourceFlightId: input.sourceFlightId ?? flightA,
     competitionMonth: input.competitionMonth ?? '2026-01-01',
-    cellSize: input.cellSize ?? 1_000,
     cellX: input.cellX,
     cellY: input.cellY ?? 0,
   };

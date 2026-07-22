@@ -33,9 +33,9 @@ workers, which parse the files and persist flights and claims in PostgreSQL.
 
 ### Grid and cell claiming
 
-Glide Hero uses one global, meter-based grid. Its cell size is configured with
-`GRID_CLAIM_CELL_SIZE`, so personal territory and competition ownership always
-refer to the same cells.
+Glide Hero uses one global, meter-based grid with a permanent 500-meter cell
+size, so personal territory and competition ownership always refer to the same
+cells.
 
 A flight directly claims every cell its track intersects. When those cells form
 a closed, edge-connected ring, the fully enclosed cells are claimed as well;
@@ -237,9 +237,9 @@ serves status; the worker consumes queued uploads and writes completed flights
 and claims. For object-storage permissions and CORS requirements, see
 [`docs/flight-upload-deployment.md`](docs/flight-upload-deployment.md).
 
-`GRID_CLAIM_CELL_SIZE` is required and specifies the grid-cell size in meters;
-the example environment uses `500`. Arena scoring constructs each claim-cell
-center from that claim's stored size and applies `ST_Covers` to `arenas.area`.
+The grid-cell size is fixed at `500` meters. Arena scoring constructs each claim-cell
+center from the application grid and applies `ST_Covers` to `arenas.area`; claim rows
+do not persist a per-claim cell size.
 
 Administrators author every Arena at **Areas** using multiple drawn polygons,
 reshape/delete controls, GeoJSON import, and a
@@ -271,8 +271,8 @@ npm run rebuild:arenas -- --apply --confirm-delete-all-arenas
 
 This migration intentionally deletes every existing Arena, including General
 Arenas, then inserts Country, State, and Launch Arenas. It is not an idempotent
-synchronizer and is supported for one migration run only. A positive
-`GRID_CLAIM_CELL_SIZE` and `DATABASE_URL` are required.
+synchronizer and is supported for one migration run only. `DATABASE_URL` is
+required.
 
 The importer excludes D.C. and territories, uses Census FIPS identity, and
 uses the same geometry normalization as the Arena editor. New or edited Arenas immediately include matching
@@ -306,5 +306,5 @@ Set `ENVIRONMENT=production` so the session cookie receives the `Secure`
 attribute. Terminate HTTPS before traffic reaches the application, apply checked-in
 migrations with `npm run db:migrate`, and provide configuration through the
 deployment secret store. Production requires at least one web process and one
-`npm run worker` process sharing PostgreSQL, Valkey, object storage,
-`GRID_CLAIM_CELL_SIZE`, and `BUCKET_FOLDER` configuration.
+`npm run worker` process sharing PostgreSQL, Valkey, object storage, and
+`BUCKET_FOLDER` configuration.

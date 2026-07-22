@@ -9,14 +9,18 @@ import { createArenaLeadershipReconciliationService, type ArenaLeadershipReconci
 import type { AchievementKey } from '../domain/achievement/catalog.js';
 import { gridClaimCandidateCtes } from '../services/gridClaimCandidates.js';
 
+const DEFAULT_BATCH_SIZE = 10;
+const APP_GRID_CELL_SIZE = 500;
+
 const usage = `Usage: npm run backfill:arena-leadership [-- --dry-run|--apply]
 
 The default is a dry-run. Apply mode commits Arena batches independently. Pause
 and drain workers, and avoid Arena edits or admin claim mutations during apply.
 Prior committed batches may remain applied if a later batch fails.
-Set ARENA_LEADERSHIP_BACKFILL_BATCH_SIZE to control the positive Arena batch size (default 25).
+DATABASE_URL is required. Set ARENA_LEADERSHIP_BACKFILL_BATCH_SIZE to control the
+positive Arena batch size (default ${DEFAULT_BATCH_SIZE}). Arena cell sizing is
+fixed at ${APP_GRID_CELL_SIZE} meters for this command.
 `;
-const DEFAULT_BATCH_SIZE = 25;
 const APPLY = '--apply';
 const DRY_RUN = '--dry-run';
 const HELP = '--help';
@@ -66,7 +70,7 @@ export type ArenaLeadershipBackfillSummary = {
   committedBatchesMayRemain: boolean;
 };
 
-type ArenaRow = { id: string; arenaType: string; claimableCellCount: number | string | null; claimableCellSize: number | string | null };
+type ArenaRow = { id: string; arenaType: string; claimableCellCount: number | string | null };
 type FlightRow = { flightId: string; launchTimezone: string };
 type Candidate = { userId: string; key: AchievementKey; earnedAt: Date; sourceFlightId: string; arenaId: string; arenaName: string; eventKey: string };
 
@@ -103,8 +107,8 @@ function candidateFromResult(result: ArenaLeadershipReconciliationResult): Candi
 
 async function selectArenas(database: Pick<Database, 'execute'>): Promise<ArenaRow[]> {
   const result = await database.execute<ArenaRow>(sql`
-    SELECT id, arena_type AS "arenaType", claimable_cell_count AS "claimableCellCount",
-           claimable_cell_size AS "claimableCellSize"
+    SELECT id, arena_type AS "arenaType",
+           CASE WHEN arena_type = 'general' THEN claimable_cell_count ELSE NULL END AS "claimableCellCount"
     FROM arenas
     WHERE arena_type IN ('general', 'state', 'country')
     ORDER BY id
@@ -147,7 +151,6 @@ async function correctClaimTimestampBatch(
       SET claim_timestamp = first_claims.claim_timestamp
       FROM first_claims
       WHERE claim.claim_flight = ${flight.flightId}
-        AND claim.cell_size = ${cellSize}
         AND claim.competition_month = first_claims.competition_month
         AND claim.x = first_claims.x AND claim.y = first_claims.y
         AND claim.claim_timestamp IS DISTINCT FROM first_claims.claim_timestamp
@@ -167,15 +170,20 @@ async function processBatch(
   const ids = arenas.map((arena) => arena.id);
   const candidates: Candidate[] = [];
   for (const arena of arenas) {
-    const countResult = await transaction.execute<{ count: number | string }>(sql`
-      SELECT ${claimableCellCountSql({ area: sql`arena.area`, cellSize: sql`${cellSize}` })} AS count
-      FROM arenas arena WHERE arena.id = ${arena.id}
-    `);
-    const count = Number(countResult.rows[0]?.count);
-    if (!Number.isSafeInteger(count) || count <= 0) throw new Error(`Arena ${arena.id} has no positive claimable cells.`);
-    if (arena.claimableCellCount === null) summary.denominatorsPopulated += 1;
-    if (Number(arena.claimableCellCount) !== count || Number(arena.claimableCellSize) !== cellSize) summary.denominatorsChanged += 1;
-    await transaction.execute(sql`UPDATE arenas SET claimable_cell_count = ${count}, claimable_cell_size = ${cellSize} WHERE id = ${arena.id}`);
+    if (arena.arenaType === 'general') {
+      const countResult = await transaction.execute<{ count: number | string }>(sql`
+        SELECT ${claimableCellCountSql({ area: sql`arena.area`, cellSize: sql`${cellSize}` })} AS count
+        FROM arenas arena WHERE arena.id = ${arena.id}
+      `);
+      const count = Number(countResult.rows[0]?.count);
+      if (!Number.isSafeInteger(count) || count <= 0) throw new Error(`Arena ${arena.id} has no positive claimable cells.`);
+      const previousCount = arena.claimableCellCount === null ? null : Number(arena.claimableCellCount);
+      if (previousCount === null) summary.denominatorsPopulated += 1;
+      if (previousCount !== count) {
+        summary.denominatorsChanged += 1;
+        await transaction.execute(sql`UPDATE arenas SET claimable_cell_count = ${count} WHERE id = ${arena.id}`);
+      }
+    }
   }
   const leadership = createArenaLeadershipReconciliationService(transaction as unknown as Database, { cellSize });
   const result = await leadership.reconcileInTransaction(transaction, { arenaIds: ids, awardAchievements: false });
@@ -202,6 +210,7 @@ function chooseEarliest(candidates: Candidate[]): Candidate[] {
 
 export async function runArenaLeadershipBackfill(database: Database, options: { apply: boolean; cellSize: number; batchSize?: number; logger?: Logger }): Promise<ArenaLeadershipBackfillSummary> {
   const logger = options.logger ?? console;
+  const startedAt = Date.now();
   const summary = emptySummary(!options.apply);
   const batchSize = options.batchSize ?? DEFAULT_BATCH_SIZE;
   if (!Number.isSafeInteger(batchSize) || batchSize <= 0) throw new RangeError('Arena leadership backfill batch size must be a positive integer.');
@@ -222,34 +231,56 @@ export async function runArenaLeadershipBackfill(database: Database, options: { 
     if (!options.apply) {
       try {
         await database.transaction(async (tx) => {
+          const timestampPhaseStartedAt = Date.now();
+          logger.log(`Claim timestamp correction phase started: ${timestampFlights.length} flights`);
           for (const [index, flightBatch] of batch(timestampFlights, batchSize).entries()) {
-            logger.log(`Correcting claim timestamp batch ${index + 1} / ${Math.ceil(timestampFlights.length / batchSize)}`);
+            const batchStartedAt = Date.now();
+            logger.log(`Correcting claim timestamp batch ${index + 1} / ${Math.ceil(timestampFlights.length / batchSize)} (${flightBatch.length} flights)`);
             await correctClaimTimestampBatch(tx, flightBatch, options.cellSize, summary);
+            logger.log(`Claim timestamp batch ${index + 1} completed in ${Date.now() - batchStartedAt} ms`);
           }
+          logger.log(`Claim timestamp correction phase completed: ${summary.claimTimestampFlightsInspected} flights, ${summary.claimTimestampsChanged} cells changed, elapsed ${Date.now() - timestampPhaseStartedAt} ms`);
+          const arenaPhaseStartedAt = Date.now();
+          logger.log(`Arena reconciliation phase started: ${arenas.length} Arenas`);
           for (const [index, arenaBatch] of batch(arenas, batchSize).entries()) {
-            logger.log(`Reconciling Arena batch ${index + 1} / ${Math.ceil(arenas.length / batchSize)}`);
+            const batchStartedAt = Date.now();
+            logger.log(`Reconciling Arena batch ${index + 1} / ${Math.ceil(arenas.length / batchSize)} (${arenaBatch.length} Arenas)`);
             candidates.push(...await processBatch(tx, arenaBatch, options.cellSize, summary));
+            logger.log(`Arena batch ${index + 1} completed in ${Date.now() - batchStartedAt} ms`);
           }
+          logger.log(`Arena reconciliation phase completed: ${summary.arenasReconciled} Arenas, elapsed ${Date.now() - arenaPhaseStartedAt} ms`);
           await award(tx);
           throw new RollbackDryRun();
         });
       } catch (error) {
         if (!(error instanceof RollbackDryRun)) throw error;
       }
+      logger.log(`Arena leadership backfill dry-run completed in ${Date.now() - startedAt} ms`);
       return summary;
     }
 
+    const timestampPhaseStartedAt = Date.now();
+    logger.log(`Claim timestamp correction phase started: ${timestampFlights.length} flights`);
     for (const [index, flightBatch] of batch(timestampFlights, batchSize).entries()) {
-      logger.log(`Correcting claim timestamp batch ${index + 1} / ${Math.ceil(timestampFlights.length / batchSize)}`);
+      const batchStartedAt = Date.now();
+      logger.log(`Correcting claim timestamp batch ${index + 1} / ${Math.ceil(timestampFlights.length / batchSize)} (${flightBatch.length} flights)`);
       await database.transaction((tx) => correctClaimTimestampBatch(tx, flightBatch, options.cellSize, summary));
+      logger.log(`Claim timestamp batch ${index + 1} completed in ${Date.now() - batchStartedAt} ms`);
       committed += 1;
     }
+    logger.log(`Claim timestamp correction phase completed: ${summary.claimTimestampFlightsInspected} flights, ${summary.claimTimestampsChanged} cells changed, elapsed ${Date.now() - timestampPhaseStartedAt} ms`);
+    const arenaPhaseStartedAt = Date.now();
+    logger.log(`Arena reconciliation phase started: ${arenas.length} Arenas`);
     for (const [index, arenaBatch] of batch(arenas, batchSize).entries()) {
-      logger.log(`Reconciling Arena batch ${index + 1} / ${Math.ceil(arenas.length / batchSize)}`);
+      const batchStartedAt = Date.now();
+      logger.log(`Reconciling Arena batch ${index + 1} / ${Math.ceil(arenas.length / batchSize)} (${arenaBatch.length} Arenas)`);
       candidates.push(...await database.transaction((tx) => processBatch(tx, arenaBatch, options.cellSize, summary)));
+      logger.log(`Arena batch ${index + 1} completed in ${Date.now() - batchStartedAt} ms`);
       committed += 1;
     }
+    logger.log(`Arena reconciliation phase completed: ${summary.arenasReconciled} Arenas, elapsed ${Date.now() - arenaPhaseStartedAt} ms`);
     await database.transaction(award);
+    logger.log(`Arena leadership backfill apply completed in ${Date.now() - startedAt} ms`);
     return summary;
   } catch (error) {
     summary.failures += 1;
@@ -262,7 +293,7 @@ export function printArenaLeadershipBackfillSummary(summary: ArenaLeadershipBack
   logger.log(`${summary.dryRun ? 'Dry-run' : 'Applied'} Arena leadership backfill`);
   logger.log(`Claim timestamp flights inspected/cells changed: ${summary.claimTimestampFlightsInspected}/${summary.claimTimestampsChanged}`);
   logger.log(`Arenas inspected/reconciled: ${summary.arenasInspected}/${summary.arenasReconciled}`);
-  logger.log(`Denominators populated/changed: ${summary.denominatorsPopulated}/${summary.denominatorsChanged}`);
+  logger.log(`General denominators populated/changed: ${summary.denominatorsPopulated}/${summary.denominatorsChanged}`);
   logger.log(`Leadership events built: ${summary.leadershipEventsBuilt}`);
   logger.log(`Current sole-leader pilots: ${summary.currentSoleLeaders}`);
   logger.log(`Current joint-leader pilots: ${summary.currentJointLeaders}`);
@@ -278,14 +309,12 @@ async function main(): Promise<void> {
   if (args.help) { console.log(usage); return; }
   const databaseUrl = process.env.DATABASE_URL;
   if (!databaseUrl) throw new Error('DATABASE_URL is required.');
-  const cellSize = Number(process.env.GRID_CLAIM_CELL_SIZE);
-  if (!Number.isSafeInteger(cellSize) || cellSize <= 0) throw new Error('GRID_CLAIM_CELL_SIZE must be a positive integer.');
   const rawBatch = process.env.ARENA_LEADERSHIP_BACKFILL_BATCH_SIZE;
   const batchSize = rawBatch === undefined ? DEFAULT_BATCH_SIZE : Number(rawBatch);
   if (!Number.isSafeInteger(batchSize) || batchSize <= 0) throw new Error('ARENA_LEADERSHIP_BACKFILL_BATCH_SIZE must be a positive integer.');
   const database = createDatabase(databaseUrl);
   try {
-    try { printArenaLeadershipBackfillSummary(await runArenaLeadershipBackfill(database.db, { apply: args.apply, cellSize, batchSize })); }
+    try { printArenaLeadershipBackfillSummary(await runArenaLeadershipBackfill(database.db, { apply: args.apply, cellSize: APP_GRID_CELL_SIZE, batchSize })); }
     catch (error) {
       if (!(error instanceof ArenaLeadershipBackfillError)) throw error;
       printArenaLeadershipBackfillSummary(error.summary);

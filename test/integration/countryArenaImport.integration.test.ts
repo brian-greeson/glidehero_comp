@@ -55,11 +55,10 @@ describe('Country Arena importer', () => {
       empty: boolean;
       geometry_type: string;
       claimable_cell_count: number | null;
-      claimable_cell_size: number | null;
     }>(`SELECT source_id, country_code, external_source, external_id, arena_type,
       ST_SRID(area)::integer AS srid, ST_IsValid(area) AS valid,
       ST_IsEmpty(area) AS empty, ST_GeometryType(area) AS geometry_type,
-      claimable_cell_count, claimable_cell_size
+      claimable_cell_count
       FROM arenas ORDER BY source_id`);
 
     expect(result.rows).toHaveLength(2);
@@ -67,16 +66,7 @@ describe('Country Arena importer', () => {
     expect(result.rows.every((row) => row.country_code.length === 2 && row.arena_type === 'country')).toBe(true);
     expect(result.rows.every((row) => row.external_source === 'natural-earth-admin-0-sovereignty')).toBe(true);
     expect(result.rows.every((row) => row.srid === 6933 && row.valid && !row.empty && row.geometry_type === 'ST_MultiPolygon')).toBe(true);
-    expect(result.rows.every((row) => Number(row.claimable_cell_count) > 0 && row.claimable_cell_size === cellSize)).toBe(true);
-    const exact = await database.pool.query<{ source_id: string; count: string }>(`
-      SELECT arena.source_id::text AS source_id, COUNT(*)::bigint AS count
-      FROM arenas arena
-      CROSS JOIN LATERAL ST_SquareGrid($1, arena.area) AS grid(geom, x, y)
-      WHERE ST_Covers(arena.area, ST_SetSRID(ST_MakePoint((grid.x + 0.5) * $1, (grid.y + 0.5) * $1), 6933))
-      GROUP BY arena.source_id
-      ORDER BY arena.source_id
-    `, [cellSize]);
-    expect(exact.rows.map((row) => row.count)).toEqual(result.rows.map((row) => String(row.claimable_cell_count)));
+    expect(result.rows.every((row) => row.claimable_cell_count === null)).toBe(true);
   });
 
   it('imports every feature from the checked-in 194-country artifact', async () => {
@@ -100,11 +90,10 @@ describe('Country Arena importer', () => {
       valid: boolean;
       empty: boolean;
       claimable_cell_count: number | null;
-      claimable_cell_size: number | null;
     }>(`SELECT source_id, external_source, external_id, country_code, arena_type,
       ST_SRID(area)::integer AS srid, ST_GeometryType(area) AS geometry_type,
       ST_IsValid(area) AS valid, ST_IsEmpty(area) AS empty,
-      claimable_cell_count, claimable_cell_size
+      claimable_cell_count
       FROM arenas`);
 
     expect(result.rows).toHaveLength(2);
@@ -115,7 +104,7 @@ describe('Country Arena importer', () => {
     expect(result.rows.every((row) => row.arena_type === 'country')).toBe(true);
     expect(result.rows.every((row) => row.srid === 6933 && row.geometry_type === 'ST_MultiPolygon')).toBe(true);
     expect(result.rows.every((row) => row.valid && !row.empty)).toBe(true);
-    expect(result.rows.every((row) => Number(row.claimable_cell_count) > 0 && row.claimable_cell_size === artifactCellSize)).toBe(true);
+    expect(result.rows.every((row) => row.claimable_cell_count === null)).toBe(true);
   }, 120_000);
 
   it('rejects a non-empty target before writing any rows', async () => {

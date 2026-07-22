@@ -24,7 +24,7 @@ export function resolveLaunchCountryName(name: string, catalog: ReadonlyMap<stri
 
 /** Grid indices use mathematical floor, including for negative projected coordinates. */
 export function launchGridAnchor(projected: { x: number; y: number }, cellSize: number): { x: number; y: number } {
-  if (!Number.isInteger(cellSize) || cellSize <= 0) throw new RangeError('GRID_CLAIM_CELL_SIZE must be a positive integer.');
+  if (!Number.isInteger(cellSize) || cellSize <= 0) throw new RangeError('Grid cell size must be a positive integer.');
   if (!Number.isFinite(projected.x) || !Number.isFinite(projected.y)) throw new TypeError('Projected launch coordinates must be finite.');
   return { x: Math.floor(projected.x / cellSize), y: Math.floor(projected.y / cellSize) };
 }
@@ -81,7 +81,7 @@ export async function importLaunchArenasInTransaction(
   rows: LaunchImportRow[],
   cellSize: number,
 ): Promise<LaunchArenaImportSummary> {
-  if (!Number.isInteger(cellSize) || cellSize <= 0) throw new RangeError('GRID_CLAIM_CELL_SIZE must be a positive integer.');
+  if (!Number.isInteger(cellSize) || cellSize <= 0) throw new RangeError('Grid cell size must be a positive integer.');
   if (rows.length === 0) throw new RangeError('Launch source is empty.');
   const ids = rows.map((row) => row.id);
   if (new Set(ids).size !== ids.length) throw new RangeError('Launch source contains duplicate IDs.');
@@ -141,11 +141,11 @@ export async function importLaunchArenasInTransaction(
       await transaction.execute(sql`
         INSERT INTO arenas (
           source_id, name, country, country_code, state, city, location, altitude_meters, timezone, area,
-          external_source, external_id, arena_type, claimable_cell_count, claimable_cell_size
+          external_source, external_id, arena_type, claimable_cell_count
         ) VALUES (
           ${row.id}, ${row.name}, ${country.name}, ${country.countryCode.toUpperCase()}, ${row.state || null}, ${row.city || null},
           ST_SetSRID(ST_MakePoint(${row.longitude}, ${row.latitude}), 4326), ${row.elevation}, ${timezone},
-          ${launchGeometrySql(row, cellSize)}, ${XCONTEST_LAUNCH_SOURCE}, ${String(row.id)}, 'launch', 25, ${cellSize}
+          ${launchGeometrySql(row, cellSize)}, ${XCONTEST_LAUNCH_SOURCE}, ${String(row.id)}, 'launch', 25
         )
       `);
     }

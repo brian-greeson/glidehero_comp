@@ -7,7 +7,7 @@ import type {
 } from '../domain/competition/monthlyCoverage.js';
 import { normalizeCompetitionLeaderboardMonth } from '../domain/competition/competitionLeaderboardMonth.js';
 import { viewportCtes, type ViewportBounds } from './viewportGrid.js';
-import { claimCellCenterSql } from './arenaGeometrySql.js';
+import { arenaCellOwnershipPredicateSql, claimCellCenterSql } from './arenaGeometrySql.js';
 
 export type MonthlyCoveragePeriod = { competitionMonth: string } | { period: 'all-time' };
 
@@ -22,22 +22,20 @@ type StoredPilot = MonthlyCoveragePilot & { isCurrentPilotOnly: boolean; display
 function coverageClaimsCtes(input: { competitionMonth?: string; cellSize: number }) {
   return sql`
     pilot_cells AS (
-      SELECT DISTINCT c.cell_size, c.x, c.y, c.claim_user
+      SELECT DISTINCT c.x, c.y, c.claim_user
       FROM competition_grid_claims c
-      WHERE c.cell_size = ${input.cellSize}
-        ${input.competitionMonth
-          ? sql`AND c.competition_month = ${input.competitionMonth}::date`
+      ${input.competitionMonth
+          ? sql`WHERE c.competition_month = ${input.competitionMonth}::date`
           : sql``}
     ),
     cell_claimants AS (
       SELECT
-        cell_size,
         x,
         y,
         COUNT(*)::integer AS claimant_count,
         CASE WHEN COUNT(*) = 1 THEN MIN(claim_user::text)::uuid END AS pilot_user_id
       FROM pilot_cells
-      GROUP BY cell_size, x, y
+      GROUP BY x, y
     )
   `;
 }
@@ -164,7 +162,7 @@ export function createMonthlyCoverageService(
           scopedClaims: sql`
             SELECT pilot.*, claimant.claimant_count
             FROM pilot_cells pilot
-            INNER JOIN cell_claimants claimant USING (cell_size, x, y)
+            INNER JOIN cell_claimants claimant USING (x, y)
             INNER JOIN viewport_parts viewport ON ST_Intersects(
               ST_MakeEnvelope(
                 pilot.x * ${cellSize}, pilot.y * ${cellSize},
@@ -187,9 +185,9 @@ export function createMonthlyCoverageService(
           scopedClaims: sql`
             SELECT pilot.*, claimant.claimant_count
             FROM pilot_cells pilot
-            INNER JOIN cell_claimants claimant USING (cell_size, x, y)
+            INNER JOIN cell_claimants claimant USING (x, y)
             INNER JOIN arenas arena ON arena.id = ${input.arenaId}
-              AND ST_Covers(arena.area, ${claimCellCenterSql({ x: sql`pilot.x`, y: sql`pilot.y`, cellSize: sql`pilot.cell_size` })})
+              AND ${arenaCellOwnershipPredicateSql({ arenaId: sql`arena.id`, arenaType: sql`arena.arena_type`, externalId: sql`arena.external_id`, area: sql`arena.area`, cellCenter: claimCellCenterSql({ x: sql`pilot.x`, y: sql`pilot.y`, cellSize: sql`${cellSize}` }) })}
           `,
         })}
       `);

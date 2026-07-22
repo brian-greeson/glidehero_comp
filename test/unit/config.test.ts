@@ -12,7 +12,6 @@ describe('parseConfig', () => {
       BUCKET_URL: 'https://s3.example.test',
       BUCKET_FOLDER: '/glidehero-dev/',
       MAPTILER_API_KEY: 'maptiler-test-key',
-      GRID_CLAIM_CELL_SIZE: '1000',
       KOFI_VERIFICATION_TOKEN: 'kofi-test-token',
     })).toEqual({
       databaseUrl: 'postgres://localhost/glidehero',
@@ -23,7 +22,7 @@ describe('parseConfig', () => {
       sessionCookieName: 'glidehero_session',
       sessionTtlSeconds: 604800,
       mapTilerApiKey: 'maptiler-test-key',
-      gridClaimCellSize: 1000,
+      gridClaimCellSize: 500,
       kofiVerificationToken: 'kofi-test-token',
       adminEmails: [],
       bucket: {
@@ -49,7 +48,6 @@ describe('parseConfig', () => {
       BUCKET_NAME: 'glidehero-files',
       BUCKET_URL: 'https://s3.example.test',
       BUCKET_FOLDER: 'glidehero-dev',
-      GRID_CLAIM_CELL_SIZE: '1000',
       KOFI_VERIFICATION_TOKEN: 'kofi-test-token',
     })).toThrow();
   });
@@ -64,11 +62,10 @@ describe('parseConfig', () => {
       BUCKET_URL: 'https://s3.example.test',
       BUCKET_FOLDER: 'glidehero-dev',
       MAPTILER_API_KEY: 'maptiler-test-key',
-      GRID_CLAIM_CELL_SIZE: '1000',
     })).toThrow();
   });
 
-  it('requires a positive integer grid claim cell size', () => {
+  it('uses the permanent 500-meter grid cell size', () => {
     const env = {
       DATABASE_URL: 'postgres://localhost/glidehero',
       VALKEY_URL: 'redis://localhost:6379',
@@ -81,10 +78,8 @@ describe('parseConfig', () => {
       KOFI_VERIFICATION_TOKEN: 'kofi-test-token',
     };
 
-    expect(() => parseConfig(env)).toThrow();
-    expect(() => parseConfig({ ...env, GRID_CLAIM_CELL_SIZE: '0' })).toThrow();
-    expect(() => parseConfig({ ...env, GRID_CLAIM_CELL_SIZE: '10.5' })).toThrow();
-    expect(parseConfig({ ...env, GRID_CLAIM_CELL_SIZE: '250' }).gridClaimCellSize).toBe(250);
+    expect(parseConfig(env).gridClaimCellSize).toBe(500);
+    expect(parseConfig({ ...env, UNUSED_GRID_SETTING: '250' }).gridClaimCellSize).toBe(500);
   });
 
   it('enables secure production behavior', () => {
@@ -99,7 +94,6 @@ describe('parseConfig', () => {
         BUCKET_URL: 'https://s3.example.test',
         BUCKET_FOLDER: 'glidehero-production',
         MAPTILER_API_KEY: 'maptiler-test-key',
-        GRID_CLAIM_CELL_SIZE: '1000',
         KOFI_VERIFICATION_TOKEN: 'kofi-test-token',
       }),
     ).toMatchObject({ environment: 'production', isProduction: true });
@@ -115,7 +109,6 @@ describe('parseConfig', () => {
       BUCKET_URL: 'https://s3.example.test',
       BUCKET_FOLDER: 'glidehero-dev',
       MAPTILER_API_KEY: 'maptiler-test-key',
-      GRID_CLAIM_CELL_SIZE: '1000',
       KOFI_VERIFICATION_TOKEN: 'kofi-test-token',
       ADMIN_EMAILS: ' Admin@example.com, ,second@example.com,ADMIN@example.com ',
     });

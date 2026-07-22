@@ -82,18 +82,16 @@ async function persistFlight(
 
 async function storedCells(cellSize: number) {
   return database.db.select({
-    cellSize: userGridClaims.cellSize,
     x: userGridClaims.x,
     y: userGridClaims.y,
     claimUser: userGridClaims.claimUser,
     claimFlight: userGridClaims.claimFlight,
     claimTimestamp: userGridClaims.claimTimestamp,
-  }).from(userGridClaims).where(eq(userGridClaims.cellSize, cellSize)).orderBy(userGridClaims.x, userGridClaims.y);
+  }).from(userGridClaims).orderBy(userGridClaims.x, userGridClaims.y);
 }
 
 async function storedCompetitionCells(cellSize: number) {
   return database.db.select().from(competitionGridClaims)
-    .where(eq(competitionGridClaims.cellSize, cellSize))
     .orderBy(
       competitionGridClaims.competitionMonth,
       competitionGridClaims.x,
@@ -119,7 +117,6 @@ async function persistClaimCells(
   cellSize = 1_000,
 ) {
   await database.db.insert(userGridClaims).values(cells.map(({ x, y }) => ({
-    cellSize,
     x,
     y,
     claimFlight: claim.flightId,
@@ -129,11 +126,12 @@ async function persistClaimCells(
 }
 
 async function persistArena(input: { sourceId: number; name: string; arenaType: 'launch' | 'general' | 'state' | 'country'; shape: string }) {
+  const externalId = input.arenaType === 'state' || input.arenaType === 'country' ? String(input.sourceId) : null;
   const result = await database.pool.query<{ id: string }>(
-    `INSERT INTO arenas (source_id, name, country, country_code, area, arena_type)
-     VALUES ($1, $2, 'United States', 'US', ST_Multi(ST_GeomFromText($3, 6933)), $4)
+    `INSERT INTO arenas (source_id, name, country, country_code, area, arena_type, external_id)
+     VALUES ($1, $2, 'United States', 'US', ST_Multi(ST_GeomFromText($3, 6933)), $4, $5)
      RETURNING id`,
-    [input.sourceId, input.name, input.shape, input.arenaType],
+    [input.sourceId, input.name, input.shape, input.arenaType, externalId],
   );
   const id = result.rows[0]?.id;
   if (!id) throw new Error('Arena insert returned no row.');
@@ -618,17 +616,12 @@ describe('GridClaimService with PostGIS', () => {
     ])).toEqual(new Set([3, 6]));
   });
 
-  it('stores independent 1000m and 2000m grid variants', async () => {
+  it('uses the configured grid size without persisted cell-size variants', async () => {
     const flight = await persistFlight([[100, 100], [2_100, 100]]);
 
     await createGridClaimService(database.db, { cellSize: 1_000 }).process(flight);
-    await createGridClaimService(database.db, { cellSize: 2_000 }).process(flight);
-
     expect(await storedCells(1_000)).toHaveLength(3);
-    expect(await storedCells(2_000)).toMatchObject([
-      { cellSize: 2_000, x: 0, y: 0, claimUser: flight.userId },
-      { cellSize: 2_000, x: 1, y: 0, claimUser: flight.userId },
-    ]);
+    expect(await storedCompetitionCells(1_000)).toHaveLength(3);
   });
 
   it('rebuilds a completed flight’s claims without changing its flight data or track points', async () => {
@@ -641,7 +634,6 @@ describe('GridClaimService with PostGIS', () => {
       durationSeconds: 60,
     }).where(eq(flights.id, flight.flightId));
     await service.process(flight);
-    await createGridClaimService(database.db, { cellSize: 2_000 }).process(flight);
     const pointsBefore = await database.db.select().from(trackPoints).where(eq(trackPoints.flightId, flight.flightId));
 
     const adminFlights = createAdminFlightService(database.db, service);
@@ -650,8 +642,6 @@ describe('GridClaimService with PostGIS', () => {
       result: { directCellCount: 3, enclosedCellCount: 0 },
     });
 
-    expect(await storedCells(2_000)).toEqual([]);
-    expect(await storedCompetitionCells(2_000)).toEqual([]);
     expect(await storedCells(1_000)).toMatchObject([
       { x: 0, y: 0, claimFlight: flight.flightId },
       { x: 1, y: 0, claimFlight: flight.flightId },
@@ -676,7 +666,6 @@ describe('GridClaimService with PostGIS', () => {
     const flight = await persistFlight([[100, 100], [900, 100]], new Date(Date.UTC(2026, 0, 1)), 'Invalid/Timezone');
     const claimTimestamp = new Date(Date.UTC(2026, 0, 1));
     await database.db.insert(userGridClaims).values({
-      cellSize: 1_000,
       x: 99,
       y: 99,
       claimFlight: flight.flightId,
@@ -685,7 +674,6 @@ describe('GridClaimService with PostGIS', () => {
     });
     await database.db.insert(competitionGridClaims).values({
       competitionMonth: '2026-01-01',
-      cellSize: 1_000,
       x: 99,
       y: 99,
       claimFlight: flight.flightId,
@@ -697,10 +685,10 @@ describe('GridClaimService with PostGIS', () => {
     await expect(service.reprocess({ flightId: flight.flightId })).rejects.toThrow();
 
     expect(await database.db.select().from(userGridClaims).where(eq(userGridClaims.claimFlight, flight.flightId))).toMatchObject([
-      { cellSize: 1_000, x: 99, y: 99, claimUser: flight.userId },
+      { x: 99, y: 99, claimUser: flight.userId },
     ]);
     expect(await database.db.select().from(competitionGridClaims).where(eq(competitionGridClaims.claimFlight, flight.flightId))).toMatchObject([
-      { competitionMonth: '2026-01-01', cellSize: 1_000, x: 99, y: 99, claimUser: flight.userId },
+      { competitionMonth: '2026-01-01', x: 99, y: 99, claimUser: flight.userId },
     ]);
   });
 

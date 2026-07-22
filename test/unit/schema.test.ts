@@ -22,17 +22,18 @@ describe('launch schema', () => {
 });
 
 describe('Arena schema', () => {
-  it('classifies Arenas and stores optional claimable-cell metadata', () => {
+  it('classifies Arenas and stores optional claimable-cell counts', () => {
     const config = getTableConfig(arenas);
 
     expect(config.columns.map((column) => column.name)).toEqual([
       'id', 'source_id', 'name', 'country', 'state', 'city', 'location', 'altitude_meters',
       'timezone', 'area', 'external_source', 'external_id', 'arena_type', 'country_code',
-      'claimable_cell_count', 'claimable_cell_size',
+      'claimable_cell_count',
     ]);
     expect(config.indexes.map((index) => index.config.name)).toEqual([
       'arenas_area_gist_idx',
       'arenas_external_source_external_id_unique',
+      'arenas_arena_type_external_id_state_country_unique',
     ]);
     expect(config.uniqueConstraints.map((constraint) => constraint.name)).toEqual([
       'arenas_source_id_unique',
@@ -40,6 +41,7 @@ describe('Arena schema', () => {
     ]);
     expect(config.checks.map((checkConstraint) => checkConstraint.name)).toEqual([
       'arenas_country_code_iso2_check',
+      'arenas_state_country_external_id_required',
     ]);
   });
 });
@@ -69,7 +71,6 @@ describe('Arena leadership schema', () => {
     expect(currentLeaders.primaryKeys[0]?.columns.map((column) => column.name)).toEqual(['arena_id', 'user_id']);
     expect(currentLeaders.checks.map((constraint) => constraint.name)).toEqual([
       'arena_current_leaders_cells_claimed_positive',
-      'arena_current_leaders_decisive_cell_size_positive',
     ]);
 
     const events = getTableConfig(arenaLeadershipEvents);

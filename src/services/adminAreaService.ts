@@ -167,9 +167,9 @@ export function createAdminAreaService(
             FROM geometry
           )
           INSERT INTO arenas (source_id, name, country, country_code, state, city, area, arena_type,
-            claimable_cell_count, claimable_cell_size)
+            claimable_cell_count)
           SELECT nextval('arena_source_id_seq'), ${input.name}, ${country.name}, ${country.countryCode},
-            ${input.state || null}, ${input.city || null}, counted.area, 'general', counted.count, ${cellSize}
+            ${input.state || null}, ${input.city || null}, counted.area, 'general', counted.count
           FROM counted
           WHERE counted.area IS NOT NULL AND NOT ST_IsEmpty(counted.area) AND ST_IsValid(counted.area)
             AND counted.count > 0
@@ -189,7 +189,26 @@ export function createAdminAreaService(
     async update(id, input) {
       const updated = await database.transaction(async (transaction) => {
         const country = await resolveCountry(transaction, input.countryArenaId);
-        const result = await transaction.execute<{ id: string; arenaType: AdminAreaSummary['arenaType'] }>(sql`
+        const arenaTypeResult = await transaction.execute<{ arenaType: AdminAreaSummary['arenaType'] }>(sql`
+          SELECT arena_type AS "arenaType" FROM arenas WHERE id = ${id}
+        `);
+        const arenaType = arenaTypeResult.rows[0]?.arenaType;
+        if (!arenaType) return null;
+        let oldPeerIds: string[] = [];
+        if (arenaType === 'state' || arenaType === 'country') {
+          const peers = await transaction.execute<{ id: string }>(sql`
+            SELECT peer.id
+            FROM arenas target
+            INNER JOIN arenas peer
+              ON peer.arena_type = target.arena_type
+             AND peer.id <> target.id
+             AND ST_Intersects(peer.area, target.area)
+            WHERE target.id = ${id}
+          `);
+          oldPeerIds = peers.rows.map((peer) => peer.id);
+        }
+        const shouldRecomputeCount = arenaType === 'general' || arenaType === 'launch';
+        const result = await transaction.execute<{ id: string; arenaType: AdminAreaSummary['arenaType'] }>(shouldRecomputeCount ? sql`
           WITH geometry AS (SELECT ${normalizedArenaGeometrySql(input.geometries)} AS area),
           counted AS (
             SELECT area, ${claimableCellCountSql({ area: sql`geometry.area`, cellSize: sql`${cellSize}` })} AS count
@@ -201,18 +220,42 @@ export function createAdminAreaService(
             country_code = CASE WHEN arenas.arena_type = 'country' THEN arenas.country_code ELSE ${country.countryCode} END,
             state = ${input.state || null},
             city = ${input.city || null}, area = counted.area,
-            claimable_cell_count = counted.count,
-            claimable_cell_size = CAST(${cellSize} AS integer)
+            claimable_cell_count = counted.count
           FROM counted
           WHERE arenas.id = ${id}
             AND counted.area IS NOT NULL AND NOT ST_IsEmpty(counted.area) AND ST_IsValid(counted.area)
             AND counted.count > 0
           RETURNING arenas.id, arenas.arena_type AS "arenaType"
+        ` : sql`
+          WITH geometry AS (SELECT ${normalizedArenaGeometrySql(input.geometries)} AS area)
+          UPDATE arenas
+          SET name = ${input.name},
+            country = CASE WHEN arenas.arena_type = 'country' THEN arenas.country ELSE ${country.name} END,
+            country_code = CASE WHEN arenas.arena_type = 'country' THEN arenas.country_code ELSE ${country.countryCode} END,
+            state = ${input.state || null},
+            city = ${input.city || null}, area = geometry.area
+          FROM geometry
+          WHERE arenas.id = ${id}
+            AND geometry.area IS NOT NULL AND NOT ST_IsEmpty(geometry.area) AND ST_IsValid(geometry.area)
+          RETURNING arenas.id, arenas.arena_type AS "arenaType"
         `);
         const row = result.rows[0];
         if (!row) return null;
         if (row.arenaType !== 'launch') {
-          await arenaLeadership.reconcileInTransaction(transaction, { arenaIds: [row.id] });
+          const affectedArenaIds = new Set<string>([row.id, ...oldPeerIds]);
+          if (row.arenaType === 'state' || row.arenaType === 'country') {
+            const peers = await transaction.execute<{ id: string }>(sql`
+              SELECT peer.id
+              FROM arenas target
+              INNER JOIN arenas peer
+                ON peer.arena_type = target.arena_type
+               AND peer.id <> target.id
+               AND ST_Intersects(peer.area, target.area)
+              WHERE target.id = ${row.id}
+            `);
+            for (const peer of peers.rows) affectedArenaIds.add(peer.id);
+          }
+          await arenaLeadership.reconcileInTransaction(transaction, { arenaIds: [...affectedArenaIds] });
         }
         return row;
       });

@@ -12,7 +12,6 @@ export type ArenaLeadershipClaim = {
   claimTimestamp: Date;
   sourceFlightId: string;
   competitionMonth: string;
-  cellSize: number;
   cellX: number;
   cellY: number;
 };
@@ -45,8 +44,6 @@ export function compareArenaLeadershipClaims(left: ArenaLeadershipClaim, right: 
   if (flightDifference !== 0) return flightDifference;
   const monthDifference = left.competitionMonth.localeCompare(right.competitionMonth);
   if (monthDifference !== 0) return monthDifference;
-  const cellSizeDifference = left.cellSize - right.cellSize;
-  if (cellSizeDifference !== 0) return cellSizeDifference;
   const xDifference = left.cellX - right.cellX;
   if (xDifference !== 0) return xDifference;
   const yDifference = left.cellY - right.cellY;
@@ -62,7 +59,6 @@ export function arenaLeadershipEventKey(event: ArenaLeadershipClaim, eventType: 
     event.claimTimestamp.toISOString(),
     event.sourceFlightId,
     event.competitionMonth,
-    event.cellSize,
     event.cellX,
     event.cellY,
   ].join(':');
@@ -72,7 +68,7 @@ export function arenaLeadershipEventKey(event: ArenaLeadershipClaim, eventType: 
 export function replayArenaLeadership(claims: readonly ArenaLeadershipClaim[]): ArenaLeadershipReplayResult {
   const firstClaims = new Map<string, ArenaLeadershipClaim>();
   for (const claim of claims) {
-    const key = `${claim.arenaId}:${claim.userId}:${claim.cellSize}:${claim.cellX}:${claim.cellY}`;
+    const key = `${claim.arenaId}:${claim.userId}:${claim.cellX}:${claim.cellY}`;
     const existing = firstClaims.get(key);
     if (!existing || compareArenaLeadershipClaims(claim, existing) < 0) firstClaims.set(key, claim);
   }

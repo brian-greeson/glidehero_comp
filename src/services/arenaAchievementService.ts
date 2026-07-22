@@ -2,7 +2,7 @@ import { sql } from 'drizzle-orm';
 import type { Database } from '../db/client.js';
 import type { AchievementKey } from '../domain/achievement/catalog.js';
 import { awardAchievement, awardAchievementRecordInTransaction, type AchievementAwardResult, type AchievementRecordResult } from './achievementService.js';
-import { claimCellCenterSql } from './arenaGeometrySql.js';
+import { arenaCellOwnershipPredicateSql, claimCellCenterSql } from './arenaGeometrySql.js';
 import {
   generalCoverageMilestones,
   generalExplorationMilestones,
@@ -33,7 +33,6 @@ export type ArenaAchievementSnapshotRow = {
   id: string;
   arenaType: 'launch' | 'general' | 'state' | 'country';
   claimableCellCount: number | string | null;
-  claimableCellSize: number | string | null;
   claimedCells: number | string;
   visited: boolean;
   firstFromLaunch: boolean;
@@ -71,17 +70,13 @@ export async function evaluateArenaAchievementsInTransaction(
       SELECT DISTINCT claims.x, claims.y
       FROM user_grid_claims claims
       WHERE claims.claim_user = ${input.userId}
-        AND claims.cell_size = ${input.cellSize}
         ${historicalClaimFilter}
     ),
     arena_claims AS (
       SELECT arena.id,
              COUNT(DISTINCT (personal_cells.x, personal_cells.y)) FILTER (WHERE personal_cells.x IS NOT NULL AND personal_cells.y IS NOT NULL)::integer AS claimed_cells
       FROM arenas arena
-      LEFT JOIN personal_cells ON ST_Covers(
-        arena.area,
-        ${claimCellCenterSql({ x: sql`personal_cells.x`, y: sql`personal_cells.y`, cellSize: sql`${input.cellSize}` })}
-      )
+      LEFT JOIN personal_cells ON ${arenaCellOwnershipPredicateSql({ arenaId: sql`arena.id`, arenaType: sql`arena.arena_type`, externalId: sql`arena.external_id`, area: sql`arena.area`, cellCenter: claimCellCenterSql({ x: sql`personal_cells.x`, y: sql`personal_cells.y`, cellSize: sql`${input.cellSize}` }) })}
       GROUP BY arena.id
     ),
     launch_visits AS (
@@ -104,7 +99,6 @@ export async function evaluateArenaAchievementsInTransaction(
       INNER JOIN user_grid_claims claims
         ON claims.claim_user = ${input.userId}
        AND claims.claim_flight = ${input.sourceFlightId}
-       AND claims.cell_size = ${input.cellSize}
        AND ST_Covers(
          arena.area,
          ${claimCellCenterSql({ x: sql`claims.x`, y: sql`claims.y`, cellSize: sql`${input.cellSize}` })}
@@ -126,8 +120,7 @@ export async function evaluateArenaAchievementsInTransaction(
     )
     SELECT arena.id,
            arena.arena_type AS "arenaType",
-           arena.claimable_cell_count AS "claimableCellCount",
-           arena.claimable_cell_size AS "claimableCellSize",
+           CASE WHEN arena.arena_type IN ('launch', 'general') THEN arena.claimable_cell_count ELSE NULL END AS "claimableCellCount",
            COALESCE(arena_claims.claimed_cells, 0)::integer AS "claimedCells",
            (launch_visits.id IS NOT NULL) AS visited,
            (current_origin.id IS NOT NULL) AS "firstFromLaunch",
@@ -175,7 +168,7 @@ export async function awardArenaAchievementsFromSnapshotInTransaction(
 
   const completeLaunch = launchRows.find((row) => {
     const total = numberOrNull(row.claimableCellCount);
-    return total !== null && total > 0 && Number(row.claimableCellSize) === input.cellSize && Number(row.claimedCells) === total;
+    return total !== null && total > 0 && Number(row.claimedCells) === total;
   });
   if (completeLaunch) await award('complete_a_launch_arena', {
     arenaId: completeLaunch.id,
@@ -204,25 +197,24 @@ export async function awardArenaAchievementsFromSnapshotInTransaction(
   }
   const coverage = generalRows.some((row) => {
     const total = numberOrNull(row.claimableCellCount);
-    const size = Number(row.claimableCellSize);
-    return total !== null && total > 0 && size === input.cellSize && Number(row.claimedCells) >= 0;
+    return total !== null && total > 0 && Number(row.claimedCells) >= 0;
   })
     ? generalRows.reduce((best, row) => {
       const total = numberOrNull(row.claimableCellCount);
-      if (total === null || total <= 0 || Number(row.claimableCellSize) !== input.cellSize) return best;
+      if (total === null || total <= 0) return best;
       return Math.max(best, Number(row.claimedCells) * 100 / total);
     }, 0)
     : 0;
   for (const threshold of generalCoverageMilestones) {
     const reached = generalRows.some((row) => {
       const total = numberOrNull(row.claimableCellCount);
-      return total !== null && total > 0 && Number(row.claimableCellSize) === input.cellSize
+      return total !== null && total > 0
         && Number(row.claimedCells) * 100 >= threshold * total;
     });
     if (reached) {
       const bestArena = generalRows.find((row) => {
         const total = numberOrNull(row.claimableCellCount);
-        return total !== null && total > 0 && Number(row.claimableCellSize) === input.cellSize
+        return total !== null && total > 0
           && Number(row.claimedCells) * 100 >= threshold * total;
       });
       await award(`general_coverage_${threshold}`, {

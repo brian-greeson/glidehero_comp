@@ -8,15 +8,11 @@ import { importLaunchArenas } from '../services/launchArenaImportService.js';
 async function main(): Promise<void> {
   const databaseUrl = process.env.DATABASE_URL;
   if (!databaseUrl) throw new Error('DATABASE_URL is required.');
-  const rawCellSize = process.env.GRID_CLAIM_CELL_SIZE;
-  if (!rawCellSize || !/^\d+$/.test(rawCellSize) || Number(rawCellSize) <= 0) {
-    throw new Error('GRID_CLAIM_CELL_SIZE must be a positive integer.');
-  }
   const sourcePath = resolve(process.argv[2] ?? 'ingest/launches.sql');
   const rows = parseMysqlLaunchDump(await readFile(sourcePath, 'utf8'));
   const { db, pool } = createDatabase(databaseUrl);
   try {
-    const summary = await importLaunchArenas(db, rows, Number(rawCellSize));
+    const summary = await importLaunchArenas(db, rows, 500);
     console.log(`Refreshed ${summary.refreshed} launches and imported ${summary.imported} Launch Arenas from ${sourcePath}.`);
   } finally {
     await pool.end();

@@ -13,6 +13,7 @@ import {
   selectClosestMilestones,
 } from '../domain/achievement/progress.js';
 import { arenaPath } from '../domain/arena/arenaRoute.js';
+import { arenaCellOwnershipPredicateSql, claimCellCenterSql } from './arenaGeometrySql.js';
 
 const territoryColorPattern = /^#[0-9a-f]{6}$/i;
 
@@ -48,7 +49,7 @@ export type PilotArenaLeadership = {
   arenaPath: string;
   status: 'sole' | 'joint';
   cellsClaimed: number;
-  coveragePercent: number;
+  coveragePercent: number | null;
   leadMarginCells: number;
   leadingSince: string;
 };
@@ -203,7 +204,9 @@ function loadCurrentArenaLeaderships(
       state.leading_cell_count AS "leadingCellCount",
       state.next_rank_cell_count AS "nextRankCellCount",
       current_leader.leader_count AS "leaderCount",
-      FLOOR(LEAST(100, current_leader.cells_claimed * 100.0 / arena.claimable_cell_count) * 10) / 10 AS "coveragePercent"
+      CASE WHEN arena.arena_type = 'general' AND arena.claimable_cell_count IS NOT NULL AND arena.claimable_cell_count > 0
+        THEN FLOOR(LEAST(100, current_leader.cells_claimed * 100.0 / arena.claimable_cell_count) * 10) / 10
+        ELSE NULL END AS "coveragePercent"
     FROM (
       SELECT leaders.*, COUNT(*) OVER (PARTITION BY leaders.arena_id)::integer AS leader_count
       FROM arena_current_leaders leaders
@@ -213,9 +216,6 @@ function loadCurrentArenaLeaderships(
     WHERE current_leader.user_id = ${userId}
       AND arena.arena_type IN ('general', 'state', 'country')
       AND state.arena_type = arena.arena_type
-      AND arena.claimable_cell_count IS NOT NULL
-      AND arena.claimable_cell_count > 0
-      AND arena.claimable_cell_size = ${options.cellSize}
     ORDER BY current_leader.took_lead_at DESC, lower(arena.name), arena.source_id, arena.id
   `);
 }
@@ -521,25 +521,18 @@ async function loadArenaAchievementProgress(
   const result = await database.execute<StoredArenaAchievementProgress>(sql`
     WITH arena_cell_counts AS (
       SELECT arena.id, arena.source_id, arena.name, arena.country_code, arena.arena_type,
-             arena.claimable_cell_count, arena.claimable_cell_size,
+             CASE WHEN arena.arena_type = 'general' THEN arena.claimable_cell_count ELSE NULL END AS claimable_cell_count,
              COALESCE(personal_cells.claimed_cells, 0)::integer AS claimed_cells
       FROM arenas arena
       LEFT JOIN LATERAL (
         SELECT COUNT(DISTINCT (claims.x, claims.y))::integer AS claimed_cells
         FROM user_grid_claims claims
         WHERE claims.claim_user = ${userId}
-          AND claims.cell_size = ${options.cellSize}
           AND claims.x BETWEEN FLOOR(ST_XMin(Box3D(arena.area)) / ${options.cellSize})::integer - 1
                            AND CEIL(ST_XMax(Box3D(arena.area)) / ${options.cellSize})::integer + 1
           AND claims.y BETWEEN FLOOR(ST_YMin(Box3D(arena.area)) / ${options.cellSize})::integer - 1
                            AND CEIL(ST_YMax(Box3D(arena.area)) / ${options.cellSize})::integer + 1
-          AND ST_Covers(
-            arena.area,
-            ST_SetSRID(ST_MakePoint(
-              (claims.x + 0.5) * ${options.cellSize},
-              (claims.y + 0.5) * ${options.cellSize}
-            ), 6933)
-          )
+          AND ${arenaCellOwnershipPredicateSql({ arenaId: sql`arena.id`, arenaType: sql`arena.arena_type`, externalId: sql`arena.external_id`, area: sql`arena.area`, cellCenter: claimCellCenterSql({ x: sql`claims.x`, y: sql`claims.y`, cellSize: sql`${options.cellSize}` }) })}
       ) personal_cells ON TRUE
       WHERE arena.arena_type IN ('general', 'state', 'country')
     ), launch_visits AS (
@@ -561,7 +554,6 @@ async function loadArenaAchievementProgress(
       WHERE arena_type = 'general'
         AND claimed_cells > 0
         AND claimable_cell_count > 0
-        AND claimable_cell_size = ${options.cellSize}
       ORDER BY claimed_cells::numeric / claimable_cell_count DESC, lower(name), source_id
       LIMIT 1
     )
@@ -614,7 +606,6 @@ export function createProfileService(database: Database, options: { cellSize: nu
         INNER JOIN profiles ON profiles.user_id = users.user_id
         LEFT JOIN user_grid_claims claims
           ON claims.claim_user = users.user_id
-         AND claims.cell_size = ${options.cellSize}
         WHERE users.user_id = ${userId}
         GROUP BY users.user_id, profiles.display_name
       `);
@@ -637,7 +628,6 @@ export function createProfileService(database: Database, options: { cellSize: nu
             SELECT COUNT(DISTINCT (claims.x, claims.y))::integer
             FROM user_grid_claims claims
             WHERE claims.claim_user = users.user_id
-              AND claims.cell_size = ${options.cellSize}
           ) AS "lifetimeUniqueCellCount",
           (
             SELECT COUNT(*)::integer
@@ -772,7 +762,7 @@ export function createProfileService(database: Database, options: { cellSize: nu
           }),
           status: Number(leadership.leaderCount) > 1 ? 'joint' : 'sole',
           cellsClaimed: Number(leadership.cellsClaimed),
-          coveragePercent: Number(leadership.coveragePercent),
+          coveragePercent: leadership.coveragePercent === null ? null : Number(leadership.coveragePercent),
           leadMarginCells: Number(leadership.leadingCellCount) - Number(leadership.nextRankCellCount),
           leadingSince: displayDate(leadership.tookLeadAt),
         })),

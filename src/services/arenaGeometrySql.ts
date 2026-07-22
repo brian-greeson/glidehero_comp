@@ -1,6 +1,8 @@
 import { sql } from 'drizzle-orm';
 import type { PolygonGeometry } from '../domain/arena/geoJson.js';
 
+type SqlFragment = ReturnType<typeof sql>;
+
 export function claimCellCenterSql(input: { x: ReturnType<typeof sql>; y: ReturnType<typeof sql>; cellSize: ReturnType<typeof sql> }) {
   return sql`ST_SetSRID(ST_MakePoint(
     (${input.x} + 0.5) * ${input.cellSize},
@@ -28,6 +30,41 @@ export function claimableCellCountSql(input: { area: ReturnType<typeof sql>; cel
     WHERE ST_Covers(
       ${input.area},
       ${claimCellCenterSql({ x: sql`candidate_cells.x`, y: sql`candidate_cells.y`, cellSize: input.cellSize })}
+    )
+  )`;
+}
+
+/**
+ * Applies complete canonical Arena membership to a cell center.
+ * General Arenas retain raw ST_Covers membership; State and Country Arenas
+ * yield to a same-type peer with a lexically lower external_id under the C
+ * collation. Launch Arenas are intentionally left unchanged.
+ */
+export function arenaCellOwnershipPredicateSql(input: {
+  arenaId: SqlFragment;
+  arenaType: SqlFragment;
+  externalId: SqlFragment;
+  area: SqlFragment;
+  cellCenter: SqlFragment;
+}) {
+  return sql`(
+    ST_Covers(${input.area}, ${input.cellCenter})
+    AND (
+      ${input.arenaType} NOT IN ('state', 'country')
+      OR (
+        ${input.externalId} IS NOT NULL
+        AND btrim(${input.externalId}) <> ''
+        AND NOT EXISTS (
+          SELECT 1
+          FROM arenas peer
+          WHERE peer.arena_type = ${input.arenaType}
+            AND peer.id <> ${input.arenaId}
+            AND peer.external_id IS NOT NULL
+            AND btrim(peer.external_id) <> ''
+            AND peer.external_id COLLATE "C" < ${input.externalId} COLLATE "C"
+            AND ST_Covers(peer.area, ${input.cellCenter})
+        )
+      )
     )
   )`;
 }

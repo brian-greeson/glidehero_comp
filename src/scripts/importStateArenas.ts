@@ -5,9 +5,7 @@ import { createDatabase } from '../db/client.js';
 import { importStateArenas, parseStateArenaGeoJson } from '../services/stateArenaImportService.js';
 
 function cellSizeFromEnvironment(): number {
-  const value = Number(process.env.GRID_CLAIM_CELL_SIZE);
-  if (!Number.isInteger(value) || value <= 0) throw new Error('GRID_CLAIM_CELL_SIZE must be a positive integer.');
-  return value;
+  return 500;
 }
 
 async function main(): Promise<void> {

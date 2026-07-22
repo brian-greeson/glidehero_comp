@@ -37,27 +37,27 @@ describe('Launch Arena importer', () => {
     const result = await database.pool.query<{
       id: number; projectedX: number; projectedY: number; anchorX: number; anchorY: number;
       areaSize: number; width: number; height: number; centralCell: boolean; centerCount: string;
-      arenaType: string; country: string; countryCode: string; timezone: string; claimableCellCount: string; claimableCellSize: number;
+      arenaType: string; country: string; countryCode: string; timezone: string; claimableCellCount: string;
       valid: boolean; geometryType: string; area: string;
     }>(`WITH projected AS (
-      SELECT source_id, arena_type, country, country_code, timezone, claimable_cell_count, claimable_cell_size, area,
+      SELECT source_id, arena_type, country, country_code, timezone, claimable_cell_count, area,
         ST_Transform(location, 6933) AS point FROM arenas WHERE arena_type = 'launch'
     ), anchors AS (
-      SELECT *, floor(ST_X(point) / claimable_cell_size)::integer AS x, floor(ST_Y(point) / claimable_cell_size)::integer AS y
+      SELECT *, floor(ST_X(point) / 1000)::integer AS x, floor(ST_Y(point) / 1000)::integer AS y
       FROM projected
     )
     SELECT source_id::integer AS id, ST_X(point)::double precision AS "projectedX", ST_Y(point)::double precision AS "projectedY", x AS "anchorX", y AS "anchorY",
       ST_Area(area)::double precision AS "areaSize", (ST_XMax(area)-ST_XMin(area))::double precision AS width,
       (ST_YMax(area)-ST_YMin(area))::double precision AS height,
-      ST_Covers(ST_MakeEnvelope(x*claimable_cell_size, y*claimable_cell_size, (x+1)*claimable_cell_size, (y+1)*claimable_cell_size, 6933), point) AS "centralCell",
+      ST_Covers(ST_MakeEnvelope(x*1000, y*1000, (x+1)*1000, (y+1)*1000, 6933), point) AS "centralCell",
       (SELECT COUNT(*) FROM generate_series(-2, 2) dx, generate_series(-2, 2) dy
-        WHERE ST_Covers(area, ST_SetSRID(ST_MakePoint((x+dx+0.5)*claimable_cell_size, (y+dy+0.5)*claimable_cell_size), 6933)))::text AS "centerCount",
+        WHERE ST_Covers(area, ST_SetSRID(ST_MakePoint((x+dx+0.5)*1000, (y+dy+0.5)*1000), 6933)))::text AS "centerCount",
       arena_type AS "arenaType", country, country_code AS "countryCode", timezone,
-      claimable_cell_count AS "claimableCellCount", claimable_cell_size AS "claimableCellSize",
+      claimable_cell_count AS "claimableCellCount",
       ST_IsValid(area) AS valid, ST_GeometryType(area) AS "geometryType", ST_AsText(area) area
       FROM anchors ORDER BY source_id`);
     expect(result.rows).toHaveLength(2);
-    expect(result.rows[0]).toMatchObject({ id: 745, arenaType: 'launch', country: 'United States of America', countryCode: 'US', timezone: 'America/Los_Angeles', claimableCellCount: '25', claimableCellSize: 1000, valid: true, geometryType: 'ST_MultiPolygon', areaSize: 25_000_000, width: 5000, height: 5000, centralCell: true, centerCount: '25' });
+    expect(result.rows[0]).toMatchObject({ id: 745, arenaType: 'launch', country: 'United States of America', countryCode: 'US', timezone: 'America/Los_Angeles', claimableCellCount: '25', valid: true, geometryType: 'ST_MultiPolygon', areaSize: 25_000_000, width: 5000, height: 5000, centralCell: true, centerCount: '25' });
     expect(result.rows[1]).toMatchObject({ id: 746, valid: true, geometryType: 'ST_MultiPolygon', areaSize: 25_000_000, width: 5000, height: 5000, centralCell: true, centerCount: '25' });
     expect(result.rows[1]?.projectedY).toBeLessThan(0);
     expect(result.rows[1]?.anchorY).toBe(Math.floor((result.rows[1]?.projectedY ?? 0) / 1000));

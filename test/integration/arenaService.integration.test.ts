@@ -19,13 +19,21 @@ afterAll(async () => {
 async function insertArena(input: { sourceId: number; name: string; city: string; countryCode?: string; arenaType?: string }) {
   const inserted = await database.pool.query<{ id: string }>(`
     INSERT INTO arenas (
-      source_id, name, country, country_code, arena_type, state, city, location, altitude_meters, timezone, area
+      source_id, name, country, country_code, arena_type, state, city, location, altitude_meters, timezone, area,
+      external_id
     ) VALUES (
       $1, $2, 'United States', $4, $5, 'Colorado', $3,
       ST_Transform(ST_SetSRID(ST_Point(500, 500), 6933), 4326), 1000, 'America/Denver',
-      ST_Multi(ST_MakeEnvelope(0, 0, 1000, 1000, 6933))
+      ST_Multi(ST_MakeEnvelope(0, 0, 1000, 1000, 6933)), $6
     ) RETURNING id
-  `, [input.sourceId, input.name, input.city, input.countryCode ?? 'US', input.arenaType ?? 'general']);
+  `, [
+    input.sourceId,
+    input.name,
+    input.city,
+    input.countryCode ?? 'US',
+    input.arenaType ?? 'general',
+    input.arenaType === 'state' || input.arenaType === 'country' ? `${input.arenaType}-${input.sourceId}` : null,
+  ]);
   const id = inserted.rows[0]?.id;
   if (!id) throw new Error('Expected Arena id.');
   return id;

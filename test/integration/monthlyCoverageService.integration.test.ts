@@ -41,7 +41,6 @@ async function addClaim(pilot: { userId: string }, input: {
   if (!flight) throw new Error('Expected a flight.');
   await database.db.insert(competitionGridClaims).values({
     competitionMonth: input.month,
-    cellSize: input.cellSize ?? 1_000,
     x: input.x,
     y: input.y,
     claimFlight: flight.id,

@@ -274,8 +274,12 @@ territory, and monthly/all-time behavior.
 
 The canonical `arenas` table classifies rows as `launch`, `general`, `state`, or
 `country`. Every row has an uppercase ISO-3166-1 alpha-2 `country_code`.
-`claimable_cell_count` and `claimable_cell_size` are populated only for Launch
-and General rows. The checked-in Natural Earth country artifact is reduced by
+`claimable_cell_count` is meaningful and maintained only for General and Launch
+rows. Any legacy value on a State or Country row is ignored and is not
+recalculated. State and Country ownership is exclusive by the claim-cell center,
+while General Arenas may overlap and retain their own coverage counts. The
+application grid size is fixed at 500 meters and is not persisted on claim rows.
+The checked-in Natural Earth country artifact is reduced by
 the documented Release 2 policy to 194 Country Arenas; the Census source
 imports exactly 50 State Arenas; the launch source generates a configured 5x5
 grid for each Launch Arena. `npm run rebuild:arenas` performs the one-time,
@@ -319,8 +323,8 @@ Arenas, and excludes D.C. and territories.
 The admin editor creates General Arenas by default and requires selecting an
 existing Country Arena from the imported catalog. Editing an imported row
 preserves its source identity and metadata; only applicable Launch/General
-claimable denominators are recomputed with configured-grid cell centers and
-`ST_Covers`. State and Country progress is intentionally a boolean Flown-in
+claimable denominators are recomputed with fixed 500-meter application-grid
+cell centers and `ST_Covers`. State and Country progress is intentionally a boolean Flown-in
 state rather than a denominator.
 
 On an Arena page, competition remains the existing additive leaderboard and
@@ -531,7 +535,7 @@ idempotent. The launch-tag personal-best value is written to
 `achievement_records` together with immutable `achievement_record_events` in
 one transaction; a new record is awarded only for a strict positive increase.
 The live evaluator runs after a claim rebuild while holding the per-user
-advisory transaction lock. It counts distinct configured-grid cells using
+advisory transaction lock. It counts distinct fixed 500-meter application-grid cells using
 EPSG:6933 center `ST_Covers`, ignores invalid denominators for coverage awards,
 and never revokes an existing award. Profile reads merge ordinary awards and
 record events into one latest-50 activity list without exposing raw keys or

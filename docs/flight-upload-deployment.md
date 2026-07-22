@@ -78,6 +78,38 @@ apply failure leaves earlier successful batches committed and exits nonzero.
 Resolve or restore that partial state before retrying; the one-time backfill does
 not automatically resume it.
 
+## Release 3 Arena leadership and claim-timestamp backfill
+
+Deploy the checked-in migrations and application code, then pause and drain the
+flight workers. During this one-time run, avoid Arena edits and admin claim
+mutations. `DATABASE_URL` is the only required environment variable; the command
+uses the fixed 500-meter application grid. The optional
+`ARENA_LEADERSHIP_BACKFILL_BATCH_SIZE` controls independent batch transactions
+and defaults to 10. Run the rollback-only dry-run first:
+
+```sh
+npm run db:migrate
+npm run backfill:arena-leadership
+```
+
+Review the timestamp-correction and per-Arena-batch elapsed timings, inspected
+and changed counts, leadership totals, and achievement totals. The backfill
+corrects Competition claim timestamps from track-point order before rebuilding
+leadership. It recalculates `claimable_cell_count` only for General Arenas; State
+and Country Arenas are exclusive ownership scopes with no denominator work.
+
+After review, run the independent-commit apply:
+
+```sh
+npm run backfill:arena-leadership -- --apply
+```
+
+Verify the summary and database counts, including corrected timestamps,
+General-Arena denominators, leadership projections/events, and idempotent
+achievements. If apply fails after a committed batch, earlier batches remain
+applied; resolve that partial state before retrying. Restart the flight workers
+only after verification.
+
 Configure the private DigitalOcean Space with a CORS rule that allows:
 
 - Origin: `https://glidehero.com`

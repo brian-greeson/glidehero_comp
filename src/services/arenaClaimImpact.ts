@@ -1,5 +1,6 @@
 import { sql } from 'drizzle-orm';
 import type { Database } from '../db/client.js';
+import { arenaCellOwnershipPredicateSql } from './arenaGeometrySql.js';
 
 type DatabaseTransaction = Parameters<Parameters<Database['transaction']>[0]>[0];
 export type ArenaClaimImpactTransaction = Pick<DatabaseTransaction, 'execute'>;
@@ -20,21 +21,18 @@ export async function findEligibleArenaIdsForCompetitionFlight(
       SELECT
         claims.x,
         claims.y,
-        claims.cell_size,
         claims.claim_user,
         MIN(claims.claim_timestamp) AS claim_timestamp
       FROM competition_grid_claims claims
       WHERE claims.claim_flight = ${input.flightId}
-        ${input.cellSize === undefined ? sql`` : sql`AND claims.cell_size = ${input.cellSize}`}
-      GROUP BY claims.x, claims.y, claims.cell_size, claims.claim_user
+      GROUP BY claims.x, claims.y, claims.claim_user
     ), selected_cells AS (
-      SELECT cells.x, cells.y, cells.cell_size
+      SELECT cells.x, cells.y
       FROM flight_cells cells
         WHERE NOT EXISTS (
           SELECT 1
           FROM competition_grid_claims previous
           WHERE previous.claim_user = cells.claim_user
-            AND previous.cell_size = cells.cell_size
             AND previous.x = cells.x
             AND previous.y = cells.y
             AND previous.claim_flight <> ${input.flightId}
@@ -48,23 +46,26 @@ export async function findEligibleArenaIdsForCompetitionFlight(
         )
       )`
     : sql`WITH selected_cells AS (
-        SELECT DISTINCT claims.x, claims.y, claims.cell_size
+        SELECT DISTINCT claims.x, claims.y
         FROM competition_grid_claims claims
         WHERE claims.claim_flight = ${input.flightId}
-          ${input.cellSize === undefined ? sql`` : sql`AND claims.cell_size = ${input.cellSize}`}
       )`;
 
+  const cellCenter = sql`ST_SetSRID(ST_MakePoint(
+    (cells.x + 0.5) * ${input.cellSize ?? 500},
+    (cells.y + 0.5) * ${input.cellSize ?? 500}
+  ), 6933)`;
   const result = await transaction.execute<{ arenaId: string }>(sql`
     ${cells}
     SELECT DISTINCT arena.id AS "arenaId"
     FROM arenas arena
-    INNER JOIN selected_cells cells ON ST_Covers(
-      arena.area,
-      ST_SetSRID(ST_MakePoint(
-        (cells.x + 0.5) * cells.cell_size,
-        (cells.y + 0.5) * cells.cell_size
-      ), 6933)
-    )
+    INNER JOIN selected_cells cells ON ${arenaCellOwnershipPredicateSql({
+      arenaId: sql`arena.id`,
+      arenaType: sql`arena.arena_type`,
+      externalId: sql`arena.external_id`,
+      area: sql`arena.area`,
+      cellCenter,
+    })}
     WHERE arena.arena_type IN ('general', 'state', 'country')
     ORDER BY arena.id
   `);

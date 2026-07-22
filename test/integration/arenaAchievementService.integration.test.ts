@@ -29,12 +29,13 @@ async function createFlight(userId: string, status: 'processing' | 'completed' |
   return flight.id;
 }
 
-async function createArena(sourceId: number, type: 'launch' | 'general' | 'state' | 'country', denominator: number | null, size: number | null, wkt = 'POLYGON((-1000 -1000,10000 -1000,10000 1000,-1000 1000,-1000 -1000))') {
+async function createArena(sourceId: number, type: 'launch' | 'general' | 'state' | 'country', denominator: number | null, _size: number | null, wkt = 'POLYGON((-1000 -1000,10000 -1000,10000 1000,-1000 1000,-1000 -1000))') {
+  const externalId = type === 'state' || type === 'country' ? String(sourceId) : null;
   const result = await database.pool.query<{ id: string }>(`INSERT INTO arenas
-    (source_id, name, country, country_code, area, arena_type, claimable_cell_count, claimable_cell_size)
+    (source_id, name, country, country_code, area, arena_type, external_id, claimable_cell_count)
     VALUES ($1, $2, 'United States', 'US',
-      ST_Multi(ST_GeomFromText($6, 6933)),
-      $3, $4, $5) RETURNING id`, [sourceId, `${type}-${sourceId}`, type, denominator, size, wkt]);
+      ST_Multi(ST_GeomFromText($3, 6933)),
+      $4, $5, $6) RETURNING id`, [sourceId, `${type}-${sourceId}`, wkt, type, externalId, denominator]);
   if (!result.rows[0]) throw new Error('arena insert failed');
   return result.rows[0].id;
 }
@@ -72,7 +73,7 @@ describe('Arena achievement evaluation with PostgreSQL', () => {
     expect(result.newlyEarned).toEqual(expect.arrayContaining([
       'first_flight_from_launch', 'complete_a_launch_arena', 'first_cells_in_general_arena',
       'general_arenas_explored_1', 'general_coverage_10', 'general_coverage_25', 'general_coverage_50', 'general_coverage_75', 'general_coverage_100',
-      'states_flown_in_1', 'states_flown_in_3', 'countries_flown_in_1', 'countries_flown_in_3',
+      'states_flown_in_1', 'countries_flown_in_1',
     ]));
     expect(result.newlyEarned.some((key) => key.startsWith('states_') && (key.includes('coverage') || key.includes('completed')))).toBe(false);
     expect(result.newlyEarned.some((key) => key.startsWith('countries_') && (key.includes('coverage') || key.includes('completed')))).toBe(false);
@@ -81,7 +82,7 @@ describe('Arena achievement evaluation with PostgreSQL', () => {
     const again = await database.db.transaction((tx) => evaluateArenaAchievementsInTransaction(tx, input));
     expect(again.newlyEarned).toEqual([]);
     expect(again.record).toMatchObject({ newRecord: false, value: 1 });
-    expect(await database.db.select().from(achievements).where(eq(achievements.userId, userId))).toHaveLength(13);
+    expect(await database.db.select().from(achievements).where(eq(achievements.userId, userId))).toHaveLength(11);
     expect(await database.db.select().from(achievementRecords).where(eq(achievementRecords.userId, userId))).toHaveLength(1);
     expect(await database.db.select().from(achievementRecordEvents).where(eq(achievementRecordEvents.userId, userId))).toHaveLength(1);
   });
@@ -91,8 +92,8 @@ describe('Arena achievement evaluation with PostgreSQL', () => {
     const flightId = await createFlight(userId);
     await createArena(10, 'general', null, null);
     await createArena(11, 'launch', null, 1_000);
-    await createArena(12, 'launch', 1, 2_000);
-    await database.db.insert(personalGridClaims).values({ cellSize: 1_000, x: 0, y: 0, claimFlight: flightId, claimUser: userId, claimTimestamp: new Date() });
+    await createArena(12, 'launch', null, null);
+    await database.db.insert(personalGridClaims).values({ x: 0, y: 0, claimFlight: flightId, claimUser: userId, claimTimestamp: new Date() });
     const result = await database.db.transaction((tx) => evaluateArenaAchievementsInTransaction(tx, {
       userId, sourceFlightId: flightId, cellSize: 1_000, earnedAt: new Date(),
     }));
@@ -188,8 +189,8 @@ describe('Arena achievement evaluation with PostgreSQL', () => {
     await createArena(400, 'launch', null, null, one);
     await createArena(401, 'launch', null, null, one);
     await createArena(402, 'launch', null, null, one);
-    await database.db.insert(personalGridClaims).values({ cellSize: 1_000, x: 0, y: 0, claimFlight: firstFlight, claimUser: userId, claimTimestamp: new Date() });
-    await database.db.insert(personalGridClaims).values({ cellSize: 1_000, x: 0, y: 0, claimFlight: secondFlight, claimUser: userId, claimTimestamp: new Date() });
+    await database.db.insert(personalGridClaims).values({ x: 0, y: 0, claimFlight: firstFlight, claimUser: userId, claimTimestamp: new Date() });
+    await database.db.insert(personalGridClaims).values({ x: 0, y: 0, claimFlight: secondFlight, claimUser: userId, claimTimestamp: new Date() });
     const first = await database.db.transaction((tx) => evaluateArenaAchievementsInTransaction(tx, { userId, sourceFlightId: firstFlight, cellSize: 1_000, earnedAt: new Date() }));
     expect(first.record).toMatchObject({ newRecord: true, value: 3 });
     await createArena(403, 'launch', null, null, two);

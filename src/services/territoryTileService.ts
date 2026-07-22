@@ -2,6 +2,7 @@ import { sql } from 'drizzle-orm';
 import type { Database } from '../db/client.js';
 import { normalizeCompetitionLeaderboardMonth } from '../domain/competition/competitionLeaderboardMonth.js';
 import type { MonthlyCoveragePeriod } from './monthlyCoverageService.js';
+import { arenaCellOwnershipPredicateSql, claimCellCenterSql } from './arenaGeometrySql.js';
 
 export type TerritoryTileResult = {
   data: Buffer;
@@ -94,11 +95,10 @@ export function createTerritoryTileService(
     const result = await database.execute<StoredTile>(sql`
       WITH ${tileBoundsCtes({ ...input, cellSize, extent, buffer })},
       pilot_cells AS (
-        SELECT DISTINCT claim.cell_size, claim.x, claim.y, claim.claim_user
+        SELECT DISTINCT claim.x, claim.y, claim.claim_user
         FROM competition_grid_claims claim
         CROSS JOIN cell_ranges range
-        WHERE claim.cell_size = ${cellSize}
-          AND claim.x BETWEEN range.min_x AND range.max_x
+        WHERE claim.x BETWEEN range.min_x AND range.max_x
           AND claim.y BETWEEN range.min_y AND range.max_y
           ${competitionMonth
             ? sql`AND claim.competition_month = ${competitionMonth}::date`
@@ -106,17 +106,15 @@ export function createTerritoryTileService(
       ),
       cell_claimants AS (
         SELECT
-          cell_size,
           x,
           y,
           COUNT(*)::integer AS claimant_count,
           CASE WHEN COUNT(*) = 1 THEN MIN(claim_user::text)::uuid END AS pilot_user_id
         FROM pilot_cells
-        GROUP BY cell_size, x, y
+        GROUP BY x, y
       ),
       selected_cells AS (
         SELECT
-          claimant.cell_size,
           claimant.x,
           claimant.y,
           claimant.claimant_count,
@@ -125,7 +123,7 @@ export function createTerritoryTileService(
             : sql`claimant.pilot_user_id`} AS pilot_user_id
         FROM cell_claimants claimant
         ${input.pilotUserId
-          ? sql`INNER JOIN pilot_cells pilot USING (cell_size, x, y)`
+          ? sql`INNER JOIN pilot_cells pilot USING (x, y)`
           : sql``}
         WHERE true
           ${input.pilotUserId ? sql`AND pilot.claim_user = ${input.pilotUserId}` : sql``}
@@ -135,19 +133,13 @@ export function createTerritoryTileService(
         FROM selected_cells selected
         ${input.arenaId
           ? sql`INNER JOIN arenas arena ON arena.id = ${input.arenaId}
-              AND ST_Covers(
-                arena.area,
-                ST_SetSRID(ST_MakePoint(
-                  (selected.x + 0.5) * selected.cell_size,
-                  (selected.y + 0.5) * selected.cell_size
-                ), 6933)
-              )`
+              AND ${arenaCellOwnershipPredicateSql({ arenaId: sql`arena.id`, arenaType: sql`arena.arena_type`, externalId: sql`arena.external_id`, area: sql`arena.area`, cellCenter: claimCellCenterSql({ x: sql`selected.x`, y: sql`selected.y`, cellSize: sql`${cellSize}` }) })}`
           : sql``}
       ),
       clipped_features AS (
         SELECT
-          concat(cell_size, ':', x, ':', y) AS "cellId",
-          cell_size::integer AS "cellSize",
+          concat(${cellSize}::integer, ':', x, ':', y) AS "cellId",
+          ${cellSize}::integer AS "cellSize",
           x::integer AS x,
           y::integer AS y,
           claimant_count::integer AS "claimantCount",
@@ -155,10 +147,10 @@ export function createTerritoryTileService(
           pilot_user_id::text AS "pilotUserId",
           ST_AsMVTGeom(
             ST_Transform(ST_MakeEnvelope(
-              x * cell_size,
-              y * cell_size,
-              (x + 1) * cell_size,
-              (y + 1) * cell_size,
+              x * ${cellSize},
+              y * ${cellSize},
+              (x + 1) * ${cellSize},
+              (y + 1) * ${cellSize},
               6933
             ), 3857),
             tile_bounds.geometry,
@@ -189,7 +181,6 @@ export function createTerritoryTileService(
           FROM user_grid_claims claim
           CROSS JOIN cell_ranges range
           WHERE claim.claim_user = ${input.userId}
-            AND claim.cell_size = ${cellSize}
             AND claim.x BETWEEN range.min_x AND range.max_x
             AND claim.y BETWEEN range.min_y AND range.max_y
         ),

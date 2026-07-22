@@ -62,7 +62,6 @@ async function addCompetitionClaim(
 ) {
   await database.db.insert(competitionGridClaims).values({
     competitionMonth: input.month ?? '2026-07-01',
-    cellSize: input.cellSize ?? 1_000,
     x: input.x,
     y: input.y,
     claimFlight: pilot.flightId,
@@ -91,7 +90,7 @@ describe('TerritoryTileService with PostGIS MVT', () => {
     const pilot = await createPilot();
     const other = await createPilot();
     await addPersonalClaims(pilot, [
-      { x: 0, y: 0 }, { x: 1, y: 0 }, { x: 3, y: 0 }, { x: 2, y: 0, cellSize: 2_000 },
+      { x: 0, y: 0 }, { x: 1, y: 0 }, { x: 3, y: 0 },
     ]);
     await addPersonalClaims(other, [{ x: 2, y: 0 }]);
 
@@ -116,7 +115,6 @@ describe('TerritoryTileService with PostGIS MVT', () => {
     await addCompetitionClaim(alpha, { x: 1, y: 0 });
     await addCompetitionClaim(bravo, { x: 0, y: 0 });
     await addCompetitionClaim(bravo, { x: 2, y: 0, month: '2026-08-01' });
-    await addCompetitionClaim(alpha, { x: 3, y: 0, cellSize: 2_000 });
     const service = createTerritoryTileService(database.db, { cellSize: 1_000 });
 
     const july = await service.getGlobalCompetitionTile({

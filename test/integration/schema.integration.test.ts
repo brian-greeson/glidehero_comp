@@ -249,7 +249,7 @@ describe('authentication schema', () => {
       `SELECT column_name, data_type
        FROM information_schema.columns
        WHERE table_schema = 'public' AND table_name = 'arenas'
-         AND column_name IN ('claimable_cell_count', 'claimable_cell_size')
+         AND column_name IN ('claimable_cell_count')
        ORDER BY column_name`,
     );
     const indexes = await database.pool.query<{ indexname: string; indexdef: string }>(
@@ -275,11 +275,9 @@ describe('authentication schema', () => {
       { column_name: 'arena_type', is_nullable: 'NO' },
       { column_name: 'country_code', is_nullable: 'NO' },
       { column_name: 'claimable_cell_count', is_nullable: 'YES' },
-      { column_name: 'claimable_cell_size', is_nullable: 'YES' },
     ]);
     expect(claimableColumns.rows).toEqual([
       { column_name: 'claimable_cell_count', data_type: 'bigint' },
-      { column_name: 'claimable_cell_size', data_type: 'integer' },
     ]);
     expect(geometryColumns.rows).toEqual([
       { f_geometry_column: 'area', srid: 6933, type: 'MULTIPOLYGON' },
@@ -287,6 +285,7 @@ describe('authentication schema', () => {
     ]);
     expect(indexes.rows.map((row) => row.indexname)).toEqual([
       'arenas_area_gist_idx',
+      'arenas_arena_type_external_id_state_country_unique',
       'arenas_external_source_external_id_unique',
       'arenas_id_arena_type_unique',
       'arenas_pkey',
@@ -411,18 +410,17 @@ describe('authentication schema', () => {
     );
 
     expect(columns.rows).toEqual([
-      { column_name: 'cell_size', data_type: 'integer', is_nullable: 'NO', udt_name: 'int4' },
       { column_name: 'claim_flight', data_type: 'uuid', is_nullable: 'NO', udt_name: 'uuid' },
       { column_name: 'claim_timestamp', data_type: 'timestamp with time zone', is_nullable: 'NO', udt_name: 'timestamptz' },
       { column_name: 'claim_user', data_type: 'uuid', is_nullable: 'NO', udt_name: 'uuid' },
       { column_name: 'x', data_type: 'integer', is_nullable: 'NO', udt_name: 'int4' },
       { column_name: 'y', data_type: 'integer', is_nullable: 'NO', udt_name: 'int4' },
     ]);
-    expect(primaryKey.rows).toEqual([{ definition: 'PRIMARY KEY (claim_user, cell_size, x, y, claim_flight)' }]);
+    expect(primaryKey.rows).toEqual([{ definition: 'PRIMARY KEY (claim_user, x, y, claim_flight)' }]);
     expect(foreignKeys.rows).toEqual([{ confdeltype: 'c' }, { confdeltype: 'c' }]);
     expect(indexes.rows.map((row) => row.indexname)).toEqual([
       'user_grid_claims_claim_flight_idx',
-      'user_grid_claims_claim_user_cell_size_idx',
+      'user_grid_claims_claim_user_idx',
       'user_grid_claims_pkey',
     ]);
   });
@@ -527,7 +525,6 @@ describe('authentication schema', () => {
     );
 
     expect(columns.rows).toEqual([
-      { column_name: 'cell_size', data_type: 'integer', is_nullable: 'NO', udt_name: 'int4' },
       { column_name: 'claim_flight', data_type: 'uuid', is_nullable: 'NO', udt_name: 'uuid' },
       { column_name: 'claim_timestamp', data_type: 'timestamp with time zone', is_nullable: 'NO', udt_name: 'timestamptz' },
       { column_name: 'claim_user', data_type: 'uuid', is_nullable: 'NO', udt_name: 'uuid' },
@@ -536,7 +533,7 @@ describe('authentication schema', () => {
       { column_name: 'y', data_type: 'integer', is_nullable: 'NO', udt_name: 'int4' },
     ]);
     expect(primaryKey.rows).toEqual([{
-      definition: 'PRIMARY KEY (competition_month, cell_size, x, y, claim_flight)',
+      definition: 'PRIMARY KEY (competition_month, x, y, claim_flight)',
     }]);
     expect(foreignKeys.rows).toEqual([{ confdeltype: 'c' }, { confdeltype: 'c' }]);
     expect(indexes.rows.map((row) => row.indexname)).toEqual([

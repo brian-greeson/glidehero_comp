@@ -72,14 +72,8 @@ export function createGridClaimService(
       .select({ startedAt: flights.startedAt, createdAt: flights.createdAt })
       .from(flights)
       .where(eq(flights.id, input.flightId));
-    await transaction.delete(personalGridClaims).where(and(
-      eq(personalGridClaims.claimFlight, input.flightId),
-      eq(personalGridClaims.cellSize, options.cellSize),
-    ));
-    await transaction.delete(competitionGridClaims).where(and(
-      eq(competitionGridClaims.claimFlight, input.flightId),
-      eq(competitionGridClaims.cellSize, options.cellSize),
-    ));
+    await transaction.delete(personalGridClaims).where(eq(personalGridClaims.claimFlight, input.flightId));
+    await transaction.delete(competitionGridClaims).where(eq(competitionGridClaims.claimFlight, input.flightId));
 
     const result = await rebuildGridClaims(transaction, input, options.cellSize);
     if (evaluateAchievements && result.progressionVersion === 1 && flight) {
@@ -144,7 +138,6 @@ export function createGridClaimService(
             viewport.geometry
           )
           WHERE claims.claim_user = ${userId}
-            AND claims.cell_size = ${options.cellSize}
         ),
         claimed_cells AS (
           SELECT DISTINCT x, y FROM visible_claims
