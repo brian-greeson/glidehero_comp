@@ -41,6 +41,7 @@ describe('refreshed app UI renderer', () => {
   it('keeps the MapLibre canvas sized after MapLibre applies its runtime class', () => {
     const mapCss = readFileSync('public/styles/app-ui/map.css', 'utf8');
     expect(mapCss).toContain('.map-canvas { position: absolute; inset: 0; width: 100%; height: 100%; }');
+    expect(mapCss).toContain('.cell-popover[hidden] { display: none; }');
   });
 
   it('positions Arena search relative to the map stage', async () => {
@@ -52,13 +53,23 @@ describe('refreshed app UI renderer', () => {
     expect(mapStageStart).toBeGreaterThan(-1);
     expect(arenaSearch).toBeGreaterThan(mapStageStart);
     expect(arenaSearch).toBeLessThan(mapStageEnd);
+    expect(html).toContain('class="map-arena-search" data-map-arena-search>');
+    expect(html).not.toContain('data-map-arena-search hidden');
   });
 
-  it('renders one responsive map sidebar so mobile data is not updated in a hidden duplicate', async () => {
-    const html = await render(authenticatedPageFixture('map'));
-    expect(html.match(/class="map-sidebar"/g)).toHaveLength(1);
-    expect(html.match(/data-map-viewport-stats/g)).toHaveLength(1);
-    expect(html.match(/data-map-viewport-leaderboard/g)).toHaveLength(1);
+  it('renders one responsive map sidebar and keeps the leaderboard competition-only', async () => {
+    const personal = await render(authenticatedPageFixture('map'));
+    const competitiveModel = structuredClone(authenticatedPageFixture('map'));
+    if (competitiveModel.page !== 'map') throw new Error('Expected Map fixture.');
+    competitiveModel.mode = 'competitive';
+    const competitive = await render(competitiveModel);
+
+    expect(personal.match(/class="map-sidebar"/g)).toHaveLength(1);
+    expect(personal.match(/data-map-viewport-stats/g)).toHaveLength(1);
+    expect(personal).not.toContain('Viewport Leaderboard');
+    expect(personal).not.toContain('data-map-viewport-leaderboard');
+    expect(competitive.match(/data-territory-leaderboard/g)).toHaveLength(1);
+    expect(competitive).toContain('Viewport Leaderboard');
   });
 
   it('keeps the collapsed mobile drawer at a slim handle height', () => {
@@ -119,13 +130,11 @@ describe('refreshed app UI renderer', () => {
     expect(profile).not.toContain('<img class="profile');
   });
 
-  it('keeps preview values in models and renders numeric-looking zero text', async () => {
+  it('keeps preview metric values in models and renders numeric-looking zero text', async () => {
     const model = structuredClone(authenticatedPageFixture('map'));
     if (model.page !== 'map') throw new Error('Expected Map fixture.');
     model.metrics[0]!.value = '0';
-    model.leaderboard[0]!.cells = '0';
     const html = await render(model);
     expect(html).toContain('<strong>0</strong><span>Cells Owned</span>');
-    expect(html).toContain('<b>0</b>');
   });
 });

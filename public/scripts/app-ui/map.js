@@ -20,10 +20,7 @@ export function initializeMapUrlControls({ documentRef = document, locationRef =
     trigger.addEventListener('click', () => {
       const search = documentRef.querySelector('[data-map-arena-search]');
       if (!search) return;
-      const open = search.hidden;
-      search.hidden = !open;
-      trigger.setAttribute('aria-expanded', String(open));
-      if (open) search.querySelector('input')?.focus?.();
+      search.querySelector('input')?.focus?.();
     });
   }
 }

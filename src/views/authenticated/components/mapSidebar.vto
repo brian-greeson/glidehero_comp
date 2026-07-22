@@ -20,7 +20,7 @@
   </section>
   <section class="map-control-group map-location">
     <h2>Location</h2>
-    <button type="button" class="map-location__trigger" data-map-location-trigger aria-expanded="false" aria-controls="map-arena-search">{{ include "authenticated/components/icon.vto" { name: "pin" } }}<span>{{ location }}</span>{{ include "authenticated/components/icon.vto" { name: "chevron-down" } }}</button>
+    <button type="button" class="map-location__trigger" data-map-location-trigger aria-controls="arena-search-input">{{ include "authenticated/components/icon.vto" { name: "pin" } }}<span>{{ location }}</span>{{ include "authenticated/components/icon.vto" { name: "chevron-down" } }}</button>
   </section>
   <section class="map-control-group map-stats">
     <h2>Your Stats</h2>
@@ -36,18 +36,12 @@
       {{ /if }}
     </div>
   </section>
-  <section class="map-control-group map-leaderboard{{ if mode === 'competitive' }} map-leaderboard--coverage{{ /if }}" {{ if mode === 'competitive' }}data-territory-leaderboard aria-busy="true"{{ /if }}>
-    <header class="map-leaderboard__heading"><h2>Viewport Leaderboard</h2>{{ if mode === 'competitive' }}<button type="button" data-territory-allpilots aria-pressed="true">Show All</button>{{ /if }}</header>
-    {{ if mode === 'competitive' }}
+  {{ if mode === 'competitive' }}
+    <section class="map-control-group map-leaderboard map-leaderboard--coverage" data-territory-leaderboard aria-busy="true">
+      <header class="map-leaderboard__heading"><h2>Viewport Leaderboard</h2><button type="button" data-territory-allpilots aria-pressed="true">Show All</button></header>
       <p class="leaderboard-status" data-territory-status aria-live="polite">Loading coverage…</p>
       <div class="coverage-table" role="table" aria-label="Coverage leaders"><div data-territory-list role="rowgroup"></div></div>
       <div class="current-pilot-result" data-territory-current-pilot hidden></div>
-    {{ else }}
-      <ol data-map-viewport-leaderboard>
-        {{ for row of leaderboard }}
-          <li{{ if row.isCurrent }} class="is-current"{{ /if }}><span>{{ row.rank }}</span>{{ include "authenticated/components/initialsAvatar.vto" { initials: row.pilot.initials, color: row.pilot.color, size: "small" } }}<strong>{{ if row.isCurrent }}You{{ else }}{{ row.pilot.displayName }}{{ /if }}</strong><b>{{ row.cells }}</b><i style="--pilot-color: {{ row.pilot.color }}"></i></li>
-        {{ /for }}
-      </ol>
-    {{ /if }}
-  </section>
+    </section>
+  {{ /if }}
 </aside>

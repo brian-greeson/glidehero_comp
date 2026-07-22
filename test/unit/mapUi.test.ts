@@ -40,9 +40,10 @@ describe('refreshed map UI controls', () => {
     expect(currentMonth.href).toBe('/global?month=2026-07');
   });
 
-  it('opens the Arena search from either desktop or mobile location trigger', () => {
+  it('focuses the always-visible Arena search from the location trigger', () => {
     const trigger = node();
     const search = node();
+    search.hidden = false;
     const input = { focus: vi.fn() };
     search.querySelector = vi.fn(() => input);
     const documentRef = {
@@ -58,7 +59,6 @@ describe('refreshed map UI controls', () => {
     trigger.dispatch('click');
 
     expect(search.hidden).toBe(false);
-    expect(trigger.getAttribute('aria-expanded')).toBe('true');
     expect(input.focus).toHaveBeenCalledOnce();
   });
 });
