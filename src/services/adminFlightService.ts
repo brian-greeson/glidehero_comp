@@ -9,6 +9,7 @@ import {
   type ArenaLeadershipReconciliationService,
 } from './arenaLeadershipReconciliationService.js';
 import { findEligibleArenaIdsForCompetitionFlight } from './arenaClaimImpact.js';
+import type { FlightThumbnailLifecycleService } from './flightThumbnailLifecycleService.js';
 
 export type AdminFlight = {
   id: string;
@@ -40,6 +41,7 @@ type StorageOptions = {
   bucketName: string;
   uploadQueue: Pick<FlightUploadQueueService, 'removeTerminalJobsForFlight'>;
   presign?: (command: GetObjectCommand) => Promise<string>;
+  thumbnailLifecycle?: Pick<FlightThumbnailLifecycleService, 'generateForFlight' | 'deleteForFlight'>;
 };
 
 type ArenaLeadershipOptions = {
@@ -113,6 +115,16 @@ export function createAdminFlightService(
       });
       await storage.s3Client.send(new DeleteObjectCommand({ Bucket: storage.bucketName, Key: flight.bucketKey }));
     });
+    if (storage.thumbnailLifecycle) {
+      try {
+        await storage.thumbnailLifecycle.deleteForFlight({ userId: input.userId, flightId: input.flightId });
+      } catch (error) {
+        console.error('Unable to delete flight thumbnails', {
+          flightId: input.flightId,
+          error: error instanceof Error ? error.message : 'unknown error',
+        });
+      }
+    }
     return 'deleted' as const;
   }
 
@@ -165,7 +177,18 @@ export function createAdminFlightService(
       if (input.userId && !(await storedFlight({ flightId: input.flightId, userId: input.userId }))) {
         return { status: 'not_found' };
       }
-      return gridClaim.reprocess({ flightId: input.flightId });
+      const result = await gridClaim.reprocess({ flightId: input.flightId });
+      if (result.status === 'completed' && storage?.thumbnailLifecycle) {
+        try {
+          await storage.thumbnailLifecycle.generateForFlight(input.flightId);
+        } catch (error) {
+          console.error('Unable to regenerate flight thumbnail', {
+            flightId: input.flightId,
+            error: error instanceof Error ? error.message : 'unknown error',
+          });
+        }
+      }
+      return result;
     },
 
     deleteFlight,

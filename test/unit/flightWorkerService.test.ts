@@ -33,11 +33,13 @@ describe('FlightWorkerService', () => {
     const processor = {
       process: vi.fn(async () => ({ status: 'completed' as const, flightId: '00000000-0000-4000-8000-000000000030' })),
     };
+    const generateForFlight = vi.fn(async () => undefined);
     const send = vi.fn(async () => ({ Body: { transformToByteArray: vi.fn(async () => Uint8Array.from([1, 2, 3])) } }));
     const worker = createFlightWorkerService(database as never, valkey as never, queue as never, processor, {
       s3Client: { send } as never,
       bucketName: 'flights',
       consumerName: 'worker-1',
+      thumbnailLifecycle: { generateForFlight },
     });
 
     await worker.processJob('1-0', job.id);
@@ -51,8 +53,35 @@ describe('FlightWorkerService', () => {
       source: '\u0001\u0002\u0003',
     });
     expect(saved.map((value) => value.status)).toEqual(['completed']);
+    expect(generateForFlight).toHaveBeenCalledWith('00000000-0000-4000-8000-000000000030');
     expect(xack).toHaveBeenCalledWith('glidehero:flight-jobs', 'flight-workers', ['1-0']);
     expect(xdel).toHaveBeenCalledWith('glidehero:flight-jobs', ['1-0']);
+  });
+
+  it('keeps a completed queue item when best-effort thumbnail generation fails', async () => {
+    const limit = vi.fn(async () => []);
+    const database = {
+      select: vi.fn(() => ({ from: vi.fn(() => ({ leftJoin: vi.fn(() => ({ where: vi.fn(() => ({ limit })) })) })) })),
+      insert: vi.fn(() => ({ values: vi.fn(() => ({ returning: vi.fn(async () => [{ id: 'file-1' }]) })) })),
+    };
+    const saved: UploadJob[] = [];
+    const queue = {
+      claimJob: vi.fn(async () => ({ ...job, status: 'processing' as const, processingToken: 'token-1', heartbeatAt: Date.now() })),
+      saveClaimedJob: vi.fn(async (value: UploadJob) => { saved.push(value); return true; }),
+      reconcileTerminalJob: vi.fn(async (value: UploadJob) => { saved.push(value); return true; }),
+    };
+    const worker = createFlightWorkerService(database as never, { xack: vi.fn(async () => 1), xdel: vi.fn(async () => 1) } as never, queue as never, {
+      process: vi.fn(async () => ({ status: 'completed' as const, flightId: 'flight-1' })),
+    }, {
+      s3Client: { send: vi.fn(async () => ({ Body: { transformToByteArray: vi.fn(async () => Uint8Array.from([1, 2, 3])) } })) } as never,
+      bucketName: 'flights',
+      consumerName: 'worker-1',
+      thumbnailLifecycle: { generateForFlight: vi.fn(async () => { throw new Error('MapTiler unavailable'); }) },
+    });
+
+    await worker.processJob('1-0', job.id);
+
+    expect(saved.map((value) => value.status)).toEqual(['completed']);
   });
 
   it('acknowledges a terminal duplicate delivery without touching PostgreSQL', async () => {

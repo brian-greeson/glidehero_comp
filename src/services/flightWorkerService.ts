@@ -6,6 +6,7 @@ import type { Database } from '../db/client.js';
 import { flightProgress, flights, igcFiles } from '../db/schema.js';
 import type { FlightProcessingService } from './flightProcessingService.js';
 import type { FlightProcessingOutcome } from './flightProcessingService.js';
+import type { FlightThumbnailLifecycleService } from './flightThumbnailLifecycleService.js';
 import {
   FLIGHT_JOB_GROUP,
   FLIGHT_JOB_STREAM,
@@ -74,6 +75,7 @@ export function createFlightWorkerService(
     consumerName: string;
     readRetryDelayMs?: number;
     streamReader?: Pick<GlideClient, 'xreadgroup'>;
+    thumbnailLifecycle?: Pick<FlightThumbnailLifecycleService, 'generateForFlight'>;
   },
 ): FlightWorkerService {
   const streamReader = options.streamReader ?? valkey;
@@ -185,6 +187,17 @@ export function createFlightWorkerService(
     outcome: Exclude<FlightProcessingOutcome, { status: 'duplicate' }>,
   ) {
     console.log(`Processed Flight: ${outcome.flightId} with status ${outcome.status}`);
+
+    if (outcome.status === 'completed' && options.thumbnailLifecycle) {
+      try {
+        await options.thumbnailLifecycle.generateForFlight(outcome.flightId);
+      } catch (error) {
+        console.error('Unable to generate flight thumbnail', {
+          flightId: outcome.flightId,
+          error: error instanceof Error ? error.message : 'unknown error',
+        });
+      }
+    }
 
     if (
       outcome.status === 'completed' &&

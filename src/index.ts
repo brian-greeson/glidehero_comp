@@ -30,12 +30,27 @@ import { createDonationRouter } from './routes/donationRouter.js';
 import { createDonationService } from './services/donationService.js';
 import { createFollowService } from './services/followService.js';
 import { createActivityService } from './services/activityService.js';
+import { createFlightThumbnailService } from './services/flightThumbnailService.js';
+import { createFlightThumbnailLifecycleService } from './services/flightThumbnailLifecycleService.js';
 
 const config = parseConfig(process.env);
 const { db } = createDatabase(config.databaseUrl);
 const auth = createAuthService(db, { sessionTtlSeconds: config.sessionTtlSeconds });
 const donations = createDonationService(db);
 const s3Client = createBucketClient(config);
+const thumbnails = createFlightThumbnailService({
+  mapTilerApiKey: config.mapTilerApiKey,
+  bucketName: config.bucket.bucketName,
+  bucketFolder: config.bucket.bucketFolder,
+  cellSize: config.gridClaimCellSize,
+  s3Client,
+});
+const thumbnailLifecycle = createFlightThumbnailLifecycleService(db, thumbnails, {
+  cellSize: config.gridClaimCellSize,
+  s3Client,
+  bucketName: config.bucket.bucketName,
+  bucketFolder: config.bucket.bucketFolder,
+});
 const valkey = await createValkeyClient(config.valkeyUrl);
 const arenaLeadership = createArenaLeadershipReconciliationService(db, { cellSize: config.gridClaimCellSize });
 const gridClaim = createGridClaimService(db, { cellSize: config.gridClaimCellSize }, undefined, undefined, arenaLeadership);
@@ -58,6 +73,7 @@ const adminFlights = createAdminFlightService(db, gridClaim, {
   s3Client,
   bucketName: config.bucket.bucketName,
   uploadQueue,
+  thumbnailLifecycle,
 }, { arenaLeadership, cellSize: config.gridClaimCellSize });
 const adminUsers = createAdminUserService(db, {
   uploadQueue,
