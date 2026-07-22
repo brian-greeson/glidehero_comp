@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { appPageFixture } from '../../src/views/app/fixtures.js';
 import { createAppPageRenderer } from '../../src/views/app/appRenderer.js';
@@ -6,6 +7,12 @@ import type { AppPage } from '../../src/views/app/models.js';
 describe('refreshed app UI renderer', () => {
   const render = createAppPageRenderer();
   const pages: AppPage[] = ['map', 'activity', 'achievements', 'profile'];
+
+  it('keeps upload and processing status states visually exclusive', () => {
+    const css = readFileSync('public/styles/app-ui/app.css', 'utf8');
+    expect(css).toContain('.flight-upload-progress[hidden] { display: none; }');
+    expect(css).toContain('.flight-processing-state[hidden] { display: none; }');
+  });
 
   it('renders every isolated page with the shared four-destination shell', async () => {
     for (const page of pages) {
@@ -22,7 +29,7 @@ describe('refreshed app UI renderer', () => {
       expect(html).toContain('data-upload-dialog');
       expect(html.indexOf('data-upload-trigger')).toBeLessThan(html.indexOf('data-account-trigger'));
       expect(html).toContain('Keep this page open until all files finish uploading.');
-      expect(html).toContain('Processing flights. Results will appear on the map shortly.');
+      expect(html).toContain('Processing flights. You can safely navigate away; results will appear on the map shortly.');
       expect(html).not.toContain('View achievements');
       expect(html).not.toContain('>Settings</span>');
       expect(html).not.toContain('Notification');
