@@ -110,6 +110,27 @@ achievements. If apply fails after a committed batch, earlier batches remain
 applied; resolve that partial state before retrying. Restart the flight workers
 only after verification.
 
+## Release 4 activity publication rollout
+
+Release 4 publishes one Activity row for each newly completed flight in the
+same transaction as flight completion. It intentionally performs no historical
+activity backfill, so flights completed before the Release 4 code is deployed do
+not gain Activity cards. Reprocessing an existing flight does not republish it;
+deleting a flight cascades to its activity and Thermals.
+
+Roll out the web and worker processes in this order:
+
+1. Drain or pause the flight workers.
+2. Apply the checked-in schema migrations with `npm run db:migrate`.
+3. Deploy the Release 4 web and worker code together.
+4. Resume flight processing.
+
+The pause prevents a mixed-version worker from completing a flight while the
+new `activities` table exists but the worker still lacks transactional activity
+publication. Without this ordering, that old worker could complete a flight
+without creating its Activity row. No activity backfill is required or
+provided; only flights completed by the Release 4 worker are published.
+
 Configure the private DigitalOcean Space with a CORS rule that allows:
 
 - Origin: `https://glidehero.com`

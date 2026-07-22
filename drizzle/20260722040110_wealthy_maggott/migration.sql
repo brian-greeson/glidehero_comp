@@ -1,0 +1,1 @@
+CREATE INDEX "activities_published_at_id_idx" ON "activities" ("published_at","id");

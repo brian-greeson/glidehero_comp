@@ -21,3 +21,6 @@
     </div>
   </dl>
 </header>
+{{ if !profileIsCurrent }}
+  {{ include "components/followButton.vto" { targetUserId: profile.userId, isFollowing: profileIsFollowed, returnTo: currentPath } }}
+{{ /if }}

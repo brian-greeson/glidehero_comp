@@ -11,6 +11,8 @@ import type { ArenaProgressService } from '../../src/services/arenaProgressServi
 import type { MapGridService } from '../../src/services/mapGridService.js';
 import type { FlightUploadQueueService } from '../../src/services/flightUploadQueueService.js';
 import type { FailedFlightCleanupService } from '../../src/services/failedFlightCleanupService.js';
+import { PilotNotFoundError, type FollowService } from '../../src/services/followService.js';
+import { ActivityNotFoundError, SelfThermalError, type ActivityService } from '../../src/services/activityService.js';
 import { createTerritoryTileSettingsService } from '../../src/services/territoryTileSettingsService.js';
 import { createPageRenderer } from '../../src/views/renderer.js';
 import { createCurrentUserMiddleware } from '../../src/web/currentUserMiddleware.js';
@@ -122,6 +124,17 @@ function dependencies() {
     getDashboardAchievementProgress: vi.fn(async () => []),
     getPilotProfile: vi.fn(async () => null),
   };
+  const follow: FollowService = {
+    follow: vi.fn(async () => undefined),
+    unfollow: vi.fn(async () => undefined),
+    isFollowing: vi.fn(async () => false),
+    searchPilots: vi.fn(async () => []),
+  };
+  const activity: ActivityService = {
+    listFeed: vi.fn(async () => ({ items: [], nextCursor: null })),
+    publishFlightInTransaction: vi.fn(async () => ({ id: '00000000-0000-4000-8000-000000000010' })),
+    toggleThermal: vi.fn(async () => ({ reacted: true, totalCount: 1 })),
+  };
   const gridClaim: GridClaimService = {
     getViewportStats: vi.fn(async () => viewportStats),
     process: vi.fn(async () => ({
@@ -167,6 +180,8 @@ function dependencies() {
     auth,
     cookie,
     profiles,
+    follow,
+    activity,
     gridClaim,
     mapGrid,
     coverage,
@@ -178,6 +193,8 @@ function dependencies() {
   return {
     auth,
     profiles,
+    follow,
+    activity,
     gridClaim,
     mapGrid,
     coverage,
@@ -833,6 +850,131 @@ describe('webRouter', () => {
       expect(missing.status).toBe(404);
       expect(missing.headers.get('content-type')).toContain('text/html');
       expect(profiles.getPilotProfile).toHaveBeenCalledWith(pilotProfile.userId);
+    });
+  });
+
+  it('protects Activity, searches only for a non-empty trimmed query, and renders follow results', async () => {
+    const base = dependencies();
+    vi.mocked(base.follow.searchPilots).mockResolvedValueOnce([{
+      userId: pilotProfile.userId,
+      displayName: 'Cloud Dancer',
+      isFollowing: true,
+    }]);
+    await withServer(base.app, async (baseUrl) => {
+      const anonymous = await fetch(`${baseUrl}/activity`, { redirect: 'manual' });
+      expect(anonymous.status).toBe(302);
+      expect(anonymous.headers.get('location')).toBe('/');
+
+      const empty = await fetch(`${baseUrl}/activity?q=   `, {
+        headers: { cookie: 'glidehero_session=valid-token' },
+      });
+      expect(empty.status).toBe(200);
+      expect(base.follow.searchPilots).not.toHaveBeenCalled();
+
+      const search = await fetch(`${baseUrl}/activity?q=%20cloud%20`, {
+        headers: { cookie: 'glidehero_session=valid-token' },
+      });
+      expect(search.status).toBe(200);
+      expect(base.follow.searchPilots).toHaveBeenCalledWith({
+        viewerUserId: user.userId,
+        query: 'cloud',
+      });
+      expect(base.renderPage).toHaveBeenLastCalledWith(expect.objectContaining({
+        page: 'activity',
+        activitySearch: 'cloud',
+        activityPilotResults: [{
+          userId: pilotProfile.userId,
+          displayName: 'Cloud Dancer',
+          isFollowing: true,
+        }],
+      }));
+    });
+  });
+
+  it('toggles Thermal as JSON or redirects for HTML, with authenticated error mapping', async () => {
+    const base = dependencies();
+    await withServer(base.app, async (baseUrl) => {
+      const json = await fetch(`${baseUrl}/activities/${pilotProfile.userId}/thermal`, {
+        method: 'POST',
+        headers: { cookie: 'glidehero_session=valid-token', accept: 'application/json' },
+      });
+      expect(json.status).toBe(200);
+      expect(await json.json()).toEqual({ reacted: true, totalCount: 1 });
+      expect(base.activity.toggleThermal).toHaveBeenCalledWith({ viewerUserId: user.userId, activityId: pilotProfile.userId });
+
+      const html = await fetch(`${baseUrl}/activities/${pilotProfile.userId}/thermal`, {
+        method: 'POST', redirect: 'manual', headers: { cookie: 'glidehero_session=valid-token' },
+      });
+      expect(html.status).toBe(303);
+      expect(html.headers.get('location')).toBe('/activity');
+
+      vi.mocked(base.activity.toggleThermal).mockRejectedValueOnce(new ActivityNotFoundError());
+      const missing = await fetch(`${baseUrl}/activities/${pilotProfile.userId}/thermal`, {
+        method: 'POST', headers: { cookie: 'glidehero_session=valid-token', accept: 'application/json' },
+      });
+      expect(missing.status).toBe(404);
+      expect(await missing.json()).toEqual({ error: { code: 'not_found', message: 'Activity not found.' } });
+
+      vi.mocked(base.activity.toggleThermal).mockRejectedValueOnce(new SelfThermalError());
+      const self = await fetch(`${baseUrl}/activities/${pilotProfile.userId}/thermal`, {
+        method: 'POST', headers: { cookie: 'glidehero_session=valid-token', accept: 'application/json' },
+      });
+      expect(self.status).toBe(403);
+    });
+  });
+
+  it('calls follow actions, rejects self or invalid IDs, and constrains returnTo redirects', async () => {
+    const base = dependencies();
+    await withServer(base.app, async (baseUrl) => {
+      const target = pilotProfile.userId;
+      const followed = await fetch(`${baseUrl}/pilots/${target}/follow`, {
+        method: 'POST',
+        redirect: 'manual',
+        headers: {
+          cookie: 'glidehero_session=valid-token',
+          'content-type': 'application/x-www-form-urlencoded',
+        },
+        body: new URLSearchParams({ returnTo: 'https://evil.example/fake' }),
+      });
+      expect(followed.status).toBe(303);
+      expect(followed.headers.get('location')).toBe(`/pilots/${target}`);
+      expect(base.follow.follow).toHaveBeenCalledWith({ followerUserId: user.userId, followedUserId: target });
+
+      const unfollowed = await fetch(`${baseUrl}/pilots/${target}/unfollow`, {
+        method: 'POST',
+        redirect: 'manual',
+        headers: {
+          cookie: 'glidehero_session=valid-token',
+          'content-type': 'application/x-www-form-urlencoded',
+        },
+        body: new URLSearchParams({ returnTo: '/activity?q=cloud' }),
+      });
+      expect(unfollowed.status).toBe(303);
+      expect(unfollowed.headers.get('location')).toBe('/activity?q=cloud');
+      expect(base.follow.unfollow).toHaveBeenCalledWith({ followerUserId: user.userId, followedUserId: target });
+
+      const self = await fetch(`${baseUrl}/pilots/${user.userId}/follow`, {
+        method: 'POST',
+        redirect: 'manual',
+        headers: { cookie: 'glidehero_session=valid-token' },
+      });
+      expect(self.status).toBe(400);
+
+      const invalid = await fetch(`${baseUrl}/pilots/not-a-uuid/follow`, {
+        method: 'POST',
+        redirect: 'manual',
+        headers: { cookie: 'glidehero_session=valid-token' },
+      });
+      expect(invalid.status).toBe(400);
+      expect(base.follow.follow).toHaveBeenCalledTimes(1);
+
+      vi.mocked(base.follow.follow).mockRejectedValueOnce(new PilotNotFoundError());
+      const missing = await fetch(`${baseUrl}/pilots/00000000-0000-4000-8000-000000000404/follow`, {
+        method: 'POST',
+        redirect: 'manual',
+        headers: { cookie: 'glidehero_session=valid-token' },
+      });
+      expect(missing.status).toBe(404);
     });
   });
 

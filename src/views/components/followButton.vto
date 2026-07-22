@@ -1,0 +1,4 @@
+<form method="post" action="/pilots/{{ targetUserId }}/{{ if isFollowing }}unfollow{{ else }}follow{{ /if }}" class="follow-form">
+  <input type="hidden" name="returnTo" value="{{ returnTo }}">
+  <button type="submit" class="follow-button">{{ if isFollowing }}Unfollow{{ else }}Follow{{ /if }}</button>
+</form>

@@ -1,0 +1,49 @@
+<article class="activity-card">
+  <header class="activity-card-header">
+    <a class="activity-card-pilot" href="/pilots/{{ activity.actorUserId }}">{{ activity.actorDisplayName }}</a>
+    <time datetime="{{ activity.publishedAtIso }}">{{ activity.publishedAtLabel }}</time>
+  </header>
+  {{ if activity.activityType === 'flight' }}
+    <p class="activity-card-type">Completed a flight</p>
+    <dl class="activity-card-flight-summary">
+      <div><dt>Flight date</dt><dd>{{ activity.flightDate }}</dd></div>
+      <div><dt>Duration</dt><dd>{{ activity.duration }}</dd></div>
+      <div><dt>Distance</dt><dd>{{ activity.distance }}</dd></div>
+      <div><dt>Total cells</dt><dd>{{ if activity.totalCellCount === 0 }}0{{ else }}{{ activity.totalCellCount }}{{ /if }}</dd></div>
+      <div><dt>Location</dt><dd>{{ if activity.launchArenaPath }}<a href="{{ activity.launchArenaPath }}">{{ activity.location }}</a>{{ else }}{{ activity.location }}{{ /if }}</dd></div>
+    </dl>
+    {{ if activity.accomplishments.length > 0 }}
+      <section class="activity-card-accomplishments" aria-label="Flight accomplishments">
+        <h3>Accomplishments</h3>
+        <ul>
+          {{ for accomplishment of activity.accomplishments }}
+            <li>
+              {{ if accomplishment.arenaPath }}<a href="{{ accomplishment.arenaPath }}">{{ accomplishment.title }}</a>{{ else }}<strong>{{ accomplishment.title }}</strong>{{ /if }}
+              <span>{{ accomplishment.description }}</span>
+            </li>
+          {{ /for }}
+        </ul>
+      </section>
+    {{ /if }}
+  {{ else }}
+    <p class="activity-card-type">Activity</p>
+  {{ /if }}
+  <footer class="activity-card-footer">
+    {{ if activity.isOwn }}
+      <div class="activity-thermal activity-thermal-static" aria-label="{{ if activity.thermalCount === 1 }}1 Thermal received{{ else }}{{ activity.thermalCount }} Thermals received{{ /if }}">
+        {{ include "components/thermalIcon.vto" }}
+        <span class="activity-thermal-count" data-thermal-count>{{ if activity.thermalCount === 0 }}0{{ else }}{{ activity.thermalCount }}{{ /if }}</span>
+        <span class="activity-thermal-count-label">Thermals</span>
+      </div>
+    {{ else }}
+      <form method="post" action="/activities/{{ activity.id }}/thermal" class="activity-thermal-form" data-thermal-form>
+        <button type="submit" class="activity-thermal-button" data-thermal-button aria-label="{{ if activity.viewerHasReacted }}Thermal sent{{ else }}Send a Thermal{{ /if }}" aria-pressed="{{ if activity.viewerHasReacted }}true{{ else }}false{{ /if }}">
+          {{ include "components/thermalIcon.vto" }}
+          <span data-thermal-label>{{ if activity.viewerHasReacted }}Thermal sent{{ else }}Send a Thermal{{ /if }}</span>
+          <span class="activity-thermal-count" data-thermal-count>{{ if activity.thermalCount === 0 }}0{{ else }}{{ activity.thermalCount }}{{ /if }}</span>
+        </button>
+        <span class="activity-thermal-status" data-thermal-status aria-live="polite"></span>
+      </form>
+    {{ /if }}
+  </footer>
+</article>

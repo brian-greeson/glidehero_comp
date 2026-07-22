@@ -39,11 +39,26 @@ function databaseDouble(options: { events?: string[]; transactionError?: Error; 
     flightUpdates.push(update);
     return { where: updateWhere };
   });
-  const txInsertValues = vi.fn(async (points: unknown[]) => {
-    if (options.transactionError) throw options.transactionError;
-    insertedPoints.push(...points);
+  const txInsertValues = vi.fn((values: unknown) => {
+    if (Array.isArray(values)) {
+      return (async () => {
+        if (options.transactionError) throw options.transactionError;
+        insertedPoints.push(...values);
+      })();
+    }
+    return {
+      returning: vi.fn(async () => {
+        if (options.transactionError) throw options.transactionError;
+        options.events?.push('activity-published');
+        return [{ id: 'activity-id' }];
+      }),
+    };
   });
-  const txUpdateReturning = vi.fn(async () => options.fenceLost ? [] : [{ id: flightId }]);
+  const txUpdateReturning = vi.fn(async () => options.fenceLost ? [] : [{
+    id: flightId,
+    actorUserId: ownerUserId,
+    processedAt: new Date('2026-07-20T00:00:00Z'),
+  }]);
   const txUpdateWhere = vi.fn(() => ({ returning: txUpdateReturning }));
   const txUpdateSet = vi.fn((update: Record<string, unknown>) => {
     flightUpdates.push(update);
@@ -117,6 +132,7 @@ describe('FlightProcessingService', () => {
     expect(events).toEqual([
       'ingest-started',
       'grid-claim-processed',
+      'activity-published',
       'ingest-committed',
     ]);
     expect(insertedPoints).toEqual([

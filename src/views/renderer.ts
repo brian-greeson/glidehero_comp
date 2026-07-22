@@ -8,16 +8,27 @@ import type { ArenaDetail } from '../services/arenaService.js';
 import type { ArenaPersonalProgress } from '../services/arenaProgressService.js';
 import type { TerritoryTileConfig } from '../config/territoryTiles.js';
 import type { AchievementProgressCard, PilotProfileSummary } from '../services/profileService.js';
+import type { PilotSearchResult } from '../services/followService.js';
+import type { ActivityFeedItem } from '../services/activityService.js';
 import { createTerritoryTileSettingsService, type TerritoryTileSettingsService } from '../services/territoryTileSettingsService.js';
 
 export type PageModel = {
   currentUser: AuthenticatedUser | null;
-  page?: 'landing' | 'global' | 'personal' | 'arena' | 'profile';
+  page?: 'landing' | 'global' | 'personal' | 'arena' | 'profile' | 'activity';
   arena?: ArenaDetail;
   arenaProgress?: ArenaPersonalProgress;
   profile?: PilotProfileSummary;
   dashboardAchievementProgress?: AchievementProgressCard[];
   profileIsCurrent?: boolean;
+  profileIsFollowed?: boolean;
+  activitySearch?: string;
+  activityPilotResults?: PilotSearchResult[];
+  activityReturnTo?: string;
+  activityFeed?: ActivityFeedItem[];
+  activityNextCursor?: string | null;
+  activityLoadMoreHref?: string;
+  activityLoadMoreEndpoint?: string;
+  currentPath?: string;
   loginError?: string;
   signupError?: string;
   loginEmail?: string;
@@ -30,6 +41,13 @@ export type PageModel = {
 };
 
 export type PageRenderer = (model: PageModel) => Promise<string>;
+export type ActivityFeedRenderer = (model: {
+  activityFeed: ActivityFeedItem[];
+  activityNextCursor: string | null;
+  activitySearch?: string;
+  activityLoadMoreHref?: string;
+  activityLoadMoreEndpoint?: string;
+}) => Promise<string>;
 export type ErrorPageRenderer = (model: {
   currentUser: AuthenticatedUser | null;
   status: number;
@@ -86,6 +104,7 @@ export function createPageRenderer(options: {
       personal: 'pages/personal.vto',
       arena: 'pages/arena.vto',
       profile: 'pages/profile.vto',
+      activity: 'pages/activity.vto',
     }[page];
     const dashboardScript = page === 'arena' ? '/scripts/arena.js' : '/scripts/dashboard.js';
 
@@ -104,17 +123,38 @@ export function createPageRenderer(options: {
         profile: undefined,
         dashboardAchievementProgress: [],
         profileIsCurrent: false,
+        profileIsFollowed: false,
+        activitySearch: '',
+        activityPilotResults: [],
+        activityReturnTo: '/activity',
+        activityFeed: [],
+        activityNextCursor: null,
+        activityLoadMoreHref: '',
+        activityLoadMoreEndpoint: '',
+        currentPath: '/',
         isDashboard: page === 'global' || page === 'personal' || page === 'arena',
         isErrorPage: false,
         dashboardScript,
-        pageStylesheet: page === 'profile' ? '/styles/profile.css' : undefined,
-        pageScript: page === 'profile' ? '/scripts/profile.js' : undefined,
+        pageStylesheet: page === 'profile' ? '/styles/profile.css' : page === 'activity' ? '/styles/activity.css' : undefined,
+        pageScript: page === 'profile' ? '/scripts/profile.js' : page === 'activity' ? '/scripts/activity.js' : undefined,
         mapTilerStyleUrl: `https://api.maptiler.com/maps/outdoor-v2/style.json?key=${options.mapTilerApiKey}`,
         territoryTileConfig: territoryTileSettings.get(),
         ...model,
       })
     ).content;
   };
+}
+
+export function createActivityFeedRenderer(): ActivityFeedRenderer {
+  const environment = createEnvironment();
+  return async (model) => (
+    await environment.run('components/activityFeedList.vto', {
+      ...model,
+      activitySearch: model.activitySearch ?? '',
+      activityLoadMoreHref: model.activityLoadMoreHref ?? '',
+      activityLoadMoreEndpoint: model.activityLoadMoreEndpoint ?? '',
+    })
+  ).content;
 }
 
 export function createErrorPageRenderer(): ErrorPageRenderer {

@@ -1,14 +1,29 @@
 import { formatClaimedArea, formatCount } from './dashboardFormatters.js';
 
 function pilotRow(documentRef, pilot, { selectedPilotId, currentUserId, colorRegistry, onSelect }) {
-  const button = documentRef.createElement('button');
-  button.type = 'button';
-  button.className = 'coverage-pilot-row';
-  button.setAttribute('role', 'row');
-  button.setAttribute('aria-pressed', String(pilot.userId === selectedPilotId));
-  if (pilot.userId === selectedPilotId) button.classList.add('is-selected');
-  if (pilot.userId === currentUserId) button.classList.add('is-current-pilot');
-  button.addEventListener('click', () => onSelect(pilot.userId === selectedPilotId ? null : pilot));
+  const row = documentRef.createElement('div');
+  row.className = 'coverage-pilot-row';
+  row.setAttribute('role', 'row');
+  row.setAttribute('tabindex', '0');
+  row.setAttribute('aria-pressed', String(pilot.userId === selectedPilotId));
+  row.setAttribute('aria-selected', String(pilot.userId === selectedPilotId));
+  if (pilot.userId === selectedPilotId) row.classList.add('is-selected');
+  if (pilot.userId === currentUserId) row.classList.add('is-current-pilot');
+
+  const toggleSelection = () => onSelect(pilot.userId === selectedPilotId ? null : pilot);
+  let profileLink;
+  row.addEventListener('click', (event) => {
+    if (event?.target && (event.target === profileLink || event.target.closest?.('a'))) return;
+    toggleSelection();
+  });
+  row.addEventListener('keydown', (event) => {
+    // Keep the profile link independently keyboard-accessible. Only key presses
+    // received by the row itself select a pilot.
+    if (event?.target !== row) return;
+    if (event?.key !== 'Enter' && event?.key !== ' ') return;
+    event.preventDefault?.();
+    toggleSelection();
+  });
 
   const name = documentRef.createElement('span');
   name.className = 'coverage-pilot-name';
@@ -17,11 +32,16 @@ function pilotRow(documentRef, pilot, { selectedPilotId, currentUserId, colorReg
   swatch.className = 'leaderboard-swatch';
   swatch.style.setProperty('--pilot-color', colorRegistry.colorFor(pilot.userId));
   swatch.setAttribute('aria-hidden', 'true');
-  const label = documentRef.createElement('span');
-  label.textContent = `${pilot.rank ?? '—'}. ${pilot.displayName}`;
-  name.append(swatch, label);
+  const rank = documentRef.createElement('span');
+  rank.className = 'leaderboard-rank';
+  rank.textContent = `${pilot.rank ?? '—'}.`;
+  profileLink = documentRef.createElement('a');
+  profileLink.className = 'coverage-pilot-link';
+  profileLink.setAttribute('href', `/pilots/${encodeURIComponent(pilot.userId)}`);
+  profileLink.textContent = pilot.displayName;
+  name.append(swatch, rank, profileLink);
 
-  button.append(name);
+  row.append(name);
   for (const value of [
     formatCount(pilot.claimedCellCount),
     formatClaimedArea(pilot.claimedAreaSquareMeters),
@@ -29,9 +49,9 @@ function pilotRow(documentRef, pilot, { selectedPilotId, currentUserId, colorReg
     const cell = documentRef.createElement('span');
     cell.setAttribute('role', 'cell');
     cell.textContent = value;
-    button.append(cell);
+    row.append(cell);
   }
-  return button;
+  return row;
 }
 
 export function renderCoverageLeaderboard({

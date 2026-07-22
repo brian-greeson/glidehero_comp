@@ -1,4 +1,4 @@
-import { Router, type Response } from 'express';
+import { Router, type NextFunction, type Request, type Response } from 'express';
 import { z } from 'zod';
 import { normalizeCompetitionLeaderboardMonth } from '../domain/competition/competitionLeaderboardMonth.js';
 import { AppError } from '../domain/errors.js';
@@ -15,6 +15,7 @@ import type {
   AdminPageRenderer,
   PageModel,
   PageRenderer,
+  ActivityFeedRenderer,
 } from '../views/renderer.js';
 import type { FlightUploadQueueService } from '../services/flightUploadQueueService.js';
 import type { FailedFlightCleanupService } from '../services/failedFlightCleanupService.js';
@@ -26,6 +27,9 @@ import {
   type TerritoryTileSettingsService,
 } from '../services/territoryTileSettingsService.js';
 import type { SessionCookie } from './sessionCookie.js';
+import { PilotNotFoundError, type FollowService } from '../services/followService.js';
+import type { ActivityService } from '../services/activityService.js';
+import { ActivityCursorError, ActivityNotFoundError, SelfThermalError } from '../services/activityService.js';
 
 const email = z.string().trim().toLowerCase().pipe(z.email());
 const password = z.string().min(3).max(128);
@@ -45,6 +49,10 @@ const competitionMonthValue = z.string().refine((value) => {
 });
 const competitionMonthSchema = z.object({ month: competitionMonthValue.optional() }).strict();
 const pilotUserIdSchema = z.string().uuid();
+const activityQuerySchema = z.object({
+  q: z.string().max(100).optional(),
+  before: z.string().min(1).optional(),
+}).strict();
 const finiteCoordinate = z.string().refine(
   (value) => value.length > 0 && value.trim() === value && Number.isFinite(Number(value)),
 ).transform(Number);
@@ -118,6 +126,8 @@ export function createWebRouter(dependencies: {
   uploadQueue?: FlightUploadQueueService;
   failedFlightCleanup?: FailedFlightCleanupService;
   profiles: ProfileService;
+  follow?: FollowService;
+  activity?: ActivityService;
   gridClaim: GridClaimService;
   mapGrid: MapGridService;
   coverage: MonthlyCoverageService;
@@ -125,6 +135,7 @@ export function createWebRouter(dependencies: {
   arenas: ArenaService;
   arenaProgress: ArenaProgressService;
   renderPage: PageRenderer;
+  renderActivityFeed?: ActivityFeedRenderer;
   adminEmails?: readonly string[];
   adminFlights?: AdminFlightService;
   renderAdminPage?: AdminPageRenderer;
@@ -165,6 +176,22 @@ export function createWebRouter(dependencies: {
     const url = new URL(dashboardReturnTo(value), 'http://glidehero.local');
     url.searchParams.set(parameter, 'success');
     return `${url.pathname}?${url.searchParams}`;
+  }
+
+  function followReturnTo(value: unknown, fallback: string): string {
+    if (typeof value !== 'string') return fallback;
+    try {
+      const url = new URL(value, 'http://glidehero.local');
+      if (url.origin !== 'http://glidehero.local') return fallback;
+      if (url.pathname === '/activity') {
+        const q = url.searchParams.get('q');
+        return q ? `/activity?q=${encodeURIComponent(q)}` : '/activity';
+      }
+      if (url.pathname === '/profile' || /^\/pilots\/[0-9a-f-]{36}$/i.test(url.pathname)) return url.pathname;
+    } catch {
+      // Use the known local fallback below.
+    }
+    return fallback;
   }
 
   function hasAdminAccess(currentUser: AuthenticatedUser | null): boolean {
@@ -616,6 +643,8 @@ export function createWebRouter(dependencies: {
         page: 'profile',
         profile,
         profileIsCurrent: true,
+        profileIsFollowed: false,
+        currentPath: '/profile',
         isAdmin: isAdmin(currentUser.email),
       });
     } catch (error) {
@@ -645,12 +674,161 @@ export function createWebRouter(dependencies: {
         page: 'profile',
         profile,
         profileIsCurrent: parsedUserId.data === currentUser.userId,
+        profileIsFollowed: parsedUserId.data === currentUser.userId
+          ? false
+          : dependencies.follow ? await dependencies.follow.isFollowing({ followerUserId: currentUser.userId, followedUserId: parsedUserId.data }) : false,
+        currentPath: `/pilots/${parsedUserId.data}`,
         isAdmin: isAdmin(currentUser.email),
       });
     } catch (error) {
       next(error);
     }
   });
+
+  async function activityFeedRequest(req: Request, res: Response, next: NextFunction, fragment: boolean) {
+    const currentUser = res.locals.currentUser;
+    if (!currentUser) {
+      if (fragment) next(new AppError(401, 'unauthorized', 'Sign in before viewing activity.'));
+      else res.redirect(302, '/');
+      return;
+    }
+    const parsed = activityQuerySchema.safeParse(req.query);
+    if (!parsed.success) {
+      next(new AppError(400, 'invalid_request', 'Activity query is invalid.'));
+      return;
+    }
+    const query = parsed.data.q?.trim() ?? '';
+    try {
+      const activityFeed = dependencies.activity
+        ? await dependencies.activity.listFeed({ viewerUserId: currentUser.userId, limit: 20, before: parsed.data.before, q: query })
+        : { items: [], nextCursor: null };
+      const activityReturnTo = query ? `/activity?q=${encodeURIComponent(query)}` : '/activity';
+      const activityLoadMoreHref = activityFeed.nextCursor
+        ? `/activity?before=${encodeURIComponent(activityFeed.nextCursor)}${query ? `&q=${encodeURIComponent(query)}` : ''}`
+        : '';
+      const activityLoadMoreEndpoint = activityFeed.nextCursor
+        ? `/activity/feed?before=${encodeURIComponent(activityFeed.nextCursor)}${query ? `&q=${encodeURIComponent(query)}` : ''}`
+        : '';
+      if (fragment) {
+        if (!dependencies.renderActivityFeed) {
+          next(new Error('Activity feed renderer is not configured.'));
+          return;
+        }
+        res.status(200).type('html').send(await dependencies.renderActivityFeed({
+          activityFeed: activityFeed.items,
+          activityNextCursor: activityFeed.nextCursor,
+          activitySearch: query,
+          activityLoadMoreHref,
+          activityLoadMoreEndpoint,
+        }));
+        return;
+      }
+      const activityPilotResults = query && dependencies.follow
+        ? await dependencies.follow.searchPilots({ viewerUserId: currentUser.userId, query })
+        : [];
+      await render(res, dependencies.renderPage, 200, {
+        currentUser,
+        page: 'activity',
+        activitySearch: query,
+        activityPilotResults,
+        activityFeed: activityFeed.items,
+        activityNextCursor: activityFeed.nextCursor,
+        activityLoadMoreHref,
+        activityLoadMoreEndpoint,
+        activityReturnTo,
+        currentPath: '/activity',
+        isAdmin: isAdmin(currentUser.email),
+      });
+    } catch (error) {
+      if (error instanceof ActivityCursorError) {
+        next(new AppError(400, 'invalid_request', 'Activity cursor is invalid.'));
+        return;
+      }
+      next(error);
+    }
+  }
+
+  router.get('/activity/feed', (req, res, next) => activityFeedRequest(req, res, next, true));
+
+  router.get('/activity', (req, res, next) => activityFeedRequest(req, res, next, false));
+
+  router.post('/activities/:activityId/thermal', async (req, res, next) => {
+    const wantsJson = req.get('accept')?.toLowerCase().includes('application/json') ?? false;
+    const fail = (status: number, code: string, message: string) => {
+      if (wantsJson) {
+        res.status(status).json({ error: { code, message } });
+      } else {
+        next(new AppError(status, code === 'forbidden' ? 'unauthorized' : 'invalid_request', message));
+      }
+    };
+    const currentUser = res.locals.currentUser;
+    if (!currentUser) {
+      fail(401, 'unauthorized', 'Sign in before sending a Thermal.');
+      return;
+    }
+    const parsedActivityId = pilotUserIdSchema.safeParse(req.params.activityId);
+    if (!parsedActivityId.success) {
+      fail(400, 'invalid_request', 'Activity ID is invalid.');
+      return;
+    }
+    if (!dependencies.activity) throw new Error('Activity service is not configured.');
+    try {
+      const result = await dependencies.activity.toggleThermal({
+        viewerUserId: currentUser.userId,
+        activityId: parsedActivityId.data,
+      });
+      if (wantsJson) {
+        res.status(200).json(result);
+      } else {
+        res.redirect(303, '/activity');
+      }
+    } catch (error) {
+      if (error instanceof ActivityNotFoundError) {
+        fail(404, 'not_found', 'Activity not found.');
+        return;
+      }
+      if (error instanceof SelfThermalError) {
+        fail(403, 'forbidden', 'You cannot send a Thermal to your own activity.');
+        return;
+      }
+      next(error);
+    }
+  });
+
+  for (const action of ['follow', 'unfollow'] as const) {
+    router.post(`/pilots/:userId/${action}`, async (req, res, next) => {
+      const currentUser = res.locals.currentUser;
+      if (!currentUser) {
+        next(new AppError(401, 'unauthorized', 'Sign in before following pilots.'));
+        return;
+      }
+      const parsedUserId = pilotUserIdSchema.safeParse(req.params.userId);
+      if (!parsedUserId.success) {
+        next(new AppError(400, 'invalid_request', 'Pilot ID is invalid.'));
+        return;
+      }
+      if (parsedUserId.data === currentUser.userId) {
+        next(new AppError(400, 'invalid_request', 'You cannot follow yourself.'));
+        return;
+      }
+      if (!dependencies.follow) throw new Error('Follow service is not configured.');
+      try {
+        const body = formBody(req.body);
+        if (action === 'follow') {
+          await dependencies.follow.follow({ followerUserId: currentUser.userId, followedUserId: parsedUserId.data });
+        } else {
+          await dependencies.follow.unfollow({ followerUserId: currentUser.userId, followedUserId: parsedUserId.data });
+        }
+        res.redirect(303, followReturnTo(body.returnTo, `/pilots/${parsedUserId.data}`));
+      } catch (error) {
+        if (error instanceof PilotNotFoundError) {
+          next(new AppError(404, 'invalid_request', error.message));
+          return;
+        }
+        next(error);
+      }
+    });
+  }
 
   router.get('/arena/:countryCode/:arenaSlug', async (req, res, next) => {
     const currentUser = res.locals.currentUser;

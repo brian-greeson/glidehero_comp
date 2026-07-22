@@ -24,6 +24,8 @@ describe('authentication schema', () => {
       'achievement_record_events',
       'achievement_records',
       'achievements',
+      'activities',
+      'activity_reactions',
       'app_sessions',
       'arena_current_leaders',
       'arena_leadership_events',
@@ -35,6 +37,7 @@ describe('authentication schema', () => {
       'flights',
       'igc_files',
       'launches',
+      'pilot_follows',
       'profiles',
       'track_points',
       'user_grid_claims',
@@ -65,6 +68,39 @@ describe('authentication schema', () => {
       { column_name: 'updated_at', is_nullable: 'NO' },
       { column_name: 'user_id', is_nullable: 'NO' },
     ]);
+  });
+
+  it('contains empty activity persistence with flight publication constraints', async () => {
+    const columns = await database.pool.query<{ column_name: string; is_nullable: string; column_default: string | null }>(
+      `SELECT column_name, is_nullable, column_default
+       FROM information_schema.columns
+       WHERE table_schema = 'public' AND table_name = 'activities'
+       ORDER BY column_name`,
+    );
+    expect(columns.rows).toEqual([
+      { column_name: 'activity_type', is_nullable: 'NO', column_default: "'flight'::text" },
+      { column_name: 'actor_user_id', is_nullable: 'NO', column_default: null },
+      { column_name: 'created_at', is_nullable: 'NO', column_default: 'now()' },
+      { column_name: 'id', is_nullable: 'NO', column_default: 'gen_random_uuid()' },
+      { column_name: 'published_at', is_nullable: 'NO', column_default: null },
+      { column_name: 'source_flight_id', is_nullable: 'YES', column_default: null },
+      { column_name: 'updated_at', is_nullable: 'NO', column_default: 'now()' },
+    ]);
+
+    const constraints = await database.pool.query<{ conname: string; definition: string }>(
+      `SELECT conname, pg_get_constraintdef(oid) AS definition
+       FROM pg_constraint
+       WHERE conrelid = 'activities'::regclass
+       ORDER BY conname`,
+    );
+    expect(constraints.rows).toEqual(expect.arrayContaining([
+      { conname: 'activities_id_actor_user_id_unique', definition: 'UNIQUE (id, actor_user_id)' },
+    ]));
+    expect(constraints.rows.find(({ conname }) => conname === 'activities_flight_source_required')?.definition)
+      .toContain("activity_type <> 'flight'::text");
+
+    const count = await database.pool.query<{ count: number }>('SELECT count(*)::int AS count FROM activities');
+    expect(count.rows).toEqual([{ count: 0 }]);
   });
 
   it('stores nullable flight completion timestamps with per-user completion ordering support', async () => {

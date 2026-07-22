@@ -21,6 +21,21 @@ export const users = pgTable('users', {
   ...timestamps,
 });
 
+export const pilotFollows = pgTable(
+  'pilot_follows',
+  {
+    followerUserId: uuid('follower_user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    followedUserId: uuid('followed_user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.followerUserId, table.followedUserId] }),
+    check('pilot_follows_no_self_follow', sql`${table.followerUserId} <> ${table.followedUserId}`),
+    index('pilot_follows_follower_user_id_idx').on(table.followerUserId),
+    index('pilot_follows_followed_user_id_idx').on(table.followedUserId),
+  ],
+);
+
 export const userPasswords = pgTable('user_passwords', {
   userId: uuid('user_id').primaryKey().references(() => users.id, { onDelete: 'cascade' }),
   passwordHash: text('password_hash').notNull(),
@@ -96,6 +111,45 @@ export const flights = pgTable(
     index('flights_user_id_idx').on(table.userId),
     index('flights_user_id_processed_at_flight_id_idx').on(table.userId, table.processedAt, table.id),
     index('flights_igc_file_id_idx').on(table.igcFileId),
+  ],
+);
+
+export const activities = pgTable(
+  'activities',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    actorUserId: uuid('actor_user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    activityType: text('activity_type').notNull().default('flight'),
+    sourceFlightId: uuid('source_flight_id').unique().references(() => flights.id, { onDelete: 'cascade' }),
+    publishedAt: timestamp('published_at', { withTimezone: true, mode: 'date' }).notNull(),
+    ...timestamps,
+  },
+  (table) => [
+    unique('activities_id_actor_user_id_unique').on(table.id, table.actorUserId),
+    index('activities_actor_user_id_published_at_id_idx').on(table.actorUserId, table.publishedAt, table.id),
+    index('activities_published_at_id_idx').on(table.publishedAt, table.id),
+    index('activities_activity_type_source_flight_id_idx').on(table.activityType, table.sourceFlightId),
+    check('activities_flight_source_required', sql`${table.activityType} <> 'flight' OR ${table.sourceFlightId} IS NOT NULL`),
+  ],
+);
+
+export const activityReactions = pgTable(
+  'activity_reactions',
+  {
+    activityId: uuid('activity_id').notNull(),
+    activityOwnerUserId: uuid('activity_owner_user_id').notNull(),
+    reactorUserId: uuid('reactor_user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.activityId, table.reactorUserId] }),
+    foreignKey({
+      name: 'activity_reactions_activity_owner_fkey',
+      columns: [table.activityId, table.activityOwnerUserId],
+      foreignColumns: [activities.id, activities.actorUserId],
+    }).onDelete('cascade'),
+    check('activity_reactions_no_self_reaction', sql`${table.activityOwnerUserId} <> ${table.reactorUserId}`),
+    index('activity_reactions_reactor_user_id_idx').on(table.reactorUserId),
   ],
 );
 

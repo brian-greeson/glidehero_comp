@@ -78,6 +78,7 @@ describe('pilot profile renderer', () => {
     expect(current).toContain('/styles/profile.css');
     expect(current).toContain('/scripts/profile.js');
     expect(current).not.toContain('/scripts/dashboard.js');
+    expect(current).not.toContain('action="/pilots/');
 
     const other = await render({ currentUser, page: 'profile', profile, profileIsCurrent: false });
     expect(other).toContain('Cloud Dancer’s Achievements');
@@ -89,6 +90,19 @@ describe('pilot profile renderer', () => {
     expect(other).not.toContain('Complete a flight to start building your history.');
     expect(other).toContain('No completed flights yet.</p>');
     expect(other).not.toContain('Upload a flight to see it here.');
+    expect(other).toContain('action="/pilots/00000000-0000-4000-8000-000000000003/follow"');
+    expect(other).toContain('>Follow</button>');
+
+    const followed = await render({
+      currentUser,
+      page: 'profile',
+      profile,
+      profileIsCurrent: false,
+      profileIsFollowed: true,
+      currentPath: '/pilots/00000000-0000-4000-8000-000000000003',
+    });
+    expect(followed).toContain('action="/pilots/00000000-0000-4000-8000-000000000003/unfollow"');
+    expect(followed).toContain('>Unfollow</button>');
   });
 
   it('renders singular next milestone copy', async () => {

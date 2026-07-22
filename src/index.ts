@@ -19,7 +19,7 @@ import { createMonthlyCoverageService } from './services/monthlyCoverageService.
 import { createMapGridService } from './services/mapGridService.js';
 import { createTerritoryTileService } from './services/territoryTileService.js';
 import { createTerritoryTileSettingsService } from './services/territoryTileSettingsService.js';
-import { createAdminAreaPageRenderer, createAdminMapSettingsPageRenderer, createAdminPageRenderer, createAdminUserPageRenderer, createPageRenderer } from './views/renderer.js';
+import { createActivityFeedRenderer, createAdminAreaPageRenderer, createAdminMapSettingsPageRenderer, createAdminPageRenderer, createAdminUserPageRenderer, createPageRenderer } from './views/renderer.js';
 import { createAdminAreaRouter } from './web/adminAreaRouter.js';
 import { createAdminUserRouter } from './web/adminUserRouter.js';
 import { createCurrentUserMiddleware } from './web/currentUserMiddleware.js';
@@ -27,6 +27,8 @@ import { createSessionCookie } from './web/sessionCookie.js';
 import { createWebRouter } from './web/webRouter.js';
 import { createDonationRouter } from './routes/donationRouter.js';
 import { createDonationService } from './services/donationService.js';
+import { createFollowService } from './services/followService.js';
+import { createActivityService } from './services/activityService.js';
 
 const config = parseConfig(process.env);
 const { db } = createDatabase(config.databaseUrl);
@@ -44,6 +46,8 @@ const mapGrid = createMapGridService(db, { cellSize: config.gridClaimCellSize })
 const territoryTiles = createTerritoryTileService(db, { cellSize: config.gridClaimCellSize });
 const territoryTileSettings = createTerritoryTileSettingsService();
 const profiles = createProfileService(db, { cellSize: config.gridClaimCellSize });
+const follow = createFollowService(db);
+const activity = createActivityService(db);
 const uploadQueue = createFlightUploadQueueService(valkey, {
   s3Client,
   bucketName: config.bucket.bucketName,
@@ -91,6 +95,8 @@ const webMiddleware = [
     uploadQueue,
     failedFlightCleanup,
     profiles,
+    follow,
+    activity,
     gridClaim,
     mapGrid,
     coverage: monthlyCoverage,
@@ -101,6 +107,7 @@ const webMiddleware = [
       mapTilerApiKey: config.mapTilerApiKey,
       territoryTileSettings,
     }),
+    renderActivityFeed: createActivityFeedRenderer(),
     adminEmails: config.adminEmails,
     adminFlights,
     renderAdminPage: createAdminPageRenderer(),

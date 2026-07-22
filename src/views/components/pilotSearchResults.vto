@@ -1,0 +1,15 @@
+<section class="activity-search-results" aria-labelledby="activity-search-results-heading">
+  <h2 id="activity-search-results-heading">Pilots</h2>
+  {{ if activityPilotResults.length === 0 }}
+    <p class="activity-empty-search">No pilots found.</p>
+  {{ else }}
+    <ul>
+      {{ for pilot of activityPilotResults }}
+        <li>
+          <a href="/pilots/{{ pilot.userId }}">{{ pilot.displayName }}</a>
+          {{ include "components/followButton.vto" { targetUserId: pilot.userId, isFollowing: pilot.isFollowing, returnTo: activityReturnTo } }}
+        </li>
+      {{ /for }}
+    </ul>
+  {{ /if }}
+</section>

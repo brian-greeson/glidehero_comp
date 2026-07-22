@@ -1355,6 +1355,13 @@ grid-template-columns: fit-content(36rem) minmax(0, 1fr);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.coverage-pilot-link {
+  min-width: 0;
+  overflow: hidden;
+  color: inherit;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .leaderboard-area {
   font-variant-numeric: tabular-nums;
   white-space: nowrap;

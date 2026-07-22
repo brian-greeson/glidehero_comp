@@ -47,7 +47,7 @@ function processor() {
   });
 }
 
-async function installInsertFailureTrigger(table: 'competition_grid_claims' | 'flight_progress', message: string) {
+async function installInsertFailureTrigger(table: 'activities' | 'competition_grid_claims' | 'flight_progress', message: string) {
   if (!database) throw new Error('Test database was not initialized.');
   const suffix = randomUUID().replaceAll('-', '');
   const functionName = `test_${suffix}_fn`;
@@ -79,6 +79,7 @@ async function persistedProcessingState(igcFileId: string) {
     competition_claim_count: number;
     progress_count: number;
     achievement_count: number;
+    activity_count: number;
   }>(
     `SELECT f.processing_status,
             f.processed_at,
@@ -86,7 +87,8 @@ async function persistedProcessingState(igcFileId: string) {
             (SELECT count(*)::int FROM user_grid_claims WHERE claim_flight = f.flight_id) AS personal_claim_count,
             (SELECT count(*)::int FROM competition_grid_claims WHERE claim_flight = f.flight_id) AS competition_claim_count,
             (SELECT count(*)::int FROM flight_progress WHERE flight_id = f.flight_id) AS progress_count,
-            (SELECT count(*)::int FROM achievements WHERE source_flight_id = f.flight_id) AS achievement_count
+            (SELECT count(*)::int FROM achievements WHERE source_flight_id = f.flight_id) AS achievement_count,
+            (SELECT count(*)::int FROM activities WHERE source_flight_id = f.flight_id) AS activity_count
      FROM flights f
      WHERE f.igc_file_id = $1`,
     [igcFileId],
@@ -113,6 +115,7 @@ describe('FlightProcessingService with a real IGC file', () => {
     expect(result.status).toBe('completed');
     const persisted = await database.pool.query<{
       processing_status: string;
+      processed_at: Date;
       launch_timezone: string;
       grid_claim_count: number;
       competition_claim_count: number;
@@ -155,6 +158,16 @@ describe('FlightProcessingService with a real IGC file', () => {
     expect(persisted.rows[0]?.grid_claim_count).toBeGreaterThan(0);
     expect(persisted.rows[0]?.competition_claim_count).toBeGreaterThan(0);
     expect(persisted.rows[0]?.last_fix.getTime()).toBeGreaterThan(persisted.rows[0]?.first_fix.getTime() ?? 0);
+
+    const activity = await database.pool.query<{ actor_user_id: string; source_flight_id: string; published_at: Date }>(
+      'SELECT actor_user_id, source_flight_id, published_at FROM activities',
+    );
+    expect(activity.rows).toEqual([{
+      actor_user_id: pilot.user.userId,
+      source_flight_id: expect.any(String),
+      published_at: expect.any(Date),
+    }]);
+    expect(activity.rows[0]?.published_at.getTime()).toBe(persisted.rows[0]?.processed_at.getTime());
 
   }, 60_000);
 
@@ -220,6 +233,7 @@ describe('FlightProcessingService with a real IGC file', () => {
         competition_claim_count: 0,
         progress_count: 0,
         achievement_count: 0,
+        activity_count: 0,
       });
     } finally {
       await removeTrigger();
@@ -253,6 +267,41 @@ describe('FlightProcessingService with a real IGC file', () => {
         competition_claim_count: 0,
         progress_count: 0,
         achievement_count: 0,
+        activity_count: 0,
+      });
+    } finally {
+      await removeTrigger();
+    }
+  }, 60_000);
+
+  it('does not complete a flight or retain partial work when activity publication fails', async () => {
+    if (!database) throw new Error('Test database was not initialized.');
+    const auth = createAuthService(database.db, { sessionTtlSeconds: 60 });
+    const pilot = await auth.signup({ email: 'activity-failure@example.com', password: 'correct horse battery staple' });
+    const stored = await storeFile(pilot.user.userId, 'flights/activity-failure.igc', 'activity-failure.igc');
+    const removeTrigger = await installInsertFailureTrigger('activities', 'test activity persistence failure');
+
+    try {
+      await expect(processor().process({
+        ownerUserId: pilot.user.userId,
+        igcFileId: stored.id,
+        bucketKey: 'flights/activity-failure.igc',
+        contentHash: createHash('sha256').update(fixture).digest('hex').replace(/^./, 'd'),
+        processingToken: randomUUID(),
+        source,
+      })).rejects.toThrow();
+
+      const persisted = await persistedProcessingState(stored.id);
+      expect(persisted).toHaveLength(1);
+      expect(persisted[0]).toMatchObject({
+        processing_status: 'processing',
+        processed_at: null,
+        track_point_count: 0,
+        personal_claim_count: 0,
+        competition_claim_count: 0,
+        progress_count: 0,
+        achievement_count: 0,
+        activity_count: 0,
       });
     } finally {
       await removeTrigger();

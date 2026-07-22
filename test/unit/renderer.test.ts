@@ -265,6 +265,79 @@ describe('Vento page renderer', () => {
     expect(arena).toContain('<script type="module" src="/scripts/arena.js"></script>');
   });
 
+  it('renders the authenticated Activity shell, search result controls, and escaped pilot names', async () => {
+    const html = await render({
+      currentUser: {
+        userId: '00000000-0000-4000-8000-000000000001',
+        sessionId: '00000000-0000-4000-8000-000000000002',
+        email: 'pilot@example.com',
+        displayName: 'Sky Pilot',
+        territoryColor: '#1769AA',
+      },
+      page: 'activity',
+      activitySearch: '<script>alert(1)</script>',
+      activityPilotResults: [{
+        userId: '00000000-0000-4000-8000-000000000003',
+        displayName: '<Pilot>',
+        isFollowing: false,
+      }],
+      activityReturnTo: '/activity?q=%3Cscript%3Ealert%281%29%3C%2Fscript%3E',
+      currentPath: '/activity',
+    });
+
+    expect(html).toContain('<h1>Activity</h1>');
+    expect(html).toContain('href="/activity" aria-current="page">Activity</a>');
+    expect(html).toContain('/styles/activity.css');
+    expect(html).toContain('href="/pilots/00000000-0000-4000-8000-000000000003">&lt;Pilot&gt;</a>');
+    expect(html).toContain('action="/pilots/00000000-0000-4000-8000-000000000003/follow"');
+    expect(html).not.toContain('<script>alert(1)</script>');
+    expect(html).toContain('&lt;script&gt;alert(1)&lt;/script&gt;');
+
+    const empty = await render({
+      currentUser: {
+        userId: '00000000-0000-4000-8000-000000000001',
+        sessionId: '00000000-0000-4000-8000-000000000002',
+        email: 'pilot@example.com',
+        displayName: 'Sky Pilot',
+        territoryColor: '#1769AA',
+      },
+      page: 'activity',
+    });
+    expect(empty).toContain('Your activity feed');
+    expect(empty).not.toContain('activity-search-results-heading');
+  });
+
+  it('renders Thermal controls for another pilot and a static count for own activity', async () => {
+    const html = await render({
+      currentUser: {
+        userId: '00000000-0000-4000-8000-000000000001',
+        sessionId: '00000000-0000-4000-8000-000000000002',
+        email: 'pilot@example.com',
+        displayName: 'Sky Pilot',
+        territoryColor: '#1769AA',
+      },
+      page: 'activity',
+      activityFeed: [{
+        id: '00000000-0000-4000-8000-000000000010', actorUserId: '00000000-0000-4000-8000-000000000003',
+        actorDisplayName: 'Other Pilot', activityType: 'competition', sourceFlightId: null,
+        publishedAt: new Date('2026-07-21T00:00:00.000Z'), publishedAtIso: '2026-07-21T00:00:00.000Z',
+        publishedAtLabel: 'Jul 21, 2026', accomplishments: [], thermalCount: 2, viewerHasReacted: true, isOwn: false,
+      }, {
+        id: '00000000-0000-4000-8000-000000000011', actorUserId: '00000000-0000-4000-8000-000000000001',
+        actorDisplayName: 'Sky Pilot', activityType: 'competition', sourceFlightId: null,
+        publishedAt: new Date('2026-07-20T00:00:00.000Z'), publishedAtIso: '2026-07-20T00:00:00.000Z',
+        publishedAtLabel: 'Jul 20, 2026', accomplishments: [], thermalCount: 3, viewerHasReacted: false, isOwn: true,
+      }],
+    });
+
+    expect(html).toContain('action="/activities/00000000-0000-4000-8000-000000000010/thermal"');
+    expect(html).toContain('aria-pressed="true"');
+    expect(html).toContain('Thermal sent');
+    expect(html).toContain('aria-label="3 Thermals received"');
+    expect(html).not.toContain('action="/activities/00000000-0000-4000-8000-000000000011/thermal"');
+    expect(html).toContain('class="thermal-icon"');
+  });
+
   it('reads current runtime tile settings for each new dashboard render', async () => {
     const territoryTileSettings = createTerritoryTileSettingsService();
     const runtimeRender = createPageRenderer({

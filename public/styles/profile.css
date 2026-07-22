@@ -30,6 +30,28 @@
   background: rgb(255 255 255 / 0.18);
 }
 
+.profile-nav-links {
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+}
+
+.follow-form {
+  margin: 1rem 0 0;
+}
+
+.follow-button {
+  min-height: 44px;
+  padding: .6rem 1rem;
+  border: 0;
+  border-radius: 999px;
+  color: var(--color-on-primary);
+  background: var(--color-primary-strong);
+  font: inherit;
+  font-weight: 800;
+  cursor: pointer;
+}
+
 .profile-nav-link:focus-visible,
 .profile-back-link:focus-visible {
   outline: 3px solid var(--color-focus-ring);

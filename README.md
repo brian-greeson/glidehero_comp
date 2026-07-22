@@ -135,6 +135,45 @@ earn Took the Lead and Reclaimed the Lead once each; those achievements remain
 after the pilot loses the lead. Launch and viewport-dependent Global competition
 do not support durable leadership.
 
+### Release 4 activity and following
+
+Release 4 adds an authenticated Activity page in the main navigation and pilot
+following. A pilot can Follow or Unfollow another pilot from that pilot's
+profile or from Activity search results. Display names in competition
+leaderboards are clickable profile links, where the same Follow/Unfollow control
+is available. Following is stored only for other pilots: self-following is
+implicit for feed visibility, so there is no self-follow row or self Follow/
+Unfollow control, and the product exposes no follower/following counts or lists.
+
+Activity search uses a case-insensitive literal display-name substring, excludes
+the current pilot, and returns at most 10 results. The feed includes the current
+pilot's own activities and activities from pilots currently followed. Following
+someone reveals their earlier Release 4 activity; unfollowing removes it on the
+next read. Feed cards are ordered newest first by processing time and use stable
+20-item keyset pagination with Load more.
+
+Every newly completed flight publishes exactly one flight activity in the same
+transaction as completion. There is no pre-Release 4 activity backfill. A card
+links the pilot display name to that pilot's profile and shows the flight date
+in its launch time zone, duration, distance, total cells (direct plus enclosed),
+and either the matching Launch Arena (with its canonical
+link) or launch coordinates rounded to four decimal places. Accomplishments are
+grouped from one-time achievement awards, completed milestones, new
+personal-record events, and positive `Took the Lead`/`Reclaimed the Lead` events
+when entering or re-entering first place; progress that did not award an
+achievement, `lost` events, and lower-rank changes are omitted. Reprocessing
+refreshes joined card details without changing publication order, and deleting
+a flight removes its activity and Thermals.
+
+Each activity supports one Thermal per reacting pilot. The toggle inserts or
+removes that pilot's Thermal and returns the current count; Thermal actions are
+not gated by whether the activity is currently visible in the viewer's feed.
+The activity owner can see the count but cannot react to their own activity.
+There are no reactor lists. Activities carry a generic source type for future
+activity kinds, but Release 4 currently writes only flight activities. Comments,
+messaging, reposts, manual posts, photo or video uploads, groups, general-purpose
+notifications, and feed preferences remain out of scope.
+
 ### Map routes and navigation
 
 - `/` displays login and signup to signed-out visitors. A signed-in request to
@@ -142,9 +181,14 @@ do not support durable leadership.
 - `/global` displays the viewport-based additive coverage competition.
 - `/personal` displays the signed-in pilot's permanent Personal Map and
   viewport Stats.
+- `/activity` displays the authenticated pilot's followed-and-own activity feed,
+  pilot search, and inline Follow/Unfollow controls.
+- `/pilots/{user-id}` displays an authenticated pilot profile with inline
+  Follow/Unfollow control when the profile belongs to another pilot.
 - `/arena/{country-code}/{name}-{source-id}` displays a fixed-area additive
   coverage competition backed by a canonical Arena polygon.
-- Signed-out requests to Global, Personal, and Arena pages redirect to `/`.
+- Signed-out requests to Global, Personal, Activity, Arena, and pilot-profile
+  pages redirect to `/`.
 - Invalid or unavailable Arena routes display an Arena 404 page.
 
 The Competitive and Personal controls navigate between `/global` and
@@ -193,20 +237,20 @@ Included features:
 - Arena personal progress and Release 2 exploration achievements.
 - Durable General, State, and Country Arena leadership and one-time leadership
   achievements.
+- Authenticated pilot following, Activity feed, grouped flight accomplishments,
+  and Thermal reactions.
 - Optional grid overlay and foreground live-position trail on every map.
 - Flight statistics after upload.
 - Administrative Arena, map-setting, user, and flight-management tools.
 
 Excluded from Version 1:
 
-- Following.
-- Activity feeds.
-- Reactions.
 - Comments.
 - Messaging.
 - Public signed-out profiles.
-- A public activity feed or standalone Arena leadership-history view. Release 3
-  persists leadership transitions internally for a future activity system.
+- A standalone Arena leadership-history view. Release 3 leadership transitions
+  are surfaced in the Release 4 Activity feed only when they are positive
+  accomplishments for a completed flight.
 - Pilot-facing flight editing or deletion.
 - Historical playback.
 - Support for file formats other than IGC.

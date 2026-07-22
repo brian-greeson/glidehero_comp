@@ -14,6 +14,10 @@ export const relations = defineRelations(schema, (r) => ({
     achievementRecordEvents: r.many.achievementRecordEvents({ from: r.users.id, to: r.achievementRecordEvents.userId }),
     personalGridClaims: r.many.personalGridClaims({ from: r.users.id, to: r.personalGridClaims.claimUser }),
     competitionGridClaims: r.many.competitionGridClaims({ from: r.users.id, to: r.competitionGridClaims.claimUser }),
+    following: r.many.pilotFollows({ from: r.users.id, to: r.pilotFollows.followerUserId }),
+    followers: r.many.pilotFollows({ from: r.users.id, to: r.pilotFollows.followedUserId }),
+    activities: r.many.activities({ from: r.users.id, to: r.activities.actorUserId }),
+    activityReactions: r.many.activityReactions({ from: r.users.id, to: r.activityReactions.reactorUserId }),
   },
   userPasswords: {
     user: r.one.users({ from: r.userPasswords.userId, to: r.users.id }),
@@ -36,6 +40,16 @@ export const relations = defineRelations(schema, (r) => ({
     trackPoints: r.many.trackPoints({ from: r.flights.id, to: r.trackPoints.flightId }),
     personalGridClaims: r.many.personalGridClaims({ from: r.flights.id, to: r.personalGridClaims.claimFlight }),
     competitionGridClaims: r.many.competitionGridClaims({ from: r.flights.id, to: r.competitionGridClaims.claimFlight }),
+    activity: r.one.activities({ from: r.flights.id, to: r.activities.sourceFlightId }),
+  },
+  activities: {
+    actor: r.one.users({ from: r.activities.actorUserId, to: r.users.id }),
+    sourceFlight: r.one.flights({ from: r.activities.sourceFlightId, to: r.flights.id }),
+    reactions: r.many.activityReactions({ from: r.activities.id, to: r.activityReactions.activityId }),
+  },
+  activityReactions: {
+    activity: r.one.activities({ from: r.activityReactions.activityId, to: r.activities.id }),
+    reactor: r.one.users({ from: r.activityReactions.reactorUserId, to: r.users.id }),
   },
   trackPoints: {
     flight: r.one.flights({ from: r.trackPoints.flightId, to: r.flights.id }),
@@ -65,5 +79,9 @@ export const relations = defineRelations(schema, (r) => ({
   competitionGridClaims: {
     flight: r.one.flights({ from: r.competitionGridClaims.claimFlight, to: r.flights.id }),
     user: r.one.users({ from: r.competitionGridClaims.claimUser, to: r.users.id }),
+  },
+  pilotFollows: {
+    follower: r.one.users({ from: r.pilotFollows.followerUserId, to: r.users.id }),
+    followed: r.one.users({ from: r.pilotFollows.followedUserId, to: r.users.id }),
   },
 }));

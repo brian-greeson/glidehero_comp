@@ -5,6 +5,7 @@ import { flights, trackPoints } from '../db/schema.js';
 import { resolveLaunchTimeZone } from '../domain/competition/launchTimeZone.js';
 import { IgcParseError } from '../domain/igc/errors.js';
 import { parseIgcFlight } from '../domain/igc/parseIgcFlight.js';
+import { createActivityService } from './activityService.js';
 import { createGridClaimService } from './gridClaimService.js';
 
 const TRACK_POINT_INSERT_BATCH_SIZE = 1_000;
@@ -48,6 +49,7 @@ export function createFlightProcessingService(
   },
 ): FlightProcessingService {
   const gridClaim = createGridClaimService(database, { cellSize: options.gridClaimCellSize });
+  const activity = createActivityService();
 
   async function fail(flightId: string, processingToken: string, message: string): Promise<FlightProcessingOutcome> {
     const updated = await database
@@ -150,8 +152,15 @@ export function createFlightProcessingService(
               eq(flights.processingStatus, 'processing'),
               eq(flights.processingToken, input.processingToken),
             ))
-            .returning({ id: flights.id });
-          if (!completed.length) throw new ProcessingFenceLostError();
+            .returning({ id: flights.id, actorUserId: flights.userId, processedAt: flights.processedAt });
+          const completedFlight = completed[0];
+          if (!completedFlight) throw new ProcessingFenceLostError();
+          if (!completedFlight.processedAt) throw new Error('Completed flight has no processed timestamp.');
+          await activity.publishFlightInTransaction(tx, {
+            actorUserId: completedFlight.actorUserId,
+            sourceFlightId: completedFlight.id,
+            publishedAt: completedFlight.processedAt,
+          });
         });
       } catch (error) {
         if (error instanceof ProcessingFenceLostError) return { status: 'superseded', flightId: flight.id };

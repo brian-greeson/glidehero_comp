@@ -45,25 +45,33 @@ describe('competition coverage browser contracts', () => {
   });
 
   it('reports null when the selected leaderboard pilot is tapped again', () => {
-    const handlers = new Map<string, () => void>();
-    const element = () => ({
-      hidden: false,
-      textContent: '',
-      className: '',
-      children: [] as any[],
-      classList: { add() {} },
-      style: { setProperty() {} },
-      setAttribute() {},
-      addEventListener(event: string, handler: () => void) {
-        handlers.set(event, handler);
-      },
-      append(...children: any[]) {
-        this.children.push(...children);
-      },
-      replaceChildren(...children: any[]) {
-        this.children = children;
-      },
-    });
+    const handlers = new Map<string, (event?: any) => void>();
+    const element = () => {
+      const attributes = new Map<string, string>();
+      return {
+        hidden: false,
+        textContent: '',
+        className: '',
+        children: [] as any[],
+        classList: { add() {} },
+        style: { setProperty() {} },
+        setAttribute(name: string, value: string) {
+          attributes.set(name, value);
+        },
+        getAttribute(name: string) {
+          return attributes.get(name) ?? null;
+        },
+        addEventListener(event: string, handler: (event?: any) => void) {
+          handlers.set(event, handler);
+        },
+        append(...children: any[]) {
+          this.children.push(...children);
+        },
+        replaceChildren(...children: any[]) {
+          this.children = children;
+        },
+      };
+    };
     const elements = new Map([
       ['[data-territory-list]', element()],
       ['[data-territory-status]', element()],
@@ -90,7 +98,15 @@ describe('competition coverage browser contracts', () => {
       colorRegistry: { colorFor: () => '#1769AA' },
       onSelect,
     });
-    expect((elements.get('[data-territory-list]')?.children[0] as any).children).toHaveLength(3);
+    const row = elements.get('[data-territory-list]')?.children[0] as any;
+    expect(row.children).toHaveLength(3);
+    expect(row.getAttribute('role')).toBe('row');
+    expect(row.getAttribute('tabindex')).toBe('0');
+    expect(row.children[0].children[1].textContent).toBe('1.');
+    expect(row.children[0].children[2].getAttribute('href')).toBe('/pilots/pilot');
+    expect(row.children[0].children[2].textContent).toBe('Pilot');
+    handlers.get('click')?.({ target: row.children[0].children[2] });
+    expect(onSelect).not.toHaveBeenCalled();
     handlers.get('click')?.();
     expect(onSelect).toHaveBeenCalledWith(null);
   });

@@ -4,11 +4,14 @@
       <a class="brand" href="/personal" aria-label="Glide Hero dashboard">
         <img class="brand-logo" src="/android-chrome-192x192.png" alt=""><span class="brand-name">GLIDE HERO</span>
       </a>
-      <a class="profile-nav-link" href="/personal">Personal Map</a>
+      <nav class="profile-nav-links" aria-label="Pilot navigation">
+        <a class="profile-nav-link" href="/personal">Personal Map</a>
+        <a class="profile-nav-link" href="/activity">Activity</a>
+      </nav>
     </header>
     <main class="profile-content">
       <a class="profile-back-link" href="/personal">← Back to Personal Map</a>
-      {{ include "components/pilotProfileSummary.vto" { profile, profileIsCurrent } }}
+      {{ include "components/pilotProfileSummary.vto" { profile, profileIsCurrent, profileIsFollowed, currentPath } }}
       {{ include "components/profileArenaLeadershipList.vto" { profile, profileIsCurrent } }}
       {{ include "components/profileAchievementProgress.vto" { profile, profileIsCurrent } }}
       {{ include "components/profileAchievementHelp.vto" }}

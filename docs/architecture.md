@@ -118,6 +118,28 @@ Do not embed reusable business rules or substantial SQL in routers. If behavior 
 
 `src/web/webRouter.ts` owns the main user-facing pages and APIs. A cohesive feature with distinct access rules or a large route surface may have its own router, as the admin-area feature does in `src/web/adminAreaRouter.ts`.
 
+The authenticated Activity surface is also owned by `webRouter.ts`:
+
+- `GET /activity` renders the Activity page, including literal,
+  case-insensitive display-name search (excluding the viewer and limiting the
+  result to 10 pilots).
+- `GET /activity/feed` returns the next server-rendered feed fragment for the
+  opaque publication-timestamp/ID cursor; the page also exposes a normal
+  `GET /activity?before=...` link for the no-JavaScript path.
+- `POST /pilots/:userId/follow` and `/unfollow` are idempotent mutations that
+  redirect to a validated local destination. A valid UUID for a nonexistent
+  pilot is handled as a controlled 404 rather than a database error.
+- `POST /activities/:activityId/thermal` toggles one Thermal for the current
+  pilot and returns the normal redirect or progressive-enhancement response.
+
+Pilot display names in competition leaderboards link to `/pilots/:userId`; the
+profile page exposes the same Follow/Unfollow control used by Activity search.
+
+Self-following has no persisted row or control. Feed visibility always includes
+the viewer's own activities and actors currently followed, so following reveals
+earlier Release 4 activity and unfollowing hides it on the next read. The
+surface intentionally exposes no follower/following counts or lists.
+
 ### HTTP middleware and cookies
 
 Locations:
@@ -160,6 +182,25 @@ Services own:
 This repository does not currently have a separate repository or data-access layer. Feature-specific database access therefore belongs in the relevant service.
 
 If several services genuinely need a shared query, extract it into a focused service or helper. Do not combine persistence rules belonging to different use cases merely because their SQL is similar.
+
+`followService.ts` owns idempotent follow/unfollow state and bounded pilot
+search. `activityService.ts` owns flight publication, current-follow feed
+visibility, stable keyset pagination, joined flight summaries, grouped
+accomplishments, and Thermal toggling. Feed reads batch-load accomplishment
+sources for the visible page and calculate Thermal counts/viewer state in the
+same query rather than issuing one query per card.
+
+Flight cards link the pilot to their profile and derive launch-time-zone date,
+duration, distance, direct-plus-enclosed total cells, and Launch Arena name/link
+or four-decimal coordinates. Their grouped accomplishments include one-time
+achievement awards, completed milestones, new personal-record events, and only
+positive `took`/`reclaimed` leadership events when entering or re-entering first
+place; unawarded progress, `lost`, and lower-rank changes are excluded. The
+owner sees Thermal counts but cannot send a Thermal to their own card. Thermal
+actions are intentionally not gated by current feed visibility, and reactor
+lists are not exposed. Comments, messaging, reposts, manual posts, photo or
+video uploads, groups, general-purpose notifications, and feed preferences are
+not part of this feature.
 
 Services should not depend on:
 
@@ -238,6 +279,17 @@ Defines:
 ### `src/db/relations.ts`
 
 Defines Drizzle relations between schema entities.
+
+Release 4 persistence adds three tables. `pilot_follows` has a composite key of
+follower and followed user IDs, cascading user foreign keys, and a check that
+prevents self-follow rows. `activities` stores an actor, generic `activity_type`,
+nullable unique `source_flight_id`, immutable `published_at`, and timestamps;
+flight activities require a source flight and the source-flight foreign key
+cascades deletion. `activity_reactions` stores one `(activity_id,
+reactor_user_id)` row, carries the activity owner for a composite foreign-key
+check, cascades activity/user deletion, and rejects self-reactions. These
+constraints enforce the idempotency and self-action rules even when a service
+is bypassed.
 
 ### `src/db/client.ts`
 
@@ -322,9 +374,10 @@ transaction locks serialize leadership writes per Arena. Stable event keys and t
 one-row-per-user achievement constraint make retries idempotent. Took-the-Lead
 and Reclaimed-the-Lead achievements use the decisive cell-claim timestamp and
 source flight, are each earned only once, and remain after leadership is lost.
-The transition history remains internal for a future activity system, while
-profiles expose only the live Current Arena Leaderships projection and ordinary
-achievement entries.
+The transition history remains internal storage; Release 4 Activity cards read
+only positive `took` and `reclaimed` events associated with the completed flight
+and omit `lost` or lower-rank changes. Profiles still expose only the live
+Current Arena Leaderships projection and ordinary achievement entries.
 
 Personal, Global competition, and Arena territory are served as authenticated,
 on-demand Mapbox Vector Tiles by `TerritoryTileService`. Each query derives its
@@ -464,6 +517,13 @@ Extract reusable browser behavior into a focused module instead of continually g
 
 Feature-specific browser assets may use a subdirectory, as the admin area editor does.
 
+`public/scripts/activity.js` progressively enhances the server-rendered Activity
+page: it appends the reusable feed fragment for Load more and updates Thermal
+pressed state/counts after a successful toggle. Forms and the ordinary cursor
+link remain functional without JavaScript. `activity.css` owns the responsive
+feed, search, accomplishment, and Thermal presentation; the Thermal icon is an
+inline, repository-native SVG using `currentColor`.
+
 ### On-demand territory tiles
 
 `personalMap.js` and `competitionCoverageMap.js` install MapLibre vector
@@ -500,6 +560,19 @@ terminal database and queue state. It also recovers stale claims and performs
 leased cleanup so multiple worker processes can operate safely. Blocking
 `XREADGROUP` calls use a dedicated Valkey client; maintenance and acknowledgments
 use the normal client.
+
+For a newly completed flight, `FlightProcessingService` runs claims,
+progression, achievements, leadership, completion timestamping, and the flight
+activity insert in one PostgreSQL transaction. The activity's `published_at` is
+the database-generated `processed_at`, so a failed insert rolls back completion
+and a retry cannot publish a duplicate. Reprocessing does not republish an
+existing activity. Feed cards join current flight/profile/Arena data, so
+reprocessing can refresh their displayed details while publication order stays
+fixed. Deleting a flight cascades to its activity and Thermals. Release 4 does
+not backfill activities for flights completed before the feature was deployed.
+
+The activity table is generic for future source types, but the current worker
+writes only `flight` activities.
 
 ### Map flight aids
 
@@ -569,8 +642,8 @@ The live evaluator runs after a claim rebuild while holding the per-user
 advisory transaction lock. It counts distinct fixed 500-meter application-grid cells using
 EPSG:6933 center `ST_Covers`, ignores invalid denominators for coverage awards,
 and never revokes an existing award. Profile reads merge ordinary awards and
-record events into one latest-50 activity list without exposing raw keys or
-details.
+record events into one latest-50 achievement list without exposing raw keys or
+details. This profile list is separate from the Release 4 Activity feed.
 
 Authenticated profile reads also build an ordered, non-persistent "In progress"
 card model. One Arena aggregation calculates Launch Arenas visited, General
