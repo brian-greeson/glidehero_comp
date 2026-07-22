@@ -4,8 +4,11 @@ import sharp from 'sharp';
 const MAP_ID = 'outdoor-v4';
 const STATIC_MAP_ORIGIN = 'https://api.maptiler.com';
 const AUTHALIC_RADIUS_METERS = 6_371_007.181;
+const WEB_MERCATOR_RADIUS_METERS = 6_378_137;
 const COSINE_30_DEGREES = Math.sqrt(3) / 2;
 const MAP_PADDING_RATIO = 0.1;
+const WEB_MERCATOR_MAX_LATITUDE = 85.0511287798066;
+const ATTRIBUTION_SAFE_BOTTOM_PX = 36;
 
 export type ThumbnailCell = { x: number; y: number };
 export type ThumbnailTrackPoint = { latitude: number; longitude: number };
@@ -42,21 +45,46 @@ export class FlightThumbnailGenerationError extends Error {
   }
 }
 
-type ProjectedExtent = { minX: number; minY: number; maxX: number; maxY: number };
+export type ProjectedExtent = { minX: number; minY: number; maxX: number; maxY: number };
+export type FlightThumbnailViewport = {
+  min: { latitude: number; longitude: number };
+  max: { latitude: number; longitude: number };
+  minMercatorX: number;
+  minMercatorY: number;
+  maxMercatorX: number;
+  maxMercatorY: number;
+};
 
-function project(latitude: number, longitude: number): { x: number; y: number } {
+export function projectEpsg6933(latitude: number, longitude: number): { x: number; y: number } {
   const latitudeRadians = (latitude * Math.PI) / 180;
   const longitudeRadians = (longitude * Math.PI) / 180;
   return {
     x: AUTHALIC_RADIUS_METERS * longitudeRadians * COSINE_30_DEGREES,
-    y: AUTHALIC_RADIUS_METERS * Math.sin(latitudeRadians),
+    y: (AUTHALIC_RADIUS_METERS * Math.sin(latitudeRadians)) / COSINE_30_DEGREES,
   };
 }
 
-function unproject(x: number, y: number): { latitude: number; longitude: number } {
+export function unprojectEpsg6933(x: number, y: number): { latitude: number; longitude: number } {
   return {
-    latitude: (Math.asin(y / AUTHALIC_RADIUS_METERS) * 180) / Math.PI,
+    latitude: (Math.asin((y * COSINE_30_DEGREES) / AUTHALIC_RADIUS_METERS) * 180) / Math.PI,
     longitude: ((x / (AUTHALIC_RADIUS_METERS * COSINE_30_DEGREES)) * 180) / Math.PI,
+  };
+}
+
+function webMercator(latitude: number, longitude: number): { x: number; y: number } {
+  const clampedLatitude = Math.max(-WEB_MERCATOR_MAX_LATITUDE, Math.min(WEB_MERCATOR_MAX_LATITUDE, latitude));
+  const latitudeRadians = (clampedLatitude * Math.PI) / 180;
+  const longitudeRadians = (longitude * Math.PI) / 180;
+  return {
+    x: WEB_MERCATOR_RADIUS_METERS * longitudeRadians,
+    y: WEB_MERCATOR_RADIUS_METERS * Math.log(Math.tan(Math.PI / 4 + latitudeRadians / 2)),
+  };
+}
+
+function unprojectWebMercator(x: number, y: number): { latitude: number; longitude: number } {
+  return {
+    latitude: (Math.atan(Math.sinh(y / WEB_MERCATOR_RADIUS_METERS)) * 180) / Math.PI,
+    longitude: ((x / WEB_MERCATOR_RADIUS_METERS) * 180) / Math.PI,
   };
 }
 
@@ -93,10 +121,47 @@ export function computeFlightThumbnailExtent(
   if (!Number.isFinite(cellSize) || cellSize <= 0) throw new RangeError('Thumbnail cell size must be positive.');
   const projected = cellExtent(cells, cellSize);
   return {
-    min: unproject(projected.minX, projected.minY),
-    max: unproject(projected.maxX, projected.maxY),
+    min: unprojectEpsg6933(projected.minX, projected.minY),
+    max: unprojectEpsg6933(projected.maxX, projected.maxY),
     projected,
   };
+}
+
+function viewportFromProjected(extent: ProjectedExtent, width: number, height: number): FlightThumbnailViewport {
+  if (!Number.isFinite(width) || width <= 0 || !Number.isFinite(height) || height <= 0) {
+    throw new RangeError('Thumbnail viewport dimensions must be positive.');
+  }
+  const corners = [
+    unprojectEpsg6933(extent.minX, extent.minY),
+    unprojectEpsg6933(extent.maxX, extent.maxY),
+  ].map((coordinate) => webMercator(coordinate.latitude, coordinate.longitude));
+  const centerX = (corners[0]!.x + corners[1]!.x) / 2;
+  const centerY = (corners[0]!.y + corners[1]!.y) / 2;
+  let mercatorWidth = Math.abs(corners[1]!.x - corners[0]!.x);
+  let mercatorHeight = Math.abs(corners[1]!.y - corners[0]!.y);
+  const aspect = width / height;
+  if (mercatorWidth / mercatorHeight < aspect) mercatorWidth = mercatorHeight * aspect;
+  else mercatorHeight = mercatorWidth / aspect;
+  const minMercatorX = centerX - mercatorWidth / 2;
+  const maxMercatorX = centerX + mercatorWidth / 2;
+  const minMercatorY = centerY - mercatorHeight / 2;
+  const maxMercatorY = centerY + mercatorHeight / 2;
+  return {
+    min: unprojectWebMercator(minMercatorX, minMercatorY),
+    max: unprojectWebMercator(maxMercatorX, maxMercatorY),
+    minMercatorX,
+    minMercatorY,
+    maxMercatorX,
+    maxMercatorY,
+  };
+}
+
+export function computeFlightThumbnailViewport(
+  extent: ReturnType<typeof computeFlightThumbnailExtent>,
+  width: number,
+  height: number,
+): FlightThumbnailViewport {
+  return viewportFromProjected(extent.projected, width, height);
 }
 
 export function buildFlightThumbnailStaticMapUrl(input: {
@@ -105,7 +170,7 @@ export function buildFlightThumbnailStaticMapUrl(input: {
   height: number;
   mapTilerApiKey: string;
 }): string {
-  const { min, max } = input.extent;
+  const { min, max } = computeFlightThumbnailViewport(input.extent, input.width, input.height);
   const bounds = [min.longitude, min.latitude, max.longitude, max.latitude].map((value) => value.toFixed(6)).join(',');
   return `${STATIC_MAP_ORIGIN}/maps/${MAP_ID}/static/${bounds}/${input.width}x${input.height}.png?key=${encodeURIComponent(input.mapTilerApiKey)}`;
 }
@@ -115,14 +180,14 @@ function cellKey(cell: ThumbnailCell): string {
 }
 
 function cellForPoint(point: ThumbnailTrackPoint, cellSize: number): ThumbnailCell {
-  const projected = project(point.latitude, point.longitude);
+  const projected = projectEpsg6933(point.latitude, point.longitude);
   return { x: Math.floor(projected.x / cellSize), y: Math.floor(projected.y / cellSize) };
 }
 
 function markerCell(point: ThumbnailTrackPoint, directCells: readonly ThumbnailCell[], cellSize: number): ThumbnailCell {
   const candidate = cellForPoint(point, cellSize);
   if (directCells.some((cell) => cell.x === candidate.x && cell.y === candidate.y)) return candidate;
-  const projected = project(point.latitude, point.longitude);
+  const projected = projectEpsg6933(point.latitude, point.longitude);
   let nearest = directCells[0];
   let nearestDistance = Number.POSITIVE_INFINITY;
   for (const cell of directCells) {
@@ -138,20 +203,23 @@ function markerCell(point: ThumbnailTrackPoint, directCells: readonly ThumbnailC
   return nearest;
 }
 
-function pixelForProjected(point: { x: number; y: number }, extent: ProjectedExtent, width: number, height: number): { x: number; y: number } {
+function pixelForMercator(point: { x: number; y: number }, viewport: FlightThumbnailViewport, width: number, height: number): { x: number; y: number } {
   return {
-    x: ((point.x - extent.minX) / (extent.maxX - extent.minX)) * width,
-    y: ((extent.maxY - point.y) / (extent.maxY - extent.minY)) * height,
+    x: ((point.x - viewport.minMercatorX) / (viewport.maxMercatorX - viewport.minMercatorX)) * width,
+    y: ((viewport.maxMercatorY - point.y) / (viewport.maxMercatorY - viewport.minMercatorY)) * height,
   };
 }
 
-function cellPolygon(cell: ThumbnailCell, extent: ProjectedExtent, cellSize: number, width: number, height: number): string {
+function cellPolygon(cell: ThumbnailCell, viewport: FlightThumbnailViewport, cellSize: number, width: number, height: number): string {
   const corners = [
     { x: cell.x * cellSize, y: cell.y * cellSize },
     { x: (cell.x + 1) * cellSize, y: cell.y * cellSize },
     { x: (cell.x + 1) * cellSize, y: (cell.y + 1) * cellSize },
     { x: cell.x * cellSize, y: (cell.y + 1) * cellSize },
-  ].map((corner) => pixelForProjected(corner, extent, width, height));
+  ].map((corner) => {
+    const coordinate = unprojectEpsg6933(corner.x, corner.y);
+    return pixelForMercator(webMercator(coordinate.latitude, coordinate.longitude), viewport, width, height);
+  });
   return corners.map((corner) => `${corner.x.toFixed(2)},${corner.y.toFixed(2)}`).join(' ');
 }
 
@@ -161,10 +229,12 @@ export function buildFlightThumbnailOverlaySvg(input: {
   startCell: ThumbnailCell;
   endCell: ThumbnailCell;
   extent: ProjectedExtent;
+  viewport?: FlightThumbnailViewport;
   cellSize: number;
   width: number;
   height: number;
 }): string {
+  const viewport = input.viewport ?? viewportFromProjected(input.extent, input.width, input.height);
   const direct = new Map(input.directCells.map((cell) => [cellKey(cell), cell]));
   const enclosed = input.enclosedCells.filter((cell) => !direct.has(cellKey(cell)));
   const sameCell = cellKey(input.startCell) === cellKey(input.endCell);
@@ -172,11 +242,12 @@ export function buildFlightThumbnailOverlaySvg(input: {
     ? '<pattern id="start-end-stripes" patternUnits="userSpaceOnUse" width="10" height="10" patternTransform="rotate(45)"><rect width="10" height="10" fill="#d71920"/><rect width="5" height="10" fill="#24a148"/></pattern>'
     : '';
   const cells = [
-    ...enclosed.map((cell) => `<polygon points="${cellPolygon(cell, input.extent, input.cellSize, input.width, input.height)}" fill="#d71920" fill-opacity="0.35" stroke="#7f1d1d" stroke-opacity="0.6" stroke-width="1"/>`),
-    ...[...direct.values()].map((cell) => `<polygon points="${cellPolygon(cell, input.extent, input.cellSize, input.width, input.height)}" fill="#d71920" fill-opacity="0.85" stroke="#7f1d1d" stroke-opacity="0.7" stroke-width="1"/>`),
+    ...enclosed.map((cell) => `<polygon points="${cellPolygon(cell, viewport, input.cellSize, input.width, input.height)}" fill="#d71920" fill-opacity="0.35" stroke="#7f1d1d" stroke-opacity="0.6" stroke-width="1"/>`),
+    ...[...direct.values()].map((cell) => `<polygon points="${cellPolygon(cell, viewport, input.cellSize, input.width, input.height)}" fill="#d71920" fill-opacity="0.85" stroke="#7f1d1d" stroke-opacity="0.7" stroke-width="1"/>`),
   ].join('');
-  const marker = `<polygon points="${cellPolygon(input.startCell, input.extent, input.cellSize, input.width, input.height)}" fill="${sameCell ? 'url(#start-end-stripes)' : '#24a148'}" stroke="#173b1e" stroke-width="1.5"/><polygon points="${cellPolygon(input.endCell, input.extent, input.cellSize, input.width, input.height)}" fill="${sameCell ? 'url(#start-end-stripes)' : '#d71920'}" stroke="#641218" stroke-width="1.5"/>`;
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${input.width}" height="${input.height}" viewBox="0 0 ${input.width} ${input.height}"><defs>${markerPattern}</defs>${cells}${marker}</svg>`;
+  const marker = `<polygon points="${cellPolygon(input.startCell, viewport, input.cellSize, input.width, input.height)}" fill="${sameCell ? 'url(#start-end-stripes)' : '#24a148'}" stroke="#173b1e" stroke-width="1.5"/><polygon points="${cellPolygon(input.endCell, viewport, input.cellSize, input.width, input.height)}" fill="${sameCell ? 'url(#start-end-stripes)' : '#d71920'}" stroke="#641218" stroke-width="1.5"/>`;
+  const safeHeight = Math.max(0, input.height - ATTRIBUTION_SAFE_BOTTOM_PX);
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${input.width}" height="${input.height}" viewBox="0 0 ${input.width} ${input.height}"><defs>${markerPattern}<clipPath id="attribution-safe-area"><rect x="0" y="0" width="${input.width}" height="${safeHeight}"/></clipPath></defs><g clip-path="url(#attribution-safe-area)">${cells}${marker}</g></svg>`;
 }
 
 async function defaultFetchImage(url: string): Promise<Uint8Array> {
@@ -194,6 +265,10 @@ export function createFlightThumbnailService(options: {
   fetchImage?: (url: string) => Promise<Uint8Array>;
   putObject?: FlightThumbnailPutObject;
 }): FlightThumbnailService {
+  if (!options.mapTilerApiKey.trim()) throw new RangeError('MapTiler API key is required.');
+  if (!options.bucketName.trim()) throw new RangeError('Thumbnail bucket name is required.');
+  if (!options.bucketFolder.trim()) throw new RangeError('Thumbnail bucket folder is required.');
+  if (!Number.isFinite(options.cellSize) || options.cellSize <= 0) throw new RangeError('Thumbnail cell size must be positive.');
   const fetchImage = options.fetchImage ?? defaultFetchImage;
   const putObject: FlightThumbnailPutObject = options.putObject ?? (async (input) => {
     if (!options.s3Client) throw new FlightThumbnailGenerationError('Thumbnail object storage is not configured.');
@@ -208,6 +283,7 @@ export function createFlightThumbnailService(options: {
 
   async function render(input: FlightThumbnailInput, variant: ThumbnailVariant, extent: ReturnType<typeof computeFlightThumbnailExtent>, startCell: ThumbnailCell, endCell: ThumbnailCell): Promise<Uint8Array> {
     const [width, height] = variant.split('x').map(Number) as [number, number];
+    const viewport = computeFlightThumbnailViewport(extent, width, height);
     const url = buildFlightThumbnailStaticMapUrl({ extent, width, height, mapTilerApiKey: options.mapTilerApiKey });
     let baseImage: Uint8Array;
     try {
@@ -221,6 +297,7 @@ export function createFlightThumbnailService(options: {
       startCell,
       endCell,
       extent: extent.projected,
+      viewport,
       cellSize: options.cellSize,
       width,
       height,
@@ -234,6 +311,7 @@ export function createFlightThumbnailService(options: {
 
   return {
     async generate(input) {
+      if (!input.flightId.trim() || !input.userId.trim()) throw new FlightThumbnailGenerationError('Flight and user identifiers are required for a thumbnail.');
       const directCells = [...new Map(input.directCells.map((cell) => [cellKey(cell), cell])).values()];
       const enclosedCells = [...new Map(input.enclosedCells.map((cell) => [cellKey(cell), cell])).values()];
       if (!directCells.length && !enclosedCells.length) throw new FlightThumbnailGenerationError('Cannot generate a flight thumbnail without claimed cells.');
@@ -247,8 +325,8 @@ export function createFlightThumbnailService(options: {
       ]);
       const keys = flightThumbnailKeys(options.bucketFolder, input.userId, input.flightId);
       try {
-        await putObject({ key: keys.wideKey, body: wide, contentType: 'image/webp', cacheControl: 'public, max-age=31536000, immutable' });
-        await putObject({ key: keys.squareKey, body: square, contentType: 'image/webp', cacheControl: 'public, max-age=31536000, immutable' });
+        await putObject({ key: keys.wideKey, body: wide, contentType: 'image/webp', cacheControl: 'private, max-age=86400' });
+        await putObject({ key: keys.squareKey, body: square, contentType: 'image/webp', cacheControl: 'private, max-age=86400' });
       } catch (error) {
         throw new FlightThumbnailGenerationError('Unable to store the generated flight thumbnails.', { cause: error });
       }

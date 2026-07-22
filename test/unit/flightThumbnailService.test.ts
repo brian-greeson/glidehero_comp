@@ -4,8 +4,11 @@ import {
   buildFlightThumbnailOverlaySvg,
   buildFlightThumbnailStaticMapUrl,
   computeFlightThumbnailExtent,
+  computeFlightThumbnailViewport,
   createFlightThumbnailService,
   flightThumbnailKeys,
+  projectEpsg6933,
+  unprojectEpsg6933,
   type FlightThumbnailPutObject,
 } from '../../src/services/flightThumbnailService.js';
 
@@ -23,6 +26,27 @@ describe('flight thumbnail service', () => {
       .toMatch(/^https:\/\/api\.maptiler\.com\/maps\/outdoor-v4\/static\/-?[\d.]+,-?[\d.]+,-?[\d.]+,-?[\d.]+\/800x450\.png\?key=secret-key$/);
   });
 
+  it('uses the EPSG:6933 true-scale projection and round-trips coordinates', () => {
+    const projected = projectEpsg6933(30, 10);
+    const radius = 6_371_007.181;
+    const k0 = Math.sqrt(3) / 2;
+    expect(projected.x).toBeCloseTo(radius * k0 * (10 * Math.PI / 180), 6);
+    expect(projected.y).toBeCloseTo(radius * Math.sin(Math.PI / 6) / k0, 6);
+    const coordinate = unprojectEpsg6933(projected.x, projected.y);
+    expect(coordinate.latitude).toBeCloseTo(30, 10);
+    expect(coordinate.longitude).toBeCloseTo(10, 10);
+  });
+
+  it('fits each output to a Web Mercator viewport with its own aspect bounds', () => {
+    const extent = computeFlightThumbnailExtent([{ x: 0, y: 0 }, { x: 0, y: 8 }], 500);
+    const wide = computeFlightThumbnailViewport(extent, 800, 450);
+    const square = computeFlightThumbnailViewport(extent, 450, 450);
+    expect((wide.maxMercatorX - wide.minMercatorX) / (wide.maxMercatorY - wide.minMercatorY)).toBeCloseTo(16 / 9, 10);
+    expect((square.maxMercatorX - square.minMercatorX) / (square.maxMercatorY - square.minMercatorY)).toBeCloseTo(1, 10);
+    expect(buildFlightThumbnailStaticMapUrl({ extent, width: 800, height: 450, mapTilerApiKey: 'key' }))
+      .not.toBe(buildFlightThumbnailStaticMapUrl({ extent, width: 450, height: 450, mapTilerApiKey: 'key' }));
+  });
+
   it('renders direct, enclosed, and same-cell striped marker overlays', () => {
     const extent = computeFlightThumbnailExtent([{ x: 0, y: 0 }, { x: 1, y: 0 }], 500);
     const svg = buildFlightThumbnailOverlaySvg({
@@ -31,6 +55,7 @@ describe('flight thumbnail service', () => {
       startCell: { x: 0, y: 0 },
       endCell: { x: 0, y: 0 },
       extent: extent.projected,
+      viewport: computeFlightThumbnailViewport(extent, 450, 450),
       cellSize: 500,
       width: 450,
       height: 450,
@@ -38,6 +63,8 @@ describe('flight thumbnail service', () => {
     expect(svg).toContain('fill-opacity="0.85"');
     expect(svg).toContain('fill-opacity="0.35"');
     expect(svg).toContain('start-end-stripes');
+    expect(svg).toContain('clipPath');
+    expect(svg).toContain('clip-path="url(#attribution-safe-area)"');
   });
 
   it('fetches, composites, and stores both WebP variants without exposing delivery details', async () => {
@@ -67,9 +94,16 @@ describe('flight thumbnail service', () => {
     expect(putObject).toHaveBeenCalledTimes(2);
     expect(putObject.mock.calls.map(([value]) => value.key)).toEqual([result.wideKey, result.squareKey]);
     expect(putObject.mock.calls.every(([value]) => value.contentType === 'image/webp')).toBe(true);
+    expect(putObject.mock.calls.every(([value]) => value.cacheControl === 'private, max-age=86400')).toBe(true);
     for (const [value] of putObject.mock.calls) {
       const metadata = await sharp(value.body).metadata();
       expect(metadata.format).toBe('webp');
     }
+  });
+
+  it('rejects incomplete configuration at construction', () => {
+    expect(() => createFlightThumbnailService({ mapTilerApiKey: ' ', bucketName: 'flights', bucketFolder: 'folder', cellSize: 500 })).toThrow('MapTiler API key is required.');
+    expect(() => createFlightThumbnailService({ mapTilerApiKey: 'key', bucketName: ' ', bucketFolder: 'folder', cellSize: 500 })).toThrow('Thumbnail bucket name is required.');
+    expect(() => createFlightThumbnailService({ mapTilerApiKey: 'key', bucketName: 'flights', bucketFolder: 'folder', cellSize: 0 })).toThrow('Thumbnail cell size must be positive.');
   });
 });
