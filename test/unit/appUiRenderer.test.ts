@@ -38,6 +38,11 @@ describe('refreshed app UI renderer', () => {
     expect(activityCss).toContain('.activity-card__badges .achievement-badge__label { font-size: .62rem; }');
   });
 
+  it('keeps the MapLibre canvas sized after MapLibre applies its runtime class', () => {
+    const mapCss = readFileSync('public/styles/app-ui/map.css', 'utf8');
+    expect(mapCss).toContain('.map-canvas { position: absolute; inset: 0; width: 100%; height: 100%; }');
+  });
+
   it('renders every isolated page with the shared four-destination shell', async () => {
     for (const page of pages) {
       const html = await render(appPageFixture(page));

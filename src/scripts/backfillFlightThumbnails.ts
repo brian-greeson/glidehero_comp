@@ -7,7 +7,10 @@ import { createDatabase } from '../db/client.js';
 import { flights } from '../db/schema.js';
 import { parseConfig } from '../config.js';
 import { createBucketClient } from '../resources/bucketClient.js';
-import { createFlightThumbnailService, flightThumbnailKeys } from '../services/flightThumbnailService.js';
+import {
+  createFlightThumbnailService,
+  flightThumbnailKeys,
+} from '../services/flightThumbnailService.js';
 import { createFlightThumbnailLifecycleService } from '../services/flightThumbnailLifecycleService.js';
 
 export const DEFAULT_BATCH_SIZE = 10;
@@ -51,7 +54,10 @@ export type FlightThumbnailBackfillOptions = {
   s3Client?: Pick<S3, 'send'>;
   logger?: Logger;
   /** Test seams. Production uses the database, S3 HEAD, and lifecycle service. */
-  listFlights?: (cursor: string | undefined, limit: number) => Promise<FlightThumbnailBackfillFlight[]>;
+  listFlights?: (
+    cursor: string | undefined,
+    limit: number,
+  ) => Promise<FlightThumbnailBackfillFlight[]>;
   headObject?: (key: string) => Promise<'present' | 'missing'>;
   generate?: (flightId: string) => Promise<void>;
 };
@@ -59,7 +65,8 @@ export type FlightThumbnailBackfillOptions = {
 function parseBatchSize(value: string): number {
   if (!/^\d+$/.test(value)) throw new Error('Batch size must be a positive integer.');
   const batchSize = Number(value);
-  if (!Number.isSafeInteger(batchSize) || batchSize <= 0) throw new Error('Batch size must be a positive integer.');
+  if (!Number.isSafeInteger(batchSize) || batchSize <= 0)
+    throw new Error('Batch size must be a positive integer.');
   return batchSize;
 }
 
@@ -120,8 +127,17 @@ export function selectEligibleFlightBatch(
 
 function isNotFound(error: unknown): boolean {
   if (!error || typeof error !== 'object') return false;
-  const candidate = error as { name?: string; Code?: string; $metadata?: { httpStatusCode?: number } };
-  return candidate.name === 'NotFound' || candidate.name === 'NoSuchKey' || candidate.Code === 'NoSuchKey' || candidate.$metadata?.httpStatusCode === 404;
+  const candidate = error as {
+    name?: string;
+    Code?: string;
+    $metadata?: { httpStatusCode?: number };
+  };
+  return (
+    candidate.name === 'NotFound' ||
+    candidate.name === 'NoSuchKey' ||
+    candidate.Code === 'NoSuchKey' ||
+    candidate.$metadata?.httpStatusCode === 404
+  );
 }
 
 async function inspectThumbnailPair(
@@ -148,19 +164,31 @@ export async function runFlightThumbnailBackfill(
   options: FlightThumbnailBackfillOptions,
 ): Promise<FlightThumbnailBackfillSummary> {
   const batchSize = options.batchSize ?? DEFAULT_BATCH_SIZE;
-  if (!Number.isSafeInteger(batchSize) || batchSize <= 0) throw new Error('Batch size must be a positive integer.');
+  if (!Number.isSafeInteger(batchSize) || batchSize <= 0)
+    throw new Error('Batch size must be a positive integer.');
   const logger = options.logger ?? console;
   const bucketFolder = options.bucketFolder ?? '';
-  const listFlights = options.listFlights ?? ((cursor, limit) => selectEligibleFlightBatch(database, cursor, limit));
-  if (!options.force && !options.headObject) throw new Error('headObject is required for missing-only backfill.');
+  const listFlights =
+    options.listFlights ?? ((cursor, limit) => selectEligibleFlightBatch(database, cursor, limit));
+  if (!options.force && !options.headObject)
+    throw new Error('headObject is required for missing-only backfill.');
   if (options.apply && !options.generate) throw new Error('generate is required for apply mode.');
 
   const summary: FlightThumbnailBackfillSummary = {
-    mode: options.apply ? 'apply' : 'dry-run', batchSize, inspected: 0, wouldGenerate: 0, generated: 0, skippedPresent: 0, failed: 0,
+    mode: options.apply ? 'apply' : 'dry-run',
+    batchSize,
+    inspected: 0,
+    wouldGenerate: 0,
+    generated: 0,
+    skippedPresent: 0,
+    failed: 0,
   };
   let cursor: string | undefined;
+  let batchNum = 0;
   while (true) {
     const batch = await listFlights(cursor, batchSize);
+    batchNum++;
+    logger.log(`Processing batch ${batchNum}`);
     if (!batch.length) break;
     for (const flight of batch) {
       summary.inspected += 1;
@@ -193,7 +221,10 @@ export async function runFlightThumbnailBackfill(
   return summary;
 }
 
-export function printFlightThumbnailBackfillSummary(summary: FlightThumbnailBackfillSummary, logger: Logger = console): void {
+export function printFlightThumbnailBackfillSummary(
+  summary: FlightThumbnailBackfillSummary,
+  logger: Logger = console,
+): void {
   logger.log(`Mode: ${summary.mode}`);
   logger.log(`Batch size: ${summary.batchSize}`);
   logger.log(`Inspected: ${summary.inspected}`);
@@ -203,7 +234,11 @@ export function printFlightThumbnailBackfillSummary(summary: FlightThumbnailBack
   logger.log(`Failed: ${summary.failed}`);
 }
 
-async function headObjectOrMissing(s3Client: Pick<S3, 'send'>, bucketName: string, key: string): Promise<'present' | 'missing'> {
+async function headObjectOrMissing(
+  s3Client: Pick<S3, 'send'>,
+  bucketName: string,
+  key: string,
+): Promise<'present' | 'missing'> {
   try {
     await s3Client.send(new HeadObjectCommand({ Bucket: bucketName, Key: key }));
     return 'present';
