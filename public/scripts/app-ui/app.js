@@ -73,12 +73,24 @@ export function initializeProfileDisclosures(documentRef = document) {
   }
 }
 
+export function initializeFlightThumbnailFallback(documentRef = document) {
+  const handleError = (event) => {
+    const image = event.target?.closest?.('[data-flight-thumbnail]');
+    if (!image || image.dataset.thumbnailFallback === 'true') return;
+    image.dataset.thumbnailFallback = 'true';
+    image.parentElement?.querySelector?.('source')?.removeAttribute('srcset');
+    image.src = '/flight-thumbnail-fallback.webp';
+  };
+  documentRef.addEventListener?.('error', handleError, true);
+}
+
 export function initializeAppUi(documentRef = document) {
   initializeAccountMenu(documentRef);
   initializeFlightUploads(documentRef, globalThis.window);
   initializeSegmentedControls(documentRef);
   initializeActivityFilters(documentRef);
   initializeProfileDisclosures(documentRef);
+  initializeFlightThumbnailFallback(documentRef);
 }
 
 if (typeof document !== 'undefined') initializeAppUi(document);

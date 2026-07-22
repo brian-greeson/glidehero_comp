@@ -32,6 +32,7 @@ import { createFollowService } from './services/followService.js';
 import { createActivityService } from './services/activityService.js';
 import { createFlightThumbnailService } from './services/flightThumbnailService.js';
 import { createFlightThumbnailLifecycleService } from './services/flightThumbnailLifecycleService.js';
+import { createFlightThumbnailDeliveryService } from './services/flightThumbnailDeliveryService.js';
 
 const config = parseConfig(process.env);
 const { db } = createDatabase(config.databaseUrl);
@@ -47,6 +48,11 @@ const thumbnails = createFlightThumbnailService({
 });
 const thumbnailLifecycle = createFlightThumbnailLifecycleService(db, thumbnails, {
   cellSize: config.gridClaimCellSize,
+  s3Client,
+  bucketName: config.bucket.bucketName,
+  bucketFolder: config.bucket.bucketFolder,
+});
+const thumbnailDelivery = createFlightThumbnailDeliveryService({
   s3Client,
   bucketName: config.bucket.bucketName,
   bucketFolder: config.bucket.bucketFolder,
@@ -132,6 +138,7 @@ const webMiddleware = [
     renderAdminPage: createAdminPageRenderer(),
     territoryTileSettings,
     renderAdminMapSettingsPage: createAdminMapSettingsPageRenderer(),
+    thumbnailDelivery,
   }),
 ];
 const server = createServer(createApp({ webMiddleware }));

@@ -36,6 +36,7 @@ import type { SessionCookie } from './sessionCookie.js';
 import { PilotNotFoundError, type FollowService } from '../services/followService.js';
 import type { ActivityService } from '../services/activityService.js';
 import { ActivityCursorError, ActivityNotFoundError, SelfThermalError } from '../services/activityService.js';
+import type { FlightThumbnailDeliveryService } from '../services/flightThumbnailDeliveryService.js';
 
 const email = z.string().trim().toLowerCase().pipe(z.email());
 const password = z.string().min(3).max(128);
@@ -154,6 +155,7 @@ export function createWebRouter(dependencies: {
   renderAdminPage?: AdminPageRenderer;
   territoryTileSettings?: TerritoryTileSettingsService;
   renderAdminMapSettingsPage?: AdminMapSettingsPageRenderer;
+  thumbnailDelivery?: FlightThumbnailDeliveryService;
 }) {
   const router = Router();
   const territoryTileSettings = dependencies.territoryTileSettings ?? createTerritoryTileSettingsService();
@@ -674,11 +676,14 @@ export function createWebRouter(dependencies: {
         next();
         return;
       }
+      const thumbnailUrls = dependencies.thumbnailDelivery
+        ? await dependencies.thumbnailDelivery.signMany(profile.recentFlights.map((flight) => ({ userId: profile.userId, flightId: flight.flightId })))
+        : undefined;
       const shell = appShell('profile', currentUser);
       await renderApp(res, dependencies.renderAppPage, 200, {
         ...shell,
         page: 'profile',
-        ...pilotProfileToView(profile, { isCurrent: true, isFollowed: false, currentPath: '/profile' }),
+        ...pilotProfileToView(profile, { isCurrent: true, isFollowed: false, currentPath: '/profile', thumbnailUrls }),
       });
     } catch (error) {
       next(error);
@@ -725,11 +730,14 @@ export function createWebRouter(dependencies: {
       const profileIsFollowed = profileIsCurrent
         ? false
         : dependencies.follow ? await dependencies.follow.isFollowing({ followerUserId: currentUser.userId, followedUserId: parsedUserId.data }) : false;
+      const thumbnailUrls = dependencies.thumbnailDelivery
+        ? await dependencies.thumbnailDelivery.signMany(profile.recentFlights.map((flight) => ({ userId: profile.userId, flightId: flight.flightId })))
+        : undefined;
       const shell = appShell('profile', currentUser);
       await renderApp(res, dependencies.renderAppPage, 200, {
         ...shell,
         page: 'profile',
-        ...pilotProfileToView(profile, { isCurrent: profileIsCurrent, isFollowed: profileIsFollowed, currentPath: `/pilots/${parsedUserId.data}` }),
+        ...pilotProfileToView(profile, { isCurrent: profileIsCurrent, isFollowed: profileIsFollowed, currentPath: `/pilots/${parsedUserId.data}`, thumbnailUrls }),
       });
     } catch (error) {
       next(error);
@@ -773,9 +781,14 @@ export function createWebRouter(dependencies: {
       const activityLoadMoreEndpoint = activityFeed.nextCursor
         ? `/activity/feed?before=${encodeURIComponent(activityFeed.nextCursor)}${activityQuery ? `&${activityQuery}` : ''}`
         : '';
+      const thumbnailUrls = dependencies.thumbnailDelivery
+        ? await dependencies.thumbnailDelivery.signMany(activityFeed.items
+          .filter((item) => item.activityType === 'flight' && item.sourceFlightId)
+          .map((item) => ({ userId: item.actorUserId, flightId: item.sourceFlightId as string })))
+        : undefined;
       if (fragment) {
         res.status(200).type('html').send(await dependencies.renderAppActivityFeed({
-          events: activityFeedToViews(activityFeed.items), activityLoadMoreHref, activityLoadMoreEndpoint,
+          events: activityFeedToViews(activityFeed.items, { thumbnailUrls }), activityLoadMoreHref, activityLoadMoreEndpoint,
         }));
         return;
       }
@@ -784,7 +797,7 @@ export function createWebRouter(dependencies: {
         ...shell,
         page: 'activity',
         metrics: [],
-        events: activityFeedToViews(activityFeed.items),
+        events: activityFeedToViews(activityFeed.items, { thumbnailUrls }),
         following: [],
         weekly: [],
         activitySearch: query,

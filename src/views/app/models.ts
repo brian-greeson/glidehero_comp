@@ -59,6 +59,7 @@ export type FlightView = {
   cells: string;
   achievements?: string;
   mapTone: 'orange' | 'blue' | 'cyan' | 'purple';
+  thumbnail?: { wideUrl: string; squareUrl: string };
 };
 
 export type AppShellModel = {

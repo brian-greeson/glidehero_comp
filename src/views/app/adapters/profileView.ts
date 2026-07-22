@@ -1,5 +1,6 @@
 import type { PilotProfileSummary } from '../../../services/profileService.js';
 import { initialsForDisplayName } from './shellModel.js';
+import type { FlightThumbnailUrls } from '../../../services/flightThumbnailDeliveryService.js';
 
 const avatarColors = ['#1769aa', '#ff6b24', '#17b7ca', '#43a52c', '#7441b6'] as const;
 
@@ -8,6 +9,7 @@ export type ProfileViewOptions = {
   isCurrent?: boolean;
   isFollowed?: boolean;
   currentPath?: string;
+  thumbnailUrls?: ReadonlyMap<string, FlightThumbnailUrls>;
 };
 
 export type ProfileView = ReturnType<typeof pilotProfileToView>;
@@ -71,6 +73,7 @@ export function pilotProfileToView(summary: PilotProfileSummary, options: Profil
     distance: flight.distance || '—',
     cells: formatCount(flight.totalCellCount),
     mapTone: (['orange', 'blue', 'cyan', 'purple'] as const)[index % 4]!,
+    thumbnail: options.thumbnailUrls?.get(flight.flightId),
     isInitiallyVisible: index < 3,
   }));
 

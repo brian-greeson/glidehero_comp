@@ -9,8 +9,7 @@
       {{ if event.achievements.length }}<div class="activity-card__badges">{{ for achievement of event.achievements }}{{ include "app/components/achievementBadge.vto" { achievement } }}{{ /for }}</div>{{ /if }}
       {{ if event.progress }}<div class="activity-card__challenge"><span>Completed</span>{{ include "app/components/progressBar.vto" { progress: event.progress, label: event.title } }}</div>{{ /if }}
     </div>
-    {{ if preview && event.flight }}<div class="activity-card__flight-summary"><strong>{{ event.flight.date }}</strong><span>{{ event.flight.distance }} · {{ event.flight.cells }} cells</span></div>{{ /if }}
-    {{ if typeof event.flightDate !== 'undefined' && event.flightDate }}<dl class="activity-card__flight-summary"><div><dt>Flight date</dt><dd>{{ event.flightDate }}</dd></div><div><dt>Duration</dt><dd>{{ event.duration }}</dd></div><div><dt>Distance</dt><dd>{{ event.distance }}</dd></div><div><dt>Cells</dt><dd>{{ if event.totalCellCount === 0 }}0{{ else }}{{ event.totalCellCount }}{{ /if }}</dd></div></dl>{{ /if }}
+    {{ if event.kind === "flight" && event.flight }}<div class="activity-card__flight-media">{{ include "app/components/flightMapPreview.vto" { flight: event.flight } }}{{ if preview }}<div class="activity-card__flight-summary"><strong>{{ event.flight.date }}</strong><span>{{ event.flight.distance }} · {{ event.flight.cells }} cells</span></div>{{ else }}<dl class="activity-card__flight-summary"><div><dt>Flight date</dt><dd>{{ event.flightDate }}</dd></div><div><dt>Duration</dt><dd>{{ event.duration }}</dd></div><div><dt>Distance</dt><dd>{{ event.distance }}</dd></div><div><dt>Cells</dt><dd>{{ if event.totalCellCount === 0 }}0{{ else }}{{ event.totalCellCount }}{{ /if }}</dd></div></dl>{{ /if }}</div>{{ /if }}
   </div>
   <footer>
     {{ if typeof event.activityId !== 'undefined' && event.activityId && !event.isOwn }}

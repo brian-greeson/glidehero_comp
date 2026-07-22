@@ -1,6 +1,7 @@
 import type { ActivityFeedItem } from '../../../services/activityService.js';
 import type { PilotSearchResult } from '../../../services/followService.js';
 import type { ActivityPilotResultView } from '../models.js';
+import type { FlightThumbnailUrls } from '../../../services/flightThumbnailDeliveryService.js';
 
 const avatarColors = ['#1769aa', '#ff6b24', '#17b7ca', '#43a52c', '#7441b6'] as const;
 
@@ -43,14 +44,15 @@ function timeAgo(value: Date): string {
  * shape. Keeping this adapter separate lets the preview fixture retain its
  * richer mockup-only fields while production cards stay endpoint-backed.
  */
-export function activityFeedItemToView(item: ActivityFeedItem) {
-  const flight = item.activityType === 'flight' && item.flightDate
+export function activityFeedItemToView(item: ActivityFeedItem, options: { thumbnailUrls?: ReadonlyMap<string, FlightThumbnailUrls> } = {}) {
+  const flight = item.activityType === 'flight' && item.sourceFlightId
     ? {
       id: item.sourceFlightId ?? item.id,
-      date: item.flightDate,
+      date: item.flightDate ?? 'Date unavailable',
       distance: item.distance ?? '—',
       cells: item.totalCellCount === undefined ? '—' : String(item.totalCellCount),
       mapTone: 'cyan' as const,
+      thumbnail: options.thumbnailUrls?.get(item.sourceFlightId),
     }
     : undefined;
   const detail = item.activityType === 'flight'
@@ -97,6 +99,6 @@ export function activityFeedItemToView(item: ActivityFeedItem) {
   };
 }
 
-export function activityFeedToViews(items: readonly ActivityFeedItem[]) {
-  return items.map(activityFeedItemToView);
+export function activityFeedToViews(items: readonly ActivityFeedItem[], options: { thumbnailUrls?: ReadonlyMap<string, FlightThumbnailUrls> } = {}) {
+  return items.map((item) => activityFeedItemToView(item, options));
 }

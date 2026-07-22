@@ -1,7 +1,4 @@
-<div class="flight-map-preview flight-map-preview--{{ flight.mapTone }}" role="img" aria-label="Map preview for {{ flight.arena }}">
-  <svg viewBox="0 0 240 112" preserveAspectRatio="none" aria-hidden="true">
-    <path class="flight-map-preview__terrain" d="M0 86 34 58l26 17 39-44 34 32 31-22 42 35 34-21v57H0Z"/>
-    <path class="flight-map-preview__track" d="M18 88c26-28 44-18 61-47 17-28 37 22 57-1 23-28 37 32 82-12"/>
-    <circle cx="18" cy="88" r="6"/><circle cx="218" cy="28" r="6"/>
-  </svg>
-</div>
+<picture class="flight-thumbnail" data-flight-thumbnail-picture>
+  {{ if typeof flight.thumbnail !== 'undefined' && flight.thumbnail }}<source media="(max-width: 767px)" srcset="{{ flight.thumbnail.squareUrl }}" type="image/webp">{{ /if }}
+  <img data-flight-thumbnail src="{{ if typeof flight.thumbnail !== 'undefined' && flight.thumbnail }}{{ flight.thumbnail.wideUrl }}{{ else }}/flight-thumbnail-fallback.webp{{ /if }}" alt="Flight territory preview" loading="lazy" width="800" height="450">
+</picture>
