@@ -59,6 +59,8 @@ const adminUsers = createAdminUserService(db, {
   s3Client,
   bucketName: config.bucket.bucketName,
   bucketFolder: config.bucket.bucketFolder,
+  arenaLeadership,
+  cellSize: config.gridClaimCellSize,
 });
 const failedFlightCleanup = createFailedFlightCleanupService(db, uploadQueue, {
   s3Client,

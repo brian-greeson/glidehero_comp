@@ -277,11 +277,17 @@ The canonical `arenas` table classifies rows as `launch`, `general`, `state`, or
 `claimable_cell_count` is meaningful and maintained only for General and Launch
 rows. Any legacy value on a State or Country row is ignored and is not
 recalculated. State and Country ownership is exclusive by the claim-cell center,
-while General Arenas may overlap and retain their own coverage counts. The
-application grid size is fixed at 500 meters and is not persisted on claim rows.
+while General Arenas may overlap and retain their own coverage counts. Among
+same-type State or Country Arenas that cover a center, the row with the
+lexically lowest non-empty `external_id` under the `C` collation owns the cell.
+State and Country ownership are evaluated independently, so the same cell may
+belong to one State and one Country as well as any covering General Arenas. The
+database requires a non-empty, type-unique `external_id` for State and Country
+rows. The application grid size is fixed at 500 meters in `AppConfig` and is not
+persisted on claim rows.
 The checked-in Natural Earth country artifact is reduced by
 the documented Release 2 policy to 194 Country Arenas; the Census source
-imports exactly 50 State Arenas; the launch source generates a configured 5x5
+imports exactly 50 State Arenas; the launch source generates a fixed 5x5
 grid for each Launch Arena. `npm run rebuild:arenas` performs the one-time,
 transactional rebuild. Its default is a dry-run; applying requires
 `--apply --confirm-delete-all-arenas` and deletes all existing rows, including
@@ -290,10 +296,35 @@ rerun.
 
 Competition claims remain global and Arena-independent. For Arena reads,
 `MonthlyCoverageService` constructs each claim-cell center as
-`((x + 0.5) * cell_size, (y + 0.5) * cell_size)` in EPSG:6933 and uses
-`ST_Covers(arena.area, center)`. Boundary centers therefore count. Adding or
-editing an Arena immediately changes the view over historical claims without
-flight reprocessing.
+`((x + 0.5) * 500, (y + 0.5) * 500)` in EPSG:6933. General and Launch
+membership uses `ST_Covers(arena.area, center)` directly. State and Country
+membership also excludes a cell when a lexically lower same-type `external_id`
+covers its center. Boundary centers therefore count, but overlapping State or
+Country cells have only one same-type owner. Adding or editing an Arena
+immediately changes the view over historical claims without flight
+reprocessing. Editing a State or Country Arena reconciles leadership for the
+edited row and same-type peers intersecting either its old or new geometry.
+
+Release 3 leadership is a durable projection of each eligible Arena's all-time
+Competition claims, not a separate scoring system. `arena_leadership_states`
+stores the leading and next-rank cell counts and reconciliation cursor;
+`arena_current_leaders` stores every pilot tied at the highest positive count,
+including the claim that most recently put that pilot into the lead;
+`arena_leadership_events` stores internal `took`, `reclaimed`, and `lost`
+transitions. Launch Arenas are ineligible, and no Global state exists because
+Global scoring depends on the current viewport.
+
+After a flight adds cells, `ArenaClaimImpact` finds only eligible Arenas that
+canonically own an affected cell. Chronological additions use an incremental
+leadership update; flight reprocessing, flight deletion, geometry changes, and
+historical corrections use full reconciliation for affected Arenas. Advisory
+transaction locks serialize leadership writes per Arena. Stable event keys and the
+one-row-per-user achievement constraint make retries idempotent. Took-the-Lead
+and Reclaimed-the-Lead achievements use the decisive cell-claim timestamp and
+source flight, are each earned only once, and remain after leadership is lost.
+The transition history remains internal for a future activity system, while
+profiles expose only the live Current Arena Leaderships projection and ordinary
+achievement entries.
 
 Personal, Global competition, and Arena territory are served as authenticated,
 on-demand Mapbox Vector Tiles by `TerritoryTileService`. Each query derives its
@@ -529,7 +560,7 @@ Add a corresponding `package.json` command when a script is intended to be run b
 
 Scripts should validate required inputs and make destructive or one-off behavior explicit.
 
-Release 2 achievement definitions are exhaustive in
+Released achievement definitions are exhaustive in
 `src/domain/achievement/catalog.ts`. Ordinary awards are permanent and
 idempotent. The launch-tag personal-best value is written to
 `achievement_records` together with immutable `achievement_record_events` in
@@ -544,7 +575,7 @@ details.
 Authenticated profile reads also build an ordered, non-persistent "In progress"
 card model. One Arena aggregation calculates Launch Arenas visited, General
 Arenas explored, the best valid General coverage ratio, and State/Country
-Flown-in counts from configured-size Personal cells and completed flight origins.
+Flown-in counts from fixed 500-meter Personal cells and completed flight origins.
 Pure threshold helpers select the next milestone; finished fixed tracks are
 omitted while the recurring Personal Map cell milestone remains available.
 Dashboard breadcrumbs rank the unfinished cards by completion ratio and show

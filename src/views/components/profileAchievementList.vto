@@ -22,7 +22,7 @@
           <div class="profile-achievement-copy">
             <div class="profile-item-meta">
               <span>{{ achievement.typeLabel }}</span>
-              <time>Earned {{ achievement.earnedDate }}</time>
+              <time>Earned {{ if typeof achievement.earnedTimestamp !== 'undefined' }}{{ achievement.earnedTimestamp }}{{ else }}{{ achievement.earnedDate }}{{ /if }}</time>
             </div>
             <h3>{{ achievement.title }}</h3>
             <p>{{ achievement.description }}</p>

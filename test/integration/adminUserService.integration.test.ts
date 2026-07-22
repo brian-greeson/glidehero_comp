@@ -4,6 +4,7 @@ import { eq } from 'drizzle-orm';
 import { createAdminUserService } from '../../src/services/adminUserService.js';
 import { verifyPassword } from '../../src/services/passwordService.js';
 import { resetAndMigrateTestDatabase } from './database.js';
+import { createArenaLeadershipReconciliationService } from '../../src/services/arenaLeadershipReconciliationService.js';
 
 let database: Awaited<ReturnType<typeof resetAndMigrateTestDatabase>>;
 
@@ -34,6 +35,8 @@ function harness(options: { activeJobs?: number; listedKeys?: string[] } = {}) {
       s3Client: { send } as never,
       bucketName: 'flights',
       bucketFolder: 'glidehero',
+      arenaLeadership: createArenaLeadershipReconciliationService(database.db, { cellSize: 500 }),
+      cellSize: 500,
     }),
     uploadQueue,
     deletedKeys,
@@ -126,5 +129,67 @@ describe('adminUserService', () => {
     expect(await database.db.select().from(users)).toHaveLength(1);
     expect(await database.db.select().from(flights)).toEqual([]);
     await expect(service.delete({ actorUserId: actor.id, userId: target.id })).resolves.toBe('completed');
+  });
+
+  it('reconciles affected Arena leadership after the deleted pilot claims cascade', async () => {
+    const actor = await insertAccount('admin@example.com', 'Admin');
+    const target = await insertAccount('leader@example.com', 'Leader');
+    const remaining = await insertAccount('remaining@example.com', 'Remaining');
+    const targetFile = crypto.randomUUID();
+    const remainingFile = crypto.randomUUID();
+    const targetFlight = crypto.randomUUID();
+    const remainingFlight = crypto.randomUUID();
+    const arenaId = crypto.randomUUID();
+    await database.pool.query(
+      `INSERT INTO igc_files (igc_file_id, user_id, original_filename, content_type, byte_size, bucket_key)
+       VALUES ($1::uuid, $3, 'leader.igc', 'text/plain', 1, $1::uuid::text),
+              ($2::uuid, $4, 'remaining.igc', 'text/plain', 1, $2::uuid::text)`,
+      [targetFile, remainingFile, target.id, remaining.id],
+    );
+    await database.pool.query(
+      `INSERT INTO flights (flight_id, user_id, igc_file_id, content_hash, processing_status)
+       VALUES ($1::uuid, $3, $5, $1::uuid::text, 'completed'),
+              ($2::uuid, $4, $6, $2::uuid::text, 'completed')`,
+      [targetFlight, remainingFlight, target.id, remaining.id, targetFile, remainingFile],
+    );
+    await database.pool.query(
+      `INSERT INTO arenas (id, source_id, name, country, country_code, area, arena_type)
+       VALUES ($1, 90001, 'Deletion Arena', 'United States', 'US',
+         ST_GeomFromText('MULTIPOLYGON (((0 0, 1500 0, 1500 1500, 0 1500, 0 0)))', 6933), 'general')`,
+      [arenaId],
+    );
+    await database.pool.query(
+      `INSERT INTO competition_grid_claims
+         (competition_month, x, y, claim_flight, claim_user, claim_timestamp)
+       VALUES
+         ('2026-01-01', 0, 0, $1, $3, '2026-01-01T00:00:00Z'),
+         ('2026-01-01', 1, 0, $1, $3, '2026-01-02T00:00:00Z'),
+         ('2026-01-01', 2, 0, $2, $4, '2026-01-03T00:00:00Z')`,
+      [targetFlight, remainingFlight, target.id, remaining.id],
+    );
+    const leadership = createArenaLeadershipReconciliationService(database.db, { cellSize: 500 });
+    await leadership.reconcile({ arenaIds: [arenaId] });
+
+    const { service } = harness();
+    await expect(service.delete({ actorUserId: actor.id, userId: target.id })).resolves.toBe('completed');
+
+    const projection = await database.pool.query<{
+      user_id: string;
+      cells_claimed: number;
+      leading_cell_count: number;
+      next_rank_cell_count: number;
+    }>(
+      `SELECT leader.user_id, leader.cells_claimed, state.leading_cell_count, state.next_rank_cell_count
+       FROM arena_leadership_states state
+       INNER JOIN arena_current_leaders leader ON leader.arena_id = state.arena_id
+       WHERE state.arena_id = $1`,
+      [arenaId],
+    );
+    expect(projection.rows).toEqual([{
+      user_id: remaining.id,
+      cells_claimed: 1,
+      leading_cell_count: 1,
+      next_rank_cell_count: 0,
+    }]);
   });
 });

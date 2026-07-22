@@ -581,6 +581,12 @@ describe('profileService', () => {
     expect(profile?.achievements[0]).toMatchObject({
       typeLabel: 'Arena Leadership',
       description: 'Reclaimed the Lead in Colorado.',
+      earnedDate: 'Jul 2, 2026',
+      earnedTimestamp: 'Jul 2, 2026, 12:00:00 PM UTC',
+    });
+    expect(profile?.achievements[1]).toMatchObject({
+      earnedDate: 'Jul 1, 2026',
+      earnedTimestamp: 'Jul 1, 2026, 12:00:00 PM UTC',
     });
   });
 

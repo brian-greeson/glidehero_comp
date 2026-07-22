@@ -283,7 +283,7 @@ describe('pilot profile renderer', () => {
         lifetimeEnclosedCellCount: 0,
         currentTotalCellRecord: 3,
         currentEnclosedCellRecord: 0,
-        achievementCount: 5,
+        achievementCount: 6,
         achievements: [
           {
             id: 'launch', achievementType: 'threshold', achievementCategory: 'launch', typeLabel: 'Launch Arena',
@@ -294,6 +294,12 @@ describe('pilot profile renderer', () => {
             id: 'general', achievementType: 'threshold', achievementCategory: 'general', typeLabel: 'General Arena',
             earnedDate: 'Jul 19, 2026', sourceFlightId: null, title: '10% General Arena Coverage',
             description: 'Reach 10% coverage in any General Arena.', badgeLabel: '10%', badgeAriaLabel: 'General Arena threshold achievement: 10%',
+          },
+          {
+            id: 'leadership', achievementType: 'special', achievementCategory: 'leadership', typeLabel: 'Arena Leadership',
+            earnedDate: 'Jul 18, 2026', earnedTimestamp: 'Jul 18, 2026, 4:32:10 PM UTC', sourceFlightId: 'leadership-flight',
+            title: 'Took the Lead in Colorado', description: 'Took the Lead in Colorado.', badgeLabel: '★',
+            badgeAriaLabel: 'Arena Leadership special achievement',
           },
           {
             id: 'state', achievementType: 'threshold', achievementCategory: 'state', typeLabel: 'State',
@@ -320,6 +326,9 @@ describe('pilot profile renderer', () => {
 
     expect(html).toContain('3 Launch Arenas Visited');
     expect(html).toContain('10% General Arena Coverage');
+    expect(html).toContain('Took the Lead in Colorado');
+    expect(html).toContain('Earned Jul 18, 2026, 4:32:10 PM UTC');
+    expect(html).toContain('Flight leadership-flight');
     expect(html).toContain('1 State Flown in');
     expect(html).toContain('1 Country Flown in');
     expect(html).toContain('Most Launches Tagged During One Flight');

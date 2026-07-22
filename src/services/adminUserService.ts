@@ -5,6 +5,8 @@ import { appSessions, flights, igcFiles, profiles, userPasswords, users } from '
 import { buildLiteralSearchPatterns } from '../domain/search/searchSanitizer.js';
 import { flightUploadPrefix, type FlightUploadQueueService } from './flightUploadQueueService.js';
 import { hashPassword } from './passwordService.js';
+import type { ArenaLeadershipReconciliationService } from './arenaLeadershipReconciliationService.js';
+import { findEligibleArenaIdsForCompetitionUser } from './arenaClaimImpact.js';
 
 export type AdminUserSummary = {
   id: string;
@@ -35,6 +37,8 @@ type CleanupOptions = {
   s3Client: S3;
   bucketName: string;
   bucketFolder: string;
+  arenaLeadership: ArenaLeadershipReconciliationService;
+  cellSize: number;
 };
 
 function normalizeEmail(email: string): string {
@@ -179,7 +183,16 @@ export function createAdminUserService(database: Database, cleanup: CleanupOptio
         .where(eq(igcFiles.userId, input.userId));
       await deleteStoredObjects(input.userId, storedFiles.map(({ bucketKey }) => bucketKey));
       await cleanup.uploadQueue.removeTerminalJobsForUser(input.userId);
-      await database.delete(users).where(eq(users.id, input.userId));
+      await database.transaction(async (tx) => {
+        const arenaIds = await findEligibleArenaIdsForCompetitionUser(tx, {
+          userId: input.userId,
+          cellSize: cleanup.cellSize,
+        });
+        await tx.delete(users).where(eq(users.id, input.userId));
+        if (arenaIds.length > 0) {
+          await cleanup.arenaLeadership.reconcileInTransaction(tx, { arenaIds });
+        }
+      });
       return 'completed';
     },
   };

@@ -94,11 +94,14 @@ used exclusively to find Arenas by launch name, city, state, or country. The
 same search is available on the Personal page, with a readable Arena type label
 and no additional filters.
 
-Any
-flight that claims a cell in the Arena counts, regardless of its launch
-location, when the cell center is inside or on the polygon boundary (`ST_Covers`). The Arena map hides claims outside this polygon membership, and its
-leaderboard always covers the complete Arena. Panning and zooming an Arena never
-change scoring.
+Any flight that claims a cell in the Arena counts, regardless of its launch
+location, when the fixed 500-meter cell center is inside or on the polygon
+boundary (`ST_Covers`). State and Country Arenas additionally assign a cell to
+exactly one Arena of the same type: the covering Arena with the lexically lowest
+`external_id` under PostgreSQL's `C` collation wins. General Arenas may overlap,
+and State and Country ownership are independent of each other. The Arena map
+hides claims outside this canonical membership, and its leaderboard always
+covers the complete Arena. Panning and zooming an Arena never change scoring.
 
 Opening an Arena fits the map to its polygon boundary and draws an outline
 around it. A breadcrumb below the main navigation shows `Global >> Arena Name`;
@@ -112,11 +115,25 @@ progress beside the competition leaderboard; General Arenas also show a
 concise percentage and the next 10/25/50/75/100 coverage milestone for that
 Arena (the corresponding achievement is global once-any). Launch pages show
 whether the pilot has Visited and the one-time completion state. State and
-Country pages show only whether the pilot has Flown in. Progress uses the configured
-grid cell center and `ST_Covers`, so cells whose centers lie on a boundary count.
+Country pages show only whether the pilot has Flown in. Progress uses the fixed
+500-meter grid-cell center and canonical Arena membership, so cells whose
+centers lie on a boundary count. State and Country Arenas do not calculate or
+read coverage denominators; any legacy `claimable_cell_count` value on those
+rows is ignored.
 The first Release 2 catalog rebuild is intentionally destructive and one-time;
 the checked-in country (194 policy-selected features), state (50), and launch
 sources are imported transactionally by `npm run rebuild:arenas`.
+
+Release 3 adds durable leadership to General, State, and Country Arenas. The
+all-time unique-cell result remains the scoring source: pilots tied at the
+highest positive cell count are joint leaders. PostgreSQL stores the live
+leader projection, the count below the leaders, each leader's latest lead-entry
+time, and an internal transition history. Only Arenas affected by newly claimed
+cells are evaluated during normal flight processing. Profiles show every
+current leadership with the existing Show all/Show fewer behavior. A pilot can
+earn Took the Lead and Reclaimed the Lead once each; those achievements remain
+after the pilot loses the lead. Launch and viewport-dependent Global competition
+do not support durable leadership.
 
 ### Map routes and navigation
 
@@ -174,6 +191,8 @@ Included features:
 - Dynamic viewport-based leaderboard.
 - Unified grid- and polygon-authored Arena search and fixed-area leaderboards.
 - Arena personal progress and Release 2 exploration achievements.
+- Durable General, State, and Country Arena leadership and one-time leadership
+  achievements.
 - Optional grid overlay and foreground live-position trail on every map.
 - Flight statistics after upload.
 - Administrative Arena, map-setting, user, and flight-management tools.
@@ -186,7 +205,8 @@ Excluded from Version 1:
 - Comments.
 - Messaging.
 - Public signed-out profiles.
-- Arena leadership history.
+- A public activity feed or standalone Arena leadership-history view. Release 3
+  persists leadership transitions internally for a future activity system.
 - Pilot-facing flight editing or deletion.
 - Historical playback.
 - Support for file formats other than IGC.

@@ -78,6 +78,7 @@ export type PilotAchievement = {
   achievementCategory?: AchievementCategory;
   typeLabel: string;
   earnedDate: string;
+  earnedTimestamp?: string;
   sourceFlightId: string | null;
   title: string;
   description: string;
@@ -187,6 +188,16 @@ function displayDate(value: Date | string | null): string {
   }).format(date);
 }
 
+function displayTimestamp(value: Date | string): string {
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return '—';
+  return new Intl.DateTimeFormat('en-US', {
+    year: 'numeric', month: 'short', day: 'numeric',
+    hour: 'numeric', minute: '2-digit', second: '2-digit',
+    timeZone: 'UTC', timeZoneName: 'short',
+  }).format(date);
+}
+
 function loadCurrentArenaLeaderships(
   database: Database,
   options: { cellSize: number },
@@ -293,6 +304,7 @@ function catalogAchievementDisplay(row: StoredAchievement, definition: Achieveme
     achievementCategory: definition.category,
     typeLabel: isRecord ? `${categoryLabel} personal best` : categoryLabel,
     earnedDate: displayDate(row.earnedAt),
+    ...(isLeadership ? { earnedTimestamp: displayTimestamp(row.earnedAt) } : {}),
     sourceFlightId: row.sourceFlightId,
     title,
     description,

@@ -74,3 +74,33 @@ export async function findEligibleArenaIdsForCompetitionFlight(
     .filter((id): id is string => typeof id === 'string' && id.length > 0))]
     .sort((left, right) => left.localeCompare(right));
 }
+
+/** Returns every eligible Arena currently owning one of a pilot's Competition cells. */
+export async function findEligibleArenaIdsForCompetitionUser(
+  transaction: ArenaClaimImpactTransaction,
+  input: { userId: string; cellSize?: number },
+): Promise<string[]> {
+  const cellCenter = sql`ST_SetSRID(ST_MakePoint(
+    (cells.x + 0.5) * ${input.cellSize ?? 500},
+    (cells.y + 0.5) * ${input.cellSize ?? 500}
+  ), 6933)`;
+  const result = await transaction.execute<{ arenaId: string }>(sql`
+    WITH selected_cells AS (
+      SELECT DISTINCT claims.x, claims.y
+      FROM competition_grid_claims claims
+      WHERE claims.claim_user = ${input.userId}
+    )
+    SELECT DISTINCT arena.id AS "arenaId"
+    FROM arenas arena
+    INNER JOIN selected_cells cells ON ${arenaCellOwnershipPredicateSql({
+      arenaId: sql`arena.id`,
+      arenaType: sql`arena.arena_type`,
+      externalId: sql`arena.external_id`,
+      area: sql`arena.area`,
+      cellCenter,
+    })}
+    WHERE arena.arena_type IN ('general', 'state', 'country')
+    ORDER BY arena.id
+  `);
+  return result.rows.map((row) => row.arenaId);
+}
