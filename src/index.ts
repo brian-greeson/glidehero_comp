@@ -19,7 +19,8 @@ import { createMonthlyCoverageService } from './services/monthlyCoverageService.
 import { createMapGridService } from './services/mapGridService.js';
 import { createTerritoryTileService } from './services/territoryTileService.js';
 import { createTerritoryTileSettingsService } from './services/territoryTileSettingsService.js';
-import { createActivityFeedRenderer, createAdminAreaPageRenderer, createAdminMapSettingsPageRenderer, createAdminPageRenderer, createAdminUserPageRenderer, createPageRenderer } from './views/renderer.js';
+import { createAdminAreaPageRenderer, createAdminMapSettingsPageRenderer, createAdminPageRenderer, createAdminUserPageRenderer, createPageRenderer } from './views/renderer.js';
+import { createAppActivityFeedRenderer, createAppPageRenderer } from './views/app/appRenderer.js';
 import { createAdminAreaRouter } from './web/adminAreaRouter.js';
 import { createAdminUserRouter } from './web/adminUserRouter.js';
 import { createCurrentUserMiddleware } from './web/currentUserMiddleware.js';
@@ -107,7 +108,9 @@ const webMiddleware = [
       mapTilerApiKey: config.mapTilerApiKey,
       territoryTileSettings,
     }),
-    renderActivityFeed: createActivityFeedRenderer(),
+    renderAppPage: createAppPageRenderer(),
+    renderAppActivityFeed: createAppActivityFeedRenderer(),
+    mapTilerStyleUrl: `https://api.maptiler.com/maps/outdoor-v2/style.json?key=${config.mapTilerApiKey}`,
     adminEmails: config.adminEmails,
     adminFlights,
     renderAdminPage: createAdminPageRenderer(),

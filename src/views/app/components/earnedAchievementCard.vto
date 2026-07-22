@@ -1,0 +1,9 @@
+<article class="earned-achievement-card">
+  {{ include "app/components/achievementBadge.vto" { achievement } }}
+  <div>
+    {{ if achievement.typeLabel }}<span class="achievement-card__type">{{ achievement.typeLabel }}</span>{{ /if }}
+    <h3>{{ achievement.title }}</h3>
+    <p>{{ achievement.description }}</p>
+    {{ if achievement.earnedDate }}<small>{{ include "app/components/icon.vto" { name: "check" } }}Earned {{ achievement.earnedDate }}</small>{{ /if }}
+  </div>
+</article>

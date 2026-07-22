@@ -10,6 +10,11 @@ export async function withServer<T>(app: Express, run: (baseUrl: string) => Prom
   try {
     return await run(`http://127.0.0.1:${address.port}`);
   } finally {
+    // Tests do not always need to consume every response body (for example
+    // when asserting only a status code). Force those keep-alive connections
+    // closed before waiting for the server's close callback so one unconsumed
+    // response cannot hang the entire suite.
+    server.closeAllConnections();
     await new Promise<void>((resolve, reject) =>
       server.close((error) => (error ? reject(error) : resolve())),
     );

@@ -37,6 +37,8 @@ export type PilotProfileSummary = {
   currentTotalCellRecord: number | null;
   currentEnclosedCellRecord: number | null;
   achievementCount: number;
+  followerCount?: number;
+  followingCount?: number;
   achievements: PilotAchievement[];
   recentFlights: PilotRecentFlight[];
   currentArenaLeaderships: PilotArenaLeadership[];
@@ -126,6 +128,8 @@ type StoredPilotProfile = {
   currentTotalCellRecord: number | string | null;
   currentEnclosedCellRecord: number | string | null;
   achievementCount: number | string;
+  followerCount: number | string;
+  followingCount: number | string;
 };
 
 type StoredAchievement = {
@@ -669,7 +673,9 @@ export function createProfileService(database: Database, options: { cellSize: nu
           (
             (SELECT COUNT(*) FROM achievements earned WHERE earned.user_id = users.user_id)
             + (SELECT COUNT(*) FROM achievement_record_events event WHERE event.user_id = users.user_id)
-          )::integer AS "achievementCount"
+          )::integer AS "achievementCount",
+          (SELECT COUNT(*)::integer FROM pilot_follows follows WHERE follows.followed_user_id = users.user_id) AS "followerCount",
+          (SELECT COUNT(*)::integer FROM pilot_follows follows WHERE follows.follower_user_id = users.user_id) AS "followingCount"
         FROM users
         INNER JOIN profiles ON profiles.user_id = users.user_id
         WHERE users.user_id = ${userId}
@@ -709,7 +715,6 @@ export function createProfileService(database: Database, options: { cellSize: nu
           SELECT displayable.*, COUNT(*) OVER()::integer AS "totalCount"
           FROM displayable
           ORDER BY displayable."earnedAt" DESC, displayable.id DESC
-          LIMIT 50
         `),
         database.execute<StoredRecentFlight>(sql`
           SELECT
@@ -748,6 +753,8 @@ export function createProfileService(database: Database, options: { cellSize: nu
         currentTotalCellRecord: numberOrNull(row.currentTotalCellRecord),
         currentEnclosedCellRecord: numberOrNull(row.currentEnclosedCellRecord),
         achievementCount: Number(achievementRows.rows[0]?.totalCount ?? row.achievementCount),
+        followerCount: Number(row.followerCount),
+        followingCount: Number(row.followingCount),
         achievements: achievementRows.rows.map(achievementDisplay),
         recentFlights: recentFlightRows.rows.map((flight) => {
           const directCellCount = Number(flight.directCellCount);

@@ -1,0 +1,24 @@
+:root {
+  --app-navy-950: #031426;
+  --app-navy-900: #061a2f;
+  --app-navy-800: #0b2746;
+  --app-ink: #0b1935;
+  --app-muted: #5e6f8d;
+  --app-blue: #0869f7;
+  --app-cyan: #0fe0dd;
+  --app-green: #2fa51e;
+  --app-orange: #ff681d;
+  --app-purple: #6b32b4;
+  --app-surface: #fff;
+  --app-surface-soft: #f6f9fc;
+  --app-border: #dbe3ed;
+  --app-shadow-sm: 0 4px 14px rgb(17 39 67 / 8%);
+  --app-shadow: 0 12px 32px rgb(17 39 67 / 12%);
+  --app-radius-sm: .65rem;
+  --app-radius: 1rem;
+  --app-header-height: 88px;
+  --app-mobile-header-height: 76px;
+  --app-mobile-nav-height: 76px;
+  --app-content-width: 1440px;
+  --app-font: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}

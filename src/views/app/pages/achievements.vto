@@ -1,0 +1,33 @@
+{{ layout "app/layouts/appLayout.vto" }}
+  <div class="mountain-band mountain-band--short" aria-hidden="true"></div>
+  <section class="content-page achievements-page">
+    {{ include "app/components/metricStrip.vto" { metrics, label: "Achievement summary" } }}
+    <div class="achievements-layout">
+      <div class="achievements-main">
+        <section class="achievement-section">
+          {{ include "app/components/sectionHeading.vto" { title: "Earned Achievements", icon: "check", action: "View All Earned", actionId: "earned" } }}
+          <div class="earned-achievement-grid" data-achievements-list="earned">{{ for achievement of earned }}{{ include "app/components/earnedAchievementCard.vto" { achievement } }}{{ /for }}</div>
+          {{ if earned.length === 0 }}<p class="achievement-empty-state">No achievements earned yet. Complete a flight to start your collection.</p>{{ /if }}
+        </section>
+        <section class="achievement-section">
+          {{ include "app/components/sectionHeading.vto" { title: "In Progress Achievements", icon: "progress", action: "View All In Progress", actionId: "progress" } }}
+          <div class="progress-achievement-grid" data-achievements-list="progress">{{ for achievement of inProgress }}{{ include "app/components/progressAchievementCard.vto" { achievement } }}{{ /for }}</div>
+          {{ if inProgress.length === 0 }}<p class="achievement-empty-state">You have no unfinished achievements right now. Keep soaring!</p>{{ /if }}
+        </section>
+      </div>
+      <aside class="achievement-rail">
+        <section class="rail-card recently-earned">
+          {{ include "app/components/sectionHeading.vto" { title: "Recently Earned", action: "View All", actionId: "recent" } }}
+          <div>{{ for achievement of recentlyEarned }}{{ include "app/components/earnedAchievementCard.vto" { achievement } }}{{ /for }}</div>
+          {{ if recentlyEarned.length === 0 }}<p class="achievement-empty-state">No recently earned achievements.</p>{{ /if }}
+        </section>
+        <section class="rail-card rail-progress">
+          {{ include "app/components/sectionHeading.vto" { title: "In Progress", action: "View All", actionId: "rail-progress" } }}
+          <div>{{ for achievement of inProgress }}{{ include "app/components/progressAchievementCard.vto" { achievement } }}{{ /for }}</div>
+          {{ if inProgress.length === 0 }}<p class="achievement-empty-state">Nothing in progress.</p>{{ /if }}
+        </section>
+      </aside>
+    </div>
+    {{ include "app/components/achievementTypes.vto" }}
+  </section>
+{{ /layout }}

@@ -1,0 +1,33 @@
+<section class="activity-pilot-search" aria-labelledby="activity-pilot-search-title">
+  <form method="get" action="/activity" class="activity-pilot-search__form">
+    <label id="activity-pilot-search-title" for="activity-pilot-query">Find pilots</label>
+    <div class="activity-pilot-search__controls">
+      <input id="activity-pilot-query" name="q" type="search" value="{{ if typeof activitySearch !== 'undefined' }}{{ activitySearch }}{{ /if }}" placeholder="Search pilots" autocomplete="off">
+      {{ if typeof activityScope !== 'undefined' && activityScope !== 'all' }}<input type="hidden" name="scope" value="{{ activityScope }}">{{ /if }}
+      <button type="submit">Search</button>
+    </div>
+  </form>
+  {{ if typeof activitySearch !== 'undefined' && activitySearch }}
+    <div class="activity-pilot-search__results" aria-live="polite">
+      <h2>Pilot results</h2>
+      {{ if typeof activityPilotResults !== 'undefined' && activityPilotResults.length }}
+        <ul>
+          {{ for pilot of activityPilotResults }}
+            <li>
+              <a class="activity-pilot-result" href="{{ pilot.href }}">
+                {{ include "app/components/initialsAvatar.vto" { initials: pilot.initials, color: pilot.color, size: "small" } }}
+                <strong>{{ pilot.displayName }}</strong>
+              </a>
+              <form method="post" action="/pilots/{{ pilot.userId }}/{{ if pilot.isFollowing }}unfollow{{ else }}follow{{ /if }}" class="activity-pilot-result__form">
+                <input type="hidden" name="returnTo" value="{{ if typeof activityReturnTo !== 'undefined' }}{{ activityReturnTo }}{{ else }}/activity{{ /if }}">
+                <button type="submit">{{ if pilot.isFollowing }}Unfollow{{ else }}Follow{{ /if }}</button>
+              </form>
+            </li>
+          {{ /for }}
+        </ul>
+      {{ else }}
+        <p class="activity-pilot-search__empty">No pilots matched “{{ activitySearch }}”.</p>
+      {{ /if }}
+    </div>
+  {{ /if }}
+</section>

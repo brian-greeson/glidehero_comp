@@ -40,9 +40,16 @@ export type ActivityAccomplishment = {
   id: string;
   title: string;
   description: string;
+  /** Display metadata shared by the refreshed Activity and Achievements cards. */
+  badgeLabel: string;
+  category: string;
+  kind: string;
+  tone: 'green' | 'blue' | 'orange' | 'purple';
   arenaName?: string;
   arenaPath?: string;
 };
+
+export type ActivityFeedScope = 'all' | 'following' | 'yours';
 
 export type ActivityCursor = { publishedAt: Date; id: string };
 
@@ -166,6 +173,30 @@ function cellCountText(value: number | null): string {
   return `${countText(value)} ${value === 1 ? 'cell' : 'cells'}`;
 }
 
+function accomplishmentTone(category: string | undefined, kind: string | undefined): ActivityAccomplishment['tone'] {
+  if (kind === 'record') return 'blue';
+  if (category === 'leadership') return 'purple';
+  if (category === 'launch') return 'orange';
+  return 'green';
+}
+
+function accomplishmentMetadata(input: {
+  key?: string;
+  category?: string;
+  kind?: string;
+  threshold?: number;
+  milestone?: number | null;
+}): Pick<ActivityAccomplishment, 'badgeLabel' | 'category' | 'kind' | 'tone'> {
+  const category = input.category ?? 'general';
+  const kind = input.kind ?? 'special';
+  const badgeLabel = input.threshold !== undefined
+    ? String(input.threshold)
+    : input.milestone !== null && input.milestone !== undefined
+      ? String(input.milestone)
+      : kind === 'record' ? 'PB' : category === 'leadership' ? '★' : '•';
+  return { badgeLabel, category, kind, tone: accomplishmentTone(category, kind) };
+}
+
 function achievementAccomplishment(row: ActivityAchievementRow): ActivityAccomplishment {
   const details = detailsObject(row.details);
   const definition = findAchievementDefinition(row.achievementKey);
@@ -179,7 +210,13 @@ function achievementAccomplishment(row: ActivityAchievementRow): ActivityAccompl
       ? `${row.achievementKey === 'took_lead_in_arena' ? 'Took' : 'Reclaimed'} the Lead in ${arenaName}`
       : definition.title;
     const description = isLeadership && arenaName ? `${title}.` : definition.description;
-    return { id: row.id, title, description, ...linkedArena };
+    return {
+      id: row.id,
+      title,
+      description,
+      ...accomplishmentMetadata({ category: definition.category, kind: definition.kind, threshold: 'threshold' in definition ? definition.threshold : undefined }),
+      ...linkedArena,
+    };
   }
 
   const milestone = detailNumber(details, 'milestone');
@@ -194,7 +231,13 @@ function achievementAccomplishment(row: ActivityAchievementRow): ActivityAccompl
     const description = milestone === null
       ? 'Reached a new Personal Map milestone.'
       : `Reached ${milestone} unique Personal Map cells, adding ${countText(newCells)} new ${newCells === 1 ? 'cell' : 'cells'} to a total of ${countText(newTotal)}.`;
-    return { id: row.id, title, description, ...linkedArena };
+    return {
+      id: row.id,
+      title,
+      description,
+      ...accomplishmentMetadata({ category: 'general', kind: 'threshold', milestone }),
+      ...linkedArena,
+    };
   }
   if (row.achievementType === 'personal_best_total_cells' || row.achievementType === 'personal_best_enclosed_cells') {
     const enclosed = row.achievementType === 'personal_best_enclosed_cells';
@@ -202,9 +245,21 @@ function achievementAccomplishment(row: ActivityAchievementRow): ActivityAccompl
     const description = previousRecord === null
       ? `Established an initial ${enclosed ? 'enclosed-cell' : 'total-cell'} record of ${cellCountText(newRecord)} (${countText(directCells)} direct and ${countText(enclosedCells)} enclosed).`
       : `Improved the ${enclosed ? 'enclosed-cell' : 'total-cell'} record from ${previousRecord} to ${record} cells (${countText(directCells)} direct and ${countText(enclosedCells)} enclosed).`;
-    return { id: row.id, title: enclosed ? 'New Enclosed Cell Record' : 'New Flight Cell Record', description, ...linkedArena };
+    return {
+      id: row.id,
+      title: enclosed ? 'New Enclosed Cell Record' : 'New Flight Cell Record',
+      description,
+      ...accomplishmentMetadata({ category: 'general', kind: 'record' }),
+      ...linkedArena,
+    };
   }
-  return { id: row.id, title: 'Progress Achievement', description: 'A progression achievement earned during a flight.', ...linkedArena };
+  return {
+    id: row.id,
+    title: 'Progress Achievement',
+    description: 'A progression achievement earned during a flight.',
+    ...accomplishmentMetadata({}),
+    ...linkedArena,
+  };
 }
 
 function recordAccomplishment(row: ActivityRecordEventRow): ActivityAccomplishment {
@@ -218,6 +273,7 @@ function recordAccomplishment(row: ActivityRecordEventRow): ActivityAccomplishme
     description: previousValue === null
       ? `Tagged ${count} during one flight, establishing an initial record.`
       : `Tagged ${count} during one flight, improving the previous best of ${previousValue}.`,
+    ...accomplishmentMetadata({ category: definition?.category, kind: 'record' }),
   };
 }
 
@@ -227,6 +283,7 @@ function leadershipAccomplishment(row: ActivityLeadershipRow): ActivityAccomplis
     id: row.id,
     title: `${verb} the Lead in ${row.arenaName}`,
     description: `${verb} the lead in ${row.arenaName}.`,
+    ...accomplishmentMetadata({ category: 'leadership', kind: 'special' }),
     arenaName: row.arenaName,
     arenaPath: arenaPath({ sourceId: Number(row.arenaSourceId), name: row.arenaName, countryCode: row.arenaCountryCode }),
   };
@@ -330,7 +387,7 @@ export type ActivityService = {
     transaction: ActivityTransaction,
     input: PublishFlightActivityInput,
   ): Promise<{ id: string }>;
-  listFeed(input: { viewerUserId: string; limit?: number; before?: string; q?: string }): Promise<ActivityFeedPage>;
+  listFeed(input: { viewerUserId: string; limit?: number; before?: string; q?: string; scope?: ActivityFeedScope }): Promise<ActivityFeedPage>;
   toggleThermal(input: { viewerUserId: string; activityId: string }): Promise<{ reacted: boolean; totalCount: number }>;
 };
 
@@ -351,17 +408,20 @@ export function createActivityService(database?: Database): ActivityService {
       return activity;
     },
 
-    async listFeed({ viewerUserId, limit = 20, before }) {
+    async listFeed({ viewerUserId, limit = 20, before, scope = 'all' }) {
       if (!database) throw new Error('Activity reads require a database.');
       if (!Number.isInteger(limit) || limit < 1 || limit > 20) throw new Error('Activity limit is invalid.');
+      if (scope !== 'all' && scope !== 'following' && scope !== 'yours') throw new Error('Activity scope is invalid.');
       const cursor = decodeActivityCursor(before);
-      const visibility = or(
-        eq(activities.actorUserId, viewerUserId),
-        exists(database.select({ one: sql`1` }).from(pilotFollows).where(and(
-          eq(pilotFollows.followerUserId, viewerUserId),
-          eq(pilotFollows.followedUserId, activities.actorUserId),
-        ))),
-      );
+      const following = exists(database.select({ one: sql`1` }).from(pilotFollows).where(and(
+        eq(pilotFollows.followerUserId, viewerUserId),
+        eq(pilotFollows.followedUserId, activities.actorUserId),
+      )));
+      const visibility = scope === 'yours'
+        ? eq(activities.actorUserId, viewerUserId)
+        : scope === 'following'
+          ? following
+          : or(eq(activities.actorUserId, viewerUserId), following);
       const where = cursor
         ? and(visibility, sql`(${activities.publishedAt} < ${cursor.publishedAt} OR (${activities.publishedAt} = ${cursor.publishedAt} AND ${activities.id} < ${cursor.id}))`)
         : visibility;

@@ -1,0 +1,8 @@
+<section class="profile-card profile-card--flights">
+  <header class="section-heading"><div>{{ include "app/components/icon.vto" { name: "flight" } }}<h2>Recent Flights</h2></div>{{ if flights.length > 3 }}<button type="button" class="profile-list-toggle" data-profile-list-toggle="flights" aria-expanded="false">Show all</button>{{ /if }}</header>
+  <div class="profile-card__desktop-content">
+    {{ if flights.length }}
+      <ul data-profile-list="flights">{{ for flight of flights }}<li class="{{ if typeof flight.arena !== 'undefined' && flight.arena }}profile-flight-row{{ else }}profile-flight-row profile-flight-row--no-preview{{ /if }}" data-profile-list-item="{{ if typeof flight.isInitiallyVisible !== 'undefined' && !flight.isInitiallyVisible }}extra{{ else }}visible{{ /if }}">{{ if typeof flight.arena !== 'undefined' && flight.arena }}{{ include "app/components/flightMapPreview.vto" { flight } }}{{ /if }}<div><strong>{{ if typeof flight.arena !== 'undefined' && flight.arena }}{{ flight.arena }}{{ else }}Completed flight{{ /if }}</strong><span>{{ flight.date }}</span></div><dl><div><dt>Distance</dt><dd>{{ flight.distance }}</dd></div><div><dt>Cells Claimed</dt><dd>{{ if flight.cells === "0" }}0{{ else }}{{ flight.cells }}{{ /if }}</dd></div></dl>{{ if typeof flight.href !== 'undefined' && flight.href }}{{ include "app/components/icon.vto" { name: "chevron-right" } }}{{ /if }}</li>{{ /for }}</ul>
+    {{ else }}<p class="profile-empty">No completed flights yet.</p>{{ /if }}
+  </div>
+</section>

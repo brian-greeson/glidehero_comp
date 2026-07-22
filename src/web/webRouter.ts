@@ -15,8 +15,14 @@ import type {
   AdminPageRenderer,
   PageModel,
   PageRenderer,
-  ActivityFeedRenderer,
 } from '../views/renderer.js';
+import type { AppActivityFeedRenderer, AppPageRenderer } from '../views/app/appRenderer.js';
+import { createAppShellModel } from '../views/app/adapters/shellModel.js';
+import { activityFeedToViews, activityPilotResultToView } from '../views/app/adapters/activityView.js';
+import { createAchievementsPageModel } from '../views/app/adapters/achievementView.js';
+import { pilotProfileToView } from '../views/app/adapters/profileView.js';
+import { createMapPageModel } from '../views/app/adapters/mapView.js';
+import type { AppPageModel } from '../views/app/models.js';
 import type { FlightUploadQueueService } from '../services/flightUploadQueueService.js';
 import type { FailedFlightCleanupService } from '../services/failedFlightCleanupService.js';
 import type { TerritoryTileService } from '../services/territoryTileService.js';
@@ -52,6 +58,7 @@ const pilotUserIdSchema = z.string().uuid();
 const activityQuerySchema = z.object({
   q: z.string().max(100).optional(),
   before: z.string().min(1).optional(),
+  scope: z.enum(['all', 'following', 'yours']).optional(),
 }).strict();
 const finiteCoordinate = z.string().refine(
   (value) => value.length > 0 && value.trim() === value && Number.isFinite(Number(value)),
@@ -120,6 +127,10 @@ async function render(res: Response, renderPage: PageRenderer, status: number, m
   res.status(status).type('html').send(await renderPage(model));
 }
 
+async function renderApp(res: Response, renderPage: AppPageRenderer, status: number, model: AppPageModel) {
+  res.status(status).type('html').send(await renderPage(model));
+}
+
 export function createWebRouter(dependencies: {
   auth: AuthService;
   cookie: SessionCookie;
@@ -135,7 +146,9 @@ export function createWebRouter(dependencies: {
   arenas: ArenaService;
   arenaProgress: ArenaProgressService;
   renderPage: PageRenderer;
-  renderActivityFeed?: ActivityFeedRenderer;
+  renderAppPage: AppPageRenderer;
+  renderAppActivityFeed: AppActivityFeedRenderer;
+  mapTilerStyleUrl?: string;
   adminEmails?: readonly string[];
   adminFlights?: AdminFlightService;
   renderAdminPage?: AdminPageRenderer;
@@ -185,7 +198,11 @@ export function createWebRouter(dependencies: {
       if (url.origin !== 'http://glidehero.local') return fallback;
       if (url.pathname === '/activity') {
         const q = url.searchParams.get('q');
-        return q ? `/activity?q=${encodeURIComponent(q)}` : '/activity';
+        const scope = url.searchParams.get('scope');
+        const params = new URLSearchParams();
+        if (q) params.set('q', q);
+        if (scope === 'following' || scope === 'yours') params.set('scope', scope);
+        return params.toString() ? `/activity?${params}` : '/activity';
       }
       if (url.pathname === '/profile' || /^\/pilots\/[0-9a-f-]{36}$/i.test(url.pathname)) return url.pathname;
     } catch {
@@ -198,8 +215,29 @@ export function createWebRouter(dependencies: {
     return Boolean(currentUser && isAdmin(currentUser.email));
   }
 
-  async function dashboardAchievementProgress(userId: string) {
-    return dependencies.profiles.getDashboardAchievementProgress(userId);
+  function appShell(page: 'map' | 'activity' | 'achievements' | 'profile', currentUser: AuthenticatedUser, options: { mapHref?: string; showFooter?: boolean } = {}) {
+    return createAppShellModel({
+      page,
+      user: currentUser,
+      isAdmin: isAdmin(currentUser.email),
+      mapHref: options.mapHref,
+      showFooter: options.showFooter,
+    });
+  }
+
+  function productionMap(currentUser: AuthenticatedUser, input: Omit<Parameters<typeof createMapPageModel>[1], 'currentUserId' | 'territoryColor' | 'mapStyleUrl' | 'territoryTileMinimumZoom' | 'territoryTileMaximumZoom'>, options: { mapHref?: string; showFooter?: boolean } = {}) {
+    const settings = territoryTileSettings.get();
+    return createMapPageModel(
+      appShell('map', currentUser, { mapHref: options.mapHref ?? input.mapHref, showFooter: options.showFooter ?? false }),
+      {
+        ...input,
+        currentUserId: currentUser.userId,
+        territoryColor: normalizeTerritoryColor(currentUser.territoryColor) ?? '#1769AA',
+        mapStyleUrl: dependencies.mapTilerStyleUrl,
+        territoryTileMinimumZoom: input.mode === 'personal' ? settings.personal.minimumZoom : settings.competition.minimumZoom,
+        territoryTileMaximumZoom: input.mode === 'personal' ? settings.personal.maximumZoom : settings.competition.maximumZoom,
+      },
+    );
   }
 
   router.post('/v1/igc-uploads/intents', async (req, res, next) => {
@@ -595,13 +633,12 @@ export function createWebRouter(dependencies: {
       return;
     }
     try {
-      await render(res, dependencies.renderPage, 200, {
-        currentUser,
-        page: 'global',
-        dashboardAchievementProgress: await dashboardAchievementProgress(currentUser.userId),
-        isAdmin: isAdmin(currentUser.email),
-        territoryColorSuccess: req.query.territoryColor === 'success',
-      });
+      const month = typeof req.query.month === 'string' ? req.query.month : undefined;
+      if (month) normalizeCompetitionLeaderboardMonth(month);
+      const mapHref = month ? `/global?month=${encodeURIComponent(month)}` : '/global';
+      await renderApp(res, dependencies.renderAppPage, 200, productionMap(currentUser, {
+        mode: 'competitive', period: month ? 'current-month' : 'all-time', location: 'Global Map', mapHref,
+      }));
     } catch (error) {
       next(error);
     }
@@ -614,13 +651,12 @@ export function createWebRouter(dependencies: {
       return;
     }
     try {
-      await render(res, dependencies.renderPage, 200, {
-        currentUser,
-        page: 'personal',
-        dashboardAchievementProgress: await dashboardAchievementProgress(currentUser.userId),
-        isAdmin: isAdmin(currentUser.email),
-        territoryColorSuccess: req.query.territoryColor === 'success',
-      });
+      const month = typeof req.query.month === 'string' ? req.query.month : undefined;
+      if (month) normalizeCompetitionLeaderboardMonth(month);
+      const mapHref = month ? `/personal?month=${encodeURIComponent(month)}` : '/personal';
+      await renderApp(res, dependencies.renderAppPage, 200, productionMap(currentUser, {
+        mode: 'personal', period: month ? 'current-month' : 'all-time', location: 'Personal Map', mapHref,
+      }));
     } catch (error) {
       next(error);
     }
@@ -638,15 +674,31 @@ export function createWebRouter(dependencies: {
         next();
         return;
       }
-      await render(res, dependencies.renderPage, 200, {
-        currentUser,
+      const shell = appShell('profile', currentUser);
+      await renderApp(res, dependencies.renderAppPage, 200, {
+        ...shell,
         page: 'profile',
-        profile,
-        profileIsCurrent: true,
-        profileIsFollowed: false,
-        currentPath: '/profile',
-        isAdmin: isAdmin(currentUser.email),
+        ...pilotProfileToView(profile, { isCurrent: true, isFollowed: false, currentPath: '/profile' }),
       });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.get('/achievements', async (_req, res, next) => {
+    const currentUser = res.locals.currentUser;
+    if (!currentUser) {
+      res.redirect(302, '/');
+      return;
+    }
+    try {
+      const profile = await dependencies.profiles.getPilotProfile(currentUser.userId);
+      if (!profile) {
+        next();
+        return;
+      }
+      const shell = appShell('achievements', currentUser);
+      await renderApp(res, dependencies.renderAppPage, 200, createAchievementsPageModel(profile, shell));
     } catch (error) {
       next(error);
     }
@@ -669,16 +721,15 @@ export function createWebRouter(dependencies: {
         next();
         return;
       }
-      await render(res, dependencies.renderPage, 200, {
-        currentUser,
+      const profileIsCurrent = parsedUserId.data === currentUser.userId;
+      const profileIsFollowed = profileIsCurrent
+        ? false
+        : dependencies.follow ? await dependencies.follow.isFollowing({ followerUserId: currentUser.userId, followedUserId: parsedUserId.data }) : false;
+      const shell = appShell('profile', currentUser);
+      await renderApp(res, dependencies.renderAppPage, 200, {
+        ...shell,
         page: 'profile',
-        profile,
-        profileIsCurrent: parsedUserId.data === currentUser.userId,
-        profileIsFollowed: parsedUserId.data === currentUser.userId
-          ? false
-          : dependencies.follow ? await dependencies.follow.isFollowing({ followerUserId: currentUser.userId, followedUserId: parsedUserId.data }) : false,
-        currentPath: `/pilots/${parsedUserId.data}`,
-        isAdmin: isAdmin(currentUser.email),
+        ...pilotProfileToView(profile, { isCurrent: profileIsCurrent, isFollowed: profileIsFollowed, currentPath: `/pilots/${parsedUserId.data}` }),
       });
     } catch (error) {
       next(error);
@@ -698,46 +749,51 @@ export function createWebRouter(dependencies: {
       return;
     }
     const query = parsed.data.q?.trim() ?? '';
+    const scope = parsed.data.scope ?? 'all';
     try {
       const activityFeed = dependencies.activity
-        ? await dependencies.activity.listFeed({ viewerUserId: currentUser.userId, limit: 20, before: parsed.data.before, q: query })
+        ? await dependencies.activity.listFeed({ viewerUserId: currentUser.userId, limit: 20, before: parsed.data.before, q: query, scope })
         : { items: [], nextCursor: null };
-      const activityReturnTo = query ? `/activity?q=${encodeURIComponent(query)}` : '/activity';
+      const activityParams = new URLSearchParams();
+      if (query) activityParams.set('q', query);
+      if (scope !== 'all') activityParams.set('scope', scope);
+      const activityQuery = activityParams.toString();
+      const activityReturnTo = activityQuery ? `/activity?${activityQuery}` : '/activity';
+      const activityScopeLinks = {
+        all: query ? `/activity?q=${encodeURIComponent(query)}` : '/activity',
+        following: `/activity?${new URLSearchParams({ ...(query ? { q: query } : {}), scope: 'following' })}`,
+        yours: `/activity?${new URLSearchParams({ ...(query ? { q: query } : {}), scope: 'yours' })}`,
+      };
+      const activityPilotResults = query && dependencies.follow
+        ? (await dependencies.follow.searchPilots({ viewerUserId: currentUser.userId, query })).map(activityPilotResultToView)
+        : [];
       const activityLoadMoreHref = activityFeed.nextCursor
-        ? `/activity?before=${encodeURIComponent(activityFeed.nextCursor)}${query ? `&q=${encodeURIComponent(query)}` : ''}`
+        ? `/activity?before=${encodeURIComponent(activityFeed.nextCursor)}${activityQuery ? `&${activityQuery}` : ''}`
         : '';
       const activityLoadMoreEndpoint = activityFeed.nextCursor
-        ? `/activity/feed?before=${encodeURIComponent(activityFeed.nextCursor)}${query ? `&q=${encodeURIComponent(query)}` : ''}`
+        ? `/activity/feed?before=${encodeURIComponent(activityFeed.nextCursor)}${activityQuery ? `&${activityQuery}` : ''}`
         : '';
       if (fragment) {
-        if (!dependencies.renderActivityFeed) {
-          next(new Error('Activity feed renderer is not configured.'));
-          return;
-        }
-        res.status(200).type('html').send(await dependencies.renderActivityFeed({
-          activityFeed: activityFeed.items,
-          activityNextCursor: activityFeed.nextCursor,
-          activitySearch: query,
-          activityLoadMoreHref,
-          activityLoadMoreEndpoint,
+        res.status(200).type('html').send(await dependencies.renderAppActivityFeed({
+          events: activityFeedToViews(activityFeed.items), activityLoadMoreHref, activityLoadMoreEndpoint,
         }));
         return;
       }
-      const activityPilotResults = query && dependencies.follow
-        ? await dependencies.follow.searchPilots({ viewerUserId: currentUser.userId, query })
-        : [];
-      await render(res, dependencies.renderPage, 200, {
-        currentUser,
+      const shell = appShell('activity', currentUser);
+      await renderApp(res, dependencies.renderAppPage, 200, {
+        ...shell,
         page: 'activity',
+        metrics: [],
+        events: activityFeedToViews(activityFeed.items),
+        following: [],
+        weekly: [],
         activitySearch: query,
         activityPilotResults,
-        activityFeed: activityFeed.items,
-        activityNextCursor: activityFeed.nextCursor,
+        activityReturnTo,
+        activityScopeLinks,
+        activityScope: scope,
         activityLoadMoreHref,
         activityLoadMoreEndpoint,
-        activityReturnTo,
-        currentPath: '/activity',
-        isAdmin: isAdmin(currentUser.email),
       });
     } catch (error) {
       if (error instanceof ActivityCursorError) {
@@ -842,19 +898,13 @@ export function createWebRouter(dependencies: {
         next();
         return;
       }
-      const [personalArenaProgress, achievementProgress] = await Promise.all([
-        dependencies.arenaProgress.get({ arenaId: arena.id, userId: currentUser.userId }),
-        dashboardAchievementProgress(currentUser.userId),
-      ]);
-      await render(res, dependencies.renderPage, 200, {
-        currentUser,
-        page: 'arena',
-        arena,
-        arenaProgress: personalArenaProgress,
-        dashboardAchievementProgress: achievementProgress,
-        isAdmin: isAdmin(currentUser.email),
-        territoryColorSuccess: req.query.territoryColor === 'success',
-      });
+      const month = typeof req.query.month === 'string' ? req.query.month : undefined;
+      if (month) normalizeCompetitionLeaderboardMonth(month);
+      const mapHref = month ? `${arena.path}?month=${encodeURIComponent(month)}` : arena.path;
+      await renderApp(res, dependencies.renderAppPage, 200, productionMap(currentUser, {
+        mode: 'competitive', period: month ? 'current-month' : 'all-time', location: arena.name, mapHref,
+        arenaSourceId: arena.sourceId,
+      }));
     } catch (error) {
       next(error);
     }

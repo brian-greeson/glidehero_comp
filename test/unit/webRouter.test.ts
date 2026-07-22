@@ -118,6 +118,8 @@ function dependencies() {
       `<html><body><h1>GlideHero</h1><div>${model.currentUser?.displayName ?? 'anonymous'}</div>` +
       `<div>${model.loginError ?? model.signupError ?? ''}</div></body></html>`,
   );
+  const renderAppPage = vi.fn(async () => '<html><body>App page</body></html>');
+  const renderAppActivityFeed = vi.fn(async () => '<div data-activity-feed>App feed</div>');
   const middleware = createCurrentUserMiddleware(auth, cookie);
   const profiles: ProfileService = {
     updateTerritoryColor: vi.fn(async () => undefined),
@@ -189,6 +191,8 @@ function dependencies() {
     arenas,
     arenaProgress,
     renderPage,
+    renderAppPage,
+    renderAppActivityFeed,
   });
   return {
     auth,
@@ -202,6 +206,8 @@ function dependencies() {
     arenas,
     arenaProgress,
     renderPage,
+    renderAppPage,
+    renderAppActivityFeed,
     cookie,
     app: createApp({ webMiddleware: [middleware, router] }),
   };
@@ -278,6 +284,8 @@ describe('webRouter', () => {
       arenas: base.arenas,
       arenaProgress: base.arenaProgress,
       renderPage: base.renderPage,
+      renderAppPage: base.renderAppPage,
+      renderAppActivityFeed: base.renderAppActivityFeed,
     });
     const app = createApp({ webMiddleware: [createCurrentUserMiddleware(base.auth, base.cookie), router] });
 
@@ -350,6 +358,8 @@ describe('webRouter', () => {
       arenas,
       arenaProgress: dependencies().arenaProgress,
       renderPage,
+      renderAppPage: vi.fn(async () => '<html><body>App page</body></html>'),
+      renderAppActivityFeed: vi.fn(async () => '<div>App feed</div>'),
       adminEmails: ['PILOT@example.com'],
       adminFlights,
       renderAdminPage,
@@ -391,6 +401,8 @@ describe('webRouter', () => {
       arenas: base.arenas,
       arenaProgress: base.arenaProgress,
       renderPage: base.renderPage,
+      renderAppPage: base.renderAppPage,
+      renderAppActivityFeed: base.renderAppActivityFeed,
       adminEmails: ['PILOT@example.com'],
       territoryTileSettings,
       renderAdminMapSettingsPage,
@@ -481,8 +493,7 @@ describe('webRouter', () => {
   });
 
   it('protects dashboard routes and renders canonical Arenas with a basic 404', async () => {
-    const { app, arenas, arenaProgress, profiles, renderPage } = dependencies();
-    vi.mocked(profiles.getDashboardAchievementProgress).mockResolvedValue(pilotProfile.achievementProgress);
+    const { app, arenas, renderAppPage } = dependencies();
     vi.mocked(arenas.getByRoute).mockResolvedValueOnce(arena).mockResolvedValueOnce(null);
     await withServer(app, async (baseUrl) => {
       const anonymous = await fetch(`${baseUrl}/global`, { redirect: 'manual' });
@@ -493,20 +504,16 @@ describe('webRouter', () => {
         headers: { cookie: 'glidehero_session=valid-token' },
       });
       expect(found.status).toBe(200);
-      expect(renderPage).toHaveBeenCalledWith(expect.objectContaining({
-        page: 'arena', arena, dashboardAchievementProgress: pilotProfile.achievementProgress,
+      expect(renderAppPage).toHaveBeenCalledWith(expect.objectContaining({
+        page: 'map', location: arena.name, arenaSourceId: arena.sourceId,
       }));
-      expect(arenaProgress.get).toHaveBeenCalledWith({ arenaId: arena.id, userId: user.userId });
-      expect(profiles.getDashboardAchievementProgress).toHaveBeenCalledWith(user.userId);
-
-      vi.mocked(renderPage).mockClear();
       const missing = await fetch(`${baseUrl}/arena/us/missing-999`, {
         headers: { cookie: 'glidehero_session=valid-token' },
       });
       expect(missing.status).toBe(404);
       expect(missing.headers.get('content-type')).toContain('text/html');
       expect(await missing.text()).toContain('/error-mascot.webp');
-      expect(renderPage).not.toHaveBeenCalled();
+      expect(renderAppPage).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -737,6 +744,8 @@ describe('webRouter', () => {
       arenas: arenaService(),
       arenaProgress: dependencies().arenaProgress,
       renderPage: createPageRenderer({ mapTilerApiKey: 'maptiler-test-key' }),
+      renderAppPage: vi.fn(async () => '<html><body>App page</body></html>'),
+      renderAppActivityFeed: vi.fn(async () => '<div>App feed</div>'),
     });
     const app = createApp({ webMiddleware: [middleware, router] });
 
@@ -777,7 +786,7 @@ describe('webRouter', () => {
   });
 
   it('serves the authenticated current pilot profile and passes only the summary to the page', async () => {
-    const { app, profiles, renderPage } = dependencies();
+    const { app, profiles, renderAppPage } = dependencies();
     vi.mocked(profiles.getPilotProfile).mockResolvedValueOnce({ ...pilotProfile, userId: user.userId });
     await withServer(app, async (baseUrl) => {
       const response = await fetch(`${baseUrl}/profile`, {
@@ -786,10 +795,9 @@ describe('webRouter', () => {
 
       expect(response.status).toBe(200);
       expect(profiles.getPilotProfile).toHaveBeenCalledWith(user.userId);
-      expect(renderPage).toHaveBeenCalledWith(expect.objectContaining({
+      expect(renderAppPage).toHaveBeenCalledWith(expect.objectContaining({
         page: 'profile',
-        profile: { ...pilotProfile, userId: user.userId },
-        profileIsCurrent: true,
+        profile: expect.objectContaining({ displayName: pilotProfile.displayName }),
       }));
     });
   });
@@ -808,6 +816,8 @@ describe('webRouter', () => {
       arenas: base.arenas,
       arenaProgress: base.arenaProgress,
       renderPage: createPageRenderer({ mapTilerApiKey: 'maptiler-test-key' }),
+      renderAppPage: base.renderAppPage,
+      renderAppActivityFeed: base.renderAppActivityFeed,
     });
     const app = createApp({ webMiddleware: [createCurrentUserMiddleware(base.auth, base.cookie), router] });
 
@@ -815,14 +825,13 @@ describe('webRouter', () => {
       const response = await fetch(`${baseUrl}/pilots/${pilotProfile.userId}`, {
         headers: { cookie: 'glidehero_session=valid-token' },
       });
-      const html = await response.text();
+      await response.text();
 
       expect(response.status).toBe(200);
-      expect(html).toContain('Cloud Dancer’s Achievements');
-      expect(html).toContain('Cloud Dancer needs 13 more cells to reach this Personal Map milestone.');
-      expect(html).toContain('12');
-      expect(html).toContain('href="/personal"');
-      expect(html).not.toContain('cloud-dancer@example.com');
+      expect(base.renderAppPage).toHaveBeenCalledWith(expect.objectContaining({
+        page: 'profile',
+        profile: expect.objectContaining({ displayName: pilotProfile.displayName }),
+      }));
     });
   });
 
@@ -879,14 +888,14 @@ describe('webRouter', () => {
         viewerUserId: user.userId,
         query: 'cloud',
       });
-      expect(base.renderPage).toHaveBeenLastCalledWith(expect.objectContaining({
+      expect(base.renderAppPage).toHaveBeenLastCalledWith(expect.objectContaining({
         page: 'activity',
         activitySearch: 'cloud',
-        activityPilotResults: [{
+        activityPilotResults: [expect.objectContaining({
           userId: pilotProfile.userId,
           displayName: 'Cloud Dancer',
           isFollowing: true,
-        }],
+        })],
       }));
     });
   });

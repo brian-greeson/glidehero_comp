@@ -5,14 +5,11 @@ const MAX_FILE_BYTES = 100 * 1024 * 1024;
 const CONCURRENCY = 4;
 const PROGRESS_POLL_INTERVAL_MS = 5_000;
 
-function putFile(url, file, onProgress) {
+function putFile(url, file) {
   return new Promise((resolve, reject) => {
     const request = new XMLHttpRequest();
     request.open('PUT', url);
     request.setRequestHeader('Content-Type', file.type || 'application/octet-stream');
-    request.upload.addEventListener('progress', (event) => {
-      if (event.lengthComputable) onProgress(Math.round((event.loaded / event.total) * 100));
-    });
     request.addEventListener('load', () => request.status >= 200 && request.status < 300 ? resolve() : reject(new Error('Object upload failed.')));
     request.addEventListener('error', () => reject(new Error('Object upload failed.')));
     request.send(file);
@@ -34,11 +31,12 @@ export function initializeFlightUploads(documentRef = document, windowRef = glob
   const uploadDialog = documentRef.querySelector('[data-upload-dialog]');
   const uploadClose = documentRef.querySelector('[data-upload-close]');
   const uploadList = documentRef.querySelector('[data-upload-list]');
-  const progressLink = documentRef.querySelector('[data-upload-progress-link]');
+  const uploadFailures = documentRef.querySelector('[data-upload-failures]');
+  const uploadProgressState = documentRef.querySelector('[data-upload-progress-state]');
+  const processingState = documentRef.querySelector('[data-processing-state]');
   const overall = documentRef.querySelector('[data-upload-overall]');
   const progressBar = documentRef.querySelector('[data-flight-progress-bar]');
-  const progressCount = documentRef.querySelector('[data-flight-progress-count]');
-  if (!windowRef || !uploadTrigger || !uploadDialog || !uploadList || !overall || !progressBar || !progressCount) return;
+  if (!windowRef || !uploadTrigger || !uploadDialog || !uploadList || !uploadFailures || !uploadProgressState || !processingState || !overall || !progressBar) return;
   const inputs = [...documentRef.querySelectorAll('[data-upload-more-input]')];
 
   const pending = [];
@@ -47,6 +45,7 @@ export function initializeFlightUploads(documentRef = document, windowRef = glob
   let selected = 0;
   let serverTotal = 0;
   let serverFinished = 0;
+  let serverWorkActive = false;
   let modalServerBaseline = null;
   let observedExternalGrowth = 0;
   const currentReservations = new Set();
@@ -58,10 +57,6 @@ export function initializeFlightUploads(documentRef = document, windowRef = glob
   let progressPollTimer = null;
   let progressRequestId = 0;
 
-  function showProgressLink() {
-    if (progressLink) progressLink.hidden = false;
-  }
-
   function updateUploadTrigger() {
     const localWorkActive = selected > settled || currentReservations.size > 0;
     uploadTrigger.textContent = localWorkActive || serverTotal > serverFinished ? 'Upload Status' : 'Upload';
@@ -69,38 +64,31 @@ export function initializeFlightUploads(documentRef = document, windowRef = glob
 
   function updateOverall() {
     overall.textContent = `${settled}/${selected}`;
+    progressBar.max = Math.max(selected, 1);
+    progressBar.value = settled;
+    const localUploadsActive = selected > settled;
+    const processing = !localUploadsActive && (serverWorkActive || (selected > 0 && settled === selected));
+    uploadProgressState.hidden = processing;
+    processingState.hidden = !processing;
     updateUploadTrigger();
   }
 
-  function makeRow(file) {
-    const row = documentRef.createElement('div');
-    row.className = 'flight-upload-row';
-    const name = documentRef.createElement('span');
-    name.textContent = file.name;
-    const progress = documentRef.createElement('progress');
-    progress.max = 100;
-    progress.value = 0;
-    const status = documentRef.createElement('span');
-    status.textContent = 'Waiting';
-    row.append(name, progress, status);
-    uploadList.append(row);
-    return { progress, status };
+  function appendFailedUpload(file, error) {
+    const item = documentRef.createElement('li');
+    item.textContent = `${file.name}: ${error instanceof Error ? error.message : 'Upload failed.'}`;
+    uploadList.append(item);
+    uploadFailures.hidden = false;
   }
 
   async function upload(item) {
-    item.row.status.textContent = 'Preparing';
     const intent = await jsonRequest('/v1/igc-uploads/intents', {
       method: 'POST',
       body: JSON.stringify({ originalFilename: item.file.name, contentType: item.file.type || 'application/octet-stream', byteSize: item.file.size }),
     });
     item.intentId = intent.id;
     currentIntentIds.add(intent.id);
-    item.row.status.textContent = 'Uploading';
-    await putFile(intent.uploadUrl, item.file, (percent) => { item.row.progress.value = percent; });
-    item.row.progress.value = 100;
-    item.row.status.textContent = 'Queueing';
+    await putFile(intent.uploadUrl, item.file);
     await jsonRequest(`/v1/igc-uploads/${intent.id}/complete`, { method: 'POST', body: '{}' });
-    item.row.status.textContent = 'Queued';
   }
 
   function releaseReservation(item) {
@@ -129,8 +117,7 @@ export function initializeFlightUploads(documentRef = document, windowRef = glob
       const item = pending.shift();
       running += 1;
       void upload(item).catch(async (error) => {
-        item.row.status.textContent = error.message;
-        item.row.status.classList.add('error');
+        appendFailedUpload(item.file, error);
         await releaseFailedUpload(item);
       }).finally(() => {
         running -= 1;
@@ -149,7 +136,7 @@ export function initializeFlightUploads(documentRef = document, windowRef = glob
       return;
     }
     for (const file of valid) {
-      const item = { file, row: makeRow(file) };
+      const item = { file };
       currentReservations.add(item);
       pending.push(item);
     }
@@ -175,11 +162,10 @@ export function initializeFlightUploads(documentRef = document, windowRef = glob
     const intentIdsBeforeRequest = new Set(currentIntentIds);
     try {
       const progress = await jsonRequest('/v1/igc-upload-progress');
-      const completedIds = Array.isArray(progress.completedIds) ? progress.completedIds : [];
-      if (completedIds.some((id) => currentIntentIds.has(id))) showProgressLink();
       if (requestId !== progressRequestId) return;
       serverTotal = progress.total;
       serverFinished = progress.finished;
+      serverWorkActive = Number(progress.queued) > 0 || Number(progress.processing) > 0;
       for (const id of intentIdsBeforeRequest) {
         if (currentIntentIds.has(id)) representedIntentIds.add(id);
       }
@@ -204,10 +190,7 @@ export function initializeFlightUploads(documentRef = document, windowRef = glob
         modalServerBaseline = null;
         observedExternalGrowth = 0;
       }
-      progressBar.max = Math.max(progress.total, 1);
-      progressBar.value = progress.finished;
-      progressCount.textContent = `${progress.finished}/${progress.total}`;
-      updateUploadTrigger();
+      updateOverall();
       if (!initialProgressResolved) {
         initialProgressResolved = true;
         resolveInitialProgress();
@@ -219,9 +202,6 @@ export function initializeFlightUploads(documentRef = document, windowRef = glob
   }
 
   function openUploadDialog() {
-    if (!uploadDialog.open && currentReservations.size === 0) {
-      progressLink?.setAttribute('hidden', '');
-    }
     if (!uploadDialog.open) uploadDialog.showModal();
     void refreshProgress();
   }

@@ -1,0 +1,25 @@
+<dialog id="flight-upload-dialog" class="flight-upload-dialog" data-upload-dialog aria-labelledby="flight-upload-title">
+  <section class="flight-upload-panel">
+    <header>
+      <div><p class="flight-upload-eyebrow">Flight upload</p><h2 id="flight-upload-title">Uploading flights</h2></div>
+      <button type="button" class="flight-upload-close" data-upload-close aria-label="Close upload status">&times;</button>
+    </header>
+    <div class="flight-upload-status">
+      <div class="flight-upload-progress" data-upload-progress-state>
+        <div><strong>Keep this page open until all files finish uploading.</strong><span data-upload-overall>0/0</span></div>
+        <progress max="1" value="0" data-flight-progress-bar></progress>
+      </div>
+      <div class="flight-processing-state" data-processing-state hidden>
+        <span class="flight-processing-spinner" aria-hidden="true"></span>
+        <strong>Processing flights. Results will appear on the map shortly.</strong>
+      </div>
+    </div>
+    <section class="flight-upload-failures" data-upload-failures hidden>
+      <h3>Failed uploads</h3>
+      <ul data-upload-list></ul>
+    </section>
+    <footer>
+      <label class="flight-upload-action">Choose flights<input data-upload-more-input type="file" accept=".igc,.zip" multiple></label>
+    </footer>
+  </section>
+</dialog>

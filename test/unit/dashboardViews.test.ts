@@ -27,6 +27,7 @@ describe('Dashboard result views', () => {
   it('renders populated Personal stats', () => {
     const elements = new Map([
       ['[data-personal-stats]', element()],
+      ['[data-personal-claimed-cells]', element()],
       ['[data-personal-claimed-area]', element()],
       ['[data-personal-flights]', element()],
     ]);
@@ -39,6 +40,7 @@ describe('Dashboard result views', () => {
     });
     expect(elements.get('[data-personal-claimed-area]')?.textContent).toBe('2.5 km²');
     expect(elements.get('[data-personal-flights]')?.textContent).toBe('2');
+    expect(elements.get('[data-personal-claimed-cells]')?.textContent).toBe('2');
 
     expect(formatClaimedArea(2_500_000, 'en-US')).toBe('2.5 km²');
   });

@@ -1,0 +1,53 @@
+<aside class="map-sidebar" aria-label="Map controls">
+  <section class="map-control-group">
+    <h2>Map Mode</h2>
+    <div class="segmented-control" data-segmented-control role="group" aria-label="Map mode">
+      <a href="{{ if mode === 'personal' }}{{ navigation[0].href }}{{ else }}{{ if typeof competitiveMapHref !== 'undefined' }}{{ competitiveMapHref }}{{ else }}/global{{ /if }}{{ /if }}" data-map-mode-link="personal" class="{{ if mode === 'personal' }}is-active{{ /if }}" aria-current="{{ if mode === 'personal' }}page{{ else }}false{{ /if }}">{{ include "app/components/icon.vto" { name: "profile" } }}Personal</a>
+      <a href="{{ if mode === 'competitive' }}{{ if typeof competitiveMapHref !== 'undefined' }}{{ competitiveMapHref }}{{ else }}/global{{ /if }}{{ else }}/global{{ /if }}" data-map-mode-link="competitive" class="{{ if mode === 'competitive' }}is-active{{ /if }}" aria-current="{{ if mode === 'competitive' }}page{{ else }}false{{ /if }}">{{ include "app/components/icon.vto" { name: "trophy" } }}Competitive</a>
+    </div>
+  </section>
+  <section class="map-control-group">
+    <h2>Time Range</h2>
+    <div class="segmented-control" data-segmented-control role="group" aria-label="Time range">
+      {{ if mode === 'competitive' }}
+        <button type="button" data-competition-period-option="all-time" aria-pressed="{{ if period === 'all-time' }}true{{ else }}false{{ /if }}">All Time</button>
+        <button type="button" data-competition-period-option="current-month" aria-pressed="{{ if period === 'current-month' }}true{{ else }}false{{ /if }}"><span data-current-month-option>Current Month</span></button>
+      {{ else }}
+        <a href="{{ if typeof mapPath !== 'undefined' }}{{ mapPath }}{{ else }}{{ navigation[0].href }}{{ /if }}" data-map-period-link="all-time" class="{{ if period === 'all-time' }}is-active{{ /if }}" aria-current="{{ if period === 'all-time' }}page{{ else }}false{{ /if }}">All Time</a>
+        <a href="{{ if typeof mapPath !== 'undefined' }}{{ mapPath }}{{ else }}{{ navigation[0].href }}{{ /if }}" data-map-period-link="current-month" class="{{ if period === 'current-month' }}is-active{{ /if }}" aria-current="{{ if period === 'current-month' }}page{{ else }}false{{ /if }}">Current Month</a>
+      {{ /if }}
+    </div>
+  </section>
+  <section class="map-control-group map-location">
+    <h2>Location</h2>
+    <button type="button" class="map-location__trigger" data-map-location-trigger aria-expanded="false" aria-controls="map-arena-search">{{ include "app/components/icon.vto" { name: "pin" } }}<span>{{ location }}</span>{{ include "app/components/icon.vto" { name: "chevron-down" } }}</button>
+  </section>
+  <section class="map-control-group map-stats">
+    <h2>Your Stats</h2>
+    <div class="map-stat-grid" data-map-viewport-stats {{ if mode === 'personal' }}data-personal-stats aria-busy="true"{{ /if }}>
+      {{ if mode === 'personal' && metrics.length === 0 }}
+        <article class="map-stat map-stat--green"><strong data-personal-claimed-cells>—</strong><span>Cells Owned</span></article>
+        <article class="map-stat map-stat--blue"><strong data-personal-claimed-area>—</strong><span>Claimed Area</span></article>
+        <article class="map-stat map-stat--purple"><strong data-personal-flights>—</strong><span>Flights</span></article>
+      {{ else }}
+        {{ for metric of metrics }}
+          <article class="map-stat map-stat--{{ metric.tone }}"><strong>{{ metric.value }}</strong><span>{{ metric.label }}</span></article>
+        {{ /for }}
+      {{ /if }}
+    </div>
+  </section>
+  <section class="map-control-group map-leaderboard{{ if mode === 'competitive' }} map-leaderboard--coverage{{ /if }}" {{ if mode === 'competitive' }}data-territory-leaderboard aria-busy="true"{{ /if }}>
+    <header class="map-leaderboard__heading"><h2>Viewport Leaderboard</h2>{{ if mode === 'competitive' }}<button type="button" data-territory-allpilots aria-pressed="true">Show All</button>{{ /if }}</header>
+    {{ if mode === 'competitive' }}
+      <p class="leaderboard-status" data-territory-status aria-live="polite">Loading coverage…</p>
+      <div class="coverage-table" role="table" aria-label="Coverage leaders"><div data-territory-list role="rowgroup"></div></div>
+      <div class="current-pilot-result" data-territory-current-pilot hidden></div>
+    {{ else }}
+      <ol data-map-viewport-leaderboard>
+        {{ for row of leaderboard }}
+          <li{{ if row.isCurrent }} class="is-current"{{ /if }}><span>{{ row.rank }}</span>{{ include "app/components/initialsAvatar.vto" { initials: row.pilot.initials, color: row.pilot.color, size: "small" } }}<strong>{{ if row.isCurrent }}You{{ else }}{{ row.pilot.displayName }}{{ /if }}</strong><b>{{ row.cells }}</b><i style="--pilot-color: {{ row.pilot.color }}"></i></li>
+        {{ /for }}
+      </ol>
+    {{ /if }}
+  </section>
+</aside>

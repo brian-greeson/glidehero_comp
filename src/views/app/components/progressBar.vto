@@ -1,0 +1,4 @@
+<div class="progress-row">
+  <progress max="100" value="{{ if progress.percent === 0 }}0{{ else }}{{ progress.percent }}{{ /if }}" aria-label="{{ label }}: {{ progress.percent }} percent">{{ progress.percent }}%</progress>
+  <strong>{{ progress.percent }}%</strong>
+</div>

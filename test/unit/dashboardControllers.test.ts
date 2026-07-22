@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 // @ts-expect-error Browser assets remain JavaScript.
-import { initializeDashboard } from '../../public/scripts/dashboard.js';
+import { initializeArenaSearch } from '../../public/scripts/arenaSearch.js';
 // @ts-expect-error Browser assets remain JavaScript.
 import { initializeGlobalDashboard } from '../../public/scripts/globalDashboard.js';
 // @ts-expect-error Browser assets remain JavaScript.
@@ -242,7 +242,7 @@ describe('Personal dashboard controller', () => {
       };
       const fetchImpl = vi.fn(async () => new Response(JSON.stringify({ arenas: [] }), { status: 200 }));
 
-      initializeDashboard({ documentRef, maplibre: null, fetchImpl });
+      initializeArenaSearch({ documentRef, fetchImpl });
       await searchInput.emit('input');
       await vi.advanceTimersByTimeAsync(200);
 

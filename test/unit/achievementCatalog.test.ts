@@ -58,4 +58,10 @@ describe('achievement catalog', () => {
     expect(Object.isFrozen(achievementCatalog)).toBe(true);
     expect(Object.isFrozen(achievementCatalog[0])).toBe(true);
   });
+
+  it('does not expose achievement point or reward metadata', () => {
+    expect(achievementCatalog.every((definition) => !('points' in definition) && !('rewardPoints' in definition))).toBe(true);
+    expect(getAchievementDefinition('launches_visited_3')).not.toHaveProperty('points');
+    expect(getAchievementDefinition('general_coverage_100')).not.toHaveProperty('rewardPoints');
+  });
 });

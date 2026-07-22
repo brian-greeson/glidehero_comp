@@ -1,0 +1,36 @@
+import type { MapPageModel } from '../models.js';
+
+export type ProductionMapInput = {
+  mode: MapPageModel['mode'];
+  period: MapPageModel['period'];
+  location: string;
+  mapHref: string;
+  currentUserId: string;
+  territoryColor: string;
+  mapStyleUrl?: string;
+  territoryTileMinimumZoom?: number;
+  territoryTileMaximumZoom?: number;
+  arenaSourceId?: number;
+};
+
+/** Build an endpoint-backed map model. Map data is loaded by MapLibre after render. */
+export function createMapPageModel(
+  shell: Omit<MapPageModel, 'page' | 'mode' | 'period' | 'location' | 'metrics' | 'leaderboard'>,
+  input: ProductionMapInput,
+): MapPageModel {
+  return {
+    ...shell,
+    page: 'map',
+    mode: input.mode,
+    period: input.period,
+    location: input.location,
+    metrics: [],
+    leaderboard: [],
+    currentUserId: input.currentUserId,
+    territoryColor: input.territoryColor,
+    ...(input.mapStyleUrl ? { mapStyleUrl: input.mapStyleUrl } : {}),
+    ...(input.territoryTileMinimumZoom === undefined ? {} : { territoryTileMinimumZoom: input.territoryTileMinimumZoom }),
+    ...(input.territoryTileMaximumZoom === undefined ? {} : { territoryTileMaximumZoom: input.territoryTileMaximumZoom }),
+    ...(input.arenaSourceId === undefined ? {} : { arenaSourceId: input.arenaSourceId }),
+  };
+}

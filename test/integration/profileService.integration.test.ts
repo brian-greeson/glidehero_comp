@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { achievementRecordEvents, achievementRecords, achievements, flights, flightProgress, igcFiles, personalGridClaims } from '../../src/db/schema.js';
+import { achievementRecordEvents, achievementRecords, achievements, flights, flightProgress, igcFiles, personalGridClaims, pilotFollows } from '../../src/db/schema.js';
 import { createAuthService } from '../../src/services/authService.js';
 import { createProfileService, normalizeTerritoryColor } from '../../src/services/profileService.js';
 import { resetAndMigrateTestDatabase } from './database.js';
@@ -62,6 +62,28 @@ describe('profileService', () => {
     ]));
     expect(stored.rows.find((profile) => profile.user_id === firstPilot.user.userId)?.updated_at.getTime())
       .toBeGreaterThan(oldUpdatedAt.getTime());
+  });
+
+  it('returns follower and following counts for current and public profiles', async () => {
+    const auth = createAuthService(database.db, { sessionTtlSeconds: 604800 });
+    const pilot = await auth.signup({ email: 'counts-pilot@example.com', password: 'correct horse battery staple', displayName: 'Counts Pilot' });
+    const follower = await auth.signup({ email: 'counts-follower@example.com', password: 'correct horse battery staple', displayName: 'Counts Follower' });
+    const otherFollower = await auth.signup({ email: 'counts-other@example.com', password: 'correct horse battery staple', displayName: 'Counts Other' });
+    await database.db.insert(pilotFollows).values([
+      { followerUserId: follower.user.userId, followedUserId: pilot.user.userId },
+      { followerUserId: otherFollower.user.userId, followedUserId: pilot.user.userId },
+      { followerUserId: pilot.user.userId, followedUserId: follower.user.userId },
+    ]);
+
+    const profiles = createProfileService(database.db, { cellSize: 1_000 });
+    await expect(profiles.getPilotProfile(pilot.user.userId)).resolves.toEqual(expect.objectContaining({
+      followerCount: 2,
+      followingCount: 1,
+    }));
+    await expect(profiles.getPilotProfile(follower.user.userId)).resolves.toEqual(expect.objectContaining({
+      followerCount: 1,
+      followingCount: 1,
+    }));
   });
 
   it('aggregates the requested pilot profile and returns empty numeric values safely', async () => {
@@ -153,6 +175,8 @@ describe('profileService', () => {
       currentTotalCellRecord: 8,
       currentEnclosedCellRecord: 2,
       achievementCount: 3,
+      followerCount: 0,
+      followingCount: 0,
       achievements: [
         expect.objectContaining({
           achievementType: 'unique_cells_milestone',
@@ -221,6 +245,8 @@ describe('profileService', () => {
       currentTotalCellRecord: null,
       currentEnclosedCellRecord: null,
       achievementCount: 0,
+      followerCount: 0,
+      followingCount: 0,
       achievements: [],
       recentFlights: [],
       currentArenaLeaderships: [],
