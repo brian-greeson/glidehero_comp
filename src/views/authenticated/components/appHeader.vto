@@ -1,0 +1,29 @@
+<header class="app-header">
+  {{ for item of navigation }}{{ if item.page === 'map' }}<a class="app-brand" href="{{ item.href }}" aria-label="Glide Hero Map">{{ /if }}{{ /for }}
+    <img src="/android-chrome-192x192.png" alt="">
+    <span class="app-brand__wordmark"><strong>GLIDE</strong><strong>HERO</strong></span>
+  </a>
+  <nav class="desktop-navigation" aria-label="Primary navigation">
+    {{ for item of navigation }}
+      <a class="desktop-navigation__item{{ if item.page === page }} is-active{{ /if }}" href="{{ item.href }}"{{ if item.page === page }} aria-current="page"{{ /if }}>
+        {{ include "authenticated/components/icon.vto" { name: item.icon } }}<span>{{ item.label }}</span>
+      </a>
+    {{ /for }}
+  </nav>
+  <div class="app-header__actions">
+    <button class="app-upload-trigger" type="button" data-upload-trigger aria-controls="flight-upload-dialog">
+      {{ include "authenticated/components/icon.vto" { name: "flight" } }}<span>Upload</span>
+    </button>
+    <div class="app-account" data-app-account>
+      <button class="app-account__trigger" type="button" data-account-trigger aria-expanded="false" aria-controls="app-account-menu" aria-label="Open account menu for {{ user.displayName }}">
+        {{ include "authenticated/components/initialsAvatar.vto" { initials: user.initials, size: "header" } }}
+        {{ include "authenticated/components/icon.vto" { name: "chevron-down" } }}
+      </button>
+      <div class="app-account__menu" id="app-account-menu" data-account-menu hidden>
+        <a href="{{ donateUrl }}">{{ include "authenticated/components/icon.vto" { name: "heart" } }}Donate</a>
+        {{ if user.isAdmin }}<a href="{{ adminUrl }}">{{ include "authenticated/components/icon.vto" { name: "shield" } }}Admin</a>{{ /if }}
+        <form method="post" action="{{ logoutUrl }}"><button type="submit">{{ include "authenticated/components/icon.vto" { name: "logout" } }}Log out</button></form>
+      </div>
+    </div>
+  </div>
+</header>

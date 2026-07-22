@@ -3,7 +3,7 @@ import { basename, resolve } from 'node:path';
 import { inflateSync } from 'node:zlib';
 import { describe, expect, it } from 'vitest';
 import { achievementCatalog } from '../../src/domain/achievement/catalog.js';
-import { achievementArtworkManifest, resolveAchievementArtworkKey } from '../../src/views/app/achievementArtwork.js';
+import { achievementArtworkManifest, resolveAchievementArtworkKey } from '../../src/views/authenticated/achievementArtwork.js';
 
 type DecodedPng = { width: number; height: number; bitDepth: number; colorType: number; interlace: number; pixels: Uint8Array };
 

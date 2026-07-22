@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { extractPolygonGeometries } from '../domain/arena/geoJson.js';
 import { AppError } from '../domain/errors.js';
 import type { AdminAreaService } from '../services/adminAreaService.js';
-import type { AdminAreaPageRenderer } from '../views/renderer.js';
+import type { AdminAreaPageRenderer } from '../views/admin/renderer.js';
 
 const uuid = z.string().uuid();
 const saveSchema = z.object({

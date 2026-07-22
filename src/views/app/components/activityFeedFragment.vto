@@ -1,4 +1,0 @@
-<div data-activity-feed>
-  {{ for event of events }}{{ include "app/components/activityCard.vto" { event, preview: false } }}{{ /for }}
-  {{ if activityLoadMoreHref }}<a class="activity-load-more" data-activity-load-more data-fragment-href="{{ activityLoadMoreEndpoint }}" href="{{ activityLoadMoreHref }}">Load more activity</a><p class="activity-load-more-status" data-activity-load-more-status aria-live="polite"></p>{{ /if }}
-</div>

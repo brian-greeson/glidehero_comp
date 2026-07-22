@@ -19,6 +19,7 @@ import {
   visibleCoverageFeatureCount,
 } from './competitionCoverageMap.js';
 import { initializeMapFlightAids } from './mapFlightAids.js';
+import { mapViewportFromSearch, updateMapModeLinks } from './mapViewportUrl.js';
 
 async function jsonRequest(url, fetchImpl, signal) {
   const response = await fetchImpl(url, {
@@ -184,12 +185,15 @@ export function initializeCompetitionCoverage({
   });
 
   try {
+    const initialViewport = mapViewportFromSearch(locationRef?.search);
     map = new maplibre.Map({
       container: mapElement,
       style: mapElement.dataset.mapStyleUrl,
-      center: [-106.2, 39.2],
-      zoom: 7,
+      center: initialViewport?.center ?? [-106.2, 39.2],
+      zoom: initialViewport?.zoom ?? 7,
     });
+    const syncModeLinks = () => updateMapModeLinks({ documentRef, locationRef, map });
+    syncModeLinks();
     map.addControl(new maplibre.NavigationControl(), 'top-right');
     map.once('error', () => setStatus('Map unavailable. Check your connection and try again.'));
     map.once('load', async () => {
@@ -206,13 +210,15 @@ export function initializeCompetitionCoverage({
             source: 'competition-arena-boundary',
             paint: { 'line-color': '#0f172a', 'line-width': 3 },
           });
-          map.fitBounds(
-            [
-              [boundary.bbox[0], boundary.bbox[1]],
-              [boundary.bbox[2], boundary.bbox[3]],
-            ],
-            { padding: 60, duration: 0 },
-          );
+          if (!initialViewport) {
+            map.fitBounds(
+              [
+                [boundary.bbox[0], boundary.bbox[1]],
+                [boundary.bbox[2], boundary.bbox[3]],
+              ],
+              { padding: 60, duration: 0 },
+            );
+          }
         }
         installCoverageSource(map, activeTileUrl(), {
           minimumZoom: Number(mapElement.dataset.territoryTileMinimumZoom),
@@ -235,6 +241,7 @@ export function initializeCompetitionCoverage({
       }
     });
     map.on('moveend', () => {
+      syncModeLinks();
       if (!mapReady) return;
       if (!arenaSourceId) void leaderboardRequest.run();
     });

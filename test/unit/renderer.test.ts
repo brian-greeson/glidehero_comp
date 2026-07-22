@@ -1,12 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import {
+  createErrorPageRenderer,
+  createPageRenderer,
+} from '../../src/views/renderer.js';
+import {
   createAdminAreaPageRenderer,
   createAdminMapSettingsPageRenderer,
   createAdminPageRenderer,
   createAdminUserPageRenderer,
-  createErrorPageRenderer,
-  createPageRenderer,
-} from '../../src/views/renderer.js';
+} from '../../src/views/admin/renderer.js';
 
 const user = {
   userId: '00000000-0000-4000-8000-000000000001',

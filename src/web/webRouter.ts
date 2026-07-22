@@ -10,19 +10,15 @@ import type { GridClaimService } from '../services/gridClaimService.js';
 import type { AdminFlightService } from '../services/adminFlightService.js';
 import type { ArenaService } from '../services/arenaService.js';
 import type { ArenaProgressService } from '../services/arenaProgressService.js';
-import type {
-  AdminMapSettingsPageRenderer,
-  AdminPageRenderer,
-  PageModel,
-  PageRenderer,
-} from '../views/renderer.js';
-import type { AppActivityFeedRenderer, AppPageRenderer } from '../views/app/appRenderer.js';
-import { createAppShellModel } from '../views/app/adapters/shellModel.js';
-import { activityFeedToViews, activityPilotResultToView } from '../views/app/adapters/activityView.js';
-import { createAchievementsPageModel } from '../views/app/adapters/achievementView.js';
-import { pilotProfileToView } from '../views/app/adapters/profileView.js';
-import { createMapPageModel } from '../views/app/adapters/mapView.js';
-import type { AppPageModel } from '../views/app/models.js';
+import type { PageModel, PageRenderer } from '../views/renderer.js';
+import type { AdminMapSettingsPageRenderer, AdminPageRenderer } from '../views/admin/renderer.js';
+import type { AuthenticatedActivityFeedRenderer, AuthenticatedPageRenderer } from '../views/authenticated/renderer.js';
+import { createAuthenticatedShellModel } from '../views/authenticated/adapters/shellModel.js';
+import { activityFeedToViews, activityPilotResultToView } from '../views/authenticated/adapters/activityView.js';
+import { createAchievementsPageModel } from '../views/authenticated/adapters/achievementView.js';
+import { pilotProfileToView } from '../views/authenticated/adapters/profileView.js';
+import { createMapPageModel } from '../views/authenticated/adapters/mapView.js';
+import type { AuthenticatedPageModel } from '../views/authenticated/models.js';
 import type { FlightUploadQueueService } from '../services/flightUploadQueueService.js';
 import type { FailedFlightCleanupService } from '../services/failedFlightCleanupService.js';
 import type { TerritoryTileService } from '../services/territoryTileService.js';
@@ -128,7 +124,7 @@ async function render(res: Response, renderPage: PageRenderer, status: number, m
   res.status(status).type('html').send(await renderPage(model));
 }
 
-async function renderApp(res: Response, renderPage: AppPageRenderer, status: number, model: AppPageModel) {
+async function renderAuthenticated(res: Response, renderPage: AuthenticatedPageRenderer, status: number, model: AuthenticatedPageModel) {
   res.status(status).type('html').send(await renderPage(model));
 }
 
@@ -147,8 +143,8 @@ export function createWebRouter(dependencies: {
   arenas: ArenaService;
   arenaProgress: ArenaProgressService;
   renderPage: PageRenderer;
-  renderAppPage: AppPageRenderer;
-  renderAppActivityFeed: AppActivityFeedRenderer;
+  renderAuthenticatedPage: AuthenticatedPageRenderer;
+  renderAuthenticatedActivityFeed: AuthenticatedActivityFeedRenderer;
   mapTilerStyleUrl?: string;
   adminEmails?: readonly string[];
   adminFlights?: AdminFlightService;
@@ -217,8 +213,8 @@ export function createWebRouter(dependencies: {
     return Boolean(currentUser && isAdmin(currentUser.email));
   }
 
-  function appShell(page: 'map' | 'activity' | 'achievements' | 'profile', currentUser: AuthenticatedUser, options: { mapHref?: string; showFooter?: boolean } = {}) {
-    return createAppShellModel({
+  function authenticatedShell(page: 'map' | 'activity' | 'achievements' | 'profile', currentUser: AuthenticatedUser, options: { mapHref?: string; showFooter?: boolean } = {}) {
+    return createAuthenticatedShellModel({
       page,
       user: currentUser,
       isAdmin: isAdmin(currentUser.email),
@@ -230,7 +226,7 @@ export function createWebRouter(dependencies: {
   function productionMap(currentUser: AuthenticatedUser, input: Omit<Parameters<typeof createMapPageModel>[1], 'currentUserId' | 'territoryColor' | 'mapStyleUrl' | 'territoryTileMinimumZoom' | 'territoryTileMaximumZoom'>, options: { mapHref?: string; showFooter?: boolean } = {}) {
     const settings = territoryTileSettings.get();
     return createMapPageModel(
-      appShell('map', currentUser, { mapHref: options.mapHref ?? input.mapHref, showFooter: options.showFooter ?? false }),
+      authenticatedShell('map', currentUser, { mapHref: options.mapHref ?? input.mapHref, showFooter: options.showFooter ?? false }),
       {
         ...input,
         currentUserId: currentUser.userId,
@@ -638,7 +634,7 @@ export function createWebRouter(dependencies: {
       const month = typeof req.query.month === 'string' ? req.query.month : undefined;
       if (month) normalizeCompetitionLeaderboardMonth(month);
       const mapHref = month ? `/global?month=${encodeURIComponent(month)}` : '/global';
-      await renderApp(res, dependencies.renderAppPage, 200, productionMap(currentUser, {
+      await renderAuthenticated(res, dependencies.renderAuthenticatedPage, 200, productionMap(currentUser, {
         mode: 'competitive', period: month ? 'current-month' : 'all-time', location: 'Global Map', mapHref,
       }));
     } catch (error) {
@@ -656,7 +652,7 @@ export function createWebRouter(dependencies: {
       const month = typeof req.query.month === 'string' ? req.query.month : undefined;
       if (month) normalizeCompetitionLeaderboardMonth(month);
       const mapHref = month ? `/personal?month=${encodeURIComponent(month)}` : '/personal';
-      await renderApp(res, dependencies.renderAppPage, 200, productionMap(currentUser, {
+      await renderAuthenticated(res, dependencies.renderAuthenticatedPage, 200, productionMap(currentUser, {
         mode: 'personal', period: month ? 'current-month' : 'all-time', location: 'Personal Map', mapHref,
       }));
     } catch (error) {
@@ -679,8 +675,8 @@ export function createWebRouter(dependencies: {
       const thumbnailUrls = dependencies.thumbnailDelivery
         ? await dependencies.thumbnailDelivery.signMany(profile.recentFlights.map((flight) => ({ userId: profile.userId, flightId: flight.flightId })))
         : undefined;
-      const shell = appShell('profile', currentUser);
-      await renderApp(res, dependencies.renderAppPage, 200, {
+      const shell = authenticatedShell('profile', currentUser);
+      await renderAuthenticated(res, dependencies.renderAuthenticatedPage, 200, {
         ...shell,
         page: 'profile',
         ...pilotProfileToView(profile, { isCurrent: true, isFollowed: false, currentPath: '/profile', thumbnailUrls }),
@@ -702,8 +698,8 @@ export function createWebRouter(dependencies: {
         next();
         return;
       }
-      const shell = appShell('achievements', currentUser);
-      await renderApp(res, dependencies.renderAppPage, 200, createAchievementsPageModel(profile, shell));
+      const shell = authenticatedShell('achievements', currentUser);
+      await renderAuthenticated(res, dependencies.renderAuthenticatedPage, 200, createAchievementsPageModel(profile, shell));
     } catch (error) {
       next(error);
     }
@@ -733,8 +729,8 @@ export function createWebRouter(dependencies: {
       const thumbnailUrls = dependencies.thumbnailDelivery
         ? await dependencies.thumbnailDelivery.signMany(profile.recentFlights.map((flight) => ({ userId: profile.userId, flightId: flight.flightId })))
         : undefined;
-      const shell = appShell('profile', currentUser);
-      await renderApp(res, dependencies.renderAppPage, 200, {
+      const shell = authenticatedShell('profile', currentUser);
+      await renderAuthenticated(res, dependencies.renderAuthenticatedPage, 200, {
         ...shell,
         page: 'profile',
         ...pilotProfileToView(profile, { isCurrent: profileIsCurrent, isFollowed: profileIsFollowed, currentPath: `/pilots/${parsedUserId.data}`, thumbnailUrls }),
@@ -787,13 +783,13 @@ export function createWebRouter(dependencies: {
           .map((item) => ({ userId: item.actorUserId, flightId: item.sourceFlightId as string })))
         : undefined;
       if (fragment) {
-        res.status(200).type('html').send(await dependencies.renderAppActivityFeed({
+        res.status(200).type('html').send(await dependencies.renderAuthenticatedActivityFeed({
           events: activityFeedToViews(activityFeed.items, { thumbnailUrls }), activityLoadMoreHref, activityLoadMoreEndpoint,
         }));
         return;
       }
-      const shell = appShell('activity', currentUser);
-      await renderApp(res, dependencies.renderAppPage, 200, {
+      const shell = authenticatedShell('activity', currentUser);
+      await renderAuthenticated(res, dependencies.renderAuthenticatedPage, 200, {
         ...shell,
         page: 'activity',
         metrics: [],
@@ -914,7 +910,7 @@ export function createWebRouter(dependencies: {
       const month = typeof req.query.month === 'string' ? req.query.month : undefined;
       if (month) normalizeCompetitionLeaderboardMonth(month);
       const mapHref = month ? `${arena.path}?month=${encodeURIComponent(month)}` : arena.path;
-      await renderApp(res, dependencies.renderAppPage, 200, productionMap(currentUser, {
+      await renderAuthenticated(res, dependencies.renderAuthenticatedPage, 200, productionMap(currentUser, {
         mode: 'competitive', period: month ? 'current-month' : 'all-time', location: arena.name, mapHref,
         arenaSourceId: arena.sourceId,
       }));

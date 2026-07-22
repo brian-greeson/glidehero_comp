@@ -1,14 +1,14 @@
 import { createReadStream, existsSync, statSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { extname, resolve, sep } from 'node:path';
-import { appPageFixture } from '../views/app/fixtures.js';
-import { createAppPageRenderer } from '../views/app/appRenderer.js';
-import type { AppPage } from '../views/app/models.js';
+import { authenticatedPageFixture } from '../views/authenticated/fixtures.js';
+import { createAuthenticatedPageRenderer } from '../views/authenticated/renderer.js';
+import type { AuthenticatedPage } from '../views/authenticated/models.js';
 
 const port = Number(process.env.UI_PREVIEW_PORT ?? 4174);
 const publicRoot = resolve('public');
-const render = createAppPageRenderer();
-const pages = new Set<AppPage>(['map', 'activity', 'achievements', 'profile']);
+const render = createAuthenticatedPageRenderer();
+const pages = new Set<AuthenticatedPage>(['map', 'activity', 'achievements', 'profile']);
 const contentTypes: Record<string, string> = {
   '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.svg': 'image/svg+xml',
   '.png': 'image/png', '.webp': 'image/webp', '.ico': 'image/x-icon',
@@ -20,10 +20,10 @@ createServer(async (request, response) => {
     response.writeHead(302, { location: '/map' }).end();
     return;
   }
-  const page = pathname.slice(1) as AppPage;
+  const page = pathname.slice(1) as AuthenticatedPage;
   if (pages.has(page)) {
     response.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
-    response.end(await render(appPageFixture(page)));
+    response.end(await render(authenticatedPageFixture(page)));
     return;
   }
   const file = resolve(publicRoot, `.${pathname}`);

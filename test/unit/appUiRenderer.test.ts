@@ -1,12 +1,12 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { appPageFixture } from '../../src/views/app/fixtures.js';
-import { createAppPageRenderer } from '../../src/views/app/appRenderer.js';
-import type { AppPage } from '../../src/views/app/models.js';
+import { authenticatedPageFixture } from '../../src/views/authenticated/fixtures.js';
+import { createAuthenticatedPageRenderer } from '../../src/views/authenticated/renderer.js';
+import type { AuthenticatedPage } from '../../src/views/authenticated/models.js';
 
 describe('refreshed app UI renderer', () => {
-  const render = createAppPageRenderer();
-  const pages: AppPage[] = ['map', 'activity', 'achievements', 'profile'];
+  const render = createAuthenticatedPageRenderer();
+  const pages: AuthenticatedPage[] = ['map', 'activity', 'achievements', 'profile'];
 
   it('keeps upload and processing status states visually exclusive', () => {
     const css = readFileSync('public/styles/app-ui/app.css', 'utf8');
@@ -17,7 +17,7 @@ describe('refreshed app UI renderer', () => {
   });
 
   it('renders extracted achievement artwork with an accessible dynamic label', async () => {
-    const html = await render(appPageFixture('achievements'));
+    const html = await render(authenticatedPageFixture('achievements'));
     expect(html).toContain('class="achievement-badge__artwork" src="/images/app-ui/achievements/cell-explorer.png"');
     expect(html).toContain('width="256" height="256" alt="" aria-hidden="true"');
     expect(html).toContain('class="achievement-badge__label">10</span>');
@@ -43,9 +43,34 @@ describe('refreshed app UI renderer', () => {
     expect(mapCss).toContain('.map-canvas { position: absolute; inset: 0; width: 100%; height: 100%; }');
   });
 
+  it('positions Arena search relative to the map stage', async () => {
+    const html = await render(authenticatedPageFixture('map'));
+    const mapStageStart = html.indexOf('<section class="map-stage"');
+    const mapStageEnd = html.indexOf('</section>', mapStageStart);
+    const arenaSearch = html.indexOf('data-map-arena-search');
+
+    expect(mapStageStart).toBeGreaterThan(-1);
+    expect(arenaSearch).toBeGreaterThan(mapStageStart);
+    expect(arenaSearch).toBeLessThan(mapStageEnd);
+  });
+
+  it('renders one responsive map sidebar so mobile data is not updated in a hidden duplicate', async () => {
+    const html = await render(authenticatedPageFixture('map'));
+    expect(html.match(/class="map-sidebar"/g)).toHaveLength(1);
+    expect(html.match(/data-map-viewport-stats/g)).toHaveLength(1);
+    expect(html.match(/data-map-viewport-leaderboard/g)).toHaveLength(1);
+  });
+
+  it('keeps the collapsed mobile drawer at a slim handle height', () => {
+    const mapCss = readFileSync('public/styles/app-ui/map.css', 'utf8');
+    expect(mapCss).toContain('height: clamp(25px, 5svh, 260px);');
+    expect(mapCss).not.toContain('height: min(52svh, 460px);');
+    expect(mapCss).not.toContain('.mobile-map-sheet { height: 52svh; }');
+  });
+
   it('renders every isolated page with the shared four-destination shell', async () => {
     for (const page of pages) {
-      const html = await render(appPageFixture(page));
+      const html = await render(authenticatedPageFixture(page));
       expect(html).toContain(`<body class="app-ui-body app-ui-body--${page}">`);
       expect(html).toContain(`/styles/app-ui/${page}.css`);
       expect(html.match(/class="desktop-navigation__item/g)).toHaveLength(4);
@@ -66,7 +91,7 @@ describe('refreshed app UI renderer', () => {
   });
 
   it('renders the initials-only account menu and preserves conditional admin access', async () => {
-    const admin = await render(appPageFixture('map'));
+    const admin = await render(authenticatedPageFixture('map'));
     expect(admin).toContain('initials-avatar initials-avatar--header');
     expect(admin).toContain('>AS</span>');
     expect(admin).toMatch(/icon-heart[\s\S]*?Donate<\/a>/);
@@ -75,16 +100,16 @@ describe('refreshed app UI renderer', () => {
     expect(admin).not.toContain('account-email');
     expect(admin).not.toContain('territory-color');
 
-    const model = structuredClone(appPageFixture('map'));
+    const model = structuredClone(authenticatedPageFixture('map'));
     model.user.isAdmin = false;
     const pilot = await render(model);
     expect(pilot).not.toMatch(/icon-shield[\s\S]*?Admin<\/a>/);
   });
 
   it('honors the agreed page removals and footer rules', async () => {
-    const map = await render(appPageFixture('map'));
-    const activity = await render(appPageFixture('activity'));
-    const profile = await render(appPageFixture('profile'));
+    const map = await render(authenticatedPageFixture('map'));
+    const activity = await render(authenticatedPageFixture('activity'));
+    const profile = await render(authenticatedPageFixture('profile'));
     expect(map).not.toContain('class="app-footer"');
     expect(activity).toContain('class="app-footer"');
     expect(profile).toContain('class="app-footer"');
@@ -95,7 +120,7 @@ describe('refreshed app UI renderer', () => {
   });
 
   it('keeps preview values in models and renders numeric-looking zero text', async () => {
-    const model = structuredClone(appPageFixture('map'));
+    const model = structuredClone(authenticatedPageFixture('map'));
     if (model.page !== 'map') throw new Error('Expected Map fixture.');
     model.metrics[0]!.value = '0';
     model.leaderboard[0]!.cells = '0';

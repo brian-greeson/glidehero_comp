@@ -118,8 +118,8 @@ function dependencies() {
       `<html><body><h1>GlideHero</h1><div>${model.currentUser?.displayName ?? 'anonymous'}</div>` +
       `<div>${model.loginError ?? model.signupError ?? ''}</div></body></html>`,
   );
-  const renderAppPage = vi.fn(async () => '<html><body>App page</body></html>');
-  const renderAppActivityFeed = vi.fn(async () => '<div data-activity-feed>App feed</div>');
+  const renderAuthenticatedPage = vi.fn(async () => '<html><body>App page</body></html>');
+  const renderAuthenticatedActivityFeed = vi.fn(async () => '<div data-activity-feed>App feed</div>');
   const middleware = createCurrentUserMiddleware(auth, cookie);
   const profiles: ProfileService = {
     updateTerritoryColor: vi.fn(async () => undefined),
@@ -192,8 +192,8 @@ function dependencies() {
     arenas,
     arenaProgress,
     renderPage,
-    renderAppPage,
-    renderAppActivityFeed,
+    renderAuthenticatedPage,
+    renderAuthenticatedActivityFeed,
   });
   return {
     auth,
@@ -207,8 +207,8 @@ function dependencies() {
     arenas,
     arenaProgress,
     renderPage,
-    renderAppPage,
-    renderAppActivityFeed,
+    renderAuthenticatedPage,
+    renderAuthenticatedActivityFeed,
     cookie,
     app: createApp({ webMiddleware: [middleware, router] }),
   };
@@ -285,8 +285,8 @@ describe('webRouter', () => {
       arenas: base.arenas,
       arenaProgress: base.arenaProgress,
       renderPage: base.renderPage,
-      renderAppPage: base.renderAppPage,
-      renderAppActivityFeed: base.renderAppActivityFeed,
+      renderAuthenticatedPage: base.renderAuthenticatedPage,
+      renderAuthenticatedActivityFeed: base.renderAuthenticatedActivityFeed,
     });
     const app = createApp({ webMiddleware: [createCurrentUserMiddleware(base.auth, base.cookie), router] });
 
@@ -359,8 +359,8 @@ describe('webRouter', () => {
       arenas,
       arenaProgress: dependencies().arenaProgress,
       renderPage,
-      renderAppPage: vi.fn(async () => '<html><body>App page</body></html>'),
-      renderAppActivityFeed: vi.fn(async () => '<div>App feed</div>'),
+      renderAuthenticatedPage: vi.fn(async () => '<html><body>App page</body></html>'),
+      renderAuthenticatedActivityFeed: vi.fn(async () => '<div>App feed</div>'),
       adminEmails: ['PILOT@example.com'],
       adminFlights,
       renderAdminPage,
@@ -402,8 +402,8 @@ describe('webRouter', () => {
       arenas: base.arenas,
       arenaProgress: base.arenaProgress,
       renderPage: base.renderPage,
-      renderAppPage: base.renderAppPage,
-      renderAppActivityFeed: base.renderAppActivityFeed,
+      renderAuthenticatedPage: base.renderAuthenticatedPage,
+      renderAuthenticatedActivityFeed: base.renderAuthenticatedActivityFeed,
       adminEmails: ['PILOT@example.com'],
       territoryTileSettings,
       renderAdminMapSettingsPage,
@@ -494,7 +494,7 @@ describe('webRouter', () => {
   });
 
   it('protects dashboard routes and renders canonical Arenas with a basic 404', async () => {
-    const { app, arenas, renderAppPage } = dependencies();
+    const { app, arenas, renderAuthenticatedPage } = dependencies();
     vi.mocked(arenas.getByRoute).mockResolvedValueOnce(arena).mockResolvedValueOnce(null);
     await withServer(app, async (baseUrl) => {
       const anonymous = await fetch(`${baseUrl}/global`, { redirect: 'manual' });
@@ -505,7 +505,7 @@ describe('webRouter', () => {
         headers: { cookie: 'glidehero_session=valid-token' },
       });
       expect(found.status).toBe(200);
-      expect(renderAppPage).toHaveBeenCalledWith(expect.objectContaining({
+      expect(renderAuthenticatedPage).toHaveBeenCalledWith(expect.objectContaining({
         page: 'map', location: arena.name, arenaSourceId: arena.sourceId,
       }));
       const missing = await fetch(`${baseUrl}/arena/us/missing-999`, {
@@ -514,7 +514,7 @@ describe('webRouter', () => {
       expect(missing.status).toBe(404);
       expect(missing.headers.get('content-type')).toContain('text/html');
       expect(await missing.text()).toContain('/error-mascot.webp');
-      expect(renderAppPage).toHaveBeenCalledTimes(1);
+      expect(renderAuthenticatedPage).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -746,8 +746,8 @@ describe('webRouter', () => {
       arenas: arenaService(),
       arenaProgress: dependencies().arenaProgress,
       renderPage: createPageRenderer({ mapTilerApiKey: 'maptiler-test-key' }),
-      renderAppPage: vi.fn(async () => '<html><body>App page</body></html>'),
-      renderAppActivityFeed: vi.fn(async () => '<div>App feed</div>'),
+      renderAuthenticatedPage: vi.fn(async () => '<html><body>App page</body></html>'),
+      renderAuthenticatedActivityFeed: vi.fn(async () => '<div>App feed</div>'),
     });
     const app = createApp({ webMiddleware: [middleware, router] });
 
@@ -788,7 +788,7 @@ describe('webRouter', () => {
   });
 
   it('serves the authenticated current pilot profile and passes only the summary to the page', async () => {
-    const { app, profiles, renderAppPage } = dependencies();
+    const { app, profiles, renderAuthenticatedPage } = dependencies();
     vi.mocked(profiles.getPilotProfile).mockResolvedValueOnce({ ...pilotProfile, userId: user.userId });
     await withServer(app, async (baseUrl) => {
       const response = await fetch(`${baseUrl}/profile`, {
@@ -797,7 +797,7 @@ describe('webRouter', () => {
 
       expect(response.status).toBe(200);
       expect(profiles.getPilotProfile).toHaveBeenCalledWith(user.userId);
-      expect(renderAppPage).toHaveBeenCalledWith(expect.objectContaining({
+      expect(renderAuthenticatedPage).toHaveBeenCalledWith(expect.objectContaining({
         page: 'profile',
         profile: expect.objectContaining({ displayName: pilotProfile.displayName }),
       }));
@@ -806,7 +806,7 @@ describe('webRouter', () => {
   });
 
   it('uses the narrow achievements read model without loading the profile read model', async () => {
-    const { app, profiles, renderAppPage } = dependencies();
+    const { app, profiles, renderAuthenticatedPage } = dependencies();
     vi.mocked(profiles.getPilotAchievements).mockResolvedValueOnce({
       userId: user.userId,
       displayName: user.displayName,
@@ -821,7 +821,7 @@ describe('webRouter', () => {
       expect(response.status).toBe(200);
       expect(profiles.getPilotAchievements).toHaveBeenCalledWith(user.userId);
       expect(profiles.getPilotProfile).not.toHaveBeenCalled();
-      expect(renderAppPage).toHaveBeenCalledWith(expect.objectContaining({ page: 'achievements' }));
+      expect(renderAuthenticatedPage).toHaveBeenCalledWith(expect.objectContaining({ page: 'achievements' }));
     });
   });
 
@@ -839,8 +839,8 @@ describe('webRouter', () => {
       arenas: base.arenas,
       arenaProgress: base.arenaProgress,
       renderPage: createPageRenderer({ mapTilerApiKey: 'maptiler-test-key' }),
-      renderAppPage: base.renderAppPage,
-      renderAppActivityFeed: base.renderAppActivityFeed,
+      renderAuthenticatedPage: base.renderAuthenticatedPage,
+      renderAuthenticatedActivityFeed: base.renderAuthenticatedActivityFeed,
     });
     const app = createApp({ webMiddleware: [createCurrentUserMiddleware(base.auth, base.cookie), router] });
 
@@ -851,7 +851,7 @@ describe('webRouter', () => {
       await response.text();
 
       expect(response.status).toBe(200);
-      expect(base.renderAppPage).toHaveBeenCalledWith(expect.objectContaining({
+      expect(base.renderAuthenticatedPage).toHaveBeenCalledWith(expect.objectContaining({
         page: 'profile',
         profile: expect.objectContaining({ displayName: pilotProfile.displayName }),
       }));
@@ -911,7 +911,7 @@ describe('webRouter', () => {
         viewerUserId: user.userId,
         query: 'cloud',
       });
-      expect(base.renderAppPage).toHaveBeenLastCalledWith(expect.objectContaining({
+      expect(base.renderAuthenticatedPage).toHaveBeenLastCalledWith(expect.objectContaining({
         page: 'activity',
         activitySearch: 'cloud',
         activityPilotResults: [expect.objectContaining({

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { pilotProfileToView } from '../../src/views/app/adapters/profileView.js';
+import { pilotProfileToView } from '../../src/views/authenticated/adapters/profileView.js';
 import type { PilotProfileSummary } from '../../src/services/profileService.js';
 
 const summary: PilotProfileSummary = {

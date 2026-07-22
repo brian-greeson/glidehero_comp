@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createAppShellModel, initialsForDisplayName } from '../../src/views/app/adapters/shellModel.js';
+import { createAuthenticatedShellModel, initialsForDisplayName } from '../../src/views/authenticated/adapters/shellModel.js';
 
 describe('refreshed app shell model', () => {
   it('creates compact initials from a display name', () => {
@@ -9,7 +9,7 @@ describe('refreshed app shell model', () => {
   });
 
   it('uses production navigation and account defaults', () => {
-    const model = createAppShellModel({
+    const model = createAuthenticatedShellModel({
       page: 'map',
       user: { displayName: 'Alex Summit', email: 'alex@example.com' },
       isAdmin: true,
@@ -27,12 +27,12 @@ describe('refreshed app shell model', () => {
   });
 
   it('keeps map active while preserving a global or Arena map destination', () => {
-    const global = createAppShellModel({
+    const global = createAuthenticatedShellModel({
       page: 'map',
       mapHref: '/global?month=2026-07',
       user: { displayName: 'Pilot' },
     });
-    const arena = createAppShellModel({
+    const arena = createAuthenticatedShellModel({
       page: 'map',
       mapHref: '/arena/123',
       user: { displayName: 'Pilot' },

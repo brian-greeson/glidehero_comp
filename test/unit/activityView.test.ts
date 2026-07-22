@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { activityFeedItemToView } from '../../src/views/app/adapters/activityView.js';
+import { activityFeedItemToView } from '../../src/views/authenticated/adapters/activityView.js';
 
 describe('activityFeedItemToView', () => {
   it('keeps real pilot and flight links while exposing badge metadata', () => {

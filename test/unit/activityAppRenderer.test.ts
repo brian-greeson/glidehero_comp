@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { appPageFixture } from '../../src/views/app/fixtures.js';
-import { createAppPageRenderer } from '../../src/views/app/appRenderer.js';
+import { authenticatedPageFixture } from '../../src/views/authenticated/fixtures.js';
+import { createAuthenticatedPageRenderer } from '../../src/views/authenticated/renderer.js';
 
 describe('refreshed Activity search UI', () => {
   it('renders server-backed pilot results with follow controls and preserves scope/query links', async () => {
-    const model = structuredClone(appPageFixture('activity'));
+    const model = structuredClone(authenticatedPageFixture('activity'));
     if (model.page !== 'activity') throw new Error('Expected Activity fixture.');
     model.activitySearch = 'cloud';
     model.activityReturnTo = '/activity?q=cloud&scope=following';
@@ -23,7 +23,7 @@ describe('refreshed Activity search UI', () => {
       isFollowing: false,
     }];
 
-    const html = await createAppPageRenderer()(model);
+    const html = await createAuthenticatedPageRenderer()(model);
 
     expect(html).toContain('id="activity-pilot-query"');
     expect(html).toContain('Cloud Dancer');
@@ -34,11 +34,11 @@ describe('refreshed Activity search UI', () => {
   });
 
   it('renders an explicit empty state for a pilot search with no matches', async () => {
-    const model = structuredClone(appPageFixture('activity'));
+    const model = structuredClone(authenticatedPageFixture('activity'));
     if (model.page !== 'activity') throw new Error('Expected Activity fixture.');
     model.activitySearch = 'missing';
     model.activityPilotResults = [];
-    const html = await createAppPageRenderer()(model);
+    const html = await createAuthenticatedPageRenderer()(model);
     expect(html).toContain('No pilots matched “missing”.');
   });
 });

@@ -439,9 +439,45 @@ This prevents external SDK setup from leaking into domain or route code and allo
 
 Location: `src/views/`
 
+Views are organized by audience and access boundary:
+
+```text
+src/views/
+├── renderer.ts                 # landing and error renderer
+├── pages/                      # landing and error pages
+├── components/                 # unauthenticated landing components
+├── layouts/                    # root landing/error shell; shared by some admin pages
+├── authenticated/
+│   ├── renderer.ts
+│   ├── models.ts
+│   ├── adapters/
+│   ├── pages/
+│   ├── components/
+│   └── layouts/
+└── admin/
+    ├── renderer.ts
+    ├── pages/
+    ├── components/
+    └── layouts/
+```
+
+Put a view in the narrowest matching family:
+
+- Public landing and error presentation stays directly under `src/views/`.
+- Signed-in pilot presentation belongs under `src/views/authenticated/`.
+- Administrator-only presentation belongs under `src/views/admin/`.
+- Do not place authenticated or admin templates in the root `pages/`, `components/`, or `layouts/` directories merely because another view includes them.
+- Keep a genuinely shared layout at the root only when multiple view families intentionally use the same shell. Do not move a feature-specific component to the root to avoid a qualified include path.
+
+Authenticated presentation adapters convert service results into typed, display-ready models and belong in `src/views/authenticated/adapters/`. Authenticated model types, preview fixtures, and presentation-only helpers belong alongside that family in `src/views/authenticated/`. They should not contain database access or application workflows.
+
 ### Renderers
 
-Location: `src/views/renderer.ts`
+Locations:
+
+- `src/views/renderer.ts` for landing and error pages.
+- `src/views/authenticated/renderer.ts` for authenticated pages and fragments.
+- `src/views/admin/renderer.ts` for admin pages.
 
 Renderers:
 
@@ -456,7 +492,11 @@ Add a renderer or model when a page family needs a distinct rendering contract. 
 
 ### Layouts
 
-Location: `src/views/layouts/`
+Locations:
+
+- `src/views/layouts/` for the root landing, error, and shared admin shell.
+- `src/views/authenticated/layouts/` for the authenticated application shell.
+- `src/views/admin/layouts/` for admin-specific shells.
 
 Layouts define reusable page shells:
 
@@ -468,7 +508,11 @@ Add or change a layout when multiple pages share the same outer structure.
 
 ### Pages
 
-Location: `src/views/pages/`
+Locations:
+
+- `src/views/pages/` for unauthenticated landing and error pages.
+- `src/views/authenticated/pages/` for authenticated pages.
+- `src/views/admin/pages/` for admin pages.
 
 Pages are route-level Vento templates. They assemble layouts and components for one screen or page mode.
 
@@ -476,7 +520,11 @@ A page should describe composition. It should not contain backend queries or lar
 
 ### Components
 
-Location: `src/views/components/`
+Locations:
+
+- `src/views/components/` for unauthenticated components.
+- `src/views/authenticated/components/` for authenticated components.
+- `src/views/admin/components/` for admin components.
 
 Components are reusable server-rendered UI fragments such as:
 
@@ -775,10 +823,14 @@ A vertical feature should normally protect both its public boundary contract and
 | Web dependency wiring or HTTP startup | `src/index.ts` |
 | Flight-worker wiring and startup | `src/worker.ts` and `src/services/flightWorkerRuntime.ts` |
 | Application-wide Express, error, or static-file policy | `src/app.ts` |
-| Route-level server-rendered screen | `src/views/pages/` |
-| Reusable server-rendered UI | `src/views/components/` |
-| Shared HTML shell | `src/views/layouts/` |
-| Page model, renderer, or template defaults | `src/views/renderer.ts` |
+| Route-level server-rendered screen | Matching family under `src/views/pages/`, `src/views/authenticated/pages/`, or `src/views/admin/pages/` |
+| Reusable server-rendered UI | Matching family under `src/views/components/`, `src/views/authenticated/components/`, or `src/views/admin/components/` |
+| Shared HTML shell | Matching family under `src/views/layouts/`, `src/views/authenticated/layouts/`, or `src/views/admin/layouts/` |
+| Public landing or error view | `src/views/pages/`, `src/views/components/`, `src/views/layouts/`, and `src/views/renderer.ts` |
+| Authenticated pilot view | Matching location under `src/views/authenticated/` |
+| Admin-only view | Matching location under `src/views/admin/` |
+| Authenticated presentation adapter | `src/views/authenticated/adapters/` |
+| Page model, renderer, fixture, or presentation-only helper | Matching view family under `src/views/`, `src/views/authenticated/`, or `src/views/admin/` |
 | DOM behavior, fetch calls, or map interaction | `public/scripts/` |
 | Styling | `public/styles/` |
 | Static image or browser asset | `public/` |

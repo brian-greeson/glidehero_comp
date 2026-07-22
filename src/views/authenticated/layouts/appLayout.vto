@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="color-scheme" content="light">
+    <link rel="icon" href="/favicon.ico" sizes="any">
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+    <link rel="stylesheet" href="/styles/app-ui/tokens.css">
+    <link rel="stylesheet" href="/styles/app-ui/app.css">
+    <link rel="stylesheet" href="/styles/app-ui/flight-thumbnails.css">
+    <link rel="stylesheet" href="{{ pageStylesheet }}">
+    {{ if page === 'map' }}<link rel="stylesheet" href="https://unpkg.com/maplibre-gl@5.16.0/dist/maplibre-gl.css">{{ /if }}
+    <title>{{ title }}</title>
+  </head>
+  <body class="app-ui-body app-ui-body--{{ page }}">
+    <div class="app-ui-frame" data-app-page="{{ page }}">
+      {{ include "authenticated/components/appHeader.vto" { page, user, navigation, donateUrl, adminUrl, logoutUrl } }}
+      <main class="app-ui-main app-ui-main--{{ page }}" id="main-content">
+        {{ content }}
+      </main>
+      {{ if showFooter }}{{ include "authenticated/components/appFooter.vto" }}{{ /if }}
+      {{ include "authenticated/components/mobileBottomNav.vto" { page, navigation } }}
+      {{ include "authenticated/components/flightUploadDialog.vto" }}
+    </div>
+    {{ if page === 'map' }}<script src="https://unpkg.com/maplibre-gl@5.16.0/dist/maplibre-gl.js"></script>{{ /if }}
+    <script type="module" src="/scripts/app-ui/app.js"></script>
+    {{ if pageScript }}<script type="module" src="{{ pageScript }}"></script>{{ /if }}
+  </body>
+</html>

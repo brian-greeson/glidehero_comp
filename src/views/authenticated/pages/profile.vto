@@ -1,0 +1,28 @@
+{{ layout "authenticated/layouts/appLayout.vto" }}
+  <div class="profile-mountain-hero" aria-hidden="true"></div>
+  <section class="content-page profile-page">
+    <header class="profile-identity-card">
+      {{ include "authenticated/components/initialsAvatar.vto" { initials: profile.initials, color: profile.territoryColor, size: "profile" } }}
+      <div class="profile-identity-card__copy">
+        <div class="profile-name"><h1>{{ profile.displayName }}</h1>{{ if typeof profile.tier !== 'undefined' && profile.tier }}<span>{{ profile.tier }}</span>{{ /if }}</div>
+        {{ if typeof profile.handle !== 'undefined' && profile.handle }}<p class="profile-handle">{{ profile.handle }}</p>{{ /if }}
+        {{ if typeof profile.location !== 'undefined' && profile.location }}<p class="profile-location">{{ include "authenticated/components/icon.vto" { name: "pin" } }}{{ profile.location }}</p>{{ /if }}
+        {{ if typeof profile.bio !== 'undefined' && profile.bio }}<p class="profile-bio">{{ profile.bio }}</p>{{ /if }}
+        {{ if typeof profile.memberSince !== 'undefined' && profile.memberSince }}<p class="profile-member">{{ include "authenticated/components/icon.vto" { name: "calendar" } }}Member since {{ profile.memberSince }}</p>{{ /if }}
+        {{ if typeof profileIsCurrent !== 'undefined' && !profileIsCurrent }}
+          <form method="post" action="/pilots/{{ profile.userId }}/{{ if profileIsFollowed }}unfollow{{ else }}follow{{ /if }}" class="profile-follow-form">
+            <input type="hidden" name="returnTo" value="{{ currentPath }}">
+            <button type="submit" class="profile-follow-button">{{ if profileIsFollowed }}Unfollow{{ else }}Follow{{ /if }}</button>
+          </form>
+        {{ /if }}
+      </div>
+      <dl class="profile-social"><div><dt>Followers</dt><dd>{{ if profile.followers === "0" }}0{{ else }}{{ profile.followers }}{{ /if }}</dd></div><div><dt>Following</dt><dd>{{ if profile.following === "0" }}0{{ else }}{{ profile.following }}{{ /if }}</dd></div></dl>
+    </header>
+    {{ include "authenticated/components/metricStrip.vto" { metrics, label: "Pilot statistics", compact: true } }}
+    <div class="profile-grid">
+      {{ include "authenticated/components/profileTitles.vto" { titles } }}
+      {{ include "authenticated/components/profileFlights.vto" { flights } }}
+      {{ if typeof glider !== 'undefined' && glider }}{{ include "authenticated/components/profileGlider.vto" { glider } }}{{ /if }}
+    </div>
+  </section>
+{{ /layout }}

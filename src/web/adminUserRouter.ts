@@ -4,7 +4,7 @@ import { AppError } from '../domain/errors.js';
 import type { AdminFlightService } from '../services/adminFlightService.js';
 import type { AdminUserService } from '../services/adminUserService.js';
 import type { AuthenticatedUser } from '../services/authService.js';
-import type { AdminUserPageRenderer } from '../views/renderer.js';
+import type { AdminUserPageRenderer } from '../views/admin/renderer.js';
 
 const uuid = z.string().uuid();
 const email = z.string().trim().toLowerCase().pipe(z.email()).pipe(z.string().max(320));

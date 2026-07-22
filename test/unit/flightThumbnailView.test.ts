@@ -1,18 +1,18 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { appPageFixture } from '../../src/views/app/fixtures.js';
-import { createAppPageRenderer } from '../../src/views/app/appRenderer.js';
-import { activityFeedItemToView } from '../../src/views/app/adapters/activityView.js';
+import { authenticatedPageFixture } from '../../src/views/authenticated/fixtures.js';
+import { createAuthenticatedPageRenderer } from '../../src/views/authenticated/renderer.js';
+import { activityFeedItemToView } from '../../src/views/authenticated/adapters/activityView.js';
 import type { ActivityFeedItem } from '../../src/services/activityService.js';
 
 describe('flight thumbnail view delivery', () => {
   it('renders thumbnails only for flight activity rows with responsive sources and exact alt text', async () => {
-    const model = structuredClone(appPageFixture('activity'));
+    const model = structuredClone(authenticatedPageFixture('activity'));
     if (model.page !== 'activity') throw new Error('Expected activity fixture.');
     const flightEvent = model.events[1]!;
     if (!flightEvent.flight) throw new Error('Expected fixture flight.');
     flightEvent.flight.thumbnail = { wideUrl: '/signed-wide.webp', squareUrl: '/signed-square.webp' };
-    const html = await createAppPageRenderer()(model);
+    const html = await createAuthenticatedPageRenderer()(model);
 
     expect(html).toContain('srcset="/signed-square.webp"');
     expect(html).toContain('src="/signed-wide.webp"');
@@ -25,9 +25,9 @@ describe('flight thumbnail view delivery', () => {
   });
 
   it('uses the square-safe fallback when a profile flight has no signed pair', async () => {
-    const model = structuredClone(appPageFixture('profile'));
+    const model = structuredClone(authenticatedPageFixture('profile'));
     if (model.page !== 'profile') throw new Error('Expected profile fixture.');
-    const html = await createAppPageRenderer()(model);
+    const html = await createAuthenticatedPageRenderer()(model);
 
     expect(html).toContain('src="/flight-thumbnail-fallback.webp"');
     expect(html.match(/alt="Flight territory preview"/g)?.length).toBe(model.flights.length);
@@ -49,7 +49,7 @@ describe('flight thumbnail view delivery', () => {
   it('uses aspect-ratio responsive CSS and delegated image fallback handling', () => {
     const css = readFileSync('public/styles/app-ui/flight-thumbnails.css', 'utf8');
     const script = readFileSync('public/scripts/app-ui/app.js', 'utf8');
-    const template = readFileSync('src/views/app/components/flightMapPreview.vto', 'utf8');
+    const template = readFileSync('src/views/authenticated/components/flightMapPreview.vto', 'utf8');
     expect(css).toContain('aspect-ratio: 16 / 9');
     expect(css).toContain('aspect-ratio: 1');
     expect(script).toContain("data-flight-thumbnail");

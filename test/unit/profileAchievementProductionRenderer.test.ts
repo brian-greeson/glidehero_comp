@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { createAchievementsPageModel } from '../../src/views/app/adapters/achievementView.js';
-import { pilotProfileToView } from '../../src/views/app/adapters/profileView.js';
-import { createAppShellModel } from '../../src/views/app/adapters/shellModel.js';
-import { createAppPageRenderer } from '../../src/views/app/appRenderer.js';
+import { createAchievementsPageModel } from '../../src/views/authenticated/adapters/achievementView.js';
+import { pilotProfileToView } from '../../src/views/authenticated/adapters/profileView.js';
+import { createAuthenticatedShellModel } from '../../src/views/authenticated/adapters/shellModel.js';
+import { createAuthenticatedPageRenderer } from '../../src/views/authenticated/renderer.js';
 import type { PilotAchievementsSummary, PilotProfileSummary } from '../../src/services/profileService.js';
 
 type ProductionFixture = PilotProfileSummary & PilotAchievementsSummary;
@@ -77,11 +77,11 @@ function productionProfile(overrides: Partial<ProductionFixture> = {}): Producti
 }
 
 describe('production Profile and Achievements rendering', () => {
-  const render = createAppPageRenderer();
+  const render = createAuthenticatedPageRenderer();
 
   it('renders a populated public profile with real counts, follow state, and disclosure rows', async () => {
     const profile = productionProfile();
-    const shell = createAppShellModel({
+    const shell = createAuthenticatedShellModel({
       page: 'profile',
       user: { displayName: 'Viewer' },
       isAdmin: false,
@@ -123,7 +123,7 @@ describe('production Profile and Achievements rendering', () => {
       recentFlights: [],
       currentArenaLeaderships: [],
     });
-    const shell = createAppShellModel({ page: 'profile', user: { displayName: 'Viewer' }, showFooter: true });
+    const shell = createAuthenticatedShellModel({ page: 'profile', user: { displayName: 'Viewer' }, showFooter: true });
     const html = await render({
       ...shell,
       page: 'profile',
@@ -147,7 +147,7 @@ describe('production Profile and Achievements rendering', () => {
 
   it('renders earned dates, categories, recent first three, and empty states without point concepts', async () => {
     const profile = productionProfile();
-    const shell = createAppShellModel({ page: 'achievements', user: { displayName: 'Viewer' }, showFooter: true });
+    const shell = createAuthenticatedShellModel({ page: 'achievements', user: { displayName: 'Viewer' }, showFooter: true });
     const html = await render({ ...createAchievementsPageModel(profile, shell) });
 
     expect(html).toContain('Earned Jun 1, 2026');

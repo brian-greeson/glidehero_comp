@@ -79,7 +79,7 @@ export function initializeMapPage({ documentRef = document, maplibre = globalThi
   if (!root || root.dataset.mapPreview === 'true') return;
   if (!maplibre || !fetchImpl) return;
   if (root.dataset.dashboardMode === 'personal') {
-    initializePersonalDashboard({ documentRef, maplibre, fetchImpl, navigatorRef, storage });
+    initializePersonalDashboard({ documentRef, maplibre, fetchImpl, locationRef, navigatorRef, storage });
   } else if (root.hasAttribute('data-competition-coverage')) {
     initializeCompetitionCoverage({ documentRef, maplibre, fetchImpl, locationRef, historyRef, now, navigatorRef, storage });
   }

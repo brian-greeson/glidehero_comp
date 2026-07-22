@@ -1,0 +1,10 @@
+<article class="progress-achievement-card">
+  {{ include "authenticated/components/achievementBadge.vto" { achievement } }}
+  <div class="progress-achievement-card__copy">
+    {{ if achievement.typeLabel }}<span class="achievement-card__type">{{ achievement.typeLabel }}</span>{{ /if }}
+    <h3>{{ achievement.title }}</h3>
+    <p>{{ achievement.description }}</p>
+    <div class="progress-achievement-card__values"><strong>{{ achievement.current }} / {{ achievement.target }}</strong><span>{{ if achievement.percent === 0 }}0{{ else }}{{ achievement.percent }}{{ /if }}%</span></div>
+    {{ include "authenticated/components/progressBar.vto" { progress: achievement, label: achievement.title } }}
+  </div>
+</article>

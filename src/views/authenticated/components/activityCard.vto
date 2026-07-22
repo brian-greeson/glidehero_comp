@@ -1,0 +1,23 @@
+<article class="activity-card" data-activity-kind="{{ event.kind }}" data-activity-own="{{ if typeof event.isOwn !== 'undefined' }}{{ event.isOwn }}{{ else }}false{{ /if }}">
+  <header class="activity-card__pilot">
+    {{ include "authenticated/components/initialsAvatar.vto" { initials: event.pilot.initials, color: event.pilot.color } }}
+    <div>{{ if typeof event.pilot.href !== 'undefined' && event.pilot.href }}<a href="{{ event.pilot.href }}"><strong>{{ event.pilot.displayName }}</strong></a>{{ else }}<strong>{{ event.pilot.displayName }}</strong>{{ /if }}<time datetime="{{ event.publishedAtIso }}">{{ event.timeAgo }}</time></div>
+  </header>
+  <div class="activity-card__content">
+    <div class="activity-card__copy">
+      <h3>{{ event.title }}</h3><p>{{ event.detail }}</p><small>{{ include "authenticated/components/icon.vto" { name: "pin" } }}{{ event.arena }}</small>
+      {{ if event.achievements.length }}<div class="activity-card__badges">{{ for achievement of event.achievements }}{{ include "authenticated/components/achievementBadge.vto" { achievement } }}{{ /for }}</div>{{ /if }}
+      {{ if event.progress }}<div class="activity-card__challenge"><span>Completed</span>{{ include "authenticated/components/progressBar.vto" { progress: event.progress, label: event.title } }}</div>{{ /if }}
+    </div>
+    {{ if event.kind === "flight" && event.flight }}<div class="activity-card__flight-media">{{ include "authenticated/components/flightMapPreview.vto" { flight: event.flight } }}{{ if preview }}<div class="activity-card__flight-summary"><strong>{{ event.flight.date }}</strong><span>{{ event.flight.distance }} · {{ event.flight.cells }} cells</span></div>{{ else }}<dl class="activity-card__flight-summary"><div><dt>Flight date</dt><dd>{{ event.flightDate }}</dd></div><div><dt>Duration</dt><dd>{{ event.duration }}</dd></div><div><dt>Distance</dt><dd>{{ event.distance }}</dd></div><div><dt>Cells</dt><dd>{{ if event.totalCellCount === 0 }}0{{ else }}{{ event.totalCellCount }}{{ /if }}</dd></div></dl>{{ /if }}</div>{{ /if }}
+  </div>
+  <footer>
+    {{ if typeof event.activityId !== 'undefined' && event.activityId && !event.isOwn }}
+      <form method="post" action="/activities/{{ event.activityId }}/thermal" class="activity-thermal-form" data-thermal-form>
+        <button type="submit" class="activity-thermal-button" data-thermal-button aria-label="{{ if event.viewerHasReacted }}Thermal sent{{ else }}Send a Thermal{{ /if }}" aria-pressed="{{ if event.viewerHasReacted }}true{{ else }}false{{ /if }}"><span class="thermal-icon" aria-hidden="true">⌁</span><span data-thermal-label>{{ if event.viewerHasReacted }}Thermal sent{{ else }}Send a Thermal{{ /if }}</span><span class="activity-thermal-count" data-thermal-count>{{ if event.thermalCount === 0 }}0{{ else }}{{ event.thermalCount }}{{ /if }}</span></button><span class="activity-thermal-status" data-thermal-status aria-live="polite"></span>
+      </form>
+    {{ else if typeof event.activityId !== 'undefined' && event.activityId }}
+      <span class="activity-thermal-static" aria-label="{{ event.thermalCount }} Thermals received"><span class="thermal-icon" aria-hidden="true">⌁</span><span data-thermal-count>{{ if event.thermalCount === 0 }}0{{ else }}{{ event.thermalCount }}{{ /if }}</span><span>Thermals</span></span>
+    {{ /if }}
+  </footer>
+</article>

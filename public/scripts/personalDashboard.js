@@ -3,12 +3,14 @@ import { installPersonalTerritorySource } from './personalMap.js';
 import { renderPersonalStats } from './personalStatsView.js';
 import { personalStatsUrl } from './viewportQuery.js';
 import { initializeMapFlightAids } from './mapFlightAids.js';
+import { mapViewportFromSearch, updateMapModeLinks } from './mapViewportUrl.js';
 
 export function initializePersonalDashboard({
   documentRef = document,
   maplibre = window.maplibregl,
   fetchImpl = window.fetch.bind(window),
   navigatorRef = globalThis.navigator,
+  locationRef = globalThis.location,
   storage,
 } = {}) {
   const mapElement = documentRef.querySelector('[data-dashboard-map]');
@@ -45,12 +47,15 @@ export function initializePersonalDashboard({
   });
 
   try {
+    const initialViewport = mapViewportFromSearch(locationRef?.search);
     map = new maplibre.Map({
       container: mapElement,
       style: mapElement.dataset.mapStyleUrl,
-      center: [-106.2, 39.2],
-      zoom: 7,
+      center: initialViewport?.center ?? [-106.2, 39.2],
+      zoom: initialViewport?.zoom ?? 7,
     });
+    const syncModeLinks = () => updateMapModeLinks({ documentRef, locationRef, map });
+    syncModeLinks();
     map.addControl(new maplibre.NavigationControl(), 'top-right');
     map.once('error', () => showStatus('Map unavailable. Check your connection and try again.'));
     map.once('load', async () => {
@@ -65,6 +70,7 @@ export function initializePersonalDashboard({
       if (map.getBounds) await statsRequest.run(map.getBounds());
     });
     map.on?.('moveend', () => {
+      syncModeLinks();
       if (mapReady && map.getBounds) {
         void statsRequest.run(map.getBounds());
       }

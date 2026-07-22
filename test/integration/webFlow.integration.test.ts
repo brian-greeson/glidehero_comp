@@ -9,7 +9,7 @@ import { createMapGridService } from '../../src/services/mapGridService.js';
 import { createProfileService } from '../../src/services/profileService.js';
 import { createTerritoryTileService } from '../../src/services/territoryTileService.js';
 import { createPageRenderer } from '../../src/views/renderer.js';
-import { createAppActivityFeedRenderer, createAppPageRenderer } from '../../src/views/app/appRenderer.js';
+import { createAuthenticatedActivityFeedRenderer, createAuthenticatedPageRenderer } from '../../src/views/authenticated/renderer.js';
 import { createCurrentUserMiddleware } from '../../src/web/currentUserMiddleware.js';
 import { createSessionCookie } from '../../src/web/sessionCookie.js';
 import { createWebRouter } from '../../src/web/webRouter.js';
@@ -58,8 +58,8 @@ describe('GlideHero browser authentication flow', () => {
           arenas,
           arenaProgress,
           renderPage: createPageRenderer({ mapTilerApiKey: 'maptiler-test-key' }),
-          renderAppPage: createAppPageRenderer(),
-          renderAppActivityFeed: createAppActivityFeedRenderer(),
+          renderAuthenticatedPage: createAuthenticatedPageRenderer(),
+          renderAuthenticatedActivityFeed: createAuthenticatedActivityFeedRenderer(),
         }),
       ],
     });

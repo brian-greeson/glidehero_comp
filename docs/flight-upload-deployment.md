@@ -198,3 +198,20 @@ cleanup lists the prefix so orphaned IGC and thumbnail objects can still be
 removed when database or queue metadata is incomplete.
 
 The App Platform worker starts with one instance. Increase `workers[].instance_count` manually when the admin queue summary shows sustained queue growth.
+
+## Release backfill spot checks
+
+After running the release backfills, run the read-only verifier:
+
+```sh
+npm run verify:release-backfills
+```
+
+It checks flight progress, flight thumbnails, Arena achievements, Arena
+leadership, and user achievement progress. Each check samples at most two of
+the oldest eligible records. `PASS` means every sampled record has its expected
+database row or thumbnail pair, `FAIL` means a sampled artifact is missing, and
+`SKIP` means the database has no eligible record for that check. `ERROR` means
+the database or object-store check could not be performed. Failures and errors
+exit nonzero. This is deliberately evidence that a backfill has run, not a
+complete record-by-record audit.

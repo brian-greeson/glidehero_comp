@@ -1,0 +1,40 @@
+{{ layout "layouts/appLayout.vto" }}
+
+  <section class="admin-page">
+    {{ include "admin/components/adminNav.vto" { activeAdminPage: "system" } }}
+    <div class="admin-content">
+      {{ include "admin/components/adminSystemNav.vto" { activeSystemPage: "recent" } }}
+      <div>
+        <p class="admin-eyebrow">Administration</p>
+        <h1>Recent activity</h1>
+        <p class="muted">The 100 most recently uploaded flights.</p>
+      </div>
+      {{ if reprocessSuccess }}<p class="success" role="status">Flight cells were reprocessed.</p>{{ /if }}
+      {{ if reprocessError }}<p class="error" role="alert">We could not reprocess that flight. Its existing cells were left unchanged.</p>{{ /if }}
+      {{ if queueSummary }}
+        <dl class="admin-queue-summary">
+          <div><dt>Queued</dt><dd>{{ queueSummary.queued }}</dd></div>
+          <div><dt>Processing</dt><dd>{{ queueSummary.processing }}</dd></div>
+          <div><dt>Failed</dt><dd>{{ queueSummary.failed }}</dd></div>
+          <div><dt>Oldest queued</dt><dd>{{ if queueSummary.oldestQueuedAgeSeconds !== null }}{{ queueSummary.oldestQueuedAgeSeconds }}s{{ else }}—{{ /if }}</dd></div>
+        </dl>
+      {{ /if }}
+      <div class="admin-table-wrap">
+        <table class="admin-flight-table">
+          <thead><tr><th scope="col">Flight date</th><th scope="col">Pilot</th><th scope="col">File</th><th scope="col">Status</th><th scope="col"><span class="sr-only">Action</span></th></tr></thead>
+          <tbody>
+            {{ for flight of flights }}
+              <tr>
+                <td>{{ flight.flightDate ?? '—' }}</td>
+                <td>{{ flight.pilotEmail }}</td>
+                <td>{{ flight.originalFilename }}</td>
+                <td>{{ flight.processingStatus }}</td>
+                <td>{{ if flight.processingStatus === 'completed' }}<form method="post" action="/admin/flights/{{ flight.id }}/reprocess"><button type="submit" class="admin-reprocess-button">Reprocess</button></form>{{ /if }}</td>
+              </tr>
+            {{ /for }}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+{{ /layout }}

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { createAchievementsPageModel } from '../../src/views/app/adapters/achievementView.js';
-import { appPageFixture } from '../../src/views/app/fixtures.js';
+import { createAchievementsPageModel } from '../../src/views/authenticated/adapters/achievementView.js';
+import { authenticatedPageFixture } from '../../src/views/authenticated/fixtures.js';
 import type { PilotAchievementsSummary } from '../../src/services/profileService.js';
 
 function profile(): PilotAchievementsSummary {
@@ -68,7 +68,7 @@ function profile(): PilotAchievementsSummary {
 
 describe('achievements page adapter', () => {
   it('maps service semantics to the four badge families and keeps the newest three', () => {
-    const fixture = appPageFixture('achievements');
+    const fixture = authenticatedPageFixture('achievements');
     if (fixture.page !== 'achievements') throw new Error('Expected achievements fixture.');
     const { page: _page, metrics: _metrics, earned: _earned, inProgress: _progress, recentlyEarned: _recent, ...shell } = fixture;
     const model = createAchievementsPageModel(profile(), shell);
