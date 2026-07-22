@@ -267,7 +267,7 @@ export function createFlightThumbnailService(options: {
 }): FlightThumbnailService {
   if (!options.mapTilerApiKey.trim()) throw new RangeError('MapTiler API key is required.');
   if (!options.bucketName.trim()) throw new RangeError('Thumbnail bucket name is required.');
-  if (!options.bucketFolder.trim()) throw new RangeError('Thumbnail bucket folder is required.');
+  if (!options.bucketFolder.replace(/^\/+|\/+$/g, '').trim()) throw new RangeError('Thumbnail bucket folder is required.');
   if (!Number.isFinite(options.cellSize) || options.cellSize <= 0) throw new RangeError('Thumbnail cell size must be positive.');
   const fetchImage = options.fetchImage ?? defaultFetchImage;
   const putObject: FlightThumbnailPutObject = options.putObject ?? (async (input) => {
