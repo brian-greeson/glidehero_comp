@@ -38,6 +38,8 @@ export type ActivityFeedItem = {
 
 export type ActivityAccomplishment = {
   id: string;
+  /** Stable catalog/legacy identity used by presentation adapters. */
+  achievementKey: string;
   title: string;
   description: string;
   /** Display metadata shared by the refreshed Activity and Achievements cards. */
@@ -212,6 +214,7 @@ function achievementAccomplishment(row: ActivityAchievementRow): ActivityAccompl
     const description = isLeadership && arenaName ? `${title}.` : definition.description;
     return {
       id: row.id,
+      achievementKey: row.achievementKey,
       title,
       description,
       ...accomplishmentMetadata({ category: definition.category, kind: definition.kind, threshold: 'threshold' in definition ? definition.threshold : undefined }),
@@ -233,6 +236,7 @@ function achievementAccomplishment(row: ActivityAchievementRow): ActivityAccompl
       : `Reached ${milestone} unique Personal Map cells, adding ${countText(newCells)} new ${newCells === 1 ? 'cell' : 'cells'} to a total of ${countText(newTotal)}.`;
     return {
       id: row.id,
+      achievementKey: row.achievementType,
       title,
       description,
       ...accomplishmentMetadata({ category: 'general', kind: 'threshold', milestone }),
@@ -247,6 +251,7 @@ function achievementAccomplishment(row: ActivityAchievementRow): ActivityAccompl
       : `Improved the ${enclosed ? 'enclosed-cell' : 'total-cell'} record from ${previousRecord} to ${record} cells (${countText(directCells)} direct and ${countText(enclosedCells)} enclosed).`;
     return {
       id: row.id,
+      achievementKey: row.achievementType,
       title: enclosed ? 'New Enclosed Cell Record' : 'New Flight Cell Record',
       description,
       ...accomplishmentMetadata({ category: 'general', kind: 'record' }),
@@ -255,6 +260,7 @@ function achievementAccomplishment(row: ActivityAchievementRow): ActivityAccompl
   }
   return {
     id: row.id,
+    achievementKey: row.achievementKey,
     title: 'Progress Achievement',
     description: 'A progression achievement earned during a flight.',
     ...accomplishmentMetadata({}),
@@ -269,6 +275,7 @@ function recordAccomplishment(row: ActivityRecordEventRow): ActivityAccomplishme
   const count = `${row.value} Launch Arena${row.value === 1 ? '' : 's'}`;
   return {
     id: row.id,
+    achievementKey: row.recordKey,
     title: definition?.title ?? 'Personal Best',
     description: previousValue === null
       ? `Tagged ${count} during one flight, establishing an initial record.`
@@ -281,6 +288,7 @@ function leadershipAccomplishment(row: ActivityLeadershipRow): ActivityAccomplis
   const verb = row.eventType === 'took' ? 'Took' : 'Reclaimed';
   return {
     id: row.id,
+    achievementKey: row.eventType === 'took' ? 'took_lead_in_arena' : 'reclaimed_lead_in_arena',
     title: `${verb} the Lead in ${row.arenaName}`,
     description: `${verb} the lead in ${row.arenaName}.`,
     ...accomplishmentMetadata({ category: 'leadership', kind: 'special' }),

@@ -76,6 +76,8 @@ export type AchievementProgressCard = {
 
 export type PilotAchievement = {
   id: string;
+  /** Stable catalog/legacy identity used by presentation adapters. */
+  achievementKey: string;
   achievementType: string;
   achievementCategory?: AchievementCategory;
   typeLabel: string;
@@ -304,6 +306,7 @@ function catalogAchievementDisplay(row: StoredAchievement, definition: Achieveme
     : isRecord ? String(row.value ?? detailNumber(detailsObject(row.details), 'value') ?? 'PB') : '★';
   return {
     id: row.id,
+    achievementKey: definition.key,
     achievementType: definition.kind,
     achievementCategory: definition.category,
     typeLabel: isRecord ? `${categoryLabel} personal best` : categoryLabel,
@@ -326,6 +329,7 @@ function recordEventDisplay(row: StoredAchievement, definition: AchievementDefin
     : `Tagged ${launchCount} during one flight, improving the previous best of ${previousValue}.`;
   return {
     id: row.id,
+    achievementKey: definition.key,
     achievementType: definition.kind,
     achievementCategory: definition.category,
     typeLabel: 'Launch Arena personal best',
@@ -362,6 +366,7 @@ function achievementDisplay(row: StoredAchievement): PilotAchievement {
       : `Reached ${milestone} unique Personal Map cells, adding ${newCellCountText(newCells)} to a total of ${countText(newTotal)}.`;
     return {
       id: row.id,
+      achievementKey: row.achievementType,
       achievementType: row.achievementType,
       typeLabel: 'Unique cell milestone',
       earnedDate: displayDate(row.earnedAt),
@@ -379,6 +384,7 @@ function achievementDisplay(row: StoredAchievement): PilotAchievement {
       : `Improved the total-cell record from ${previousRecord} to ${record} cells (${countText(directCells)} direct and ${countText(enclosedCells)} enclosed).`;
     return {
       id: row.id,
+      achievementKey: row.achievementType,
       achievementType: row.achievementType,
       typeLabel: 'Total-cell personal best',
       earnedDate: displayDate(row.earnedAt),
@@ -396,6 +402,7 @@ function achievementDisplay(row: StoredAchievement): PilotAchievement {
       : `Improved the enclosed-cell record from ${previousRecord} to ${record} cells (${countText(directCells)} direct and ${countText(enclosedCells)} enclosed).`;
     return {
       id: row.id,
+      achievementKey: row.achievementType,
       achievementType: row.achievementType,
       typeLabel: 'Enclosed-cell personal best',
       earnedDate: displayDate(row.earnedAt),
@@ -408,6 +415,7 @@ function achievementDisplay(row: StoredAchievement): PilotAchievement {
 
   return {
     id: row.id,
+    achievementKey: row.achievementKey || row.achievementType,
     achievementType: row.achievementType,
     typeLabel: 'Progress achievement',
     earnedDate: displayDate(row.earnedAt),

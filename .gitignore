@@ -8,3 +8,5 @@ certs/
 .pet-runs
 .superpowers
 .codex
+__pycache__/
+*.py[cod]

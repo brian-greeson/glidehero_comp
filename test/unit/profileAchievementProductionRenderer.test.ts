@@ -39,6 +39,7 @@ function productionProfile(overrides: Partial<PilotProfileSummary> = {}): PilotP
     followingCount: 2,
     achievements: [0, 1, 2, 3].map((index) => ({
       id: `achievement-${index}`,
+      achievementKey: index === 1 ? 'most_launches_tagged_one_flight' : index === 2 ? 'general_arenas_explored_1' : index === 3 ? 'took_lead_in_arena' : 'unique_cells_milestone',
       achievementType: index === 1 ? 'record' : index === 2 ? 'threshold' : index === 3 ? 'special' : 'unique_cells_milestone',
       achievementCategory: index === 1 ? 'launch' : index === 2 ? 'general' : index === 3 ? 'leadership' : undefined,
       typeLabel: index === 1 ? 'Personal best' : 'Milestone',

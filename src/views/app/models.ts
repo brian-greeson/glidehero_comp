@@ -40,6 +40,7 @@ export type ActivityPilotResultView = {
 
 export type AchievementView = {
   key: string;
+  artworkKey: import('./achievementArtwork.js').AchievementArtworkKey;
   title: string;
   description: string;
   badgeLabel: string;

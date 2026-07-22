@@ -1,6 +1,7 @@
 import type { ActivityFeedItem } from '../../../services/activityService.js';
 import type { PilotSearchResult } from '../../../services/followService.js';
 import type { ActivityPilotResultView } from '../models.js';
+import { resolveAchievementArtworkKey } from '../achievementArtwork.js';
 import type { FlightThumbnailUrls } from '../../../services/flightThumbnailDeliveryService.js';
 
 const avatarColors = ['#1769aa', '#ff6b24', '#17b7ca', '#43a52c', '#7441b6'] as const;
@@ -83,6 +84,7 @@ export function activityFeedItemToView(item: ActivityFeedItem, options: { thumbn
     totalCellCount: item.totalCellCount,
     achievements: item.accomplishments.map((accomplishment) => ({
       key: accomplishment.id,
+      artworkKey: resolveAchievementArtworkKey(accomplishment),
       title: accomplishment.title,
       description: accomplishment.description,
       badgeLabel: accomplishment.badgeLabel,

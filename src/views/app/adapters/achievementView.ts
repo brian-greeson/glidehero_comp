@@ -8,6 +8,7 @@ import type {
   PilotAchievement,
   PilotProfileSummary,
 } from '../../../services/profileService.js';
+import { resolveAchievementArtworkKey } from '../achievementArtwork.js';
 
 /**
  * Keep the presentation mapping for achievements in one place. The profile
@@ -36,6 +37,7 @@ type AchievementCardView = AchievementView & { typeLabel: string };
 function earnedView(achievement: PilotAchievement): AchievementCardView {
   return {
     key: achievement.id,
+    artworkKey: resolveAchievementArtworkKey(achievement),
     title: achievement.title,
     description: achievement.description,
     badgeLabel: achievement.badgeLabel,
@@ -48,6 +50,7 @@ function earnedView(achievement: PilotAchievement): AchievementCardView {
 function progressView(progress: AchievementProgressCard): AchievementCardView {
   return {
     key: progress.key,
+    artworkKey: resolveAchievementArtworkKey({ achievementKey: progress.key, achievementType: progress.achievementType }),
     title: progress.title,
     description: progress.currentDescription,
     badgeLabel: progress.badgeLabel,

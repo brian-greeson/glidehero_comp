@@ -38,17 +38,17 @@ const pilots = {
 };
 
 const earned: AchievementView[] = [
-  { key: 'first-steps', title: 'First Steps', description: 'Claim 10 unique cells.', badgeLabel: '10', tone: 'green', earnedDate: 'Jun 5, 2026' },
-  { key: 'distance-seeker', title: 'Distance Seeker', description: 'Set a personal best.', badgeLabel: 'PB', tone: 'blue', earnedDate: 'Jun 12, 2026' },
-  { key: 'century-club', title: 'Century Club', description: 'Claim 100 unique cells.', badgeLabel: '100', tone: 'orange', earnedDate: 'Jul 2, 2026' },
-  { key: 'arena-explorer', title: 'Arena Explorer', description: 'Touch 3 different Arenas in a single flight.', badgeLabel: '3', tone: 'purple', earnedDate: 'Jul 8, 2026' },
+  { key: 'first-steps', artworkKey: 'cell-explorer', title: 'First Steps', description: 'Claim 10 unique cells.', badgeLabel: '10', tone: 'green', earnedDate: 'Jun 5, 2026' },
+  { key: 'distance-seeker', artworkKey: 'distance-record', title: 'Distance Seeker', description: 'Set a personal best.', badgeLabel: 'PB', tone: 'blue', earnedDate: 'Jun 12, 2026' },
+  { key: 'century-club', artworkKey: 'cell-explorer', title: 'Century Club', description: 'Claim 100 unique cells.', badgeLabel: '100', tone: 'orange', earnedDate: 'Jul 2, 2026' },
+  { key: 'arena-explorer', artworkKey: 'arenas-touched', title: 'Arena Explorer', description: 'Touch 3 different Arenas in a single flight.', badgeLabel: '3', tone: 'purple', earnedDate: 'Jul 8, 2026' },
 ];
 
 const inProgress: AchievementView[] = [
-  { key: 'quarter-century', title: 'Quarter Century', description: 'Claim 25 unique cells on your Personal Map.', badgeLabel: '25', tone: 'green', current: '17', target: '25', percent: 68 },
-  { key: 'high-explorer', title: 'High Explorer', description: 'Reach 500 unique cells on your Personal Map.', badgeLabel: '500', tone: 'orange', current: '237', target: '500', percent: 47 },
-  { key: 'distance-master', title: 'Distance Master', description: 'Beat your personal best for most cells claimed in a flight.', badgeLabel: 'PB', tone: 'blue', current: '843', target: '1,000', percent: 84 },
-  { key: 'arena-adventurer', title: 'Arena Adventurer', description: 'Touch 5 different Arenas in a single flight.', badgeLabel: '5', tone: 'purple', current: '3', target: '5', percent: 60 },
+  { key: 'quarter-century', artworkKey: 'cell-explorer', title: 'Quarter Century', description: 'Claim 25 unique cells on your Personal Map.', badgeLabel: '25', tone: 'green', current: '17', target: '25', percent: 68 },
+  { key: 'high-explorer', artworkKey: 'mapper', title: 'High Explorer', description: 'Reach 500 unique cells on your Personal Map.', badgeLabel: '500', tone: 'orange', current: '237', target: '500', percent: 47 },
+  { key: 'distance-master', artworkKey: 'distance-record', title: 'Distance Master', description: 'Beat your personal best for most cells claimed in a flight.', badgeLabel: 'PB', tone: 'blue', current: '843', target: '1,000', percent: 84 },
+  { key: 'arena-adventurer', artworkKey: 'arenas-touched', title: 'Arena Adventurer', description: 'Touch 5 different Arenas in a single flight.', badgeLabel: '5', tone: 'purple', current: '3', target: '5', percent: 60 },
 ];
 
 const flights: FlightView[] = [

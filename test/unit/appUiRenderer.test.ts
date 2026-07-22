@@ -12,6 +12,30 @@ describe('refreshed app UI renderer', () => {
     const css = readFileSync('public/styles/app-ui/app.css', 'utf8');
     expect(css).toContain('.flight-upload-progress[hidden] { display: none; }');
     expect(css).toContain('.flight-processing-state[hidden] { display: none; }');
+    expect(css).toContain('.achievement-badge__artwork');
+    expect(css).not.toContain('.achievement-badge svg');
+  });
+
+  it('renders extracted achievement artwork with an accessible dynamic label', async () => {
+    const html = await render(appPageFixture('achievements'));
+    expect(html).toContain('class="achievement-badge__artwork" src="/images/app-ui/achievements/cell-explorer.png"');
+    expect(html).toContain('width="256" height="256" alt="" aria-hidden="true"');
+    expect(html).toContain('class="achievement-badge__label">10</span>');
+    expect(html).not.toContain('class="achievement-badge__shadow"');
+    const wrappers = html.match(/<span class="achievement-badge[^>]*" role="img" aria-label="[^"]+">/g) ?? [];
+    expect(wrappers.length).toBeGreaterThan(0);
+    expect(html.match(/role="img"/g)?.length).toBe(wrappers.length);
+    expect(html.match(/class="achievement-badge__artwork"/g)?.length).toBe(wrappers.length);
+    expect(html.match(/class="achievement-badge__label"/g)?.length).toBe(wrappers.length);
+  });
+
+  it('keeps artwork and labels sized for achievement rails and compact activity cards', () => {
+    const achievementsCss = readFileSync('public/styles/app-ui/achievements.css', 'utf8');
+    const activityCss = readFileSync('public/styles/app-ui/activity.css', 'utf8');
+    expect(achievementsCss).toContain('.rail-progress .achievement-badge { width: 48px; height: 52px; }');
+    expect(achievementsCss).toContain('.rail-progress .achievement-badge__label { font-size: .56rem; }');
+    expect(activityCss).toContain('.activity-card__badges .achievement-badge { width: 50px; height: 55px; }');
+    expect(activityCss).toContain('.activity-card__badges .achievement-badge__label { font-size: .62rem; }');
   });
 
   it('renders every isolated page with the shared four-destination shell', async () => {
