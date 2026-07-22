@@ -697,7 +697,7 @@ export function createWebRouter(dependencies: {
       return;
     }
     try {
-      const profile = await dependencies.profiles.getPilotProfile(currentUser.userId);
+      const profile = await dependencies.profiles.getPilotAchievements(currentUser.userId);
       if (!profile) {
         next();
         return;

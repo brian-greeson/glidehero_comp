@@ -17,6 +17,8 @@ export type ArenaAchievementEvaluation = {
   newlyEarned: AchievementKey[];
   alreadyEarned: number;
   record: AchievementRecordResult | null;
+  /** Raw Arena facts used by the persisted progress projection. */
+  snapshot?: ArenaAchievementSnapshot;
 };
 
 /** Optional historical cutoff used by the one-time Arena achievement backfill. */
@@ -32,11 +34,22 @@ export type ArenaAchievementEvaluationInput = {
 export type ArenaAchievementSnapshotRow = {
   id: string;
   arenaType: 'launch' | 'general' | 'state' | 'country';
+  name?: string | null;
+  sourceId?: string | null;
   claimableCellCount: number | string | null;
   claimedCells: number | string;
   visited: boolean;
   firstFromLaunch: boolean;
   tagged: boolean;
+};
+
+export type ArenaAchievementSnapshot = {
+  rows: readonly ArenaAchievementSnapshotRow[];
+  lifetimeUniqueCellCount: number;
+};
+
+type ArenaAchievementSnapshotQueryRow = ArenaAchievementSnapshotRow & {
+  lifetimeUniqueCellCount: number | string;
 };
 
 function numberOrNull(value: number | string | null): number | null {
@@ -65,7 +78,7 @@ export async function evaluateArenaAchievementsInTransaction(
       ? sql`AND FALSE`
       : sql`AND flight.flight_id IN (${sql.join(historicalIds, sql`, `)})`
     : sql``;
-  const rows = await database.execute<ArenaAchievementSnapshotRow>(sql`
+  const rows = await database.execute<ArenaAchievementSnapshotQueryRow>(sql`
     WITH personal_cells AS (
       SELECT DISTINCT claims.x, claims.y
       FROM user_grid_claims claims
@@ -78,6 +91,10 @@ export async function evaluateArenaAchievementsInTransaction(
       FROM arenas arena
       LEFT JOIN personal_cells ON ${arenaCellOwnershipPredicateSql({ arenaId: sql`arena.id`, arenaType: sql`arena.arena_type`, externalId: sql`arena.external_id`, area: sql`arena.area`, cellCenter: claimCellCenterSql({ x: sql`personal_cells.x`, y: sql`personal_cells.y`, cellSize: sql`${input.cellSize}` }) })}
       GROUP BY arena.id
+    ),
+    personal_cell_count AS (
+      SELECT COUNT(*)::integer AS count
+      FROM personal_cells
     ),
     launch_visits AS (
       SELECT DISTINCT arena.id
@@ -119,20 +136,38 @@ export async function evaluateArenaAchievementsInTransaction(
       WHERE arena.arena_type = 'launch'
     )
     SELECT arena.id,
+           arena.name,
+           arena.source_id AS "sourceId",
            arena.arena_type AS "arenaType",
            CASE WHEN arena.arena_type IN ('launch', 'general') THEN arena.claimable_cell_count ELSE NULL END AS "claimableCellCount",
            COALESCE(arena_claims.claimed_cells, 0)::integer AS "claimedCells",
            (launch_visits.id IS NOT NULL) AS visited,
            (current_origin.id IS NOT NULL) AS "firstFromLaunch",
-           (current_tags.id IS NOT NULL) AS tagged
+           (current_tags.id IS NOT NULL) AS tagged,
+           personal_cell_count.count AS "lifetimeUniqueCellCount"
     FROM arenas arena
     LEFT JOIN arena_claims ON arena_claims.id = arena.id
     LEFT JOIN launch_visits ON launch_visits.id = arena.id
     LEFT JOIN current_origin ON current_origin.id = arena.id
     LEFT JOIN current_tags ON current_tags.id = arena.id
+    CROSS JOIN personal_cell_count
   `);
 
-  return awardArenaAchievementsFromSnapshotInTransaction(database, input, rows.rows);
+  let lifetimeUniqueCellCount = Number(rows.rows[0]?.lifetimeUniqueCellCount ?? 0);
+  // The Arena catalog can legitimately be empty; in that case the final Arena
+  // join has no row from which to carry the scalar count.
+  if (rows.rows.length === 0) {
+    const count = await database.execute<{ count: number | string }>(sql`
+      SELECT COUNT(DISTINCT (claims.x, claims.y))::integer AS count
+      FROM user_grid_claims claims
+      WHERE claims.claim_user = ${input.userId}
+        ${historicalClaimFilter}
+    `);
+    lifetimeUniqueCellCount = Number(count.rows[0]?.count ?? 0);
+  }
+  const snapshot: ArenaAchievementSnapshot = { rows: rows.rows, lifetimeUniqueCellCount };
+  const evaluation = await awardArenaAchievementsFromSnapshotInTransaction(database, input, snapshot.rows);
+  return { ...evaluation, snapshot };
 }
 
 /** Applies the Release 2 catalog to an already calculated as-of Arena snapshot. */

@@ -33,10 +33,10 @@ import { createActivityService } from './services/activityService.js';
 import { createFlightThumbnailService } from './services/flightThumbnailService.js';
 import { createFlightThumbnailLifecycleService } from './services/flightThumbnailLifecycleService.js';
 import { createFlightThumbnailDeliveryService } from './services/flightThumbnailDeliveryService.js';
+import { createUserAchievementProgressService } from './services/userAchievementProgressService.js';
 
 const config = parseConfig(process.env);
 const { db } = createDatabase(config.databaseUrl);
-const auth = createAuthService(db, { sessionTtlSeconds: config.sessionTtlSeconds });
 const donations = createDonationService(db);
 const s3Client = createBucketClient(config);
 const thumbnails = createFlightThumbnailService({
@@ -59,7 +59,9 @@ const thumbnailDelivery = createFlightThumbnailDeliveryService({
 });
 const valkey = await createValkeyClient(config.valkeyUrl);
 const arenaLeadership = createArenaLeadershipReconciliationService(db, { cellSize: config.gridClaimCellSize });
-const gridClaim = createGridClaimService(db, { cellSize: config.gridClaimCellSize }, undefined, undefined, arenaLeadership);
+const userAchievementProgress = createUserAchievementProgressService(db, { cellSize: config.gridClaimCellSize });
+const auth = createAuthService(db, { sessionTtlSeconds: config.sessionTtlSeconds }, userAchievementProgress);
+const gridClaim = createGridClaimService(db, { cellSize: config.gridClaimCellSize }, undefined, undefined, arenaLeadership, userAchievementProgress);
 const adminAreas = createAdminAreaService(db, { cellSize: config.gridClaimCellSize }, arenaLeadership);
 const arenas = createArenaService(db, { cellSize: config.gridClaimCellSize });
 const arenaProgress = createArenaProgressService(db, { cellSize: config.gridClaimCellSize });
@@ -67,7 +69,10 @@ const monthlyCoverage = createMonthlyCoverageService(db, { cellSize: config.grid
 const mapGrid = createMapGridService(db, { cellSize: config.gridClaimCellSize });
 const territoryTiles = createTerritoryTileService(db, { cellSize: config.gridClaimCellSize });
 const territoryTileSettings = createTerritoryTileSettingsService();
-const profiles = createProfileService(db, { cellSize: config.gridClaimCellSize });
+const profiles = createProfileService(db, {
+  cellSize: config.gridClaimCellSize,
+  userAchievementProgress,
+});
 const follow = createFollowService(db);
 const activity = createActivityService(db);
 const uploadQueue = createFlightUploadQueueService(valkey, {
@@ -80,7 +85,7 @@ const adminFlights = createAdminFlightService(db, gridClaim, {
   bucketName: config.bucket.bucketName,
   uploadQueue,
   thumbnailLifecycle,
-}, { arenaLeadership, cellSize: config.gridClaimCellSize });
+}, { arenaLeadership, cellSize: config.gridClaimCellSize, userAchievementProgress });
 const adminUsers = createAdminUserService(db, {
   uploadQueue,
   s3Client,
@@ -88,6 +93,7 @@ const adminUsers = createAdminUserService(db, {
   bucketFolder: config.bucket.bucketFolder,
   arenaLeadership,
   cellSize: config.gridClaimCellSize,
+  userAchievementProgress,
 });
 const failedFlightCleanup = createFailedFlightCleanupService(db, uploadQueue, {
   s3Client,

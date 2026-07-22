@@ -3,6 +3,7 @@ import { eq } from 'drizzle-orm';
 import type { Database } from '../db/client.js';
 import { appSessions, profiles, userPasswords, users } from '../db/schema.js';
 import { hashPassword, verifyPassword } from './passwordService.js';
+import type { UserAchievementProgressService } from './userAchievementProgressService.js';
 
 export type AuthenticatedUser = {
   userId: string;
@@ -56,6 +57,7 @@ function isUniqueViolation(error: unknown): boolean {
 export function createAuthService(
   database: Database,
   options: { sessionTtlSeconds: number },
+  userAchievementProgress?: Pick<UserAchievementProgressService, 'initializeInTransaction'>,
 ): AuthService {
   const expiresAt = () => new Date(Date.now() + options.sessionTtlSeconds * 1000);
 
@@ -78,6 +80,10 @@ export function createAuthService(
             .values({ userId: user.id, displayName })
             .returning();
           if (!profile) throw new Error('Profile insert returned no row.');
+
+          if (userAchievementProgress) {
+            await userAchievementProgress.initializeInTransaction(tx, user.id);
+          }
 
           const [session] = await tx
             .insert(appSessions)

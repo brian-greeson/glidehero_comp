@@ -6,7 +6,7 @@ import type {
 import type {
   AchievementProgressCard,
   PilotAchievement,
-  PilotProfileSummary,
+  PilotAchievementsSummary,
 } from '../../../services/profileService.js';
 import { resolveAchievementArtworkKey } from '../achievementArtwork.js';
 
@@ -62,7 +62,7 @@ function progressView(progress: AchievementProgressCard): AchievementCardView {
   };
 }
 
-function summaryMetrics(profile: PilotProfileSummary): MetricView[] {
+function summaryMetrics(profile: PilotAchievementsSummary): MetricView[] {
   return [
     {
       label: 'Achievements Earned',
@@ -86,7 +86,7 @@ function formatCount(value: number): string {
 }
 
 export function createAchievementsPageModel(
-  profile: PilotProfileSummary,
+  profile: PilotAchievementsSummary,
   shell: Omit<AchievementsPageModel, 'page' | 'metrics' | 'earned' | 'inProgress' | 'recentlyEarned'>,
 ): AchievementsPageModel {
   const earned = profile.achievements.map(earnedView);

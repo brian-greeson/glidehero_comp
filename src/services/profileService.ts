@@ -14,6 +14,7 @@ import {
 } from '../domain/achievement/progress.js';
 import { arenaPath } from '../domain/arena/arenaRoute.js';
 import { arenaCellOwnershipPredicateSql, claimCellCenterSql } from './arenaGeometrySql.js';
+import { createUserAchievementProgressService, type UserAchievementProgressService } from './userAchievementProgressService.js';
 
 const territoryColorPattern = /^#[0-9a-f]{6}$/i;
 
@@ -30,7 +31,6 @@ export type PilotProfileSummary = {
   nextUniqueCellMilestone: number;
   uniqueCellsToNextMilestone: number;
   nextUniqueCellMilestoneProgressPercent: number;
-  achievementProgress: AchievementProgressCard[];
   completedFlightCount: number;
   lifetimeDirectCellCount: number;
   lifetimeEnclosedCellCount: number;
@@ -39,9 +39,17 @@ export type PilotProfileSummary = {
   achievementCount: number;
   followerCount?: number;
   followingCount?: number;
-  achievements: PilotAchievement[];
   recentFlights: PilotRecentFlight[];
   currentArenaLeaderships: PilotArenaLeadership[];
+};
+
+/** Narrow read model used by the Achievements page. */
+export type PilotAchievementsSummary = {
+  userId: string;
+  displayName: string;
+  achievementCount: number;
+  achievementProgress: AchievementProgressCard[];
+  achievements: PilotAchievement[];
 };
 
 export type PilotArenaLeadership = {
@@ -111,6 +119,7 @@ export interface ProfileService {
   updateTerritoryColor(input: UpdateTerritoryColorInput): Promise<void>;
   getDashboardAchievementProgress(userId: string): Promise<AchievementProgressCard[]>;
   getPilotProfile(userId: string): Promise<PilotProfileSummary | null>;
+  getPilotAchievements(userId: string): Promise<PilotAchievementsSummary | null>;
 }
 
 export function normalizeTerritoryColor(value: unknown): string | null {
@@ -606,7 +615,60 @@ async function loadArenaAchievementProgress(
   };
 }
 
-export function createProfileService(database: Database, options: { cellSize: number }): ProfileService {
+async function loadProjectionAchievementProgress(
+  database: Database,
+  progressService: UserAchievementProgressService,
+  options: { cellSize: number },
+  displayName: string,
+  userId: string,
+): Promise<AchievementProgressCard[]> {
+  const projection = await progressService.get(userId);
+  if (!projection) {
+    console.warn(`[achievement-progress] projection row missing for user ${userId}; falling back to authoritative calculation`);
+    const lifetimeResult = await database.execute<{ lifetimeUniqueCellCount: number | string }>(sql`
+      SELECT COUNT(DISTINCT (claims.x, claims.y))::integer AS "lifetimeUniqueCellCount"
+      FROM user_grid_claims claims
+      WHERE claims.claim_user = ${userId}
+    `);
+    const lifetimeUniqueCellCount = Number(lifetimeResult.rows[0]?.lifetimeUniqueCellCount ?? 0);
+    return buildAchievementProgress(
+      { displayName, lifetimeUniqueCellCount },
+      await loadArenaAchievementProgress(database, options, userId),
+    );
+  }
+
+  let bestGeneral: { name: string | null; countryCode: string | null; sourceId: number | string | null } = {
+    name: null,
+    countryCode: null,
+    sourceId: null,
+  };
+  if (projection.bestGeneralArenaId) {
+    const arenaResult = await database.execute<typeof bestGeneral>(sql`
+      SELECT name, country_code AS "countryCode", source_id AS "sourceId"
+      FROM arenas
+      WHERE id = ${projection.bestGeneralArenaId}
+      LIMIT 1
+    `);
+    bestGeneral = arenaResult.rows[0] ?? bestGeneral;
+  }
+  return buildAchievementProgress({
+    displayName,
+    lifetimeUniqueCellCount: projection.lifetimeUniqueCellCount,
+  }, {
+    launchArenasVisited: projection.launchArenasVisited,
+    generalArenasExplored: projection.generalArenasExplored,
+    statesFlownIn: projection.statesFlownIn,
+    countriesFlownIn: projection.countriesFlownIn,
+    bestGeneralClaimedCells: projection.bestGeneralClaimedCellCount,
+    bestGeneralTotalCells: projection.bestGeneralClaimableCellCount,
+    bestGeneralSourceId: bestGeneral.sourceId,
+    bestGeneralName: bestGeneral.name,
+    bestGeneralCountryCode: bestGeneral.countryCode,
+  });
+}
+
+export function createProfileService(database: Database, options: { cellSize: number; userAchievementProgress?: UserAchievementProgressService }): ProfileService {
+  const progressService = options.userAchievementProgress ?? createUserAchievementProgressService(database, { cellSize: options.cellSize });
   return {
     async updateTerritoryColor({ userId, territoryColor }) {
       const normalizedColor = normalizeTerritoryColor(territoryColor);
@@ -619,26 +681,15 @@ export function createProfileService(database: Database, options: { cellSize: nu
     },
 
     async getDashboardAchievementProgress(userId) {
-      const result = await database.execute<{
-        displayName: string;
-        lifetimeUniqueCellCount: number | string;
-      }>(sql`
-        SELECT
-          profiles.display_name AS "displayName",
-          COUNT(DISTINCT (claims.x, claims.y))::integer AS "lifetimeUniqueCellCount"
+      const result = await database.execute<{ displayName: string }>(sql`
+        SELECT profiles.display_name AS "displayName"
         FROM users
         INNER JOIN profiles ON profiles.user_id = users.user_id
-        LEFT JOIN user_grid_claims claims
-          ON claims.claim_user = users.user_id
         WHERE users.user_id = ${userId}
-        GROUP BY users.user_id, profiles.display_name
       `);
       const row = result.rows[0];
       if (!row) return [];
-      const progress = buildAchievementProgress({
-        displayName: row.displayName,
-        lifetimeUniqueCellCount: Number(row.lifetimeUniqueCellCount),
-      }, await loadArenaAchievementProgress(database, options, userId));
+      const progress = await loadProjectionAchievementProgress(database, progressService, options, row.displayName, userId);
       return selectClosestMilestones(progress, 3);
     },
 
@@ -692,38 +743,7 @@ export function createProfileService(database: Database, options: { cellSize: nu
       if (!row) return null;
       const lifetimeUniqueCellCount = Number(row.lifetimeUniqueCellCount);
       const nextMilestone = nextUniqueCellMilestone(lifetimeUniqueCellCount);
-      const [achievementRows, recentFlightRows, arenaProgress, currentArenaLeadershipRows] = await Promise.all([
-        database.execute<StoredAchievement & { totalCount: number | string }>(sql`
-          WITH displayable AS (
-            SELECT
-              earned.id::text AS id,
-              earned.achievement_type AS "achievementType",
-              earned.achievement_key AS "achievementKey",
-              earned.source_flight_id AS "sourceFlightId",
-              earned.earned_at AS "earnedAt",
-              earned.details,
-              false AS "isRecordEvent",
-              NULL::integer AS value
-            FROM achievements earned
-            WHERE earned.user_id = ${userId}
-            UNION ALL
-            SELECT
-              ('record-event:' || event.id::text) AS id,
-              'record' AS "achievementType",
-              record.record_key AS "achievementKey",
-              event.source_flight_id AS "sourceFlightId",
-              event.earned_at AS "earnedAt",
-              event.details,
-              true AS "isRecordEvent",
-              event.value
-            FROM achievement_record_events event
-            INNER JOIN achievement_records record ON record.id = event.record_id
-            WHERE event.user_id = ${userId}
-          )
-          SELECT displayable.*, COUNT(*) OVER()::integer AS "totalCount"
-          FROM displayable
-          ORDER BY displayable."earnedAt" DESC, displayable.id DESC
-        `),
+      const [recentFlightRows, currentArenaLeadershipRows] = await Promise.all([
         database.execute<StoredRecentFlight>(sql`
           SELECT
             progress.flight_id AS "flightId",
@@ -739,13 +759,8 @@ export function createProfileService(database: Database, options: { cellSize: nu
           ORDER BY flights.started_at DESC NULLS LAST, progress.evaluated_at DESC, progress.flight_id DESC
           LIMIT 20
         `),
-        loadArenaAchievementProgress(database, options, userId),
         loadCurrentArenaLeaderships(database, options, userId),
       ]);
-      const achievementProgress = buildAchievementProgress({
-        displayName: row.displayName,
-        lifetimeUniqueCellCount,
-      }, arenaProgress);
       return {
         userId: row.userId,
         displayName: row.displayName,
@@ -754,16 +769,14 @@ export function createProfileService(database: Database, options: { cellSize: nu
         nextUniqueCellMilestone: nextMilestone,
         uniqueCellsToNextMilestone: nextMilestone - lifetimeUniqueCellCount,
         nextUniqueCellMilestoneProgressPercent: milestoneProgressPercent(lifetimeUniqueCellCount, nextMilestone),
-        achievementProgress,
         completedFlightCount: Number(row.completedFlightCount),
         lifetimeDirectCellCount: Number(row.lifetimeDirectCellCount),
         lifetimeEnclosedCellCount: Number(row.lifetimeEnclosedCellCount),
         currentTotalCellRecord: numberOrNull(row.currentTotalCellRecord),
         currentEnclosedCellRecord: numberOrNull(row.currentEnclosedCellRecord),
-        achievementCount: Number(achievementRows.rows[0]?.totalCount ?? row.achievementCount),
+        achievementCount: Number(row.achievementCount),
         followerCount: Number(row.followerCount),
         followingCount: Number(row.followingCount),
-        achievements: achievementRows.rows.map(achievementDisplay),
         recentFlights: recentFlightRows.rows.map((flight) => {
           const directCellCount = Number(flight.directCellCount);
           const enclosedCellCount = Number(flight.enclosedCellCount);
@@ -793,6 +806,42 @@ export function createProfileService(database: Database, options: { cellSize: nu
           leadMarginCells: Number(leadership.leadingCellCount) - Number(leadership.nextRankCellCount),
           leadingSince: displayDate(leadership.tookLeadAt),
         })),
+      };
+    },
+
+    async getPilotAchievements(userId) {
+      const identity = await database.execute<{ userId: string; displayName: string }>(sql`
+        SELECT users.user_id AS "userId", profiles.display_name AS "displayName"
+        FROM users INNER JOIN profiles ON profiles.user_id = users.user_id
+        WHERE users.user_id = ${userId}
+      `);
+      const row = identity.rows[0];
+      if (!row) return null;
+      const achievementRows = await database.execute<StoredAchievement & { totalCount: number | string }>(sql`
+        WITH displayable AS (
+          SELECT earned.id::text AS id, earned.achievement_type AS "achievementType", earned.achievement_key AS "achievementKey",
+            earned.source_flight_id AS "sourceFlightId", earned.earned_at AS "earnedAt", earned.details,
+            false AS "isRecordEvent", NULL::integer AS value
+          FROM achievements earned WHERE earned.user_id = ${userId}
+          UNION ALL
+          SELECT ('record-event:' || event.id::text) AS id, 'record' AS "achievementType", record.record_key AS "achievementKey",
+            event.source_flight_id AS "sourceFlightId", event.earned_at AS "earnedAt", event.details,
+            true AS "isRecordEvent", event.value
+          FROM achievement_record_events event
+          INNER JOIN achievement_records record ON record.id = event.record_id
+          WHERE event.user_id = ${userId}
+        )
+        SELECT displayable.*, COUNT(*) OVER()::integer AS "totalCount"
+        FROM displayable
+        ORDER BY displayable."earnedAt" DESC, displayable.id DESC
+      `);
+      const achievementProgress = await loadProjectionAchievementProgress(database, progressService, options, row.displayName, userId);
+      return {
+        userId: row.userId,
+        displayName: row.displayName,
+        achievementCount: Number(achievementRows.rows[0]?.totalCount ?? 0),
+        achievements: achievementRows.rows.map(achievementDisplay),
+        achievementProgress,
       };
     },
   };

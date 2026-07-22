@@ -409,6 +409,35 @@ export const achievements = pgTable(
   ],
 );
 
+/** Current, rebuildable achievement progress summary for a pilot. */
+export const userAchievementProgress = pgTable(
+  'user_achievement_progress',
+  {
+    userId: uuid('user_id').primaryKey().references(() => users.id, { onDelete: 'cascade' }),
+    lifetimeUniqueCellCount: integer('lifetime_unique_cell_count').notNull().default(0),
+    launchArenasVisited: integer('launch_arenas_visited').notNull().default(0),
+    generalArenasExplored: integer('general_arenas_explored').notNull().default(0),
+    statesFlownIn: integer('states_flown_in').notNull().default(0),
+    countriesFlownIn: integer('countries_flown_in').notNull().default(0),
+    bestGeneralArenaId: uuid('best_general_arena_id').references(() => arenas.id, { onDelete: 'set null' }),
+    bestGeneralClaimedCellCount: integer('best_general_claimed_cell_count').notNull().default(0),
+    bestGeneralClaimableCellCount: integer('best_general_claimable_cell_count').notNull().default(0),
+    projectionVersion: integer('projection_version').notNull().default(1),
+    updatedAt: timestamp('updated_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
+  },
+  (table) => [
+    check('user_achievement_progress_lifetime_unique_cell_count_nonnegative', sql`${table.lifetimeUniqueCellCount} >= 0`),
+    check('user_achievement_progress_launch_arenas_visited_nonnegative', sql`${table.launchArenasVisited} >= 0`),
+    check('user_achievement_progress_general_arenas_explored_nonnegative', sql`${table.generalArenasExplored} >= 0`),
+    check('user_achievement_progress_states_flown_in_nonnegative', sql`${table.statesFlownIn} >= 0`),
+    check('user_achievement_progress_countries_flown_in_nonnegative', sql`${table.countriesFlownIn} >= 0`),
+    check('user_achievement_progress_best_general_claimed_cell_count_nonnegative', sql`${table.bestGeneralClaimedCellCount} >= 0`),
+    check('user_achievement_progress_best_general_claimable_cell_count_nonnegative', sql`${table.bestGeneralClaimableCellCount} >= 0`),
+    check('user_achievement_progress_best_general_claimed_not_above_claimable', sql`${table.bestGeneralClaimableCellCount} = 0 OR ${table.bestGeneralClaimedCellCount} <= ${table.bestGeneralClaimableCellCount}`),
+    check('user_achievement_progress_projection_version_positive', sql`${table.projectionVersion} > 0`),
+  ],
+);
+
 /** Current best value for a durable, user-scoped achievement record. */
 export const achievementRecords = pgTable(
   'achievement_records',

@@ -9,6 +9,7 @@ import {
   createArenaLeadershipReconciliationService,
   type ArenaLeadershipReconciliationService,
 } from './arenaLeadershipReconciliationService.js';
+import { createUserAchievementProgressService, type UserAchievementProgressService } from './userAchievementProgressService.js';
 import { findEligibleArenaIdsForCompetitionFlight } from './arenaClaimImpact.js';
 import { viewportCtes, type ViewportBounds } from './viewportGrid.js';
 
@@ -59,6 +60,7 @@ export function createGridClaimService(
   progressionAchievements: ProgressionAchievementService = createProgressionAchievementService(),
   arenaAchievements: ArenaAchievementService = createArenaAchievementService(),
   arenaLeadership: ArenaLeadershipReconciliationService = createArenaLeadershipReconciliationService(database, options),
+  userAchievementProgress: UserAchievementProgressService = createUserAchievementProgressService(database, options),
 ): TransactionalGridClaimService {
   async function processInTransaction(
     transaction: GridClaimTransaction,
@@ -109,7 +111,7 @@ export function createGridClaimService(
         }
       }
     }
-    result.arenaAchievements = flight && evaluateAchievements
+    const arenaEvaluation = flight && evaluateAchievements
       ? await arenaAchievements.evaluateInTransaction(transaction, {
         userId: input.userId,
         sourceFlightId: input.flightId,
@@ -117,6 +119,15 @@ export function createGridClaimService(
         earnedAt: result.evaluatedAt,
       })
       : { newlyEarned: [], alreadyEarned: 0, record: null };
+    if (flight && evaluateAchievements && 'snapshot' in arenaEvaluation && arenaEvaluation.snapshot
+      && arenaEvaluation.snapshot.rows.every((row) => typeof row.arenaType === 'string')) {
+      await userAchievementProgress.upsertFromArenaSnapshotInTransaction(transaction, input.userId, arenaEvaluation.snapshot);
+    }
+    result.arenaAchievements = {
+      newlyEarned: arenaEvaluation.newlyEarned,
+      alreadyEarned: arenaEvaluation.alreadyEarned,
+      record: arenaEvaluation.record,
+    };
     return result;
   }
 

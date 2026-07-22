@@ -2,9 +2,17 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { achievementRecordEvents, achievementRecords, achievements, flights, flightProgress, igcFiles, personalGridClaims, pilotFollows } from '../../src/db/schema.js';
 import { createAuthService } from '../../src/services/authService.js';
 import { createProfileService, normalizeTerritoryColor } from '../../src/services/profileService.js';
+import { createUserAchievementProgressService } from '../../src/services/userAchievementProgressService.js';
 import { resetAndMigrateTestDatabase } from './database.js';
 
 let database: Awaited<ReturnType<typeof resetAndMigrateTestDatabase>>;
+
+async function rebuildProgress(userId: string, cellSize = 1_000): Promise<void> {
+  const progress = createUserAchievementProgressService(database.db, { cellSize });
+  await database.db.transaction(async (transaction) => {
+    await progress.rebuildInTransaction(transaction, userId);
+  });
+}
 
 beforeAll(async () => {
   database = await resetAndMigrateTestDatabase();
@@ -158,6 +166,7 @@ describe('profileService', () => {
         details: { previousRecord: 1, newRecord: 2, directCells: 6, enclosedCells: 2, totalCells: 8 },
       },
     ]);
+    await rebuildProgress(pilot.user.userId);
 
     const summary = await profiles.getPilotProfile(pilot.user.userId);
     expect(summary).toEqual({
@@ -168,7 +177,6 @@ describe('profileService', () => {
       nextUniqueCellMilestone: 10,
       uniqueCellsToNextMilestone: 8,
       nextUniqueCellMilestoneProgressPercent: 20,
-      achievementProgress: expect.any(Array),
       completedFlightCount: 2,
       lifetimeDirectCellCount: 10,
       lifetimeEnclosedCellCount: 3,
@@ -177,26 +185,6 @@ describe('profileService', () => {
       achievementCount: 3,
       followerCount: 0,
       followingCount: 0,
-      achievements: [
-        expect.objectContaining({
-          achievementType: 'unique_cells_milestone',
-          title: '10 Unique Cells',
-          description: 'Reached 10 unique Personal Map cells, adding 1 new cell to a total of 10.',
-          sourceFlightId: firstFlight,
-        }),
-        expect.objectContaining({
-          achievementType: 'personal_best_total_cells',
-          title: 'New Flight Cell Record',
-          description: 'Established an initial total-cell record of 1 cell (1 direct and 0 enclosed).',
-          sourceFlightId: secondFlight,
-        }),
-        expect.objectContaining({
-          achievementType: 'personal_best_enclosed_cells',
-          title: 'New Enclosed Cell Record',
-          description: 'Improved the enclosed-cell record from 1 to 2 cells (6 direct and 2 enclosed).',
-          sourceFlightId: null,
-        }),
-      ],
       recentFlights: [
         expect.objectContaining({
           flightId: secondFlight,
@@ -221,13 +209,15 @@ describe('profileService', () => {
       ],
       currentArenaLeaderships: [],
     });
-    expect(summary?.achievementProgress.map((progress) => progress.key)).toEqual([
+    const achievementsSummary = await profiles.getPilotAchievements(pilot.user.userId);
+    expect(achievementsSummary?.achievementProgress.map((progress) => progress.key)).toEqual([
       'unique_cells', 'launches_visited', 'general_arenas_explored', 'general_coverage', 'states_flown_in', 'countries_flown_in',
     ]);
-    expect(summary?.achievementProgress[0]).toEqual(expect.objectContaining({ currentValue: 2, targetValue: 10, progressPercent: 20 }));
+    expect(achievementsSummary?.achievementProgress[0]).toEqual(expect.objectContaining({ currentValue: 2, targetValue: 10, progressPercent: 20 }));
     await expect(profiles.getDashboardAchievementProgress(pilot.user.userId)).resolves.toEqual(
-      summary?.achievementProgress.slice(0, 3),
+      achievementsSummary?.achievementProgress.slice(0, 3),
     );
+    expect(achievementsSummary?.achievements).toHaveLength(3);
 
     const emptySummary = await profiles.getPilotProfile(emptyPilot.user.userId);
     expect(emptySummary).toEqual({
@@ -238,7 +228,6 @@ describe('profileService', () => {
       nextUniqueCellMilestone: 10,
       uniqueCellsToNextMilestone: 10,
       nextUniqueCellMilestoneProgressPercent: 0,
-      achievementProgress: expect.any(Array),
       completedFlightCount: 0,
       lifetimeDirectCellCount: 0,
       lifetimeEnclosedCellCount: 0,
@@ -247,11 +236,10 @@ describe('profileService', () => {
       achievementCount: 0,
       followerCount: 0,
       followingCount: 0,
-      achievements: [],
       recentFlights: [],
       currentArenaLeaderships: [],
     });
-    expect(emptySummary?.achievementProgress).toHaveLength(6);
+    expect((await profiles.getPilotAchievements(emptyPilot.user.userId))?.achievementProgress).toHaveLength(6);
     await expect(profiles.getPilotProfile('00000000-0000-4000-8000-000000000099')).resolves.toBeNull();
   });
 
@@ -434,8 +422,10 @@ describe('profileService', () => {
     await insertArena(12, 'Large General', 'general', 'POLYGON((0 0,2000 0,2000 2000,0 2000,0 0))', 4);
     await insertArena(13, 'Colorado', 'state', 'POLYGON((0 0,2000 0,2000 2000,0 2000,0 0))', null);
     await insertArena(14, 'United States', 'country', 'POLYGON((0 0,2000 0,2000 2000,0 2000,0 0))', null);
+    await rebuildProgress(pilot.user.userId);
 
-    const profile = await createProfileService(database.db, { cellSize: 1_000 }).getPilotProfile(pilot.user.userId);
+    const profileService = createProfileService(database.db, { cellSize: 1_000 });
+    const profile = await profileService.getPilotAchievements(pilot.user.userId);
 
     expect(profile?.achievementProgress.map((progress) => progress.key)).toEqual([
       'unique_cells', 'launches_visited', 'general_arenas_explored', 'general_coverage', 'states_flown_in', 'countries_flown_in',
@@ -455,7 +445,7 @@ describe('profileService', () => {
       ]);
   });
 
-  it('limits profile history to the latest 50 achievements and 20 flights', async () => {
+  it('returns the full achievement history and limits recent flights to 20', async () => {
     const auth = createAuthService(database.db, { sessionTtlSeconds: 604800 });
     const pilot = await auth.signup({
       email: 'history-limits@example.com',
@@ -505,9 +495,10 @@ describe('profileService', () => {
     })));
 
     const profile = await profiles.getPilotProfile(pilot.user.userId);
-    expect(profile?.achievements).toHaveLength(50);
+    const achievementsProfile = await profiles.getPilotAchievements(pilot.user.userId);
+    expect(achievementsProfile?.achievements).toHaveLength(55);
     expect(profile?.recentFlights).toHaveLength(20);
-    expect(profile?.achievements[0]?.title).toBe('55 Unique Cells');
+    expect(achievementsProfile?.achievements[0]?.title).toBe('55 Unique Cells');
     expect(profile?.recentFlights[0]?.flightId).toBe(flightIds[24]);
   });
 
@@ -544,7 +535,7 @@ describe('profileService', () => {
       { recordId: record.id, userId: pilot.user.userId, value: 3, earnedAt: earnedAt(12), details: { value: 3, previousValue: 1, privateDetail: 'do not render' } },
     ]);
 
-    const profile = await profiles.getPilotProfile(pilot.user.userId);
+    const profile = await profiles.getPilotAchievements(pilot.user.userId);
     expect(profile?.achievementCount).toBe(12);
     expect(profile?.achievements).toHaveLength(12);
     expect(profile?.achievements[0]).toEqual(expect.objectContaining({
@@ -599,7 +590,7 @@ describe('profileService', () => {
       },
     ]);
 
-    const profile = await createProfileService(database.db, { cellSize: 1_000 }).getPilotProfile(pilot.user.userId);
+    const profile = await createProfileService(database.db, { cellSize: 1_000 }).getPilotAchievements(pilot.user.userId);
     expect(profile?.achievements.map((achievement) => achievement.title)).toEqual([
       'Reclaimed the Lead in Colorado',
       'Took the Lead in Colorado',
@@ -616,7 +607,7 @@ describe('profileService', () => {
     });
   });
 
-  it('limits one mixed ordinary and record-event history globally to the newest 50 items', async () => {
+  it('returns one mixed ordinary and record-event history globally in newest-first order', async () => {
     const auth = createAuthService(database.db, { sessionTtlSeconds: 604800 });
     const pilot = await auth.signup({
       email: 'release-two-mixed-history@example.com',
@@ -663,13 +654,12 @@ describe('profileService', () => {
       };
     }));
 
-    const profile = await profiles.getPilotProfile(pilot.user.userId);
+    const profile = await profiles.getPilotAchievements(pilot.user.userId);
     expect(profile?.achievementCount).toBe(60);
-    expect(profile?.achievements).toHaveLength(50);
-    expect(profile?.achievements.map((achievement) => achievement.id)).toEqual(allIds.slice(10).reverse());
-    expect(profile?.achievements.map((achievement) => achievement.id)).not.toContain(allIds[0]);
-    expect(profile?.achievements.map((achievement) => achievement.id)).not.toContain(allIds[1]);
-    expect(profile?.achievements.at(-1)?.id).toBe(allIds[10]);
+    expect(profile?.achievements).toHaveLength(60);
+    const expectedIds = [...allIds].reverse();
+    expect(profile?.achievements.map((achievement) => achievement.id)).toEqual(expectedIds);
+    expect(profile?.achievements.at(-1)?.id).toBe(allIds[0]);
     expect(profile?.achievements.some((achievement) => achievement.id.startsWith('record-event:'))).toBe(true);
     expect(profile?.achievements.some((achievement) => ordinaryIds.includes(achievement.id))).toBe(true);
   });

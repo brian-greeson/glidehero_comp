@@ -10,6 +10,7 @@ import { importLaunchArenasInTransaction, normalizeLaunchCountryName, LAUNCH_COU
 import { importStateArenasInTransaction, parseStateArenaGeoJson } from '../services/stateArenaImportService.js';
 import type { Database } from '../db/client.js';
 import { createArenaLeadershipReconciliationService } from '../services/arenaLeadershipReconciliationService.js';
+import { createUserAchievementProgressService } from '../services/userAchievementProgressService.js';
 
 const CONFIRM_FLAG = '--confirm-delete-all-arenas';
 const APPLY_FLAG = '--apply';
@@ -111,6 +112,7 @@ export async function rebuildArenas(database: Database, countries: ReturnType<ty
   let summary: RebuildSummary | undefined;
   try {
     const arenaLeadership = createArenaLeadershipReconciliationService(database, { cellSize });
+    const userAchievementProgress = createUserAchievementProgressService(database, { cellSize });
     await database.transaction(async (transaction) => {
       const deletedResult = await transaction.execute<{ count: number }>(sql`SELECT COUNT(*)::integer AS count FROM arenas`);
       const deleted = deletedResult.rows[0]?.count ?? 0;
@@ -118,13 +120,14 @@ export async function rebuildArenas(database: Database, countries: ReturnType<ty
       await transaction.execute(sql`ALTER SEQUENCE arena_source_id_seq RESTART WITH 10000`);
       const country = await importCountryArenasInTransaction(transaction, countries, cellSize, { reconcile: false });
       const state = await importStateArenasInTransaction(transaction, states, cellSize, { reconcile: false });
-      const launch = await importLaunchArenasInTransaction(transaction, launches, cellSize);
+      const launch = await importLaunchArenasInTransaction(transaction, launches, cellSize, { reconcileProjection: false });
       const eligibleIds = await transaction.execute<{ id: string }>(sql`
         SELECT id FROM arenas WHERE arena_type IN ('country', 'state')
         ORDER BY id
       `);
       await arenaLeadership.reconcileInTransaction(transaction, { arenaIds: eligibleIds.rows.map((row) => row.id) });
       await verifyRebuild(transaction, { country: country.imported, state: state.imported, launch: launch.imported }, cellSize);
+      await userAchievementProgress.rebuildAllInTransaction(transaction);
       summary = { deleted, inserted: { country: country.imported, state: state.imported, launch: launch.imported, general: 0 }, refreshedLaunches: launch.refreshed, dryRun: !apply };
       if (!apply) throw new DryRunRollback(summary);
     });

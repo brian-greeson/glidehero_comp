@@ -10,6 +10,8 @@ import {
 } from './arenaLeadershipReconciliationService.js';
 import { findEligibleArenaIdsForCompetitionFlight } from './arenaClaimImpact.js';
 import type { FlightThumbnailLifecycleService } from './flightThumbnailLifecycleService.js';
+import { lockUserProgression } from './gridClaimService.js';
+import type { UserAchievementProgressService } from './userAchievementProgressService.js';
 
 export type AdminFlight = {
   id: string;
@@ -47,6 +49,7 @@ type StorageOptions = {
 type ArenaLeadershipOptions = {
   arenaLeadership: ArenaLeadershipReconciliationService;
   cellSize: number;
+  userAchievementProgress?: Pick<UserAchievementProgressService, 'rebuildInTransaction'>;
 };
 
 function isMissingObject(error: unknown): boolean {
@@ -94,11 +97,17 @@ export function createAdminFlightService(
     if (!storage) throw new Error('Admin flight storage is not configured.');
 
     await database.transaction(async (tx) => {
+      if (flight.processingStatus === 'completed' && arenaLeadershipOptions?.userAchievementProgress) {
+        await lockUserProgression(tx, input.userId);
+      }
       const arenaIds = await findEligibleArenaIdsForCompetitionFlight(tx, {
         flightId: input.flightId,
         cellSize: configuredCellSize,
       });
       await tx.delete(igcFiles).where(and(eq(igcFiles.id, flight.igcFileId), eq(igcFiles.userId, input.userId)));
+      if (flight.processingStatus === 'completed' && arenaLeadershipOptions?.userAchievementProgress) {
+        await arenaLeadershipOptions.userAchievementProgress.rebuildInTransaction(tx, input.userId);
+      }
       if (arenaIds.length > 0) {
         const arenaLeadership = arenaLeadershipOptions?.arenaLeadership;
         if (!arenaLeadership) throw new Error('Arena leadership dependencies are not configured.');

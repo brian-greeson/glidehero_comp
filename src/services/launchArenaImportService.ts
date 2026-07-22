@@ -3,6 +3,7 @@ import type { Database } from '../db/client.js';
 import { launches } from '../db/schema.js';
 import { resolveLaunchTimeZone } from '../domain/competition/launchTimeZone.js';
 import type { LaunchImportRow } from '../domain/launch/mysqlLaunchDump.js';
+import { createUserAchievementProgressService, type UserAchievementProgressService } from './userAchievementProgressService.js';
 
 export const XCONTEST_LAUNCH_SOURCE = 'xcontest-launch';
 export const LAUNCH_COUNTRY_ALIASES: Readonly<Record<string, string>> = {
@@ -10,6 +11,7 @@ export const LAUNCH_COUNTRY_ALIASES: Readonly<Record<string, string>> = {
 };
 
 export type LaunchArenaImportSummary = { imported: number; refreshed: number };
+type ImportOptions = { userAchievementProgress?: UserAchievementProgressService; reconcileProjection?: boolean };
 
 /** Names are compared case-insensitively, with source whitespace normalized. */
 export function normalizeLaunchCountryName(name: string): string {
@@ -72,7 +74,8 @@ export async function importLaunchArenas(
   rows: LaunchImportRow[],
   cellSize: number,
 ): Promise<LaunchArenaImportSummary> {
-  return database.transaction((transaction) => importLaunchArenasInTransaction(transaction, rows, cellSize));
+  const progress = createUserAchievementProgressService(database, { cellSize });
+  return database.transaction((transaction) => importLaunchArenasInTransaction(transaction, rows, cellSize, { userAchievementProgress: progress }));
 }
 
 /** Import into a caller-owned transaction (used by the one-time rebuild). */
@@ -80,6 +83,7 @@ export async function importLaunchArenasInTransaction(
   transaction: DatabaseTransaction,
   rows: LaunchImportRow[],
   cellSize: number,
+  options: ImportOptions = {},
 ): Promise<LaunchArenaImportSummary> {
   if (!Number.isInteger(cellSize) || cellSize <= 0) throw new RangeError('Grid cell size must be a positive integer.');
   if (rows.length === 0) throw new RangeError('Launch source is empty.');
@@ -148,6 +152,10 @@ export async function importLaunchArenasInTransaction(
           ${launchGeometrySql(row, cellSize)}, ${XCONTEST_LAUNCH_SOURCE}, ${String(row.id)}, 'launch', 25
         )
       `);
+    }
+    if (options.reconcileProjection !== false) {
+      const progress = options.userAchievementProgress ?? createUserAchievementProgressService(transaction, { cellSize });
+      await progress.rebuildAllInTransaction(transaction);
     }
     return { imported: rows.length, refreshed: rows.length };
 }

@@ -9,6 +9,7 @@ import {
   createArenaLeadershipReconciliationService,
   type ArenaLeadershipReconciliationService,
 } from './arenaLeadershipReconciliationService.js';
+import { createUserAchievementProgressService, type UserAchievementProgressService } from './userAchievementProgressService.js';
 
 export type CountryArenaImportSummary = { imported: number };
 type DatabaseTransaction = Parameters<Parameters<Database['transaction']>[0]>[0];
@@ -16,6 +17,8 @@ type DatabaseTransaction = Parameters<Parameters<Database['transaction']>[0]>[0]
 type ImportOptions = {
   arenaLeadership?: ArenaLeadershipReconciliationService;
   reconcile?: boolean;
+  userAchievementProgress?: UserAchievementProgressService;
+  reconcileProjection?: boolean;
 };
 
 type GeometryCheck = {
@@ -42,8 +45,10 @@ export async function importCountryArenas(
     throw new RangeError('Country Arena importer requires a positive grid cell size.');
   }
   const leadership = arenaLeadership ?? createArenaLeadershipReconciliationService(database, { cellSize });
+  const progress = createUserAchievementProgressService(database, { cellSize });
   return database.transaction((transaction) => importCountryArenasInTransaction(transaction, countries, cellSize, {
     arenaLeadership: leadership,
+    userAchievementProgress: progress,
   }));
 }
 
@@ -124,6 +129,10 @@ export async function importCountryArenasInTransaction(
           AND source_id IN (${sql.join([...sourceIds].map((sourceId) => sql`${sourceId}`), sql`, `)})
       `);
       await leadership.reconcileInTransaction(transaction, { arenaIds: ids.rows.map((row) => row.id) });
+      if (options.reconcileProjection !== false) {
+        const progress = options.userAchievementProgress ?? createUserAchievementProgressService(transaction, { cellSize });
+        await progress.rebuildAllInTransaction(transaction);
+      }
     }
 
     return { imported: countries.length };

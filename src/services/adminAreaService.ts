@@ -7,6 +7,7 @@ import {
   createArenaLeadershipReconciliationService,
   type ArenaLeadershipReconciliationService,
 } from './arenaLeadershipReconciliationService.js';
+import { createUserAchievementProgressService } from './userAchievementProgressService.js';
 
 export type AdminAreaSummary = {
   id: string;
@@ -76,6 +77,7 @@ export function createAdminAreaService(
   arenaLeadership: ArenaLeadershipReconciliationService = createArenaLeadershipReconciliationService(database, options),
 ): AdminAreaService {
   const { cellSize } = options;
+  const userAchievementProgress = createUserAchievementProgressService(database, options);
 
   async function resolveCountry(executor: Pick<Database, 'execute'>, countryArenaId: string): Promise<AdminCountryOption> {
     if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(countryArenaId)) {
@@ -177,6 +179,8 @@ export function createAdminAreaService(
         `);
         const createdId = result.rows[0]?.id;
         if (!createdId) throw new RangeError('Arena geometry must contain at least one valid polygon and one claimable grid cell.');
+        const affectedUsers = await userAchievementProgress.findUsersAffectedByArenasInTransaction(transaction, [createdId]);
+        await userAchievementProgress.rebuildUsersInTransaction(transaction, affectedUsers);
         await arenaLeadership.reconcileInTransaction(transaction, { arenaIds: [createdId] });
         return createdId;
       });
@@ -207,6 +211,10 @@ export function createAdminAreaService(
           `);
           oldPeerIds = peers.rows.map((peer) => peer.id);
         }
+        const oldAffectedUsers = await userAchievementProgress.findUsersAffectedByArenasInTransaction(
+          transaction,
+          [id, ...oldPeerIds],
+        );
         const shouldRecomputeCount = arenaType === 'general' || arenaType === 'launch';
         const result = await transaction.execute<{ id: string; arenaType: AdminAreaSummary['arenaType'] }>(shouldRecomputeCount ? sql`
           WITH geometry AS (SELECT ${normalizedArenaGeometrySql(input.geometries)} AS area),
@@ -241,21 +249,26 @@ export function createAdminAreaService(
         `);
         const row = result.rows[0];
         if (!row) return null;
+        const newAffectedArenaIds = new Set<string>([row.id]);
+        if (row.arenaType === 'state' || row.arenaType === 'country') {
+          const peers = await transaction.execute<{ id: string }>(sql`
+            SELECT peer.id
+            FROM arenas target
+            INNER JOIN arenas peer
+              ON peer.arena_type = target.arena_type
+             AND peer.id <> target.id
+             AND ST_Intersects(peer.area, target.area)
+            WHERE target.id = ${row.id}
+          `);
+          for (const peer of peers.rows) newAffectedArenaIds.add(peer.id);
+        }
+        const newAffectedUsers = await userAchievementProgress.findUsersAffectedByArenasInTransaction(
+          transaction,
+          [...newAffectedArenaIds],
+        );
+        await userAchievementProgress.rebuildUsersInTransaction(transaction, [...oldAffectedUsers, ...newAffectedUsers]);
         if (row.arenaType !== 'launch') {
-          const affectedArenaIds = new Set<string>([row.id, ...oldPeerIds]);
-          if (row.arenaType === 'state' || row.arenaType === 'country') {
-            const peers = await transaction.execute<{ id: string }>(sql`
-              SELECT peer.id
-              FROM arenas target
-              INNER JOIN arenas peer
-                ON peer.arena_type = target.arena_type
-               AND peer.id <> target.id
-               AND ST_Intersects(peer.area, target.area)
-              WHERE target.id = ${row.id}
-            `);
-            for (const peer of peers.rows) affectedArenaIds.add(peer.id);
-          }
-          await arenaLeadership.reconcileInTransaction(transaction, { arenaIds: [...affectedArenaIds] });
+          await arenaLeadership.reconcileInTransaction(transaction, { arenaIds: [...new Set([row.id, ...oldPeerIds, ...newAffectedArenaIds])] });
         }
         return row;
       });

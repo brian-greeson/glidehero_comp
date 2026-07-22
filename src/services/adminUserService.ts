@@ -7,6 +7,7 @@ import { flightUploadPrefix, type FlightUploadQueueService } from './flightUploa
 import { hashPassword } from './passwordService.js';
 import type { ArenaLeadershipReconciliationService } from './arenaLeadershipReconciliationService.js';
 import { findEligibleArenaIdsForCompetitionUser } from './arenaClaimImpact.js';
+import type { UserAchievementProgressService } from './userAchievementProgressService.js';
 
 export type AdminUserSummary = {
   id: string;
@@ -39,6 +40,7 @@ type CleanupOptions = {
   bucketFolder: string;
   arenaLeadership: ArenaLeadershipReconciliationService;
   cellSize: number;
+  userAchievementProgress?: Pick<UserAchievementProgressService, 'initializeInTransaction'>;
 };
 
 function normalizeEmail(email: string): string {
@@ -118,6 +120,9 @@ export function createAdminUserService(database: Database, cleanup: CleanupOptio
           const [account] = await tx.insert(users).values({ email: normalizeEmail(input.email) }).returning({ id: users.id });
           if (!account) throw new Error('User insert returned no row.');
           await tx.insert(profiles).values({ userId: account.id, displayName: input.displayName.trim() });
+          if (cleanup.userAchievementProgress) {
+            await cleanup.userAchievementProgress.initializeInTransaction(tx, account.id);
+          }
           await tx.insert(userPasswords).values({ userId: account.id, passwordHash });
           return account.id;
         });

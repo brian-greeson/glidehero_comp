@@ -125,6 +125,7 @@ function dependencies() {
     updateTerritoryColor: vi.fn(async () => undefined),
     getDashboardAchievementProgress: vi.fn(async () => []),
     getPilotProfile: vi.fn(async () => null),
+    getPilotAchievements: vi.fn(async () => null),
   };
   const follow: FollowService = {
     follow: vi.fn(async () => undefined),
@@ -723,6 +724,7 @@ describe('webRouter', () => {
         updateTerritoryColor: vi.fn(async () => undefined),
         getDashboardAchievementProgress: vi.fn(async () => []),
         getPilotProfile: vi.fn(async () => null),
+        getPilotAchievements: vi.fn(async () => null),
       },
       gridClaim: {
         getViewportStats: vi.fn(async () => viewportStats),
@@ -799,6 +801,27 @@ describe('webRouter', () => {
         page: 'profile',
         profile: expect.objectContaining({ displayName: pilotProfile.displayName }),
       }));
+    });
+    expect(profiles.getPilotAchievements).not.toHaveBeenCalled();
+  });
+
+  it('uses the narrow achievements read model without loading the profile read model', async () => {
+    const { app, profiles, renderAppPage } = dependencies();
+    vi.mocked(profiles.getPilotAchievements).mockResolvedValueOnce({
+      userId: user.userId,
+      displayName: user.displayName,
+      achievementCount: 0,
+      achievements: [],
+      achievementProgress: [],
+    });
+    await withServer(app, async (baseUrl) => {
+      const response = await fetch(`${baseUrl}/achievements`, {
+        headers: { cookie: 'glidehero_session=valid-token' },
+      });
+      expect(response.status).toBe(200);
+      expect(profiles.getPilotAchievements).toHaveBeenCalledWith(user.userId);
+      expect(profiles.getPilotProfile).not.toHaveBeenCalled();
+      expect(renderAppPage).toHaveBeenCalledWith(expect.objectContaining({ page: 'achievements' }));
     });
   });
 

@@ -10,6 +10,7 @@ import { createFlightWorkerService } from './services/flightWorkerService.js';
 import { runFlightWorkerRuntime } from './services/flightWorkerRuntime.js';
 import { createFlightThumbnailService } from './services/flightThumbnailService.js';
 import { createFlightThumbnailLifecycleService } from './services/flightThumbnailLifecycleService.js';
+import { createUserAchievementProgressService } from './services/userAchievementProgressService.js';
 
 // Blocking stream reads legitimately take several seconds. Keep GLIDE's native
 // slow-response diagnostics from reporting those successful reads as warnings;
@@ -39,10 +40,12 @@ const queue = createFlightUploadQueueService(valkey, {
   bucketName: config.bucket.bucketName,
   bucketFolder: config.bucket.bucketFolder,
 });
+const userAchievementProgress = createUserAchievementProgressService(db, { cellSize: config.gridClaimCellSize });
 const processor = createFlightProcessingService(db, {
   s3Client,
   bucketName: config.bucket.bucketName,
   gridClaimCellSize: config.gridClaimCellSize,
+  userAchievementProgress,
 });
 const worker = createFlightWorkerService(db, valkey, queue, processor, {
   s3Client,

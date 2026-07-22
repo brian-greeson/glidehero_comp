@@ -194,4 +194,61 @@ describe('GridClaimService', () => {
 
     expect(reconcileInTransaction).not.toHaveBeenCalled();
   });
+
+  it('persists the Arena snapshot as user progress in the same transaction', async () => {
+    const { database, tx } = processingDatabaseDouble();
+    const arenaAchievements = {
+      evaluateInTransaction: vi.fn(async () => ({
+        newlyEarned: ['first_cells_in_general_arena' as const],
+        alreadyEarned: 0,
+        record: null,
+        snapshot: {
+          lifetimeUniqueCellCount: 4,
+          rows: [{
+            id: '00000000-0000-4000-8000-000000000040',
+            arenaType: 'general' as const,
+            name: 'Test Arena',
+            sourceId: '1',
+            claimableCellCount: 10,
+            claimedCells: 4,
+            visited: false,
+            firstFromLaunch: false,
+            tagged: false,
+          }],
+        },
+      })),
+    };
+    const upsertFromArenaSnapshotInTransaction = vi.fn(async () => undefined);
+    const service = createGridClaimService(
+      database as never,
+      { cellSize: 1_000 },
+      undefined,
+      arenaAchievements,
+      { reconcile: vi.fn(), reconcileInTransaction: vi.fn() } as never,
+      { upsertFromArenaSnapshotInTransaction } as never,
+    );
+
+    await service.processInTransaction(tx as never, { flightId, userId, launchTimezone: 'UTC' });
+
+    expect(upsertFromArenaSnapshotInTransaction).toHaveBeenCalledWith(expect.anything(), userId, expect.objectContaining({
+      lifetimeUniqueCellCount: 4,
+    }));
+  });
+
+  it('does not persist progress when achievement evaluation is disabled', async () => {
+    const { database, tx } = processingDatabaseDouble();
+    const upsertFromArenaSnapshotInTransaction = vi.fn(async () => undefined);
+    const service = createGridClaimService(
+      database as never,
+      { cellSize: 1_000 },
+      undefined,
+      undefined,
+      undefined,
+      { upsertFromArenaSnapshotInTransaction } as never,
+    );
+
+    await service.processInTransaction(tx as never, { flightId, userId, launchTimezone: 'UTC' }, { evaluateAchievements: false });
+
+    expect(upsertFromArenaSnapshotInTransaction).not.toHaveBeenCalled();
+  });
 });

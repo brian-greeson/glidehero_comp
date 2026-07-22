@@ -7,6 +7,7 @@ import { IgcParseError } from '../domain/igc/errors.js';
 import { parseIgcFlight } from '../domain/igc/parseIgcFlight.js';
 import { createActivityService } from './activityService.js';
 import { createGridClaimService } from './gridClaimService.js';
+import type { UserAchievementProgressService } from './userAchievementProgressService.js';
 
 const TRACK_POINT_INSERT_BATCH_SIZE = 1_000;
 export const duplicateFlightMessage = 'This flight has already been uploaded.';
@@ -46,9 +47,12 @@ export function createFlightProcessingService(
     s3Client: Pick<S3, 'send'>;
     bucketName: string;
     gridClaimCellSize: number;
+    userAchievementProgress?: UserAchievementProgressService;
   },
 ): FlightProcessingService {
-  const gridClaim = createGridClaimService(database, { cellSize: options.gridClaimCellSize });
+  const gridClaim = options.userAchievementProgress
+    ? createGridClaimService(database, { cellSize: options.gridClaimCellSize }, undefined, undefined, undefined, options.userAchievementProgress)
+    : createGridClaimService(database, { cellSize: options.gridClaimCellSize });
   const activity = createActivityService();
 
   async function fail(flightId: string, processingToken: string, message: string): Promise<FlightProcessingOutcome> {

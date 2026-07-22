@@ -3,9 +3,11 @@ import { createAchievementsPageModel } from '../../src/views/app/adapters/achiev
 import { pilotProfileToView } from '../../src/views/app/adapters/profileView.js';
 import { createAppShellModel } from '../../src/views/app/adapters/shellModel.js';
 import { createAppPageRenderer } from '../../src/views/app/appRenderer.js';
-import type { PilotProfileSummary } from '../../src/services/profileService.js';
+import type { PilotAchievementsSummary, PilotProfileSummary } from '../../src/services/profileService.js';
 
-function productionProfile(overrides: Partial<PilotProfileSummary> = {}): PilotProfileSummary {
+type ProductionFixture = PilotProfileSummary & PilotAchievementsSummary;
+
+function productionProfile(overrides: Partial<ProductionFixture> = {}): ProductionFixture {
   return {
     userId: '00000000-0000-4000-8000-000000000099',
     displayName: 'Production Pilot',

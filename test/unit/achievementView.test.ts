@@ -1,17 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { createAchievementsPageModel } from '../../src/views/app/adapters/achievementView.js';
 import { appPageFixture } from '../../src/views/app/fixtures.js';
-import type { PilotProfileSummary } from '../../src/services/profileService.js';
+import type { PilotAchievementsSummary } from '../../src/services/profileService.js';
 
-function profile(): PilotProfileSummary {
+function profile(): PilotAchievementsSummary {
   return {
     userId: 'pilot-1',
     displayName: 'Alex Summit',
-    territoryColor: '#1769AA',
-    lifetimeUniqueCellCount: 0,
-    nextUniqueCellMilestone: 10,
-    uniqueCellsToNextMilestone: 10,
-    nextUniqueCellMilestoneProgressPercent: 0,
     achievementProgress: [
       {
         key: 'unique_cells',
@@ -45,14 +40,7 @@ function profile(): PilotProfileSummary {
         otherDescription: 'Alex needs to claim cells.',
       },
     ],
-    completedFlightCount: 0,
-    lifetimeDirectCellCount: 0,
-    lifetimeEnclosedCellCount: 0,
-    currentTotalCellRecord: null,
-    currentEnclosedCellRecord: null,
     achievementCount: 4,
-    followerCount: 0,
-    followingCount: 0,
     achievements: [
       {
         id: 'a1', achievementKey: 'unique_cells_milestone', achievementType: 'unique_cells_milestone', typeLabel: 'Unique cell milestone',
@@ -75,8 +63,6 @@ function profile(): PilotProfileSummary {
         description: 'Take the lead in an Arena.', badgeLabel: '★',
       },
     ],
-    recentFlights: [],
-    currentArenaLeaderships: [],
   };
 }
 

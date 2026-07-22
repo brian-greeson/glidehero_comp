@@ -10,7 +10,6 @@ const summary: PilotProfileSummary = {
   nextUniqueCellMilestone: 10,
   uniqueCellsToNextMilestone: 10,
   nextUniqueCellMilestoneProgressPercent: 0,
-  achievementProgress: [],
   completedFlightCount: 2,
   lifetimeDirectCellCount: 0,
   lifetimeEnclosedCellCount: 0,
@@ -19,7 +18,6 @@ const summary: PilotProfileSummary = {
   achievementCount: 0,
   followerCount: 0,
   followingCount: 0,
-  achievements: [],
   recentFlights: [
     {
       flightId: 'flight-1',
