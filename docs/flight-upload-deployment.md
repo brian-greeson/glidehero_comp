@@ -1,6 +1,10 @@
 # Flight upload deployment
 
-The web service and `flight-worker` component both require `VALKEY_URL`. The web service also needs the Spaces credentials to create presigned upload URLs; the worker needs Spaces and PostgreSQL access to process queued objects.
+The web service and `flight-worker` component both require `VALKEY_URL`, the
+configured private Space, `BUCKET_FOLDER`, and `MAPTILER_API_KEY`. The web
+service uses Spaces credentials to create presigned upload and thumbnail-read
+URLs. The worker needs Spaces and PostgreSQL access to process queued objects
+and generate flight territory thumbnails.
 
 ## Historical flight-progress backfill
 
@@ -20,6 +24,53 @@ npm run backfill:flight-progress -- --apply
 
 The flight-progress command is rerunnable: completed flights that already have
 `flight_progress` are skipped, and achievement keys are unique per user.
+
+## Flight territory thumbnail rollout and backfill
+
+Newly completed flights generate two private WebP previews after database and
+queue completion: `800x450` for wider Activity/Profile layouts and `450x450`
+for mobile. Generation uses the MapTiler `outdoor-v4` static basemap and is
+best-effort, so a MapTiler or object-storage failure does not fail a completed
+flight. Admin claim reprocessing regenerates the pair; flight deletion removes
+both objects. Activity and Profile deliver the private images with 24-hour
+presigned GET URLs and use the standard fallback when either image is absent.
+
+After deploying the web and worker code together, inspect historical completed
+flights with the default missing-only dry-run:
+
+```sh
+npm run backfill:flight-thumbnails
+```
+
+The command traverses every completed flight with UUID keyset pagination and
+processes flights sequentially in batches of 10. It issues read-only HEAD
+requests for both deterministic keys and reports inspected, would-generate,
+generated, skipped-present, and failed totals. Change the page size with a
+positive `--batch-size` value:
+
+```sh
+npm run backfill:flight-thumbnails -- --dry-run --batch-size 25
+```
+
+After reviewing the dry-run, explicitly apply missing thumbnail generation:
+
+```sh
+npm run backfill:flight-thumbnails -- --apply
+```
+
+If either variant is missing, apply regenerates the pair. Use `--force` only
+when every completed flight should be regenerated, for example after changing
+the renderer:
+
+```sh
+npm run backfill:flight-thumbnails -- --apply --force
+```
+
+Flights remain sequential even when the batch size changes. A per-flight
+failure is counted and does not stop later flights; an apply run exits nonzero
+after completing the inventory if failures occurred. The command does not
+change PostgreSQL. Avoid concurrent admin reprocessing during a force run so
+the final object consistently comes from one renderer invocation.
 
 ## Release 2 Arena catalog and achievement rollout
 
@@ -140,8 +191,10 @@ Configure the private DigitalOcean Space with a CORS rule that allows:
 Uploads must use the Space origin configured by `BUCKET_URL`, not its CDN endpoint. Keep the bucket and uploaded objects private; browser access is granted only through short-lived presigned `PutObject` URLs.
 
 The application credentials also need permission to list the configured
-`BUCKET_FOLDER/uploads/<user-id>/` prefix, read objects, and delete objects.
-Admin user cleanup lists that prefix so orphaned IGC objects can still be
+`BUCKET_FOLDER/uploads/<user-id>/` prefix and perform `GetObject`, `PutObject`,
+`HeadObject`, and `DeleteObject`. The thumbnail backfill uses HEAD plus PUT; the
+worker uses GET, PUT, and DELETE; the web process signs private GETs. Admin user
+cleanup lists the prefix so orphaned IGC and thumbnail objects can still be
 removed when database or queue metadata is incomplete.
 
 The App Platform worker starts with one instance. Increase `workers[].instance_count` manually when the admin queue summary shows sustained queue growth.

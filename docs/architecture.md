@@ -7,8 +7,9 @@ This guide describes the architecture used in this repository and helps coding a
 GlideHero is a server-rendered Express application with browser-side JavaScript
 for interactive maps, uploads, and forms. PostgreSQL with PostGIS is the system
 of record, Drizzle provides database access, and Vento renders HTML. Private
-S3-compatible object storage holds uploaded IGC files, while Valkey holds the
-transient upload state and Streams work queue consumed by flight workers.
+S3-compatible object storage holds uploaded IGC files and generated flight
+territory thumbnails, while Valkey holds the transient upload state and Streams
+work queue consumed by flight workers.
 
 The usual request flow is:
 
@@ -44,10 +45,10 @@ Locations:
 - Passes dependencies explicitly into factory functions.
 - Starts the HTTP server.
 
-`src/worker.ts` independently creates the database, object-storage, and Valkey
-clients needed to consume flight jobs. It gives blocking Stream reads their own
-Valkey connection and delegates concurrent processing, maintenance loops, and
-graceful shutdown to `flightWorkerRuntime.ts`.
+`src/worker.ts` independently creates the database, object-storage, thumbnail,
+and Valkey services needed to consume flight jobs. It gives blocking Stream
+reads their own Valkey connection and delegates concurrent processing,
+maintenance loops, and graceful shutdown to `flightWorkerRuntime.ts`.
 
 Put code in these entry points only when it is required to assemble or start a
 running process.
@@ -524,6 +525,12 @@ link remain functional without JavaScript. `activity.css` owns the responsive
 feed, search, accomplishment, and Thermal presentation; the Thermal icon is an
 inline, repository-native SVG using `currentColor`.
 
+The shared `flightMapPreview.vto` component renders the responsive wide/mobile
+thumbnail pair used by Activity flight cards and Profile recent-flight rows.
+`app.js` installs a delegated image-error fallback and also repairs images that
+failed before the module initialized. Missing or unavailable private objects
+therefore remain an image-only standard fallback rather than broken content.
+
 ### On-demand territory tiles
 
 `personalMap.js` and `competitionCoverageMap.js` install MapLibre vector
@@ -560,6 +567,36 @@ terminal database and queue state. It also recovers stale claims and performs
 leased cleanup so multiple worker processes can operate safely. Blocking
 `XREADGROUP` calls use a dedicated Valkey client; maintenance and acknowledgments
 use the normal client.
+
+After a new flight reaches a completed queue state,
+`FlightThumbnailLifecycleService` reloads that flight's persisted Personal
+direct/enclosed claim cells and its first/last track points.
+`FlightThumbnailService` requests MapTiler's `outdoor-v4` static basemap, uses
+the WGS84 ellipsoidal EPSG:6933 transform to align the application grid, and
+composites the cells locally with Sharp. It writes deterministic private WebP
+objects at:
+
+```text
+<BUCKET_FOLDER>/uploads/<user-id>/thumbnails/<flight-id>-800x450.webp
+<BUCKET_FOLDER>/uploads/<user-id>/thumbnails/<flight-id>-450x450.webp
+```
+
+Direct cells use 85%-opacity red, enclosed cells use 35%-opacity red, and the
+first and last direct cells are green and solid red respectively (striped
+green/red when they are the same cell). The track itself and all other flights'
+cells are omitted. MapTiler attribution remains visible. Generation is
+best-effort and uses a bounded provider request; failure is logged without
+reverting flight or queue completion. Admin reprocessing regenerates both
+variants after its claim transaction succeeds. Admin flight deletion attempts
+both thumbnail deletions inside the existing retryable deletion boundary.
+
+`FlightThumbnailDeliveryService` derives the same keys and signs private GETs
+for 24 hours without probing storage on every Activity/Profile read. A signing
+failure or missing object falls back per flight and cannot fail the whole page.
+The one-off `backfill:flight-thumbnails` command repairs historical or missing
+objects with deterministic keyset batches and sequential flight processing; it
+is dry-run and missing-only by default, with explicit `--apply` and `--force`
+options.
 
 For a newly completed flight, `FlightProcessingService` runs claims,
 progression, achievements, leadership, completion timestamping, and the flight

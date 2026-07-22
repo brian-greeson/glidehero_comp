@@ -30,6 +30,10 @@ cells claimed by its track. No manual selection or editing is required.
 Uploads go directly from the browser to private object storage using short-lived
 presigned URLs. A Valkey-backed queue hands completed uploads to background
 workers, which parse the files and persist flights and claims in PostgreSQL.
+After completion, the worker makes a best-effort attempt to generate private
+wide and square WebP territory previews from the MapTiler Outdoor basemap.
+Preview generation cannot change a successfully completed flight into a failed
+one.
 
 ### Grid and cell claiming
 
@@ -165,6 +169,13 @@ achievement, `lost` events, and lower-rank changes are omitted. Reprocessing
 refreshes joined card details without changing publication order, and deleting
 a flight removes its activity and Thermals.
 
+Flight activity cards and Profile recent-flight rows show the same responsive
+territory preview: an 800-by-450 image on wider layouts and a 450-by-450 image
+on mobile. Each preview contains only that flight's direct and enclosed cells;
+it does not render the track or other flights' territory. Missing previews use
+one standard image-only fallback. Private preview objects are delivered through
+24-hour presigned URLs.
+
 Each activity supports one Thermal per reacting pilot. The toggle inserts or
 removes that pilot's Thermal and returns the current count; Thermal actions are
 not gated by whether the activity is currently visible in the viewer's feed.
@@ -239,6 +250,7 @@ Included features:
   achievements.
 - Authenticated pilot following, Activity feed, grouped flight accomplishments,
   and Thermal reactions.
+- Responsive flight territory previews in Activity and Profile recent flights.
 - Optional grid overlay and foreground live-position trail on every map.
 - Flight statistics after upload.
 - Administrative Arena, map-setting, user, and flight-management tools.
@@ -298,7 +310,9 @@ npm run dev:worker
 
 Both processes use the same `.env`. The web process creates upload intents and
 serves status; the worker consumes queued uploads and writes completed flights
-and claims. For object-storage permissions and CORS requirements, see
+and claims, then generates flight territory previews using MapTiler and object
+storage. For object-storage permissions, thumbnail rollout, and CORS
+requirements, see
 [`docs/flight-upload-deployment.md`](docs/flight-upload-deployment.md).
 
 The grid-cell size is fixed at `500` meters. Arena scoring constructs each claim-cell
@@ -371,4 +385,6 @@ attribute. Terminate HTTPS before traffic reaches the application, apply checked
 migrations with `npm run db:migrate`, and provide configuration through the
 deployment secret store. Production requires at least one web process and one
 `npm run worker` process sharing PostgreSQL, Valkey, object storage, and
-`BUCKET_FOLDER` configuration.
+`BUCKET_FOLDER` configuration. The worker also requires `MAPTILER_API_KEY` and
+permission to write and delete thumbnail objects. The web process requires read
+credentials so it can issue private 24-hour thumbnail URLs.
