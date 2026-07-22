@@ -1,5 +1,5 @@
 import { DeleteObjectCommand, type S3 } from '@aws-sdk/client-s3';
-import { asc, eq, sql } from 'drizzle-orm';
+import { asc, desc, eq, sql } from 'drizzle-orm';
 import type { Database } from '../db/client.js';
 import { flights, trackPoints } from '../db/schema.js';
 import { gridClaimCandidateCtes } from './gridClaimCandidates.js';
@@ -49,14 +49,24 @@ export function createFlightThumbnailLifecycleService(
         ON personal.claim_flight = ${flightId}
         AND personal.x = candidate_cells.x
         AND personal.y = candidate_cells.y
-      ORDER BY kind, x, y
+      ORDER BY candidate_cells.kind, candidate_cells.x, candidate_cells.y
     `);
-    const points = await database
-      .select({ latitude: trackPoints.latitude, longitude: trackPoints.longitude })
+    const [startPoint] = await database
+      .select({ sequenceNumber: trackPoints.sequenceNumber, latitude: trackPoints.latitude, longitude: trackPoints.longitude })
       .from(trackPoints)
       .where(eq(trackPoints.flightId, flightId))
-      .orderBy(asc(trackPoints.sequenceNumber));
-    if (!points.length) throw new Error('Cannot generate a flight thumbnail without recorded track points.');
+      .orderBy(asc(trackPoints.sequenceNumber))
+      .limit(1);
+    if (!startPoint) throw new Error('Cannot generate a flight thumbnail without recorded track points.');
+    const [endPoint] = await database
+      .select({ sequenceNumber: trackPoints.sequenceNumber, latitude: trackPoints.latitude, longitude: trackPoints.longitude })
+      .from(trackPoints)
+      .where(eq(trackPoints.flightId, flightId))
+      .orderBy(desc(trackPoints.sequenceNumber))
+      .limit(1);
+    const points = endPoint && endPoint.sequenceNumber !== startPoint.sequenceNumber
+      ? [startPoint, endPoint]
+      : [startPoint];
     const directCells: ThumbnailCell[] = [];
     const enclosedCells: ThumbnailCell[] = [];
     for (const claim of claimResult.rows) {
