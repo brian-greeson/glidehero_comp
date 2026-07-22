@@ -45,6 +45,17 @@ export type FlightThumbnailBackfillSummary = {
   failed: number;
 };
 
+export type FlightThumbnailFailureDiagnostic = {
+  stage: 'flight-data' | 'maptiler-fetch' | 'image-composite' | 'object-storage' | 'unknown';
+  errorName: string;
+  causeName?: string;
+  errorCode?: string;
+  httpStatusCode?: number;
+  requestId?: string;
+  attempts?: number;
+  totalRetryDelayMs?: number;
+};
+
 export type FlightThumbnailBackfillOptions = {
   apply: boolean;
   force?: boolean;
@@ -140,6 +151,67 @@ function isNotFound(error: unknown): boolean {
   );
 }
 
+function errorRecord(error: unknown): Record<string, unknown> | undefined {
+  return error && typeof error === 'object' ? error as Record<string, unknown> : undefined;
+}
+
+function errorCause(error: unknown): unknown {
+  return errorRecord(error)?.cause;
+}
+
+function safeString(value: unknown): string | undefined {
+  return typeof value === 'string' && value.trim() ? value : undefined;
+}
+
+function safeNumber(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+}
+
+export function flightThumbnailFailureDiagnostic(
+  error: unknown,
+): FlightThumbnailFailureDiagnostic {
+  const top = errorRecord(error);
+  const cause = errorRecord(errorCause(error));
+  const metadata = errorRecord(cause?.$metadata ?? top?.$metadata);
+  const message = safeString(top?.message);
+  let stage: FlightThumbnailFailureDiagnostic['stage'] = 'unknown';
+  if (
+    message === 'Cannot generate a thumbnail for an unknown flight.'
+    || message === 'Cannot generate a flight thumbnail without recorded track points.'
+    || message === 'Cannot generate a flight thumbnail without claimed cells.'
+    || message === 'Flight and user identifiers are required for a thumbnail.'
+    || message === 'Cannot place flight thumbnail start or end marker.'
+  ) stage = 'flight-data';
+  else if (message === 'Unable to fetch the MapTiler base image for this flight thumbnail.')
+    stage = 'maptiler-fetch';
+  else if (message === 'Unable to composite the flight thumbnail image.')
+    stage = 'image-composite';
+  else if (message === 'Unable to store the generated flight thumbnails.')
+    stage = 'object-storage';
+
+  const mapTilerStatus = safeString(cause?.message)?.match(/^MapTiler returned HTTP (\d{3})\.$/);
+  const errorCode = safeString(cause?.code)
+    ?? safeString(cause?.Code)
+    ?? safeString(top?.code)
+    ?? safeString(top?.Code);
+  return {
+    stage,
+    errorName: safeString(top?.name) ?? 'UnknownError',
+    ...(safeString(cause?.name) ? { causeName: safeString(cause?.name) } : {}),
+    ...(errorCode ? { errorCode } : {}),
+    ...(safeNumber(metadata?.httpStatusCode) !== undefined
+      ? { httpStatusCode: safeNumber(metadata?.httpStatusCode) }
+      : mapTilerStatus ? { httpStatusCode: Number(mapTilerStatus[1]) } : {}),
+    ...(safeString(metadata?.requestId) ? { requestId: safeString(metadata?.requestId) } : {}),
+    ...(safeNumber(metadata?.attempts) !== undefined
+      ? { attempts: safeNumber(metadata?.attempts) }
+      : {}),
+    ...(safeNumber(metadata?.totalRetryDelay) !== undefined
+      ? { totalRetryDelayMs: safeNumber(metadata?.totalRetryDelay) }
+      : {}),
+  };
+}
+
 async function inspectThumbnailPair(
   flight: FlightThumbnailBackfillFlight,
   bucketFolder: string,
@@ -211,9 +283,12 @@ export async function runFlightThumbnailBackfill(
       try {
         await options.generate!(flight.id);
         summary.generated += 1;
-      } catch {
+      } catch (error) {
         summary.failed += 1;
-        logger.error(`Unable to generate thumbnail objects for flight ${flight.id}.`);
+        logger.error(
+          `Unable to generate thumbnail objects for flight ${flight.id}.`,
+          flightThumbnailFailureDiagnostic(error),
+        );
       }
     }
     cursor = batch[batch.length - 1]?.id;
