@@ -188,6 +188,17 @@ export function createFlightWorkerService(
   ) {
     console.log(`Processed Flight: ${outcome.flightId} with status ${outcome.status}`);
 
+    let completedJobReconciled = false;
+    if (outcome.status === 'completed') {
+      completedJobReconciled = await queue.reconcileTerminalJob({
+        ...job,
+        flightId: outcome.flightId,
+        status: 'completed',
+        error: undefined,
+        updatedAt: Date.now(),
+      });
+    }
+
     if (outcome.status === 'completed' && options.thumbnailLifecycle) {
       try {
         await options.thumbnailLifecycle.generateForFlight(outcome.flightId);
@@ -199,17 +210,7 @@ export function createFlightWorkerService(
       }
     }
 
-    if (
-      outcome.status === 'completed' &&
-      (await queue.reconcileTerminalJob({
-        ...job,
-        flightId: outcome.flightId,
-        status: 'completed',
-        error: undefined,
-        updatedAt: Date.now(),
-      }))
-    )
-      return;
+    if (completedJobReconciled) return;
     if (
       outcome.status === 'failed' &&
       (await queue.reconcileTerminalJob({

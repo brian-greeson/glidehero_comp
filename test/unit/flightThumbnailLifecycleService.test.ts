@@ -79,7 +79,7 @@ describe('flight thumbnail lifecycle service', () => {
     expect(generate).toHaveBeenCalledWith(input);
   });
 
-  it('attempts both deterministic thumbnail deletions even when one delete fails', async () => {
+  it('attempts both deterministic thumbnail deletions and rejects after a non-not-found failure', async () => {
     const send = vi.fn()
       .mockRejectedValueOnce(new Error('temporary object-store failure'))
       .mockResolvedValueOnce({});
@@ -90,11 +90,26 @@ describe('flight thumbnail lifecycle service', () => {
       bucketFolder: 'glidehero-test',
     });
 
-    await expect(lifecycle.deleteForFlight({ userId: 'user-1', flightId: 'flight-1' })).resolves.toBeUndefined();
+    await expect(lifecycle.deleteForFlight({ userId: 'user-1', flightId: 'flight-1' })).rejects.toThrow('temporary object-store failure');
     expect(send).toHaveBeenCalledTimes(2);
     expect(send.mock.calls.map(([command]) => command.input.Key)).toEqual([
       'glidehero-test/uploads/user-1/thumbnails/flight-1-800x450.webp',
       'glidehero-test/uploads/user-1/thumbnails/flight-1-450x450.webp',
     ]);
+  });
+
+  it('treats not-found thumbnail deletions as idempotent success', async () => {
+    const send = vi.fn()
+      .mockRejectedValueOnce(Object.assign(new Error('missing'), { name: 'NotFound' }))
+      .mockResolvedValueOnce({});
+    const lifecycle = createFlightThumbnailLifecycleService({} as never, { generate: vi.fn() }, {
+      cellSize: 500,
+      s3Client: { send } as never,
+      bucketName: 'flights',
+      bucketFolder: 'glidehero-test',
+    });
+
+    await expect(lifecycle.deleteForFlight({ userId: 'user-1', flightId: 'flight-1' })).resolves.toBeUndefined();
+    expect(send).toHaveBeenCalledTimes(2);
   });
 });

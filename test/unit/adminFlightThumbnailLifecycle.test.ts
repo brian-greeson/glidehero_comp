@@ -27,7 +27,7 @@ describe('admin flight thumbnail lifecycle', () => {
     expect(generateForFlight).toHaveBeenCalledWith(flightId);
   });
 
-  it('deletes deterministic thumbnail objects after the existing flight deletion succeeds', async () => {
+  it('deletes deterministic thumbnail objects inside the existing flight deletion transaction', async () => {
     const generateForFlight = vi.fn<(flightId: string) => Promise<void>>(async () => undefined);
     const deleteForFlight = vi.fn<(input: { userId: string; flightId: string }) => Promise<void>>(async () => undefined);
     const thumbnailLifecycle = { generateForFlight, deleteForFlight };
@@ -51,6 +51,35 @@ describe('admin flight thumbnail lifecycle', () => {
     const service = createAdminFlightService(database as never, { reprocess: vi.fn() }, configuredStorage);
 
     await expect(service.deleteFlight({ flightId, userId })).resolves.toBe('deleted');
+    expect(deleteForFlight).toHaveBeenCalledWith({ userId, flightId });
+  });
+
+  it('keeps the database deletion retryable when thumbnail cleanup fails inside the transaction boundary', async () => {
+    const deleteForFlight = vi.fn(async () => { throw new Error('thumbnail object store unavailable'); });
+    const thumbnailLifecycle = { generateForFlight: vi.fn(async () => undefined), deleteForFlight };
+    const storedFlight = {
+      id: flightId,
+      userId,
+      igcFileId: 'file-1',
+      bucketKey: 'glidehero-test/uploads/user-1/flight.igc',
+      originalFilename: 'flight.igc',
+      processingStatus: 'completed' as const,
+    };
+    const where = vi.fn(async () => [storedFlight]);
+    const txDelete = vi.fn(async () => undefined);
+    const transaction = vi.fn(async (callback: (tx: unknown) => Promise<unknown>) => callback({
+      execute: vi.fn(async () => ({ rows: [] })),
+      delete: vi.fn(() => ({ where: txDelete })),
+    }));
+    const database = {
+      select: vi.fn(() => ({ from: vi.fn(() => ({ innerJoin: vi.fn(() => ({ where: vi.fn(() => ({ limit: where })) })) })) })),
+      transaction,
+    };
+    const service = createAdminFlightService(database as never, { reprocess: vi.fn() }, storage(thumbnailLifecycle));
+
+    await expect(service.deleteFlight({ flightId, userId })).rejects.toThrow('thumbnail object store unavailable');
+    expect(transaction).toHaveBeenCalledOnce();
+    expect(txDelete).toHaveBeenCalledOnce();
     expect(deleteForFlight).toHaveBeenCalledWith({ userId, flightId });
   });
 });

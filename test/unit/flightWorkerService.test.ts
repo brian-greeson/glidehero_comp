@@ -25,15 +25,16 @@ describe('FlightWorkerService', () => {
     const xdel = vi.fn(async () => 1);
     const valkey = { xack, xdel };
     const saved: UploadJob[] = [];
+    const events: string[] = [];
     const queue = {
       claimJob: vi.fn(async () => ({ ...job, status: 'processing' as const, processingToken: 'token-1', heartbeatAt: Date.now(), updatedAt: Date.now() })),
       saveClaimedJob: vi.fn(async (value: UploadJob) => { saved.push(value); return true; }),
-      reconcileTerminalJob: vi.fn(async (value: UploadJob) => { saved.push(value); return true; }),
+      reconcileTerminalJob: vi.fn(async (value: UploadJob) => { saved.push(value); events.push('reconcile'); return true; }),
     };
     const processor = {
       process: vi.fn(async () => ({ status: 'completed' as const, flightId: '00000000-0000-4000-8000-000000000030' })),
     };
-    const generateForFlight = vi.fn(async () => undefined);
+    const generateForFlight = vi.fn(async () => { events.push('thumbnail'); });
     const send = vi.fn(async () => ({ Body: { transformToByteArray: vi.fn(async () => Uint8Array.from([1, 2, 3])) } }));
     const worker = createFlightWorkerService(database as never, valkey as never, queue as never, processor, {
       s3Client: { send } as never,
@@ -54,6 +55,7 @@ describe('FlightWorkerService', () => {
     });
     expect(saved.map((value) => value.status)).toEqual(['completed']);
     expect(generateForFlight).toHaveBeenCalledWith('00000000-0000-4000-8000-000000000030');
+    expect(events).toEqual(['reconcile', 'thumbnail']);
     expect(xack).toHaveBeenCalledWith('glidehero:flight-jobs', 'flight-workers', ['1-0']);
     expect(xdel).toHaveBeenCalledWith('glidehero:flight-jobs', ['1-0']);
   });

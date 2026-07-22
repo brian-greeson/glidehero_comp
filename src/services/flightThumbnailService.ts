@@ -3,12 +3,22 @@ import sharp from 'sharp';
 
 const MAP_ID = 'outdoor-v4';
 const STATIC_MAP_ORIGIN = 'https://api.maptiler.com';
-const AUTHALIC_RADIUS_METERS = 6_371_007.181;
 const WEB_MERCATOR_RADIUS_METERS = 6_378_137;
-const COSINE_30_DEGREES = Math.sqrt(3) / 2;
 const MAP_PADDING_RATIO = 0.1;
 const WEB_MERCATOR_MAX_LATITUDE = 85.0511287798066;
 const ATTRIBUTION_SAFE_BOTTOM_PX = 36;
+const WGS84_SEMI_MAJOR_AXIS = 6_378_137;
+const WGS84_FLATTENING = 1 / 298.257223563;
+const WGS84_ECCENTRICITY_SQUARED = WGS84_FLATTENING * (2 - WGS84_FLATTENING);
+const WGS84_ECCENTRICITY = Math.sqrt(WGS84_ECCENTRICITY_SQUARED);
+const EPSG6933_LATITUDE_OF_TRUE_SCALE = Math.PI / 6;
+const EPSG6933_M1 = Math.cos(EPSG6933_LATITUDE_OF_TRUE_SCALE)
+  / Math.sqrt(1 - WGS84_ECCENTRICITY_SQUARED * Math.sin(EPSG6933_LATITUDE_OF_TRUE_SCALE) ** 2);
+const EPSG6933_MAX_AUTHALIC_Q = (1 - WGS84_ECCENTRICITY_SQUARED) * (
+  1 / (1 - WGS84_ECCENTRICITY_SQUARED)
+  - (1 / (2 * WGS84_ECCENTRICITY)) * Math.log((1 - WGS84_ECCENTRICITY) / (1 + WGS84_ECCENTRICITY))
+);
+const MAPTILER_FETCH_TIMEOUT_MS = 15_000;
 
 export type ThumbnailCell = { x: number; y: number };
 export type ThumbnailTrackPoint = { latitude: number; longitude: number };
@@ -56,19 +66,46 @@ export type FlightThumbnailViewport = {
 };
 
 export function projectEpsg6933(latitude: number, longitude: number): { x: number; y: number } {
+  if (!Number.isFinite(latitude) || latitude < -90 || latitude > 90) throw new RangeError('EPSG:6933 latitude must be finite and within -90 to 90 degrees.');
+  if (!Number.isFinite(longitude) || longitude < -180 || longitude > 180) throw new RangeError('EPSG:6933 longitude must be finite and within -180 to 180 degrees.');
   const latitudeRadians = (latitude * Math.PI) / 180;
   const longitudeRadians = (longitude * Math.PI) / 180;
+  const sineLatitude = Math.sin(latitudeRadians);
+  const authalicQ = (1 - WGS84_ECCENTRICITY_SQUARED) * (
+    sineLatitude / (1 - WGS84_ECCENTRICITY_SQUARED * sineLatitude ** 2)
+    - (1 / (2 * WGS84_ECCENTRICITY)) * Math.log((1 - WGS84_ECCENTRICITY * sineLatitude) / (1 + WGS84_ECCENTRICITY * sineLatitude))
+  );
   return {
-    x: AUTHALIC_RADIUS_METERS * longitudeRadians * COSINE_30_DEGREES,
-    y: (AUTHALIC_RADIUS_METERS * Math.sin(latitudeRadians)) / COSINE_30_DEGREES,
+    x: WGS84_SEMI_MAJOR_AXIS * EPSG6933_M1 * longitudeRadians,
+    y: (WGS84_SEMI_MAJOR_AXIS * authalicQ) / (2 * EPSG6933_M1),
   };
 }
 
 export function unprojectEpsg6933(x: number, y: number): { latitude: number; longitude: number } {
-  return {
-    latitude: (Math.asin((y * COSINE_30_DEGREES) / AUTHALIC_RADIUS_METERS) * 180) / Math.PI,
-    longitude: ((x / (AUTHALIC_RADIUS_METERS * COSINE_30_DEGREES)) * 180) / Math.PI,
-  };
+  if (!Number.isFinite(x) || !Number.isFinite(y)) throw new RangeError('EPSG:6933 coordinates must be finite.');
+  const longitudeRadians = x / (WGS84_SEMI_MAJOR_AXIS * EPSG6933_M1);
+  if (longitudeRadians < -Math.PI || longitudeRadians > Math.PI) throw new RangeError('EPSG:6933 longitude is outside the valid range.');
+  const targetQ = (2 * EPSG6933_M1 * y) / WGS84_SEMI_MAJOR_AXIS;
+  const qRatio = targetQ / EPSG6933_MAX_AUTHALIC_Q;
+  if (qRatio < -1 || qRatio > 1) throw new RangeError('EPSG:6933 northing is outside the valid range.');
+  if (Math.abs(1 - Math.abs(qRatio)) < 1e-14) {
+    return { latitude: Math.sign(targetQ) * 90, longitude: (longitudeRadians * 180) / Math.PI };
+  }
+  let latitudeRadians = Math.asin(qRatio);
+  for (let iteration = 0; iteration < 20; iteration += 1) {
+    const sineLatitude = Math.sin(latitudeRadians);
+    const cosineLatitude = Math.cos(latitudeRadians);
+    const denominator = 1 - WGS84_ECCENTRICITY_SQUARED * sineLatitude ** 2;
+    const authalicQ = (1 - WGS84_ECCENTRICITY_SQUARED) * (
+      sineLatitude / denominator
+      - (1 / (2 * WGS84_ECCENTRICITY)) * Math.log((1 - WGS84_ECCENTRICITY * sineLatitude) / (1 + WGS84_ECCENTRICITY * sineLatitude))
+    );
+    const derivative = 2 * (1 - WGS84_ECCENTRICITY_SQUARED) * cosineLatitude / denominator ** 2;
+    const correction = (authalicQ - targetQ) / derivative;
+    latitudeRadians -= correction;
+    if (Math.abs(correction) < 1e-14) break;
+  }
+  return { latitude: (latitudeRadians * 180) / Math.PI, longitude: (longitudeRadians * 180) / Math.PI };
 }
 
 function webMercator(latitude: number, longitude: number): { x: number; y: number } {
@@ -169,10 +206,11 @@ export function buildFlightThumbnailStaticMapUrl(input: {
   width: number;
   height: number;
   mapTilerApiKey: string;
+  viewport?: FlightThumbnailViewport;
 }): string {
-  const { min, max } = computeFlightThumbnailViewport(input.extent, input.width, input.height);
+  const { min, max } = input.viewport ?? computeFlightThumbnailViewport(input.extent, input.width, input.height);
   const bounds = [min.longitude, min.latitude, max.longitude, max.latitude].map((value) => value.toFixed(6)).join(',');
-  return `${STATIC_MAP_ORIGIN}/maps/${MAP_ID}/static/${bounds}/${input.width}x${input.height}.png?key=${encodeURIComponent(input.mapTilerApiKey)}`;
+  return `${STATIC_MAP_ORIGIN}/maps/${MAP_ID}/static/${bounds}/${input.width}x${input.height}.png?key=${encodeURIComponent(input.mapTilerApiKey)}&padding=0`;
 }
 
 function cellKey(cell: ThumbnailCell): string {
@@ -251,7 +289,7 @@ export function buildFlightThumbnailOverlaySvg(input: {
 }
 
 async function defaultFetchImage(url: string): Promise<Uint8Array> {
-  const response = await fetch(url);
+  const response = await fetch(url, { signal: AbortSignal.timeout(MAPTILER_FETCH_TIMEOUT_MS) });
   if (!response.ok) throw new Error(`MapTiler returned HTTP ${response.status}.`);
   return new Uint8Array(await response.arrayBuffer());
 }
@@ -284,7 +322,7 @@ export function createFlightThumbnailService(options: {
   async function render(input: FlightThumbnailInput, variant: ThumbnailVariant, extent: ReturnType<typeof computeFlightThumbnailExtent>, startCell: ThumbnailCell, endCell: ThumbnailCell): Promise<Uint8Array> {
     const [width, height] = variant.split('x').map(Number) as [number, number];
     const viewport = computeFlightThumbnailViewport(extent, width, height);
-    const url = buildFlightThumbnailStaticMapUrl({ extent, width, height, mapTilerApiKey: options.mapTilerApiKey });
+    const url = buildFlightThumbnailStaticMapUrl({ extent, width, height, mapTilerApiKey: options.mapTilerApiKey, viewport });
     let baseImage: Uint8Array;
     try {
       baseImage = await fetchImage(url);

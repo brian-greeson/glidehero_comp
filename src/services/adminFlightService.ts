@@ -114,17 +114,10 @@ export function createAdminFlightService(
         bucketKey: flight.bucketKey,
       });
       await storage.s3Client.send(new DeleteObjectCommand({ Bucket: storage.bucketName, Key: flight.bucketKey }));
-    });
-    if (storage.thumbnailLifecycle) {
-      try {
+      if (storage.thumbnailLifecycle) {
         await storage.thumbnailLifecycle.deleteForFlight({ userId: input.userId, flightId: input.flightId });
-      } catch (error) {
-        console.error('Unable to delete flight thumbnails', {
-          flightId: input.flightId,
-          error: error instanceof Error ? error.message : 'unknown error',
-        });
       }
-    }
+    });
     return 'deleted' as const;
   }
 

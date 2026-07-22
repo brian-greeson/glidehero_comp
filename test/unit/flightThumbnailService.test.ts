@@ -23,18 +23,16 @@ describe('flight thumbnail service', () => {
     expect(extent.projected.maxX - extent.projected.minX).toBe(1_500);
     expect(extent.projected.maxY - extent.projected.minY).toBe(1_500);
     expect(buildFlightThumbnailStaticMapUrl({ extent, width: 800, height: 450, mapTilerApiKey: 'secret-key' }))
-      .toMatch(/^https:\/\/api\.maptiler\.com\/maps\/outdoor-v4\/static\/-?[\d.]+,-?[\d.]+,-?[\d.]+,-?[\d.]+\/800x450\.png\?key=secret-key$/);
+      .toMatch(/^https:\/\/api\.maptiler\.com\/maps\/outdoor-v4\/static\/-?[\d.]+,-?[\d.]+,-?[\d.]+,-?[\d.]+\/800x450\.png\?key=secret-key&padding=0$/);
   });
 
-  it('uses the EPSG:6933 true-scale projection and round-trips coordinates', () => {
-    const projected = projectEpsg6933(30, 10);
-    const radius = 6_371_007.181;
-    const k0 = Math.sqrt(3) / 2;
-    expect(projected.x).toBeCloseTo(radius * k0 * (10 * Math.PI / 180), 6);
-    expect(projected.y).toBeCloseTo(radius * Math.sin(Math.PI / 6) / k0, 6);
+  it('matches the canonical WGS84 EPSG:6933 projection and round-trips coordinates', () => {
+    const projected = projectEpsg6933(40, -105);
+    expect(projected.x).toBeCloseTo(-10131059.426344134, 6);
+    expect(projected.y).toBeCloseTo(4707084.171338535, 6);
     const coordinate = unprojectEpsg6933(projected.x, projected.y);
-    expect(coordinate.latitude).toBeCloseTo(30, 10);
-    expect(coordinate.longitude).toBeCloseTo(10, 10);
+    expect(coordinate.latitude).toBeCloseTo(40, 10);
+    expect(coordinate.longitude).toBeCloseTo(-105, 10);
   });
 
   it('fits each output to a Web Mercator viewport with its own aspect bounds', () => {
@@ -45,6 +43,31 @@ describe('flight thumbnail service', () => {
     expect((square.maxMercatorX - square.minMercatorX) / (square.maxMercatorY - square.minMercatorY)).toBeCloseTo(1, 10);
     expect(buildFlightThumbnailStaticMapUrl({ extent, width: 800, height: 450, mapTilerApiKey: 'key' }))
       .not.toBe(buildFlightThumbnailStaticMapUrl({ extent, width: 450, height: 450, mapTilerApiKey: 'key' }));
+  });
+
+  it('uses the same precomputed viewport for the bounds URL and overlay coordinates', () => {
+    const extent = computeFlightThumbnailExtent([{ x: 0, y: 0 }, { x: 2, y: 1 }], 500);
+    const viewport = computeFlightThumbnailViewport(extent, 800, 450);
+    const url = buildFlightThumbnailStaticMapUrl({ extent, width: 800, height: 450, mapTilerApiKey: 'key', viewport });
+    const bounds = url.split('/static/')[1]!.split('/800x450')[0]!.split(',').map(Number);
+    expect(bounds).toEqual([
+      Number(viewport.min.longitude.toFixed(6)),
+      Number(viewport.min.latitude.toFixed(6)),
+      Number(viewport.max.longitude.toFixed(6)),
+      Number(viewport.max.latitude.toFixed(6)),
+    ]);
+    const overlay = buildFlightThumbnailOverlaySvg({
+      directCells: [{ x: 0, y: 0 }],
+      enclosedCells: [],
+      startCell: { x: 0, y: 0 },
+      endCell: { x: 0, y: 0 },
+      extent: extent.projected,
+      viewport,
+      cellSize: 500,
+      width: 800,
+      height: 450,
+    });
+    expect(overlay).toContain('<svg');
   });
 
   it('renders direct, enclosed, and same-cell striped marker overlays', () => {

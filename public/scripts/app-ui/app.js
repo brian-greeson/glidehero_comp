@@ -73,15 +73,22 @@ export function initializeProfileDisclosures(documentRef = document) {
   }
 }
 
+export function repairFlightThumbnail(image) {
+  if (!image || image.dataset?.thumbnailFallback === 'true') return;
+  image.dataset.thumbnailFallback = 'true';
+  image.parentElement?.querySelector?.('source')?.remove?.();
+  image.src = '/flight-thumbnail-fallback.webp';
+}
+
 export function initializeFlightThumbnailFallback(documentRef = document) {
   const handleError = (event) => {
     const image = event.target?.closest?.('[data-flight-thumbnail]');
-    if (!image || image.dataset.thumbnailFallback === 'true') return;
-    image.dataset.thumbnailFallback = 'true';
-    image.parentElement?.querySelector?.('source')?.removeAttribute('srcset');
-    image.src = '/flight-thumbnail-fallback.webp';
+    repairFlightThumbnail(image);
   };
   documentRef.addEventListener?.('error', handleError, true);
+  for (const image of documentRef.querySelectorAll?.('[data-flight-thumbnail]') ?? []) {
+    if (image.complete === true && image.naturalWidth === 0) repairFlightThumbnail(image);
+  }
 }
 
 export function initializeAppUi(documentRef = document) {

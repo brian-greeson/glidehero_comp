@@ -12,6 +12,15 @@ import {
 
 type ClaimRow = { x: number; y: number; kind: 'direct' | 'enclosed' };
 
+function isMissingObject(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false;
+  const value = error as { name?: string; Code?: string; $metadata?: { httpStatusCode?: number } };
+  return value.name === 'NotFound'
+    || value.name === 'NoSuchKey'
+    || value.Code === 'NoSuchKey'
+    || value.$metadata?.httpStatusCode === 404;
+}
+
 export interface FlightThumbnailLifecycleService {
   generateForFlight(flightId: string): Promise<void>;
   deleteForFlight(input: { userId: string; flightId: string }): Promise<void>;
@@ -95,11 +104,12 @@ export function createFlightThumbnailLifecycleService(
         try {
           await options.s3Client.send(new DeleteObjectCommand({ Bucket: options.bucketName, Key: key }));
         } catch (error) {
+          if (isMissingObject(error)) continue;
           firstError ??= error;
           console.error('Unable to delete flight thumbnail object', { key, error: error instanceof Error ? error.message : 'unknown error' });
         }
       }
-      if (firstError) return;
+      if (firstError) throw firstError;
     },
   };
 }
