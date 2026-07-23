@@ -483,9 +483,11 @@ export async function runFlightScoreBackfill(
   };
 
   let cursor: string | undefined;
+  let batchNumber = 0;
   while (true) {
     const batch = await listFlights(cursor, batchSize);
     if (batch.length === 0) break;
+    batchNumber += 1;
     for (const flight of batch) {
       summary.inspected += 1;
       const needsTotal = totalScoreNeedsCalculation(flight);
@@ -615,6 +617,11 @@ export async function runFlightScoreBackfill(
         logger.error(`Unable to calculate flight scores for flight ${flight.id}.`);
       }
     }
+    logger.log(
+      `Completed flight score batch ${batchNumber} (${batch.length} flight${batch.length === 1 ? '' : 's'}): `
+        + `${summary.inspected} inspected, ${summary.calculated} calculated, `
+        + `${summary.skipped} skipped, ${summary.written} written, ${summary.failed} failed`,
+    );
     cursor = batch[batch.length - 1]!.id;
   }
   return summary;

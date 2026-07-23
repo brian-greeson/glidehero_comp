@@ -61,7 +61,7 @@ describe('flight score backfill arguments', () => {
 });
 
 describe('flight score backfill traversal', () => {
-  it('uses ordered full tracks, walks keyset batches sequentially, and never writes in dry-run', async () => {
+  it('uses ordered full tracks, reports each keyset batch, and never writes in dry-run', async () => {
     const candidates = [missingScore('flight-1'), missingScore('flight-2'), missingScore('flight-3')];
     const cursors: Array<string | undefined> = [];
     const loadTrackPoints = vi.fn(async () => points);
@@ -71,6 +71,7 @@ describe('flight score backfill traversal', () => {
       return nPointDistances;
     });
     const writeScores = vi.fn(async () => true);
+    const logger = { log: vi.fn(), error: vi.fn() };
 
     const summary = await runFlightScoreBackfill(undefined as never, {
       apply: false,
@@ -85,6 +86,7 @@ describe('flight score backfill traversal', () => {
       calculateTotalDistance,
       calculateNPointDistances,
       writeScores,
+      logger,
     });
 
     expect(cursors).toEqual([undefined, 'flight-2', 'flight-3']);
@@ -92,6 +94,10 @@ describe('flight score backfill traversal', () => {
     expect(calculateTotalDistance).toHaveBeenCalledTimes(3);
     expect(calculateNPointDistances).toHaveBeenCalledTimes(3);
     expect(writeScores).not.toHaveBeenCalled();
+    expect(logger.log.mock.calls).toEqual([
+      ['Completed flight score batch 1 (2 flights): 2 inspected, 2 calculated, 0 skipped, 0 written, 0 failed'],
+      ['Completed flight score batch 2 (1 flight): 3 inspected, 3 calculated, 0 skipped, 0 written, 0 failed'],
+    ]);
     expect(summary).toEqual({
       mode: 'dry-run',
       batchSize: 2,
