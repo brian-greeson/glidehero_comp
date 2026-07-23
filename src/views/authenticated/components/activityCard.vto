@@ -7,9 +7,8 @@
     <div class="activity-card__copy">
       <h3>{{ event.title }}</h3><p>{{ event.detail }}</p><small>{{ include "authenticated/components/icon.vto" { name: "pin" } }}{{ event.arena }}</small>
       {{ if event.achievements.length }}<div class="activity-card__badges">{{ for achievement of event.achievements }}{{ include "authenticated/components/achievementBadge.vto" { achievement } }}{{ /for }}</div>{{ /if }}
-      {{ if event.progress }}<div class="activity-card__challenge"><span>Completed</span>{{ include "authenticated/components/progressBar.vto" { progress: event.progress, label: event.title } }}</div>{{ /if }}
     </div>
-    {{ if event.kind === "flight" && event.flight }}<div class="activity-card__flight-media">{{ include "authenticated/components/flightMapPreview.vto" { flight: event.flight } }}{{ if preview }}<div class="activity-card__flight-summary"><strong>{{ event.flight.date }}</strong><span>{{ event.flight.distance }} · {{ event.flight.cells }} cells</span></div>{{ else }}<dl class="activity-card__flight-summary"><div><dt>Flight date</dt><dd>{{ event.flightDate }}</dd></div><div><dt>Duration</dt><dd>{{ event.duration }}</dd></div><div><dt>Distance</dt><dd>{{ event.distance }}</dd></div><div><dt>Cells</dt><dd>{{ if event.totalCellCount === 0 }}0{{ else }}{{ event.totalCellCount }}{{ /if }}</dd></div></dl>{{ /if }}</div>{{ /if }}
+    {{ if event.kind === "flight" && event.flight }}<div class="activity-card__flight-media">{{ include "authenticated/components/flightMapPreview.vto" { flight: event.flight } }}<dl class="activity-card__flight-summary"><div><dt>Flight date</dt><dd>{{ event.flightDate }}</dd></div><div><dt>Duration</dt><dd>{{ event.duration }}</dd></div><div><dt>Distance</dt><dd>{{ event.distance }}</dd></div><div><dt>Cells</dt><dd>{{ if event.totalCellCount === 0 }}0{{ else }}{{ event.totalCellCount }}{{ /if }}</dd></div></dl></div>{{ /if }}
   </div>
   <footer>
     {{ if typeof event.activityId !== 'undefined' && event.activityId && !event.isOwn }}

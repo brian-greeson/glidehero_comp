@@ -913,10 +913,7 @@ export function createWebRouter(dependencies: {
       await renderAuthenticated(res, dependencies.renderAuthenticatedPage, 200, {
         ...shell,
         page: 'activity',
-        metrics: [],
         events: activityFeedToViews(activityFeed.items, { thumbnailUrls }),
-        following: [],
-        weekly: [],
         activitySearch: query,
         activityPilotResults,
         activityReturnTo,

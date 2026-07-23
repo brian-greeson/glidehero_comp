@@ -22,7 +22,6 @@
     <div class="profile-grid">
       {{ include "authenticated/components/profileTitles.vto" { titles } }}
       {{ include "authenticated/components/profileFlights.vto" { flights } }}
-      {{ if typeof glider !== 'undefined' && glider }}{{ include "authenticated/components/profileGlider.vto" { glider } }}{{ /if }}
     </div>
   </section>
 {{ /layout }}

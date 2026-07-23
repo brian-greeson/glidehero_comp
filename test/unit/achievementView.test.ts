@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createAchievementsPageModel } from '../../src/views/authenticated/adapters/achievementView.js';
-import { authenticatedPageFixture } from '../../src/views/authenticated/fixtures.js';
+import { createAuthenticatedShellModel } from '../../src/views/authenticated/adapters/shellModel.js';
 import type { PilotAchievementsSummary } from '../../src/services/profileService.js';
 
 function profile(): PilotAchievementsSummary {
@@ -68,9 +68,7 @@ function profile(): PilotAchievementsSummary {
 
 describe('achievements page adapter', () => {
   it('maps service semantics, keeps the latest achievement in each category visible, and keeps the newest three recent', () => {
-    const fixture = authenticatedPageFixture('achievements');
-    if (fixture.page !== 'achievements') throw new Error('Expected achievements fixture.');
-    const { page: _page, metrics: _metrics, earned: _earned, earnedHasExtras: _extras, inProgress: _progress, recentlyEarned: _recent, ...shell } = fixture;
+    const shell = createAuthenticatedShellModel({ page: 'achievements', user: { displayName: 'Pilot' } });
     const model = createAchievementsPageModel(profile(), shell);
 
     expect(model.metrics.map((metric) => metric.value)).toEqual(['4', '2']);
@@ -87,9 +85,7 @@ describe('achievements page adapter', () => {
   });
 
   it('marks all but the newest achievement in a category as disclosure extras', () => {
-    const fixture = authenticatedPageFixture('achievements');
-    if (fixture.page !== 'achievements') throw new Error('Expected achievements fixture.');
-    const { page: _page, metrics: _metrics, earned: _earned, earnedHasExtras: _extras, inProgress: _progress, recentlyEarned: _recent, ...shell } = fixture;
+    const shell = createAuthenticatedShellModel({ page: 'achievements', user: { displayName: 'Pilot' } });
     const summary = profile();
     summary.achievements.splice(1, 0, {
       ...summary.achievements[1]!,

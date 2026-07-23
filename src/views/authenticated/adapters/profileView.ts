@@ -5,7 +5,6 @@ import type { FlightThumbnailUrls } from '../../../services/flightThumbnailDeliv
 const avatarColors = ['#1769aa', '#ff6b24', '#17b7ca', '#43a52c', '#7441b6'] as const;
 
 export type ProfileViewOptions = {
-  preview?: boolean;
   isCurrent?: boolean;
   isFollowed?: boolean;
   currentPath?: string;
@@ -39,7 +38,7 @@ function titleTone(arenaType: string): 'green' | 'blue' | 'orange' | 'purple' {
 /**
  * Adapt the service-owned profile read model to the refreshed profile view.
  * Fields that are not persisted by PilotProfileSummary are intentionally
- * omitted instead of being filled with preview copy.
+ * omitted instead of being filled with synthetic copy.
  */
 export function pilotProfileToView(summary: PilotProfileSummary, options: ProfileViewOptions = {}) {
   const profile = {
@@ -73,7 +72,6 @@ export function pilotProfileToView(summary: PilotProfileSummary, options: Profil
     date: flight.flightDate || 'Date unavailable',
     distance: flight.distance || '—',
     cells: formatCount(flight.totalCellCount),
-    mapTone: (['orange', 'blue', 'cyan', 'purple'] as const)[index % 4]!,
     thumbnail: options.thumbnailUrls?.get(flight.flightId),
     isInitiallyVisible: index < 3,
   }));
@@ -87,6 +85,5 @@ export function pilotProfileToView(summary: PilotProfileSummary, options: Profil
     profileIsFollowed: options.isFollowed ?? false,
     currentPath: options.currentPath ?? `/pilots/${summary.userId}`,
     avatarColor: profile.territoryColor || colorFor(summary.userId),
-    ...(options.preview ? { glider: { imageSrc: '/images/app-ui/glider-premium.png', brand: 'Ozone', model: 'Enzo 3', color: 'Teal / White' } } : {}),
   };
 }

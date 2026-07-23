@@ -110,7 +110,7 @@ describe('production Profile and Achievements rendering', () => {
     expect(html).not.toContain('Alex Summit');
   });
 
-  it('renders followed state, empty sections, explicit zero values, and preview-only glider', async () => {
+  it('renders followed state, empty sections, and explicit zero values', async () => {
     const profile = productionProfile({
       displayName: 'Empty Pilot',
       lifetimeUniqueCellCount: 0,
@@ -135,14 +135,6 @@ describe('production Profile and Achievements rendering', () => {
     expect(html).toContain('action="/pilots/00000000-0000-4000-8000-000000000099/unfollow"');
     expect(html).toContain('No current Arena titles yet.');
     expect(html).toContain('No completed flights yet.');
-    expect(html).not.toContain('glider-premium.png');
-
-    const preview = await render({
-      ...shell,
-      page: 'profile',
-      ...pilotProfileToView(profile, { preview: true, isCurrent: true }),
-    });
-    expect(preview).toContain('/images/app-ui/glider-premium.png');
   });
 
   it('renders earned dates, categories, recent first three, and empty states without point concepts', async () => {

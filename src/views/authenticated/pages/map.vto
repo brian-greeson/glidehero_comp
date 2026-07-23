@@ -1,24 +1,13 @@
 {{ layout "authenticated/layouts/appLayout.vto" }}
-  <section class="map-page" data-map-page data-map-preview="{{ if preview }}true{{ else }}false{{ /if }}"
+  <section class="map-page" data-map-page
     {{ if mode === 'personal' }}data-dashboard data-dashboard-mode="personal"{{ else }}data-competition-coverage="{{ if typeof arenaSourceId !== 'undefined' && arenaSourceId }}arena{{ else }}global{{ /if }}"{{ /if }}>
     <aside class="mobile-map-sheet" data-map-sheet>
       <button class="mobile-map-sheet__handle" type="button" data-map-sheet-handle aria-expanded="false" aria-controls="mobile-map-sheet-content"><span></span><span class="sr-only" data-map-sheet-label>Expand map controls</span></button>
       <div class="mobile-map-sheet__content" id="mobile-map-sheet-content">
         {{ include "authenticated/components/mapSidebar.vto" { mode, period, location, metrics, leaderboard } }}
-        {{ if preview }}{{ include "authenticated/components/selectedFlight.vto" { flight: selectedFlight } }}{{ /if }}
       </div>
     </aside>
     <section class="map-stage" aria-label="Territory map">
-      {{ if preview }}
-      <div class="map-fixture" data-map-fixture>
-        <div class="map-grid-art" aria-hidden="true"></div>
-        <svg class="map-track-art" viewBox="0 0 900 900" preserveAspectRatio="none" aria-hidden="true">
-          <path class="map-track-art__secondary" d="M35 820C170 710 95 610 228 537S318 327 410 205 580 133 720 49"/>
-          <path class="map-track-art__primary" d="M132 670C260 592 308 614 377 492S497 401 548 310 666 325 731 205"/>
-          <circle cx="132" cy="670" r="13"/><circle cx="731" cy="205" r="13"/>
-        </svg>
-      </div>
-      {{ else }}
       <div class="map-canvas" data-map-canvas {{ if mode === 'personal' }}data-dashboard-map{{ else }}data-territory-map{{ /if }}
         data-map-style-url="{{ if typeof mapStyleUrl !== 'undefined' }}{{ mapStyleUrl }}{{ /if }}"
         data-current-user-id="{{ if typeof currentUserId !== 'undefined' }}{{ currentUserId }}{{ /if }}"
@@ -27,14 +16,10 @@
         data-territory-tile-maximum-zoom="{{ if typeof territoryTileMaximumZoom !== 'undefined' }}{{ if territoryTileMaximumZoom === 0 }}0{{ else }}{{ territoryTileMaximumZoom }}{{ /if }}{{ else }}22{{ /if }}"
         {{ if typeof arenaSourceId !== 'undefined' && arenaSourceId }}data-arena-source-id="{{ arenaSourceId }}"{{ /if }}
         {{ if typeof focusArenaSourceId !== 'undefined' && focusArenaSourceId }}data-focus-arena-source-id="{{ focusArenaSourceId }}"{{ /if }}></div>
-      {{ /if }}
       <span class="map-scale">500 m</span>
-      {{ if preview }}
-      <article class="cell-popover"><span></span><div><strong>{{ selectedCell.name }}</strong><b>{{ selectedCell.owner }}</b><small>Altitude: {{ selectedCell.altitude }}</small><small>Last claimed: {{ selectedCell.lastClaimed }}</small></div></article>
-      <div class="desktop-selected-flight">{{ include "authenticated/components/selectedFlight.vto" { flight: selectedFlight } }}</div>
-      {{ else }}<div class="cell-popover" data-territory-cell-popup hidden></div>{{ /if }}
+      <div class="cell-popover" data-territory-cell-popup hidden></div>
       {{ if typeof mapEmptyState !== 'undefined' }}<p class="map-empty-state" data-map-empty-state hidden>{{ mapEmptyState }}</p>{{ else }}<p class="map-empty-state" data-map-empty-state hidden>Map unavailable. Check your connection and try again.</p>{{ /if }}
-      {{ if !preview }}{{ include "authenticated/components/mapFlightAidStatus.vto" }}{{ /if }}
+      {{ include "authenticated/components/mapFlightAidStatus.vto" }}
       <div class="map-arena-search" data-map-arena-search>{{ include "authenticated/components/arenaSearch.vto" }}</div>
     </section>
   </section>

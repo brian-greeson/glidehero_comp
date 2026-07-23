@@ -53,13 +53,6 @@ describe('refreshed profile adapter', () => {
     expect(view.metrics.map((metric) => metric.value)).toEqual(['0', '2', '0']);
     expect(view.titles[0]).toMatchObject({ name: 'Colorado', detail: 'Top cell holder · 0 cells', isInitiallyVisible: true });
     expect(view.flights[0]).toMatchObject({ id: 'flight-1', href: '/flights/flight-1', cells: '0', isInitiallyVisible: true });
-    expect(view.glider).toBeUndefined();
     expect(view.profileIsFollowed).toBe(true);
-  });
-
-  it('only exposes preview glider metadata when explicitly requested', () => {
-    expect(pilotProfileToView(summary, { preview: true }).glider).toEqual(expect.objectContaining({
-      imageSrc: '/images/app-ui/glider-premium.png',
-    }));
   });
 });

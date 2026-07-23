@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 // @ts-expect-error Browser assets remain JavaScript.
 import { initializeArenaSearch } from '../../public/scripts/arenaSearch.js';
 // @ts-expect-error Browser assets remain JavaScript.
-import { initializeGlobalDashboard } from '../../public/scripts/globalDashboard.js';
+import { initializeCompetitionCoverage } from '../../public/scripts/competitionCoverageController.js';
 // @ts-expect-error Browser assets remain JavaScript.
 import { initializePersonalDashboard } from '../../public/scripts/personalDashboard.js';
 
@@ -199,7 +199,7 @@ function globalDashboardHarness(fetchImpl: any, search = '', dataset: Record<str
     },
   };
   const historyRef = { replaceState: vi.fn() };
-  initializeGlobalDashboard({
+  initializeCompetitionCoverage({
     documentRef,
     maplibre: map.maplibre,
     fetchImpl,
@@ -388,7 +388,7 @@ describe('Global dashboard controller', () => {
       return new Response(JSON.stringify(leaderboard), { status: 200 });
     });
 
-    initializeGlobalDashboard({
+    initializeCompetitionCoverage({
       documentRef,
       maplibre: harness.maplibre,
       fetchImpl,

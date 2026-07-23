@@ -40,11 +40,7 @@ function timeAgo(value: Date): string {
   return `${days}d ago`;
 }
 
-/**
- * Converts the service-owned activity read model into the refreshed template
- * shape. Keeping this adapter separate lets the preview fixture retain its
- * richer mockup-only fields while production cards stay endpoint-backed.
- */
+/** Convert the service-owned activity read model into the template shape. */
 export function activityFeedItemToView(item: ActivityFeedItem, options: { thumbnailUrls?: ReadonlyMap<string, FlightThumbnailUrls> } = {}) {
   const flight = item.activityType === 'flight' && item.sourceFlightId
     ? {
@@ -53,7 +49,6 @@ export function activityFeedItemToView(item: ActivityFeedItem, options: { thumbn
       date: item.flightDate ?? 'Date unavailable',
       distance: item.distance ?? '—',
       cells: item.totalCellCount === undefined ? '—' : String(item.totalCellCount),
-      mapTone: 'cyan' as const,
       thumbnail: options.thumbnailUrls?.get(item.sourceFlightId),
     }
     : undefined;
@@ -98,7 +93,6 @@ export function activityFeedItemToView(item: ActivityFeedItem, options: { thumbn
     likeCount: item.likeCount,
     viewerHasLiked: item.viewerHasLiked,
     isOwn: item.isOwn,
-    progress: undefined,
   };
 }
 

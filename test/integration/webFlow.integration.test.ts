@@ -128,7 +128,7 @@ describe('GlideHero browser authentication flow', () => {
       expect(loginSetCookie).toContain('SameSite=Lax');
       const loginCookie = loginSetCookie?.split(';', 1)[0];
       const signedInAgain = await fetch(`${baseUrl}/`, { headers: { cookie: loginCookie ?? '' } });
-      expect(await signedInAgain.text()).toContain('pilot@example.com');
+      expect(await signedInAgain.text()).toContain('Sky Pilot');
     });
   });
 });

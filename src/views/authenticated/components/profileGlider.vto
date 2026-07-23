@@ -1,7 +1,0 @@
-<section class="profile-card profile-card--glider">
-  {{ include "authenticated/components/sectionHeading.vto" { title: "Glider Information", icon: "flight", action: "Edit", actionId: "edit-glider" } }}
-  <div class="profile-card__desktop-content">
-    <img class="glider-art" src="{{ if typeof glider.imageSrc !== 'undefined' && glider.imageSrc }}{{ glider.imageSrc }}{{ else }}/images/app-ui/glider-premium.png{{ /if }}" alt="Teal and white competition paraglider">
-    <dl><div><dt>Brand</dt><dd>{{ glider.brand }}</dd></div><div><dt>Model</dt><dd>{{ glider.model }}</dd></div><div><dt>Color</dt><dd><i></i>{{ glider.color }}</dd></div></dl>
-  </div>
-</section>

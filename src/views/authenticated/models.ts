@@ -55,13 +55,10 @@ export type AchievementView = {
 
 export type FlightView = {
   id: string;
-  pilot?: PilotView;
   date: string;
   arena?: string;
   distance: string;
   cells: string;
-  achievements?: string;
-  mapTone: 'orange' | 'blue' | 'cyan' | 'purple';
   thumbnail?: { wideUrl: string; squareUrl: string };
   href?: string;
 };
@@ -75,7 +72,6 @@ export type AuthenticatedShellModel = {
   adminUrl: string;
   logoutUrl: string;
   showFooter: boolean;
-  preview: boolean;
 };
 
 /**
@@ -93,7 +89,6 @@ export type AuthenticatedShellInput = {
   adminUrl?: string;
   logoutUrl?: string;
   showFooter?: boolean;
-  preview?: boolean;
   title?: string;
 };
 
@@ -104,8 +99,6 @@ export type MapPageModel = AuthenticatedShellModel & {
   location: string;
   metrics: MetricView[];
   leaderboard: Array<{ rank: number; pilot: PilotView; cells: string; isCurrent: boolean }>;
-  selectedFlight?: FlightView;
-  selectedCell?: { name: string; owner: string; altitude: string; lastClaimed: string };
   mapStyleUrl?: string;
   currentUserId?: string;
   territoryColor?: string;
@@ -118,25 +111,19 @@ export type MapPageModel = AuthenticatedShellModel & {
 
 export type ActivityEventView = {
   id: string;
-  kind: 'achievements' | 'flight' | 'challenge';
+  kind: 'achievements' | 'flight';
   pilot: PilotView;
   timeAgo: string;
   title: string;
   detail: string;
   arena: string;
-  likes?: string;
-  comments?: string;
   flight?: FlightView;
   achievements: AchievementView[];
-  progress?: { current: string; target: string; percent: number };
 };
 
 export type ActivityPageModel = AuthenticatedShellModel & {
   page: 'activity';
-  metrics: MetricView[];
   events: ActivityEventView[];
-  following: Array<{ pilot: PilotView; detail: string; timeAgo: string }>;
-  weekly: Array<{ label: string; value: string; change: string; icon: string }>;
   activitySearch?: string;
   activityPilotResults?: ActivityPilotResultView[];
   activityReturnTo?: string;
@@ -180,7 +167,6 @@ export type ProfilePageModel = AuthenticatedShellModel & {
   metrics: MetricView[];
   titles: ProfileTitleView[];
   flights: FlightView[];
-  glider?: { imageSrc?: string; brand?: string; model?: string; color?: string };
 };
 
 export type FlightDistanceView = {

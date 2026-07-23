@@ -58,7 +58,7 @@ export function initializeMapPage({ documentRef = document, maplibre = globalThi
     periodSelection: period,
   });
   const root = documentRef.querySelector('[data-map-page]');
-  if (!root || root.dataset.mapPreview === 'true') return;
+  if (!root) return;
   if (!maplibre || !fetchImpl) return;
   if (root.dataset.dashboardMode === 'personal') {
     initializePersonalDashboard({

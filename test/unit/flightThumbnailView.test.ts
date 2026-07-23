@@ -1,38 +1,9 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { authenticatedPageFixture } from '../../src/views/authenticated/fixtures.js';
-import { createAuthenticatedPageRenderer } from '../../src/views/authenticated/renderer.js';
 import { activityFeedItemToView } from '../../src/views/authenticated/adapters/activityView.js';
 import type { ActivityFeedItem } from '../../src/services/activityService.js';
 
 describe('flight thumbnail view delivery', () => {
-  it('renders thumbnails only for flight activity rows with responsive sources and exact alt text', async () => {
-    const model = structuredClone(authenticatedPageFixture('activity'));
-    if (model.page !== 'activity') throw new Error('Expected activity fixture.');
-    const flightEvent = model.events[1]!;
-    if (!flightEvent.flight) throw new Error('Expected fixture flight.');
-    flightEvent.flight.thumbnail = { wideUrl: '/signed-wide.webp', squareUrl: '/signed-square.webp' };
-    const html = await createAuthenticatedPageRenderer()(model);
-
-    expect(html).toContain('srcset="/signed-square.webp"');
-    expect(html).toContain('src="/signed-wide.webp"');
-    expect(html).toContain('alt="Flight territory preview"');
-    expect(html).toContain('class="flight-thumbnail"');
-    expect(html).not.toContain('srcset="/signed-square.webp""');
-    const nonFlightStart = html.indexOf('data-activity-kind="achievements"');
-    const nonFlightEnd = html.indexOf('</article>', nonFlightStart);
-    expect(html.slice(nonFlightStart, nonFlightEnd)).not.toContain('flight-thumbnail');
-  });
-
-  it('uses the square-safe fallback when a profile flight has no signed pair', async () => {
-    const model = structuredClone(authenticatedPageFixture('profile'));
-    if (model.page !== 'profile') throw new Error('Expected profile fixture.');
-    const html = await createAuthenticatedPageRenderer()(model);
-
-    expect(html).toContain('src="/flight-thumbnail-fallback.webp"');
-    expect(html.match(/alt="Flight territory preview"/g)?.length).toBe(model.flights.length);
-  });
-
   it('keeps adapter flight-only behavior and exposes signed URLs', () => {
     const base: ActivityFeedItem = {
       id: 'activity-1', actorUserId: 'user-1', actorDisplayName: 'Pilot', activityType: 'challenge', sourceFlightId: null,

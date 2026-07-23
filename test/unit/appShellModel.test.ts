@@ -23,7 +23,6 @@ describe('refreshed app shell model', () => {
     expect(model.adminUrl).toBe('/admin');
     expect(model.logoutUrl).toBe('/logout');
     expect(model.showFooter).toBe(false);
-    expect(model.preview).toBe(false);
   });
 
   it('keeps map active while preserving a global or Arena map destination', () => {

@@ -1,7 +1,6 @@
 {{ layout "authenticated/layouts/appLayout.vto" }}
   <div class="mountain-band" aria-hidden="true"></div>
   <section class="content-page activity-page">
-    {{ if metrics.length }}{{ include "authenticated/components/metricStrip.vto" { metrics, label: "Activity summary" } }}{{ /if }}
     <div class="activity-layout">
       <section class="activity-feed-panel">
         {{ include "authenticated/components/activityPilotSearch.vto" { activitySearch, activityPilotResults, activityReturnTo, activityScope } }}
@@ -12,7 +11,7 @@
         </nav>
         {{ include "authenticated/components/sectionHeading.vto" { title: "Recent Activity", action: "View All", actionId: "all-activity" } }}
         <div class="activity-feed" data-activity-feed>
-          {{ for event of events }}{{ include "authenticated/components/activityCard.vto" { event, preview } }}{{ /for }}
+          {{ for event of events }}{{ include "authenticated/components/activityCard.vto" { event } }}{{ /for }}
           {{ if typeof activityLoadMoreHref !== 'undefined' && activityLoadMoreHref }}
             <a class="activity-load-more" data-activity-load-more data-fragment-href="{{ activityLoadMoreEndpoint }}" href="{{ activityLoadMoreHref }}">Load more activity</a>
             <p class="activity-load-more-status" data-activity-load-more-status aria-live="polite"></p>
@@ -20,16 +19,6 @@
           {{ if events.length === 0 }}<p class="activity-empty-feed" data-activity-empty>Nothing to show yet.</p>{{ /if }}
         </div>
       </section>
-      <aside class="activity-rail">
-        {{ if following.length }}<section class="rail-card following-card">
-          {{ include "authenticated/components/sectionHeading.vto" { title: "Following", action: "View All", actionId: "following" } }}
-          <ul>{{ for update of following }}<li>{{ include "authenticated/components/initialsAvatar.vto" { initials: update.pilot.initials, color: update.pilot.color, size: "small" } }}<div><strong>{{ update.pilot.displayName }}</strong><span>{{ update.detail }}</span></div><time>{{ update.timeAgo }}</time></li>{{ /for }}</ul>
-        </section>{{ /if }}
-        {{ if weekly.length }}<section class="rail-card weekly-card">
-          {{ include "authenticated/components/sectionHeading.vto" { title: "This Week" } }}
-          <dl>{{ for item of weekly }}<div><dt>{{ include "authenticated/components/icon.vto" { name: item.icon } }}{{ item.label }}</dt><dd>{{ item.value }}<span>▲ {{ item.change }}</span></dd></div>{{ /for }}</dl>
-        </section>{{ /if }}
-      </aside>
     </div>
   </section>
 {{ /layout }}

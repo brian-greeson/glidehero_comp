@@ -47,6 +47,5 @@ export function createAuthenticatedShellModel(input: AuthenticatedShellInput): A
     adminUrl: input.adminUrl ?? DEFAULT_ADMIN_URL,
     logoutUrl: input.logoutUrl ?? DEFAULT_LOGOUT_URL,
     showFooter: input.showFooter ?? input.page !== 'map',
-    preview: input.preview ?? false,
   };
 }
