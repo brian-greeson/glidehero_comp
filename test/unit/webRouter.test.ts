@@ -362,7 +362,21 @@ describe('webRouter', () => {
       }]),
       clearStatus: vi.fn(async () => undefined),
     };
+    const flightProcessingControl = {
+      getSixPointSolverState: vi.fn(async () => 'enabled' as const),
+      setSixPointSolverState: vi.fn(async () => undefined),
+      isSixPointSolverEnabled: vi.fn(async () => true),
+    };
+    const uploadQueue = {
+      queueSummary: vi.fn(async () => ({
+        queued: 2,
+        processing: 1,
+        failed: 0,
+        oldestQueuedAgeSeconds: 12,
+      })),
+    };
     const renderAdminPage = vi.fn(async () => '<html><body>Admin flights</body></html>');
+    const renderAdminFlightProcessingPage = vi.fn(async () => '<html><body>Flight processing</body></html>');
     const router = createWebRouter({
       auth,
       cookie,
@@ -378,8 +392,11 @@ describe('webRouter', () => {
       renderAuthenticatedActivityFeed: vi.fn(async () => '<div>App feed</div>'),
       adminEmails: ['PILOT@example.com'],
       adminFlights,
+      uploadQueue: uploadQueue as never,
       workerControl,
+      flightProcessingControl,
       renderAdminPage,
+      renderAdminFlightProcessingPage,
     });
     const app = createApp({ webMiddleware: [createCurrentUserMiddleware(auth, cookie), router] });
 
@@ -391,10 +408,23 @@ describe('webRouter', () => {
       expect(admin.status).toBe(200);
       expect(await admin.text()).toContain('Admin flights');
       expect(adminFlights.listRecentFlights).toHaveBeenCalledOnce();
+      expect(renderAdminPage).toHaveBeenCalledWith(expect.objectContaining({
+        queueSummary: { queued: 2, processing: 1, failed: 0, oldestQueuedAgeSeconds: 12 },
+      }));
+      expect(workerControl.getState).not.toHaveBeenCalled();
+
+      const flightProcessing = await fetch(`${baseUrl}/admin/flight-processing`, {
+        headers: { cookie: 'glidehero_session=valid-token' },
+      });
+      expect(flightProcessing.status).toBe(200);
+      expect(await flightProcessing.text()).toContain('Flight processing');
       expect(workerControl.getState).toHaveBeenCalledOnce();
       expect(workerControl.listStatuses).toHaveBeenCalledOnce();
-      expect(renderAdminPage).toHaveBeenCalledWith(expect.objectContaining({
+      expect(flightProcessingControl.getSixPointSolverState).toHaveBeenCalledOnce();
+      expect(renderAdminFlightProcessingPage).toHaveBeenCalledWith(expect.objectContaining({
+        queueSummary: { queued: 2, processing: 1, failed: 0, oldestQueuedAgeSeconds: 12 },
         workerControlState: 'paused',
+        sixPointSolverState: 'enabled',
         workers: [expect.objectContaining({ workerId: 'worker-1', online: true })],
       }));
 
@@ -421,8 +451,18 @@ describe('webRouter', () => {
         body: new URLSearchParams({ state: 'running' }),
       });
       expect(resume.status).toBe(303);
-      expect(resume.headers.get('location')).toBe('/admin?worker=running');
+      expect(resume.headers.get('location')).toBe('/admin/flight-processing?worker=running');
       expect(workerControl.setState).toHaveBeenCalledWith('running');
+
+      vi.mocked(workerControl.setState).mockRejectedValueOnce(new Error('Valkey write failed'));
+      const failedControl = await fetch(`${baseUrl}/admin/worker-control`, {
+        method: 'POST',
+        redirect: 'manual',
+        headers: { cookie: 'glidehero_session=valid-token', 'content-type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({ state: 'paused' }),
+      });
+      expect(failedControl.status).toBe(303);
+      expect(failedControl.headers.get('location')).toBe('/admin/flight-processing?worker=error');
 
       const invalidControl = await fetch(`${baseUrl}/admin/worker-control`, {
         method: 'POST',
@@ -431,7 +471,36 @@ describe('webRouter', () => {
         body: new URLSearchParams({ state: 'stop' }),
       });
       expect(invalidControl.status).toBe(303);
-      expect(invalidControl.headers.get('location')).toBe('/admin?worker=error');
+      expect(invalidControl.headers.get('location')).toBe('/admin/flight-processing?worker=error');
+
+      const disableSolver = await fetch(`${baseUrl}/admin/flight-processing/six-point-solver`, {
+        method: 'POST',
+        redirect: 'manual',
+        headers: { cookie: 'glidehero_session=valid-token', 'content-type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({ state: 'disabled' }),
+      });
+      expect(disableSolver.status).toBe(303);
+      expect(disableSolver.headers.get('location')).toBe('/admin/flight-processing?solver=disabled');
+      expect(flightProcessingControl.setSixPointSolverState).toHaveBeenCalledWith('disabled');
+
+      flightProcessingControl.setSixPointSolverState.mockRejectedValueOnce(new Error('Valkey write failed'));
+      const failedSolver = await fetch(`${baseUrl}/admin/flight-processing/six-point-solver`, {
+        method: 'POST',
+        redirect: 'manual',
+        headers: { cookie: 'glidehero_session=valid-token', 'content-type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({ state: 'enabled' }),
+      });
+      expect(failedSolver.status).toBe(303);
+      expect(failedSolver.headers.get('location')).toBe('/admin/flight-processing?solver=error');
+
+      const invalidSolver = await fetch(`${baseUrl}/admin/flight-processing/six-point-solver`, {
+        method: 'POST',
+        redirect: 'manual',
+        headers: { cookie: 'glidehero_session=valid-token', 'content-type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({ state: 'maybe' }),
+      });
+      expect(invalidSolver.status).toBe(303);
+      expect(invalidSolver.headers.get('location')).toBe('/admin/flight-processing?solver=error');
     });
   });
 

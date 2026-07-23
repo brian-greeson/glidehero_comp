@@ -2,6 +2,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { igcFiles } from '../../src/db/schema.js';
+import type { SixPointDistance } from '../../src/domain/igc/distance.js';
 import { createAuthService } from '../../src/services/authService.js';
 import { createFlightProcessingService } from '../../src/services/flightProcessingService.js';
 import { resetAndMigrateTestDatabase } from './database.js';
@@ -38,16 +39,25 @@ async function storeFile(userId: string, bucketKey: string, originalFilename: st
   return stored;
 }
 
-function processor() {
+const injectedSixPointDistance: SixPointDistance = {
+  distanceMeters: 1_234,
+  pointIndices: [0, 1, 2, 3, 4, 5],
+};
+
+function processor(options: { useRealSixPointCalculator?: boolean; sixPointSolverEnabled?: boolean } = {}) {
   if (!database) throw new Error('Test database was not initialized.');
   return createFlightProcessingService(database.db, {
     s3Client: { send: async () => { throw new Error('Worker-provided source should avoid object reads.'); } } as never,
     bucketName: 'test-flights',
     gridClaimCellSize: 1_000,
+    ...(options.useRealSixPointCalculator
+      ? {}
+      : { calculateSixPointDistance: async () => injectedSixPointDistance }),
+    isSixPointSolverEnabled: async () => options.sixPointSolverEnabled ?? true,
   });
 }
 
-async function installInsertFailureTrigger(table: 'activities' | 'competition_grid_claims' | 'flight_progress', message: string) {
+async function installInsertFailureTrigger(table: 'activities' | 'competition_grid_claims' | 'flight_progress' | 'flight_scores', message: string) {
   if (!database) throw new Error('Test database was not initialized.');
   const suffix = randomUUID().replaceAll('-', '');
   const functionName = `test_${suffix}_fn`;
@@ -80,6 +90,7 @@ async function persistedProcessingState(igcFileId: string) {
     progress_count: number;
     achievement_count: number;
     activity_count: number;
+    score_count: number;
   }>(
     `SELECT f.processing_status,
             f.processed_at,
@@ -88,7 +99,8 @@ async function persistedProcessingState(igcFileId: string) {
             (SELECT count(*)::int FROM competition_grid_claims WHERE claim_flight = f.flight_id) AS competition_claim_count,
             (SELECT count(*)::int FROM flight_progress WHERE flight_id = f.flight_id) AS progress_count,
             (SELECT count(*)::int FROM achievements WHERE source_flight_id = f.flight_id) AS achievement_count,
-            (SELECT count(*)::int FROM activities WHERE source_flight_id = f.flight_id) AS activity_count
+            (SELECT count(*)::int FROM activities WHERE source_flight_id = f.flight_id) AS activity_count,
+            (SELECT count(*)::int FROM flight_scores WHERE flight_id = f.flight_id) AS score_count
      FROM flights f
      WHERE f.igc_file_id = $1`,
     [igcFileId],
@@ -103,7 +115,7 @@ describe('FlightProcessingService with a real IGC file', () => {
     const pilot = await auth.signup({ email: 'pilot@example.com', password: 'correct horse battery staple' });
     const stored = await storeFile(pilot.user.userId, 'flights/known-good.igc', 'known-good.igc');
 
-    const result = await processor().process({
+    const result = await processor({ useRealSixPointCalculator: true }).process({
       ownerUserId: pilot.user.userId,
       igcFileId: stored.id,
       bucketKey: 'flights/known-good.igc',
@@ -123,10 +135,35 @@ describe('FlightProcessingService with a real IGC file', () => {
       point_count: number;
       first_fix: Date;
       last_fix: Date;
+      cumulative_distance_meters: number;
+      total_distance_meters: number;
+      total_distance_calc_version: number;
+      total_distance_metadata: Record<string, never>;
+      six_point_distance_meters: number;
+      six_point_distance_calc_version: number;
+      six_point_distance_metadata: {
+        calculationVersion: number;
+        distanceMeters: number;
+        pointIndices: number[];
+        points: Array<{
+          sequenceNumber: number;
+          recordedAt: string;
+          latitude: number;
+          longitude: number;
+          gpsAltitudeMeters: number;
+        }>;
+      };
     }>(
       `SELECT f.processing_status,
               f.processed_at,
               f.launch_timezone,
+              f.distance_meters AS cumulative_distance_meters,
+              fs.total_distance_meters,
+              fs.total_distance_calc_version,
+              fs.total_distance_metadata,
+              fs.six_point_distance_meters,
+              fs.six_point_distance_calc_version,
+              fs.six_point_distance_metadata,
               (SELECT count(*)::int FROM user_grid_claims ugc WHERE ugc.claim_flight = f.flight_id) AS grid_claim_count,
               (SELECT count(*)::int FROM competition_grid_claims cgc WHERE cgc.claim_flight = f.flight_id) AS competition_claim_count,
               ARRAY(
@@ -139,8 +176,9 @@ describe('FlightProcessingService with a real IGC file', () => {
               min(tp.recorded_at) AS first_fix,
               max(tp.recorded_at) AS last_fix
        FROM flights f
+       LEFT JOIN flight_scores fs ON fs.flight_id = f.flight_id
        LEFT JOIN track_points tp ON tp.flight_id = f.flight_id
-       GROUP BY f.flight_id`,
+       GROUP BY f.flight_id, fs.flight_id`,
     );
 
     expect(persisted.rows).toEqual([
@@ -153,8 +191,62 @@ describe('FlightProcessingService with a real IGC file', () => {
         competition_months: ['2026-05-01'],
         point_count: 10_835,
         first_fix: new Date('2026-05-10T18:50:26.000Z'),
+        total_distance_calc_version: 1,
+        total_distance_metadata: {},
+        six_point_distance_calc_version: 1,
       }),
     ]);
+    expect(persisted.rows[0]?.total_distance_meters).toBe(persisted.rows[0]?.cumulative_distance_meters);
+    expect(persisted.rows[0]?.six_point_distance_meters).toBeCloseTo(38_052.62276617665, 8);
+    expect(persisted.rows[0]?.six_point_distance_metadata).toEqual({
+      calculationVersion: 1,
+      distanceMeters: 38_052.62276617665,
+      pointIndices: [1490, 2692, 7161, 9223, 9634, 10708],
+      points: [
+        {
+          sequenceNumber: 1490,
+          recordedAt: '2026-05-10T19:15:17.000Z',
+          latitude: 40.05703333333334,
+          longitude: -105.29931666666667,
+          gpsAltitudeMeters: 2358,
+        },
+        {
+          sequenceNumber: 2692,
+          recordedAt: '2026-05-10T19:35:19.000Z',
+          latitude: 40.01555,
+          longitude: -105.29343333333334,
+          gpsAltitudeMeters: 3007,
+        },
+        {
+          sequenceNumber: 7161,
+          recordedAt: '2026-05-10T20:50:01.000Z',
+          latitude: 40.098483333333334,
+          longitude: -105.18663333333333,
+          gpsAltitudeMeters: 2488,
+        },
+        {
+          sequenceNumber: 9223,
+          recordedAt: '2026-05-10T21:24:23.000Z',
+          latitude: 40.06163333333333,
+          longitude: -105.3083,
+          gpsAltitudeMeters: 2833,
+        },
+        {
+          sequenceNumber: 9634,
+          recordedAt: '2026-05-10T21:31:14.000Z',
+          latitude: 40.0991,
+          longitude: -105.29686666666667,
+          gpsAltitudeMeters: 2375,
+        },
+        {
+          sequenceNumber: 10708,
+          recordedAt: '2026-05-10T21:49:08.000Z',
+          latitude: 40.05375,
+          longitude: -105.29303333333333,
+          gpsAltitudeMeters: 1808,
+        },
+      ],
+    });
     expect(persisted.rows[0]?.grid_claim_count).toBeGreaterThan(0);
     expect(persisted.rows[0]?.competition_claim_count).toBeGreaterThan(0);
     expect(persisted.rows[0]?.last_fix.getTime()).toBeGreaterThan(persisted.rows[0]?.first_fix.getTime() ?? 0);
@@ -169,6 +261,42 @@ describe('FlightProcessingService with a real IGC file', () => {
     }]);
     expect(activity.rows[0]?.published_at.getTime()).toBe(persisted.rows[0]?.processed_at.getTime());
 
+  }, 180_000);
+
+  it('completes with an empty six-point score when the solver was disabled at processing start', async () => {
+    if (!database) throw new Error('Test database was not initialized.');
+    const auth = createAuthService(database.db, { sessionTtlSeconds: 60 });
+    const pilot = await auth.signup({ email: 'solver-disabled@example.com', password: 'correct horse battery staple' });
+    const stored = await storeFile(pilot.user.userId, 'flights/solver-disabled.igc', 'solver-disabled.igc');
+
+    const result = await processor({ sixPointSolverEnabled: false }).process({
+      ownerUserId: pilot.user.userId,
+      igcFileId: stored.id,
+      bucketKey: 'flights/solver-disabled.igc',
+      contentHash: createHash('sha256').update(fixture).digest('hex').replace(/^./, 'e'),
+      processingToken: randomUUID(),
+      source,
+    });
+
+    expect(result.status).toBe('completed');
+    const score = await database.pool.query<{
+      total_distance_meters: number;
+      six_point_distance_meters: number | null;
+      six_point_distance_calc_version: number | null;
+      six_point_distance_metadata: unknown | null;
+    }>(
+      `SELECT total_distance_meters,
+              six_point_distance_meters,
+              six_point_distance_calc_version,
+              six_point_distance_metadata
+       FROM flight_scores`,
+    );
+    expect(score.rows).toEqual([expect.objectContaining({
+      total_distance_meters: expect.any(Number),
+      six_point_distance_meters: null,
+      six_point_distance_calc_version: null,
+      six_point_distance_metadata: null,
+    })]);
   }, 60_000);
 
   it('allows only one concurrent processor to persist identical flight content', async () => {
@@ -206,6 +334,41 @@ describe('FlightProcessingService with a real IGC file', () => {
     expect(counts.rows).toEqual([{ flight_count: 1 }]);
   }, 60_000);
 
+  it('does not complete a flight when its score row cannot be persisted', async () => {
+    if (!database) throw new Error('Test database was not initialized.');
+    const auth = createAuthService(database.db, { sessionTtlSeconds: 60 });
+    const pilot = await auth.signup({ email: 'score-failure@example.com', password: 'correct horse battery staple' });
+    const stored = await storeFile(pilot.user.userId, 'flights/score-failure.igc', 'score-failure.igc');
+    const removeTrigger = await installInsertFailureTrigger('flight_scores', 'test score persistence failure');
+
+    try {
+      await expect(processor().process({
+        ownerUserId: pilot.user.userId,
+        igcFileId: stored.id,
+        bucketKey: 'flights/score-failure.igc',
+        contentHash: createHash('sha256').update(fixture).digest('hex').replace(/^./, 'a'),
+        processingToken: randomUUID(),
+        source,
+      })).rejects.toThrow();
+
+      expect(await persistedProcessingState(stored.id)).toEqual([
+        expect.objectContaining({
+          processing_status: 'processing',
+          processed_at: null,
+          track_point_count: 0,
+          personal_claim_count: 0,
+          competition_claim_count: 0,
+          progress_count: 0,
+          achievement_count: 0,
+          activity_count: 0,
+          score_count: 0,
+        }),
+      ]);
+    } finally {
+      await removeTrigger();
+    }
+  }, 60_000);
+
   it('does not complete a flight or retain partial work when progression persistence fails', async () => {
     if (!database) throw new Error('Test database was not initialized.');
     const auth = createAuthService(database.db, { sessionTtlSeconds: 60 });
@@ -234,6 +397,7 @@ describe('FlightProcessingService with a real IGC file', () => {
         progress_count: 0,
         achievement_count: 0,
         activity_count: 0,
+        score_count: 0,
       });
     } finally {
       await removeTrigger();
@@ -268,6 +432,7 @@ describe('FlightProcessingService with a real IGC file', () => {
         progress_count: 0,
         achievement_count: 0,
         activity_count: 0,
+        score_count: 0,
       });
     } finally {
       await removeTrigger();
@@ -302,6 +467,7 @@ describe('FlightProcessingService with a real IGC file', () => {
         progress_count: 0,
         achievement_count: 0,
         activity_count: 0,
+        score_count: 0,
       });
     } finally {
       await removeTrigger();

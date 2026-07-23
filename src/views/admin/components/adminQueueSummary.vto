@@ -1,0 +1,8 @@
+{{ if queueSummary }}
+  <dl class="admin-queue-summary">
+    <div><dt>Queued</dt><dd>{{ if queueSummary.queued === 0 }}0{{ else }}{{ queueSummary.queued }}{{ /if }}</dd></div>
+    <div><dt>Processing</dt><dd>{{ if queueSummary.processing === 0 }}0{{ else }}{{ queueSummary.processing }}{{ /if }}</dd></div>
+    <div><dt>Failed</dt><dd>{{ if queueSummary.failed === 0 }}0{{ else }}{{ queueSummary.failed }}{{ /if }}</dd></div>
+    <div><dt>Oldest queued</dt><dd>{{ if queueSummary.oldestQueuedAgeSeconds === null }}—{{ else if queueSummary.oldestQueuedAgeSeconds === 0 }}0s{{ else }}{{ queueSummary.oldestQueuedAgeSeconds }}s{{ /if }}</dd></div>
+  </dl>
+{{ /if }}

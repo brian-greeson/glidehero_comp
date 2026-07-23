@@ -114,6 +114,50 @@ export const flights = pgTable(
   ],
 );
 
+export type TotalDistanceMetadata = Record<string, never>;
+
+export interface SixPointDistanceMetadata {
+  points: Array<{
+    sequenceNumber: number;
+    recordedAt: string;
+    latitude: number;
+    longitude: number;
+    gpsAltitudeMeters: number;
+  }>;
+}
+
+/** Current calculated scoring values for a completed flight. */
+export const flightScores = pgTable(
+  'flight_scores',
+  {
+    flightId: uuid('flight_id').primaryKey().references(() => flights.id, { onDelete: 'cascade' }),
+    totalDistanceMeters: doublePrecision('total_distance_meters').notNull(),
+    totalDistanceCalcVersion: integer('total_distance_calc_version').notNull().default(1),
+    totalDistanceMetadata: jsonb('total_distance_metadata').$type<TotalDistanceMetadata>().notNull(),
+    sixPointDistanceMeters: doublePrecision('six_point_distance_meters'),
+    sixPointDistanceCalcVersion: integer('six_point_distance_calc_version'),
+    sixPointDistanceMetadata: jsonb('six_point_distance_metadata').$type<SixPointDistanceMetadata>(),
+  },
+  (table) => [
+    check('flight_scores_total_distance_meters_nonnegative', sql`${table.totalDistanceMeters} >= 0`),
+    check('flight_scores_total_distance_calc_version_positive', sql`${table.totalDistanceCalcVersion} > 0`),
+    check('flight_scores_six_point_distance_meters_nonnegative', sql`${table.sixPointDistanceMeters} >= 0`),
+    check('flight_scores_six_point_distance_calc_version_positive', sql`${table.sixPointDistanceCalcVersion} > 0`),
+    check(
+      'flight_scores_six_point_distance_complete',
+      sql`(
+        ${table.sixPointDistanceMeters} IS NULL
+        AND ${table.sixPointDistanceCalcVersion} IS NULL
+        AND ${table.sixPointDistanceMetadata} IS NULL
+      ) OR (
+        ${table.sixPointDistanceMeters} IS NOT NULL
+        AND ${table.sixPointDistanceCalcVersion} IS NOT NULL
+        AND ${table.sixPointDistanceMetadata} IS NOT NULL
+      )`,
+    ),
+  ],
+);
+
 export const activities = pgTable(
   'activities',
   {

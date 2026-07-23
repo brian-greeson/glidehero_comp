@@ -4,6 +4,7 @@ import type { TerritoryTileConfig } from '../../config/territoryTiles.js';
 import type { AdminFlight, AdminUserFlight, AdminUserFlightSort } from '../../services/adminFlightService.js';
 import type { AuthenticatedUser } from '../../services/authService.js';
 import type { AdminUserDetail, AdminUserSummary } from '../../services/adminUserService.js';
+import type { SixPointSolverState } from '../../services/flightProcessingControlService.js';
 import type { WorkerControlState, WorkerLiveState } from '../../services/workerControlService.js';
 
 export type AdminWorkerStatus = {
@@ -22,12 +23,20 @@ export type AdminPageRenderer = (model: {
   currentUser: AuthenticatedUser;
   flights: AdminFlight[];
   queueSummary?: { queued: number; processing: number; failed: number; oldestQueuedAgeSeconds: number | null };
-  workerControlState?: WorkerControlState;
-  workers?: AdminWorkerStatus[];
-  workerControlSuccess?: boolean;
-  workerControlError?: boolean;
   reprocessSuccess?: boolean;
   reprocessError?: boolean;
+}) => Promise<string>;
+
+export type AdminFlightProcessingPageRenderer = (model: {
+  currentUser: AuthenticatedUser;
+  queueSummary?: { queued: number; processing: number; failed: number; oldestQueuedAgeSeconds: number | null };
+  workerControlState: WorkerControlState;
+  workers: AdminWorkerStatus[];
+  sixPointSolverState: SixPointSolverState;
+  workerControlSuccess?: boolean;
+  workerControlError?: boolean;
+  solverControlSuccess?: boolean;
+  solverControlError?: boolean;
 }) => Promise<string>;
 
 export type AdminAreaPageRenderer = (model: {
@@ -78,10 +87,26 @@ export function createAdminPageRenderer(): AdminPageRenderer {
       pageStylesheet: undefined,
       pageScript: undefined,
       queueSummary: undefined,
-      workerControlState: undefined,
-      workers: [],
+      ...model,
+    })
+  ).content;
+}
+
+export function createAdminFlightProcessingPageRenderer(): AdminFlightProcessingPageRenderer {
+  const environment = createEnvironment();
+
+  return async (model) => (
+    await environment.run('admin/pages/adminFlightProcessing.vto', {
+      isDashboard: false,
+      isErrorPage: false,
+      dashboardScript: '',
+      pageStylesheet: undefined,
+      pageScript: undefined,
+      queueSummary: undefined,
       workerControlSuccess: false,
       workerControlError: false,
+      solverControlSuccess: false,
+      solverControlError: false,
       ...model,
     })
   ).content;

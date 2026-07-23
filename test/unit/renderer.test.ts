@@ -5,6 +5,7 @@ import {
 } from '../../src/views/renderer.js';
 import {
   createAdminAreaPageRenderer,
+  createAdminFlightProcessingPageRenderer,
   createAdminMapSettingsPageRenderer,
   createAdminPageRenderer,
   createAdminUserPageRenderer,
@@ -53,7 +54,19 @@ describe('Vento page renderer', () => {
       currentUser: user,
       flights: [],
       queueSummary: { queued: 0, processing: 0, failed: 0, oldestQueuedAgeSeconds: 0 },
+      reprocessSuccess: true,
+    });
+    expect(html).toContain('The 100 most recently uploaded flights.');
+    expect(html).toContain('<dd>0</dd>');
+    expect(html).not.toContain('Global control state');
+    expect(html).not.toContain('dashboard.js');
+    expect(html).not.toContain('maplibre-gl');
+
+    const flightProcessing = await createAdminFlightProcessingPageRenderer()({
+      currentUser: user,
+      queueSummary: { queued: 0, processing: 0, failed: 0, oldestQueuedAgeSeconds: 0 },
       workerControlState: 'paused',
+      sixPointSolverState: 'enabled',
       workers: [{
         workerId: 'worker-1',
         state: 'processing',
@@ -65,18 +78,16 @@ describe('Vento page renderer', () => {
         heartbeat: '2026-07-22T00:00:00.000Z',
         online: true,
       }],
-      reprocessSuccess: true,
     });
-    expect(html).toContain('The 100 most recently uploaded flights.');
-    expect(html).toContain('<dd>0</dd>');
-    expect(html).toContain('Global control state: <strong>paused</strong>');
-    expect(html).toContain('worker-1');
-    expect(html).toContain('<td>3</td>');
-    expect(html).toContain('<td>1</td>');
-    expect(html).toContain('temporary read failure');
-    expect(html).toContain('Online');
-    expect(html).not.toContain('dashboard.js');
-    expect(html).not.toContain('maplibre-gl');
+    expect(flightProcessing).toContain('<h1>Flight Processing</h1>');
+    expect(flightProcessing).toContain('Current state: <strong>enabled</strong>');
+    expect(flightProcessing).toContain('Disable solver');
+    expect(flightProcessing).toContain('Global control state: <strong>paused</strong>');
+    expect(flightProcessing).toContain('worker-1');
+    expect(flightProcessing).toContain('<td>3</td>');
+    expect(flightProcessing).toContain('<td>1</td>');
+    expect(flightProcessing).toContain('temporary read failure');
+    expect(flightProcessing).toContain('Online');
   });
 
   it('renders admin area, map settings, and user management templates', async () => {

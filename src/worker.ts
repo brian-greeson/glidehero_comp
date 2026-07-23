@@ -12,6 +12,7 @@ import { createFlightThumbnailService } from './services/flightThumbnailService.
 import { createFlightThumbnailLifecycleService } from './services/flightThumbnailLifecycleService.js';
 import { createUserAchievementProgressService } from './services/userAchievementProgressService.js';
 import { createWorkerControlService } from './services/workerControlService.js';
+import { createFlightProcessingControlService } from './services/flightProcessingControlService.js';
 
 // Blocking stream reads legitimately take several seconds. Keep GLIDE's native
 // slow-response diagnostics from reporting those successful reads as warnings;
@@ -37,6 +38,7 @@ const thumbnailLifecycle = createFlightThumbnailLifecycleService(db, thumbnails,
 const valkey = await createValkeyClient(config.valkeyUrl);
 const streamReader = await createValkeyClient(config.valkeyUrl, { requestTimeout: 10_000 });
 const workerControl = createWorkerControlService(valkey);
+const flightProcessingControl = createFlightProcessingControlService(valkey);
 const queue = createFlightUploadQueueService(valkey, {
   s3Client,
   bucketName: config.bucket.bucketName,
@@ -48,6 +50,7 @@ const processor = createFlightProcessingService(db, {
   bucketName: config.bucket.bucketName,
   gridClaimCellSize: config.gridClaimCellSize,
   userAchievementProgress,
+  isSixPointSolverEnabled: () => flightProcessingControl.isSixPointSolverEnabled(),
 });
 const worker = createFlightWorkerService(db, valkey, queue, processor, {
   s3Client,

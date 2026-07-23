@@ -1,0 +1,62 @@
+{{ layout "layouts/appLayout.vto" }}
+
+  <section class="admin-page">
+    {{ include "admin/components/adminNav.vto" { activeAdminPage: "system" } }}
+    <div class="admin-content">
+      {{ include "admin/components/adminSystemNav.vto" { activeSystemPage: "flight-processing" } }}
+      <div>
+        <p class="admin-eyebrow">System</p>
+        <h1>Flight Processing</h1>
+        <p class="muted">Monitor the flight queue and control how workers process new flights.</p>
+      </div>
+      {{ if workerControlSuccess }}<p class="success" role="status">Worker control state was updated.</p>{{ /if }}
+      {{ if workerControlError }}<p class="error" role="alert">We could not update the worker control state.</p>{{ /if }}
+      {{ if solverControlSuccess }}<p class="success" role="status">Six-point solver state was updated.</p>{{ /if }}
+      {{ if solverControlError }}<p class="error" role="alert">We could not update the six-point solver state.</p>{{ /if }}
+
+      {{ include "admin/components/adminQueueSummary.vto" { queueSummary: queueSummary } }}
+
+      <section class="admin-worker-control">
+        <h2>Six-point solver</h2>
+        <p>
+          Current state: <strong>{{ sixPointSolverState }}</strong>.
+          Disabled flights still complete, but their six-point score remains empty.
+        </p>
+        <form method="post" action="/admin/flight-processing/six-point-solver">
+          <input type="hidden" name="state" value="{{ if sixPointSolverState === 'enabled' }}disabled{{ else }}enabled{{ /if }}">
+          <button type="submit">{{ if sixPointSolverState === 'enabled' }}Disable solver{{ else }}Enable solver{{ /if }}</button>
+        </form>
+      </section>
+
+      <section class="admin-worker-control">
+        <h2>Flight workers</h2>
+        <p>Global control state: <strong>{{ workerControlState }}</strong></p>
+        <form method="post" action="/admin/worker-control">
+          <input type="hidden" name="state" value="{{ if workerControlState === 'paused' }}running{{ else }}paused{{ /if }}">
+          <button type="submit">{{ if workerControlState === 'paused' }}Resume workers{{ else }}Pause workers{{ /if }}</button>
+        </form>
+      </section>
+      <div class="admin-table-wrap">
+        <table class="admin-flight-table">
+          <caption class="sr-only">Live flight worker status</caption>
+          <thead><tr><th scope="col">Worker ID</th><th scope="col">State</th><th scope="col">Current job</th><th scope="col">Processed</th><th scope="col">Failed</th><th scope="col">Last error</th><th scope="col">Heartbeat</th><th scope="col">Online</th></tr></thead>
+          <tbody>
+            {{ for worker of workers }}
+              <tr>
+                <td>{{ worker.workerId }}</td>
+                <td>{{ worker.state }}</td>
+                <td>{{ worker.currentJobId ?? '—' }}</td>
+                <td>{{ if worker.processedCount === 0 }}0{{ else }}{{ worker.processedCount }}{{ /if }}</td>
+                <td>{{ if worker.failedCount === 0 }}0{{ else }}{{ worker.failedCount }}{{ /if }}</td>
+                <td>{{ worker.lastError ?? '—' }}</td>
+                <td>{{ worker.heartbeat }}</td>
+                <td>{{ if worker.online }}Online{{ else }}Offline{{ /if }}</td>
+              </tr>
+            {{ /for }}
+            {{ if workers.length === 0 }}<tr><td colspan="8" class="muted">No live workers reported.</td></tr>{{ /if }}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+{{ /layout }}

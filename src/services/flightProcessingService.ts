@@ -1,10 +1,17 @@
 import { GetObjectCommand, type S3 } from '@aws-sdk/client-s3';
 import { and, DrizzleQueryError, eq, sql } from 'drizzle-orm';
 import type { Database } from '../db/client.js';
-import { flights, trackPoints } from '../db/schema.js';
+import { flightScores, flights, trackPoints } from '../db/schema.js';
 import { resolveLaunchTimeZone } from '../domain/competition/launchTimeZone.js';
+import {
+  mapSixPointDistanceMetadata,
+  SIX_POINT_DISTANCE_CALC_VERSION,
+  TOTAL_DISTANCE_CALC_VERSION,
+  type SixPointDistance,
+} from '../domain/igc/distance.js';
 import { IgcParseError } from '../domain/igc/errors.js';
 import { parseIgcFlight } from '../domain/igc/parseIgcFlight.js';
+import { calculateSixPointDistanceInWorker } from '../domain/igc/sixPointDistanceWorkerAdapter.js';
 import { createActivityService } from './activityService.js';
 import { createGridClaimService } from './gridClaimService.js';
 import type { UserAchievementProgressService } from './userAchievementProgressService.js';
@@ -51,6 +58,11 @@ export function createFlightProcessingService(
     gridClaimCellSize: number;
     userAchievementProgress?: UserAchievementProgressService;
     userArenaProgress?: UserArenaProgressService;
+    calculateSixPointDistance?: (points: readonly {
+      latitude: number;
+      longitude: number;
+    }[]) => Promise<SixPointDistance>;
+    isSixPointSolverEnabled?: () => Promise<boolean>;
   },
 ): FlightProcessingService {
   const gridClaim = options.userAchievementProgress || options.userArenaProgress
@@ -65,6 +77,7 @@ export function createFlightProcessingService(
     )
     : createGridClaimService(database, { cellSize: options.gridClaimCellSize });
   const activity = createActivityService();
+  const calculateSixPointDistance = options.calculateSixPointDistance ?? calculateSixPointDistanceInWorker;
 
   async function fail(flightId: string, processingToken: string, message: string): Promise<FlightProcessingOutcome> {
     const updated = await database
@@ -78,6 +91,7 @@ export function createFlightProcessingService(
 
   return {
     async process(input) {
+      const sixPointSolverEnabled = await (options.isSixPointSolverEnabled?.() ?? Promise.resolve(true));
       let flight: { id: string } | undefined;
       try {
         [flight] = await database
@@ -121,6 +135,12 @@ export function createFlightProcessingService(
         latitude: parsed.launchLatitude,
         longitude: parsed.launchLongitude,
       });
+      const sixPointDistance = sixPointSolverEnabled
+        ? await calculateSixPointDistance(parsed.points)
+        : undefined;
+      const sixPointDistanceMetadata = sixPointDistance
+        ? mapSixPointDistanceMetadata(parsed.points, sixPointDistance)
+        : undefined;
 
       try {
         await database.transaction(async (tx) => {
@@ -143,6 +163,20 @@ export function createFlightProcessingService(
             ))
             .returning({ id: flights.id });
           if (!fenced.length) throw new ProcessingFenceLostError();
+          await tx.insert(flightScores).values({
+            flightId: flight.id,
+            totalDistanceMeters: parsed.distanceMeters,
+            totalDistanceCalcVersion: TOTAL_DISTANCE_CALC_VERSION,
+            totalDistanceMetadata: {},
+            sixPointDistanceMeters: sixPointDistance?.distanceMeters ?? null,
+            sixPointDistanceCalcVersion: sixPointDistance ? SIX_POINT_DISTANCE_CALC_VERSION : null,
+            sixPointDistanceMetadata: sixPointDistanceMetadata
+              ? {
+                  ...sixPointDistanceMetadata,
+                  points: [...sixPointDistanceMetadata.points],
+                }
+              : null,
+          });
           for (let start = 0; start < parsed.points.length; start += TRACK_POINT_INSERT_BATCH_SIZE) {
             await tx
               .insert(trackPoints)

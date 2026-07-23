@@ -20,7 +20,13 @@ import { createMapGridService } from './services/mapGridService.js';
 import { createTerritoryTileService } from './services/territoryTileService.js';
 import { createTerritoryTileSettingsService } from './services/territoryTileSettingsService.js';
 import { createPageRenderer } from './views/renderer.js';
-import { createAdminAreaPageRenderer, createAdminMapSettingsPageRenderer, createAdminPageRenderer, createAdminUserPageRenderer } from './views/admin/renderer.js';
+import {
+  createAdminAreaPageRenderer,
+  createAdminFlightProcessingPageRenderer,
+  createAdminMapSettingsPageRenderer,
+  createAdminPageRenderer,
+  createAdminUserPageRenderer,
+} from './views/admin/renderer.js';
 import { createAuthenticatedActivityFeedRenderer, createAuthenticatedPageRenderer } from './views/authenticated/renderer.js';
 import { createAdminAreaRouter } from './web/adminAreaRouter.js';
 import { createAdminUserRouter } from './web/adminUserRouter.js';
@@ -37,6 +43,7 @@ import { createFlightThumbnailDeliveryService } from './services/flightThumbnail
 import { createUserAchievementProgressService } from './services/userAchievementProgressService.js';
 import { createUserArenaProgressService } from './services/userArenaProgressService.js';
 import { createWorkerControlService } from './services/workerControlService.js';
+import { createFlightProcessingControlService } from './services/flightProcessingControlService.js';
 
 const config = parseConfig(process.env);
 const { db } = createDatabase(config.databaseUrl);
@@ -62,6 +69,7 @@ const thumbnailDelivery = createFlightThumbnailDeliveryService({
 });
 const valkey = await createValkeyClient(config.valkeyUrl);
 const workerControl = createWorkerControlService(valkey);
+const flightProcessingControl = createFlightProcessingControlService(valkey);
 const arenaLeadership = createArenaLeadershipReconciliationService(db, { cellSize: config.gridClaimCellSize });
 const userAchievementProgress = createUserAchievementProgressService(db, { cellSize: config.gridClaimCellSize });
 const userArenaProgress = createUserArenaProgressService(db, { cellSize: config.gridClaimCellSize });
@@ -147,7 +155,9 @@ const webMiddleware = [
     adminEmails: config.adminEmails,
     adminFlights,
     workerControl,
+    flightProcessingControl,
     renderAdminPage: createAdminPageRenderer(),
+    renderAdminFlightProcessingPage: createAdminFlightProcessingPageRenderer(),
     territoryTileSettings,
     renderAdminMapSettingsPage: createAdminMapSettingsPageRenderer(),
     thumbnailDelivery,

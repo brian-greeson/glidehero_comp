@@ -11,7 +11,11 @@ import type { AdminFlightService } from '../services/adminFlightService.js';
 import type { ArenaService } from '../services/arenaService.js';
 import type { ArenaProgressService } from '../services/arenaProgressService.js';
 import type { PageModel, PageRenderer } from '../views/renderer.js';
-import type { AdminMapSettingsPageRenderer, AdminPageRenderer } from '../views/admin/renderer.js';
+import type {
+  AdminFlightProcessingPageRenderer,
+  AdminMapSettingsPageRenderer,
+  AdminPageRenderer,
+} from '../views/admin/renderer.js';
 import type { AuthenticatedActivityFeedRenderer, AuthenticatedPageRenderer } from '../views/authenticated/renderer.js';
 import { createAuthenticatedShellModel } from '../views/authenticated/adapters/shellModel.js';
 import { activityFeedToViews, activityPilotResultToView } from '../views/authenticated/adapters/activityView.js';
@@ -34,6 +38,7 @@ import type { ActivityService } from '../services/activityService.js';
 import { ActivityCursorError, ActivityNotFoundError, SelfLikeError } from '../services/activityService.js';
 import type { FlightThumbnailDeliveryService } from '../services/flightThumbnailDeliveryService.js';
 import { WORKER_STATUS_TTL_SECONDS, type WorkerControlService } from '../services/workerControlService.js';
+import type { FlightProcessingControlService } from '../services/flightProcessingControlService.js';
 
 const email = z.string().trim().toLowerCase().pipe(z.email());
 const password = z.string().min(3).max(128);
@@ -150,7 +155,9 @@ export function createWebRouter(dependencies: {
   adminEmails?: readonly string[];
   adminFlights?: AdminFlightService;
   workerControl?: WorkerControlService;
+  flightProcessingControl?: FlightProcessingControlService;
   renderAdminPage?: AdminPageRenderer;
+  renderAdminFlightProcessingPage?: AdminFlightProcessingPageRenderer;
   territoryTileSettings?: TerritoryTileSettingsService;
   renderAdminMapSettingsPage?: AdminMapSettingsPageRenderer;
   thumbnailDelivery?: FlightThumbnailDeliveryService;
@@ -934,26 +941,58 @@ export function createWebRouter(dependencies: {
     }
 
     try {
-      const [flightRows, queueSummary, workerControlState, workerStatuses] = await Promise.all([
+      const [flightRows, queueSummary] = await Promise.all([
         dependencies.adminFlights.listRecentFlights(),
         dependencies.uploadQueue?.queueSummary(),
-        dependencies.workerControl?.getState(),
-        dependencies.workerControl?.listStatuses(),
       ]);
       res.status(200).type('html').send(await dependencies.renderAdminPage({
         currentUser,
         flights: flightRows,
         queueSummary,
+        reprocessSuccess: req.query.reprocess === 'success',
+        reprocessError: req.query.reprocess === 'error',
+      }));
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.get('/admin/flight-processing', async (req, res, next) => {
+    const currentUser = res.locals.currentUser;
+    if (!currentUser || !hasAdminAccess(currentUser)) {
+      next(new AppError(403, 'unauthorized', 'Admin access is required.'));
+      return;
+    }
+    if (
+      !dependencies.uploadQueue
+      || !dependencies.workerControl
+      || !dependencies.flightProcessingControl
+      || !dependencies.renderAdminFlightProcessingPage
+    ) {
+      throw new Error('Admin flight processing dependencies are not configured.');
+    }
+
+    try {
+      const [queueSummary, workerControlState, workerStatuses, sixPointSolverState] = await Promise.all([
+        dependencies.uploadQueue.queueSummary(),
+        dependencies.workerControl.getState(),
+        dependencies.workerControl.listStatuses(),
+        dependencies.flightProcessingControl.getSixPointSolverState(),
+      ]);
+      res.status(200).type('html').send(await dependencies.renderAdminFlightProcessingPage({
+        currentUser,
+        queueSummary,
         workerControlState,
-        workers: workerStatuses?.map((status) => ({
+        workers: workerStatuses.map((status) => ({
           ...status,
           heartbeat: new Date(status.heartbeatAt).toISOString(),
           online: Date.now() - status.heartbeatAt <= WORKER_STATUS_TTL_SECONDS * 1_000,
         })),
+        sixPointSolverState,
         workerControlSuccess: req.query.worker === 'paused' || req.query.worker === 'running',
         workerControlError: req.query.worker === 'error',
-        reprocessSuccess: req.query.reprocess === 'success',
-        reprocessError: req.query.reprocess === 'error',
+        solverControlSuccess: req.query.solver === 'enabled' || req.query.solver === 'disabled',
+        solverControlError: req.query.solver === 'error',
       }));
     } catch (error) {
       next(error);
@@ -970,15 +1009,39 @@ export function createWebRouter(dependencies: {
 
     const parsed = z.object({ state: z.enum(['running', 'paused']) }).strict().safeParse(formBody(req.body));
     if (!parsed.success) {
-      res.redirect(303, '/admin?worker=error');
+      res.redirect(303, '/admin/flight-processing?worker=error');
       return;
     }
 
     try {
       await dependencies.workerControl.setState(parsed.data.state);
-      res.redirect(303, `/admin?worker=${parsed.data.state}`);
-    } catch (error) {
-      next(error);
+      res.redirect(303, `/admin/flight-processing?worker=${parsed.data.state}`);
+    } catch {
+      res.redirect(303, '/admin/flight-processing?worker=error');
+    }
+  });
+
+  router.post('/admin/flight-processing/six-point-solver', async (req, res, next) => {
+    const currentUser = res.locals.currentUser;
+    if (!currentUser || !hasAdminAccess(currentUser)) {
+      next(new AppError(403, 'unauthorized', 'Admin access is required.'));
+      return;
+    }
+    if (!dependencies.flightProcessingControl) {
+      throw new Error('Admin flight processing dependencies are not configured.');
+    }
+
+    const parsed = z.object({ state: z.enum(['enabled', 'disabled']) }).strict().safeParse(formBody(req.body));
+    if (!parsed.success) {
+      res.redirect(303, '/admin/flight-processing?solver=error');
+      return;
+    }
+
+    try {
+      await dependencies.flightProcessingControl.setSixPointSolverState(parsed.data.state);
+      res.redirect(303, `/admin/flight-processing?solver=${parsed.data.state}`);
+    } catch {
+      res.redirect(303, '/admin/flight-processing?solver=error');
     }
   });
 
