@@ -334,7 +334,7 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
   try {
     const s3Client = createBucketClient(config);
     const thumbnails = createFlightThumbnailService({
-      mapTilerApiKey: config.mapTilerApiKey,
+      mapTilerCredentials: config.mapTilerCredentials,
       bucketName: config.bucket.bucketName,
       bucketFolder: config.bucket.bucketFolder,
       cellSize: config.gridClaimCellSize,

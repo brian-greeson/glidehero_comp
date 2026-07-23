@@ -22,7 +22,7 @@ const config = parseConfig(process.env);
 const { db, pool } = createDatabase(config.databaseUrl);
 const s3Client = createBucketClient(config);
 const thumbnails = createFlightThumbnailService({
-  mapTilerApiKey: config.mapTilerApiKey,
+  mapTilerCredentials: config.mapTilerCredentials,
   bucketName: config.bucket.bucketName,
   bucketFolder: config.bucket.bucketFolder,
   cellSize: config.gridClaimCellSize,

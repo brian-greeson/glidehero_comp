@@ -10,6 +10,7 @@ import {
 } from './arenaLeadershipReconciliationService.js';
 import { findEligibleArenaIdsForCompetitionFlight } from './arenaClaimImpact.js';
 import type { FlightThumbnailLifecycleService } from './flightThumbnailLifecycleService.js';
+import { flightThumbnailErrorDetails } from './flightThumbnailService.js';
 import { lockUserProgression } from './gridClaimService.js';
 import type { UserAchievementProgressService } from './userAchievementProgressService.js';
 
@@ -186,7 +187,7 @@ export function createAdminFlightService(
         } catch (error) {
           console.error('Unable to regenerate flight thumbnail', {
             flightId: input.flightId,
-            error: error instanceof Error ? error.message : 'unknown error',
+            ...flightThumbnailErrorDetails(error),
           });
         }
       }

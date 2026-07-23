@@ -42,7 +42,7 @@ const { db } = createDatabase(config.databaseUrl);
 const donations = createDonationService(db);
 const s3Client = createBucketClient(config);
 const thumbnails = createFlightThumbnailService({
-  mapTilerApiKey: config.mapTilerApiKey,
+  mapTilerCredentials: config.mapTilerCredentials,
   bucketName: config.bucket.bucketName,
   bucketFolder: config.bucket.bucketFolder,
   cellSize: config.gridClaimCellSize,

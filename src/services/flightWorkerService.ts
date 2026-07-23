@@ -7,6 +7,7 @@ import { flightProgress, flights, igcFiles } from '../db/schema.js';
 import type { FlightProcessingService } from './flightProcessingService.js';
 import type { FlightProcessingOutcome } from './flightProcessingService.js';
 import type { FlightThumbnailLifecycleService } from './flightThumbnailLifecycleService.js';
+import { flightThumbnailErrorDetails } from './flightThumbnailService.js';
 import {
   FLIGHT_JOB_GROUP,
   FLIGHT_JOB_STREAM,
@@ -268,7 +269,7 @@ export function createFlightWorkerService(
       } catch (error) {
         console.error('Unable to generate flight thumbnail', {
           flightId: outcome.flightId,
-          error: errorMessage(error),
+          ...flightThumbnailErrorDetails(error),
         });
         await recordWorkerError(error);
       }

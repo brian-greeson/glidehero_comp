@@ -18,13 +18,25 @@ function storage(thumbnailLifecycle: {
 
 describe('admin flight thumbnail lifecycle', () => {
   it('regenerates after successful claim reprocessing without making failure visible', async () => {
-    const generateForFlight = vi.fn<(flightId: string) => Promise<void>>(async () => { throw new Error('thumbnail unavailable'); });
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const generateForFlight = vi.fn<(flightId: string) => Promise<void>>(async () => {
+      throw new Error('Thumbnail generation failed.', { cause: new Error('MapTiler returned HTTP 401.') });
+    });
     const thumbnailLifecycle = { generateForFlight, deleteForFlight: vi.fn(async () => undefined) };
     const reprocess = vi.fn(async () => ({ status: 'completed' as const, result: {} as never }));
     const service = createAdminFlightService({} as never, { reprocess }, storage(thumbnailLifecycle));
 
     await expect(service.reprocessFlight({ flightId })).resolves.toMatchObject({ status: 'completed' });
     expect(generateForFlight).toHaveBeenCalledWith(flightId);
+    expect(consoleError).toHaveBeenCalledWith('Unable to regenerate flight thumbnail', {
+      flightId,
+      errorName: 'Error',
+      errorMessage: 'Thumbnail generation failed.',
+      causeName: 'Error',
+      causeMessage: 'MapTiler returned HTTP 401.',
+      httpStatusCode: 401,
+    });
+    consoleError.mockRestore();
   });
 
   it('deletes deterministic thumbnail objects inside the existing flight deletion transaction', async () => {

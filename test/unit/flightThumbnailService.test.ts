@@ -11,8 +11,16 @@ import {
   unprojectEpsg6933,
   type FlightThumbnailPutObject,
 } from '../../src/services/flightThumbnailService.js';
+import { signMapTilerUrl } from '../../src/services/mapTilerCredentials.js';
 
 describe('flight thumbnail service', () => {
+  it('signs the complete MapTiler URL with the credential key', () => {
+    expect(signMapTilerUrl(
+      'https://api.maptiler.com/maps/outdoor-v4/static/1,2,3,4/800x450.png?padding=0',
+      'testkey_00112233445566778899aabbccddeeff',
+    )).toBe('https://api.maptiler.com/maps/outdoor-v4/static/1,2,3,4/800x450.png?padding=0&key=testkey&signature=FX-OkE3qhpIruThaiJ9JF6HE5XhMvBwI3LMEmUZpRf4%3D');
+  });
+
   it('builds deterministic object keys and a padded outdoor-v4 static map URL', () => {
     const keys = flightThumbnailKeys('/glidehero-dev/', 'user-1', 'flight-1');
     expect(keys).toEqual({
@@ -22,8 +30,8 @@ describe('flight thumbnail service', () => {
     const extent = computeFlightThumbnailExtent([{ x: 10, y: -2 }], 500);
     expect(extent.projected.maxX - extent.projected.minX).toBe(1_500);
     expect(extent.projected.maxY - extent.projected.minY).toBe(1_500);
-    expect(buildFlightThumbnailStaticMapUrl({ extent, width: 800, height: 450, mapTilerApiKey: 'secret-key' }))
-      .toMatch(/^https:\/\/api\.maptiler\.com\/maps\/outdoor-v4\/static\/-?[\d.]+,-?[\d.]+,-?[\d.]+,-?[\d.]+\/800x450\.png\?key=secret-key&padding=0$/);
+    expect(buildFlightThumbnailStaticMapUrl({ extent, width: 800, height: 450, mapTilerCredentials: 'testkey_00112233445566778899aabbccddeeff' }))
+      .toMatch(/^https:\/\/api\.maptiler\.com\/maps\/outdoor-v4\/static\/-?[\d.]+,-?[\d.]+,-?[\d.]+,-?[\d.]+\/800x450\.png\?padding=0&key=testkey&signature=[\w-]+%3D$/);
   });
 
   it('matches the canonical WGS84 EPSG:6933 projection and round-trips coordinates', () => {
@@ -41,14 +49,14 @@ describe('flight thumbnail service', () => {
     const square = computeFlightThumbnailViewport(extent, 450, 450);
     expect((wide.maxMercatorX - wide.minMercatorX) / (wide.maxMercatorY - wide.minMercatorY)).toBeCloseTo(16 / 9, 10);
     expect((square.maxMercatorX - square.minMercatorX) / (square.maxMercatorY - square.minMercatorY)).toBeCloseTo(1, 10);
-    expect(buildFlightThumbnailStaticMapUrl({ extent, width: 800, height: 450, mapTilerApiKey: 'key' }))
-      .not.toBe(buildFlightThumbnailStaticMapUrl({ extent, width: 450, height: 450, mapTilerApiKey: 'key' }));
+    expect(buildFlightThumbnailStaticMapUrl({ extent, width: 800, height: 450, mapTilerCredentials: 'key_00112233445566778899aabbccddeeff' }))
+      .not.toBe(buildFlightThumbnailStaticMapUrl({ extent, width: 450, height: 450, mapTilerCredentials: 'key_00112233445566778899aabbccddeeff' }));
   });
 
   it('uses the same precomputed viewport for the bounds URL and overlay coordinates', () => {
     const extent = computeFlightThumbnailExtent([{ x: 0, y: 0 }, { x: 2, y: 1 }], 500);
     const viewport = computeFlightThumbnailViewport(extent, 800, 450);
-    const url = buildFlightThumbnailStaticMapUrl({ extent, width: 800, height: 450, mapTilerApiKey: 'key', viewport });
+    const url = buildFlightThumbnailStaticMapUrl({ extent, width: 800, height: 450, mapTilerCredentials: 'key_00112233445566778899aabbccddeeff', viewport });
     const bounds = url.split('/static/')[1]!.split('/800x450')[0]!.split(',').map(Number);
     expect(bounds).toEqual([
       Number(viewport.min.longitude.toFixed(6)),
@@ -95,7 +103,7 @@ describe('flight thumbnail service', () => {
     const fetchImage = vi.fn<(url: string) => Promise<Uint8Array>>(async () => new Uint8Array(base));
     const putObject = vi.fn<FlightThumbnailPutObject>(async () => undefined);
     const service = createFlightThumbnailService({
-      mapTilerApiKey: 'maptiler-test-key',
+      mapTilerCredentials: 'maptiler-test-key_00112233445566778899aabbccddeeff',
       bucketName: 'flights',
       bucketFolder: 'glidehero-test',
       cellSize: 500,
@@ -125,8 +133,8 @@ describe('flight thumbnail service', () => {
   });
 
   it('rejects incomplete configuration at construction', () => {
-    expect(() => createFlightThumbnailService({ mapTilerApiKey: ' ', bucketName: 'flights', bucketFolder: 'folder', cellSize: 500 })).toThrow('MapTiler API key is required.');
-    expect(() => createFlightThumbnailService({ mapTilerApiKey: 'key', bucketName: ' ', bucketFolder: 'folder', cellSize: 500 })).toThrow('Thumbnail bucket name is required.');
-    expect(() => createFlightThumbnailService({ mapTilerApiKey: 'key', bucketName: 'flights', bucketFolder: 'folder', cellSize: 0 })).toThrow('Thumbnail cell size must be positive.');
+    expect(() => createFlightThumbnailService({ mapTilerCredentials: ' ', bucketName: 'flights', bucketFolder: 'folder', cellSize: 500 })).toThrow('MapTiler credentials are required.');
+    expect(() => createFlightThumbnailService({ mapTilerCredentials: 'key_00112233445566778899aabbccddeeff', bucketName: ' ', bucketFolder: 'folder', cellSize: 500 })).toThrow('Thumbnail bucket name is required.');
+    expect(() => createFlightThumbnailService({ mapTilerCredentials: 'key_00112233445566778899aabbccddeeff', bucketName: 'flights', bucketFolder: 'folder', cellSize: 0 })).toThrow('Thumbnail cell size must be positive.');
   });
 });

@@ -12,6 +12,7 @@ describe('parseConfig', () => {
       BUCKET_URL: 'https://s3.example.test',
       BUCKET_FOLDER: '/glidehero-dev/',
       MAPTILER_API_KEY: 'maptiler-test-key',
+      MAPTILER_CREDENTIALS: 'maptiler-test-key_00112233445566778899aabbccddeeff',
       KOFI_VERIFICATION_TOKEN: 'kofi-test-token',
     })).toEqual({
       databaseUrl: 'postgres://localhost/glidehero',
@@ -22,6 +23,7 @@ describe('parseConfig', () => {
       sessionCookieName: 'glidehero_session',
       sessionTtlSeconds: 604800,
       mapTilerApiKey: 'maptiler-test-key',
+      mapTilerCredentials: 'maptiler-test-key_00112233445566778899aabbccddeeff',
       gridClaimCellSize: 500,
       kofiVerificationToken: 'kofi-test-token',
       adminEmails: [],
@@ -39,7 +41,7 @@ describe('parseConfig', () => {
     expect(() => parseConfig({})).toThrow();
   });
 
-  it('requires a MapTiler API key', () => {
+  it('requires a MapTiler API key and credentials', () => {
     expect(() => parseConfig({
       DATABASE_URL: 'postgres://localhost/glidehero',
       VALKEY_URL: 'redis://localhost:6379',
@@ -62,6 +64,7 @@ describe('parseConfig', () => {
       BUCKET_URL: 'https://s3.example.test',
       BUCKET_FOLDER: 'glidehero-dev',
       MAPTILER_API_KEY: 'maptiler-test-key',
+      MAPTILER_CREDENTIALS: 'maptiler-test-key_00112233445566778899aabbccddeeff',
     })).toThrow();
   });
 
@@ -75,6 +78,7 @@ describe('parseConfig', () => {
       BUCKET_URL: 'https://s3.example.test',
       BUCKET_FOLDER: 'glidehero-dev',
       MAPTILER_API_KEY: 'maptiler-test-key',
+      MAPTILER_CREDENTIALS: 'maptiler-test-key_00112233445566778899aabbccddeeff',
       KOFI_VERIFICATION_TOKEN: 'kofi-test-token',
     };
 
@@ -94,6 +98,7 @@ describe('parseConfig', () => {
         BUCKET_URL: 'https://s3.example.test',
         BUCKET_FOLDER: 'glidehero-production',
         MAPTILER_API_KEY: 'maptiler-test-key',
+        MAPTILER_CREDENTIALS: 'maptiler-test-key_00112233445566778899aabbccddeeff',
         KOFI_VERIFICATION_TOKEN: 'kofi-test-token',
       }),
     ).toMatchObject({ environment: 'production', isProduction: true });
@@ -109,6 +114,7 @@ describe('parseConfig', () => {
       BUCKET_URL: 'https://s3.example.test',
       BUCKET_FOLDER: 'glidehero-dev',
       MAPTILER_API_KEY: 'maptiler-test-key',
+      MAPTILER_CREDENTIALS: 'maptiler-test-key_00112233445566778899aabbccddeeff',
       KOFI_VERIFICATION_TOKEN: 'kofi-test-token',
       ADMIN_EMAILS: ' Admin@example.com, ,second@example.com,ADMIN@example.com ',
     });

@@ -59,6 +59,7 @@ export async function resetAndMigrateTestDatabase(): Promise<ReturnType<typeof t
           BUCKET_URL: 'https://s3.example.test',
           BUCKET_FOLDER: 'glidehero-test',
           MAPTILER_API_KEY: 'maptiler-test-key',
+          MAPTILER_CREDENTIALS: 'maptiler-test-key_00112233445566778899aabbccddeeff',
           KOFI_VERIFICATION_TOKEN: 'kofi-test-token',
         },
       },
