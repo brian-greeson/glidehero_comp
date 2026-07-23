@@ -61,6 +61,7 @@ a { color: inherit; }
 .content-page { position: relative; z-index: 2; width: min(calc(100% - 3rem), 1340px); margin: -1.8rem auto 0; padding-bottom: 2rem; }
 .mountain-band { height: 150px; background: #f8fbfe url('/images/app-ui/mountains-premium-banner.png') 54% center / cover no-repeat; }
 .mountain-band--short { height: 112px; }
+.mountain-band--short + .content-page { margin-top: -1.5rem; }
 .metric-strip { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); overflow: hidden; border: 1px solid var(--app-border); border-radius: var(--app-radius); background: #fff; box-shadow: var(--app-shadow-sm); }
 .metric { display: flex; min-width: 0; align-items: center; gap: 1.2rem; padding: 1.45rem 1.7rem; }
 .metric + .metric { border-left: 1px solid var(--app-border); }
@@ -98,7 +99,7 @@ a { color: inherit; }
   .mobile-navigation__item { display: grid; place-items: center; align-content: center; gap: .15rem; color: #fff; font-size: .64rem; text-decoration: none; }
   .mobile-navigation__item .app-icon { font-size: 1.35rem; }.mobile-navigation__item.is-active { color: var(--app-cyan); }
   .content-page { width: calc(100% - 1.25rem); margin-top: -1rem; padding-bottom: 1rem; }
-  .mountain-band { height: 112px; }.mountain-band--short { height: 72px; }
+  .mountain-band { height: 112px; }.mountain-band--short { height: 72px; }.mountain-band--short + .content-page { margin-top: -.6rem; }
   .metric-strip { grid-template-columns: repeat(3, 1fr); }
   .metric { justify-content: center; gap: .45rem; padding: .85rem .35rem; text-align: center; }
   .metric__icon { width: 34px; height: 34px; font-size: .95rem; }.metric strong { font-size: 1.05rem; }.metric span { font-size: .62rem; }.metric small { display: none; }
