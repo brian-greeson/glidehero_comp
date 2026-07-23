@@ -13,7 +13,7 @@ import type { FlightUploadQueueService } from '../../src/services/flightUploadQu
 import type { WorkerControlService } from '../../src/services/workerControlService.js';
 import type { FailedFlightCleanupService } from '../../src/services/failedFlightCleanupService.js';
 import { PilotNotFoundError, type FollowService } from '../../src/services/followService.js';
-import { ActivityNotFoundError, SelfThermalError, type ActivityService } from '../../src/services/activityService.js';
+import { ActivityNotFoundError, SelfLikeError, type ActivityService } from '../../src/services/activityService.js';
 import { createTerritoryTileSettingsService } from '../../src/services/territoryTileSettingsService.js';
 import { createPageRenderer } from '../../src/views/renderer.js';
 import { createCurrentUserMiddleware } from '../../src/web/currentUserMiddleware.js';
@@ -138,7 +138,7 @@ function dependencies() {
     listFeed: vi.fn(async () => ({ items: [], nextCursor: null })),
     publishFlightInTransaction: vi.fn(async () => ({ id: '00000000-0000-4000-8000-000000000010' })),
     regenerateFlightActivity: vi.fn(async () => 'completed' as const),
-    toggleThermal: vi.fn(async () => ({ reacted: true, totalCount: 1 })),
+    toggleLike: vi.fn(async () => ({ reacted: true, totalCount: 1 })),
   };
   const gridClaim: GridClaimService = {
     getViewportStats: vi.fn(async () => viewportStats),
@@ -988,35 +988,36 @@ describe('webRouter', () => {
     });
   });
 
-  it('toggles Thermal as JSON or redirects for HTML, with authenticated error mapping', async () => {
+  it('toggles Like as JSON or redirects for HTML, with authenticated error mapping', async () => {
     const base = dependencies();
     await withServer(base.app, async (baseUrl) => {
-      const json = await fetch(`${baseUrl}/activities/${pilotProfile.userId}/thermal`, {
+      const json = await fetch(`${baseUrl}/activities/${pilotProfile.userId}/like`, {
         method: 'POST',
         headers: { cookie: 'glidehero_session=valid-token', accept: 'application/json' },
       });
       expect(json.status).toBe(200);
       expect(await json.json()).toEqual({ reacted: true, totalCount: 1 });
-      expect(base.activity.toggleThermal).toHaveBeenCalledWith({ viewerUserId: user.userId, activityId: pilotProfile.userId });
+      expect(base.activity.toggleLike).toHaveBeenCalledWith({ viewerUserId: user.userId, activityId: pilotProfile.userId });
 
-      const html = await fetch(`${baseUrl}/activities/${pilotProfile.userId}/thermal`, {
+      const html = await fetch(`${baseUrl}/activities/${pilotProfile.userId}/like`, {
         method: 'POST', redirect: 'manual', headers: { cookie: 'glidehero_session=valid-token' },
       });
       expect(html.status).toBe(303);
       expect(html.headers.get('location')).toBe('/activity');
 
-      vi.mocked(base.activity.toggleThermal).mockRejectedValueOnce(new ActivityNotFoundError());
-      const missing = await fetch(`${baseUrl}/activities/${pilotProfile.userId}/thermal`, {
+      vi.mocked(base.activity.toggleLike).mockRejectedValueOnce(new ActivityNotFoundError());
+      const missing = await fetch(`${baseUrl}/activities/${pilotProfile.userId}/like`, {
         method: 'POST', headers: { cookie: 'glidehero_session=valid-token', accept: 'application/json' },
       });
       expect(missing.status).toBe(404);
       expect(await missing.json()).toEqual({ error: { code: 'not_found', message: 'Activity not found.' } });
 
-      vi.mocked(base.activity.toggleThermal).mockRejectedValueOnce(new SelfThermalError());
-      const self = await fetch(`${baseUrl}/activities/${pilotProfile.userId}/thermal`, {
+      vi.mocked(base.activity.toggleLike).mockRejectedValueOnce(new SelfLikeError());
+      const self = await fetch(`${baseUrl}/activities/${pilotProfile.userId}/like`, {
         method: 'POST', headers: { cookie: 'glidehero_session=valid-token', accept: 'application/json' },
       });
       expect(self.status).toBe(403);
+      expect(await self.json()).toEqual({ error: { code: 'forbidden', message: 'You cannot send a Like to your own activity.' } });
     });
   });
 

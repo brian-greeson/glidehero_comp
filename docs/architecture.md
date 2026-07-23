@@ -130,7 +130,7 @@ The authenticated Activity surface is also owned by `webRouter.ts`:
 - `POST /pilots/:userId/follow` and `/unfollow` are idempotent mutations that
   redirect to a validated local destination. A valid UUID for a nonexistent
   pilot is handled as a controlled 404 rather than a database error.
-- `POST /activities/:activityId/thermal` toggles one Thermal for the current
+- `POST /activities/:activityId/like` toggles one Like for the current
   pilot and returns the normal redirect or progressive-enhancement response.
 
 Pilot display names in competition leaderboards link to `/pilots/:userId`; the
@@ -187,8 +187,8 @@ If several services genuinely need a shared query, extract it into a focused ser
 `followService.ts` owns idempotent follow/unfollow state and bounded pilot
 search. `activityService.ts` owns flight publication, current-follow feed
 visibility, stable keyset pagination, joined flight summaries, grouped
-accomplishments, and Thermal toggling. Feed reads batch-load accomplishment
-sources for the visible page and calculate Thermal counts/viewer state in the
+accomplishments, and Like toggling. Feed reads batch-load accomplishment
+sources for the visible page and calculate Like counts/viewer state in the
 same query rather than issuing one query per card.
 
 Flight cards link the pilot to their profile and derive launch-time-zone date,
@@ -197,8 +197,8 @@ or four-decimal coordinates. Their grouped accomplishments include one-time
 achievement awards, completed milestones, new personal-record events, and only
 positive `took`/`reclaimed` leadership events when entering or re-entering first
 place; unawarded progress, `lost`, and lower-rank changes are excluded. The
-owner sees Thermal counts but cannot send a Thermal to their own card. Thermal
-actions are intentionally not gated by current feed visibility, and reactor
+owner sees Like counts but cannot send a Like to their own card. Like actions
+are intentionally not gated by current feed visibility, and reactor
 lists are not exposed. Comments, messaging, reposts, manual posts, photo or
 video uploads, groups, general-purpose notifications, and feed preferences are
 not part of this feature.
@@ -567,11 +567,11 @@ Extract reusable browser behavior into a focused module instead of continually g
 Feature-specific browser assets may use a subdirectory, as the admin area editor does.
 
 `public/scripts/activity.js` progressively enhances the server-rendered Activity
-page: it appends the reusable feed fragment for Load more and updates Thermal
+page: it appends the reusable feed fragment for Load more and updates Like
 pressed state/counts after a successful toggle. Forms and the ordinary cursor
 link remain functional without JavaScript. `activity.css` owns the responsive
-feed, search, accomplishment, and Thermal presentation; the Thermal icon is an
-inline, repository-native SVG using `currentColor`.
+feed, search, accomplishment, and Like presentation; the Like icon is a
+thumbs-up inline, repository-native SVG using `currentColor`.
 
 The shared `flightMapPreview.vto` component renders the responsive wide/mobile
 thumbnail pair used by Activity flight cards and Profile recent-flight rows.
@@ -655,7 +655,7 @@ the database-generated `processed_at`, so a failed insert rolls back completion
 and a retry cannot publish a duplicate. Reprocessing does not republish an
 existing activity. Feed cards join current flight/profile/Arena data, so
 reprocessing can refresh their displayed details while publication order stays
-fixed. Deleting a flight cascades to its activity and Thermals. Release 4 does
+fixed. Deleting a flight cascades to its activity and Likes. Release 4 does
 not backfill activities for flights completed before the feature was deployed.
 
 The activity table is generic for future source types, but the current worker

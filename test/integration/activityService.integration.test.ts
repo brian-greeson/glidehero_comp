@@ -200,39 +200,39 @@ describe('activityService.listFeed', () => {
   });
 });
 
-describe('activityService.toggleThermal', () => {
+describe('activityService.toggleLike', () => {
   it('atomically toggles a reaction and reports the bounded count', async () => {
     if (!database) throw new Error('Test database was not initialized.');
     const auth = createAuthService(database.db, { sessionTtlSeconds: 604800 });
-    const owner = await auth.signup({ email: 'thermal-owner@example.com', password: 'correct horse battery staple', displayName: 'Thermal Owner' });
-    const reactor = await auth.signup({ email: 'thermal-reactor@example.com', password: 'correct horse battery staple', displayName: 'Thermal Reactor' });
+    const owner = await auth.signup({ email: 'like-owner@example.com', password: 'correct horse battery staple', displayName: 'Like Owner' });
+    const reactor = await auth.signup({ email: 'like-reactor@example.com', password: 'correct horse battery staple', displayName: 'Like Reactor' });
     const [activity] = await database.db.insert(activities).values({ actorUserId: owner.user.userId, activityType: 'competition', publishedAt: new Date() }).returning({ id: activities.id });
     if (!activity) throw new Error('Activity insert returned no row.');
     const service = createActivityService(database.db);
-    await expect(service.toggleThermal({ viewerUserId: reactor.user.userId, activityId: '00000000-0000-4000-8000-000000000099' })).rejects.toThrow('Activity not found.');
-    await expect(service.toggleThermal({ viewerUserId: owner.user.userId, activityId: activity.id })).rejects.toThrow('own activity');
-    await expect(service.toggleThermal({ viewerUserId: reactor.user.userId, activityId: activity.id })).resolves.toEqual({ reacted: true, totalCount: 1 });
-    await expect(service.toggleThermal({ viewerUserId: reactor.user.userId, activityId: activity.id })).resolves.toEqual({ reacted: false, totalCount: 0 });
+    await expect(service.toggleLike({ viewerUserId: reactor.user.userId, activityId: '00000000-0000-4000-8000-000000000099' })).rejects.toThrow('Activity not found.');
+    await expect(service.toggleLike({ viewerUserId: owner.user.userId, activityId: activity.id })).rejects.toThrow('You cannot send a Like to your own activity.');
+    await expect(service.toggleLike({ viewerUserId: reactor.user.userId, activityId: activity.id })).resolves.toEqual({ reacted: true, totalCount: 1 });
+    await expect(service.toggleLike({ viewerUserId: reactor.user.userId, activityId: activity.id })).resolves.toEqual({ reacted: false, totalCount: 0 });
     const concurrent = await Promise.all([
-      service.toggleThermal({ viewerUserId: reactor.user.userId, activityId: activity.id }),
-      service.toggleThermal({ viewerUserId: reactor.user.userId, activityId: activity.id }),
+      service.toggleLike({ viewerUserId: reactor.user.userId, activityId: activity.id }),
+      service.toggleLike({ viewerUserId: reactor.user.userId, activityId: activity.id }),
     ]);
     expect(concurrent.map((result) => result.totalCount).sort()).toEqual([0, 1]);
     expect((await database.db.select().from(activityReactions)).length).toBe(0);
   });
 
-  it('includes Thermal counts and viewer state in the feed and cascades activity deletion', async () => {
+  it('includes reaction counts and viewer state in the feed and cascades activity deletion', async () => {
     if (!database) throw new Error('Test database was not initialized.');
     const auth = createAuthService(database.db, { sessionTtlSeconds: 604800 });
-    const owner = await auth.signup({ email: 'thermal-feed-owner@example.com', password: 'correct horse battery staple', displayName: 'Feed Owner' });
-    const reactor = await auth.signup({ email: 'thermal-feed-reactor@example.com', password: 'correct horse battery staple', displayName: 'Feed Reactor' });
+    const owner = await auth.signup({ email: 'like-feed-owner@example.com', password: 'correct horse battery staple', displayName: 'Feed Owner' });
+    const reactor = await auth.signup({ email: 'like-feed-reactor@example.com', password: 'correct horse battery staple', displayName: 'Feed Reactor' });
     const [activity] = await database.db.insert(activities).values({ actorUserId: owner.user.userId, activityType: 'competition', publishedAt: new Date() }).returning({ id: activities.id });
     if (!activity) throw new Error('Activity insert returned no row.');
     const service = createActivityService(database.db);
-    await service.toggleThermal({ viewerUserId: reactor.user.userId, activityId: activity.id });
+    await service.toggleLike({ viewerUserId: reactor.user.userId, activityId: activity.id });
     await createFollowService(database.db).follow({ followerUserId: reactor.user.userId, followedUserId: owner.user.userId });
-    expect((await service.listFeed({ viewerUserId: reactor.user.userId })).items[0]).toMatchObject({ thermalCount: 1, viewerHasReacted: true });
-    expect((await service.listFeed({ viewerUserId: owner.user.userId })).items[0]).toMatchObject({ thermalCount: 1, viewerHasReacted: false });
+    expect((await service.listFeed({ viewerUserId: reactor.user.userId })).items[0]).toMatchObject({ likeCount: 1, viewerHasLiked: true });
+    expect((await service.listFeed({ viewerUserId: owner.user.userId })).items[0]).toMatchObject({ likeCount: 1, viewerHasLiked: false });
     await database.db.delete(activities).where(eq(activities.id, activity.id));
     expect(await database.db.select().from(activityReactions)).toEqual([]);
   });

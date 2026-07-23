@@ -94,8 +94,8 @@ export function activityFeedItemToView(item: ActivityFeedItem, options: { thumbn
       earnedDate: item.flightDate,
       href: accomplishment.arenaPath,
     })),
-    thermalCount: item.thermalCount,
-    viewerHasReacted: item.viewerHasReacted,
+    likeCount: item.likeCount,
+    viewerHasLiked: item.viewerHasLiked,
     isOwn: item.isOwn,
     progress: undefined,
   };

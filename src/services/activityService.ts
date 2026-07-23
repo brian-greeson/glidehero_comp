@@ -30,8 +30,8 @@ export type ActivityFeedItem = {
   launchArenaName?: string | null;
   launchArenaPath?: string | null;
   accomplishments: ActivityAccomplishment[];
-  thermalCount: number;
-  viewerHasReacted: boolean;
+  likeCount: number;
+  viewerHasLiked: boolean;
   /** True when this card belongs to the viewer; owners cannot react to themselves. */
   isOwn: boolean;
 };
@@ -74,10 +74,10 @@ export class ActivityNotFoundError extends Error {
   }
 }
 
-export class SelfThermalError extends Error {
+export class SelfLikeError extends Error {
   constructor() {
-    super('You cannot send a Thermal to your own activity.');
-    this.name = 'SelfThermalError';
+    super('You cannot send a Like to your own activity.');
+    this.name = 'SelfLikeError';
   }
 }
 
@@ -397,7 +397,7 @@ export type ActivityService = {
   ): Promise<{ id: string }>;
   regenerateFlightActivity(input: { flightId: string }): Promise<'completed' | 'not_found' | 'not_completed'>;
   listFeed(input: { viewerUserId: string; limit?: number; before?: string; q?: string; scope?: ActivityFeedScope }): Promise<ActivityFeedPage>;
-  toggleThermal(input: { viewerUserId: string; activityId: string }): Promise<{ reacted: boolean; totalCount: number }>;
+  toggleLike(input: { viewerUserId: string; activityId: string }): Promise<{ reacted: boolean; totalCount: number }>;
 };
 
 /** Publish a flight activity using the caller's completion transaction. */
@@ -466,12 +466,12 @@ export function createActivityService(database?: Database): ActivityService {
         activityType: activities.activityType,
         sourceFlightId: activities.sourceFlightId,
         publishedAt: activities.publishedAt,
-        thermalCount: sql<number>`(
+        likeCount: sql<number>`(
           SELECT COUNT(*)::int
           FROM ${activityReactions} reaction_count
           WHERE reaction_count.activity_id = ${activities.id}
         )`,
-        viewerHasReacted: sql<boolean>`CASE
+        viewerHasLiked: sql<boolean>`CASE
           WHEN ${activities.actorUserId} = ${viewerUserId} THEN false
           ELSE EXISTS (
             SELECT 1 FROM ${activityReactions} reaction_viewer
@@ -555,8 +555,8 @@ export function createActivityService(database?: Database): ActivityService {
           activityType: row.activityType,
           sourceFlightId: row.sourceFlightId,
           publishedAt: row.publishedAt,
-          thermalCount: Number(row.thermalCount ?? 0),
-          viewerHasReacted: Boolean(row.viewerHasReacted),
+          likeCount: Number(row.likeCount ?? 0),
+          viewerHasLiked: Boolean(row.viewerHasLiked),
           isOwn: row.actorUserId === viewerUserId,
           flightDate: row.activityType === 'flight' ? displayFlightDate(row.flightStartedAt, row.flightLaunchTimezone) : undefined,
           duration: row.activityType === 'flight' ? displayDuration(row.durationSeconds) : undefined,
@@ -578,7 +578,7 @@ export function createActivityService(database?: Database): ActivityService {
       return { items, nextCursor: hasMore && last ? encodeActivityCursor({ publishedAt: last.publishedAt, id: last.id }) : null };
     },
 
-    async toggleThermal({ viewerUserId, activityId }) {
+    async toggleLike({ viewerUserId, activityId }) {
       if (!database) throw new Error('Activity reactions require a database.');
       return database.transaction(async (transaction) => {
         const [activity] = await transaction
@@ -587,7 +587,7 @@ export function createActivityService(database?: Database): ActivityService {
           .where(eq(activities.id, activityId))
           .for('update');
         if (!activity) throw new ActivityNotFoundError();
-        if (activity.actorUserId === viewerUserId) throw new SelfThermalError();
+        if (activity.actorUserId === viewerUserId) throw new SelfLikeError();
 
         const [existing] = await transaction
           .select({ activityId: activityReactions.activityId })

@@ -3,41 +3,41 @@ export function initializeActivityUi(documentRef = document, fetchImpl = fetch) 
   const feed = documentRef.querySelector('[data-activity-feed]');
   if (!feed) return;
 
-  const thermalSubmit = async (event) => {
-    const form = event.target?.closest?.('[data-thermal-form]');
-    if (!form || form.dataset.thermalPending === 'true') return;
+  const likeSubmit = async (event) => {
+    const form = event.target?.closest?.('[data-like-form]');
+    if (!form || form.dataset.likePending === 'true') return;
     event.preventDefault();
-    const button = form.querySelector('[data-thermal-button]');
-    const label = form.querySelector('[data-thermal-label]');
-    const count = form.querySelector('[data-thermal-count]');
-    const status = form.querySelector('[data-thermal-status]');
+    const button = form.querySelector('[data-like-button]');
+    const label = form.querySelector('[data-like-label]');
+    const count = form.querySelector('[data-like-count]');
+    const status = form.querySelector('[data-like-status]');
     if (!button || !label || !count) return;
     const previous = { pressed: button.getAttribute('aria-pressed'), label: label.textContent, count: count.textContent };
-    form.dataset.thermalPending = 'true';
+    form.dataset.likePending = 'true';
     button.disabled = true;
     button.setAttribute('aria-busy', 'true');
     try {
       const response = await fetchImpl(form.action, { method: 'POST', headers: { Accept: 'application/json' } });
-      if (!response.ok) throw new Error('Thermal request failed.');
+      if (!response.ok) throw new Error('Like request failed.');
       const result = await response.json();
-      if (typeof result?.reacted !== 'boolean' || !Number.isFinite(Number(result.totalCount))) throw new Error('Thermal response was invalid.');
+      if (typeof result?.reacted !== 'boolean' || !Number.isFinite(Number(result.totalCount))) throw new Error('Like response was invalid.');
       button.setAttribute('aria-pressed', result.reacted ? 'true' : 'false');
-      label.textContent = result.reacted ? 'Thermal sent' : 'Send a Thermal';
+      label.textContent = result.reacted ? 'Like sent' : 'Send a Like';
       button.setAttribute('aria-label', label.textContent);
       count.textContent = String(Math.max(0, Number(result.totalCount)));
-      if (status) status.textContent = result.reacted ? 'Thermal sent.' : 'Thermal removed.';
+      if (status) status.textContent = result.reacted ? 'Like sent.' : 'Like removed.';
     } catch {
       if (previous.pressed === null) button.removeAttribute('aria-pressed'); else button.setAttribute('aria-pressed', previous.pressed);
       label.textContent = previous.label;
       count.textContent = previous.count;
-      if (status) { status.setAttribute('role', 'alert'); status.textContent = 'Could not update Thermal. Please try again.'; }
+      if (status) { status.setAttribute('role', 'alert'); status.textContent = 'Could not update Like. Please try again.'; }
     } finally {
-      delete form.dataset.thermalPending;
+      delete form.dataset.likePending;
       button.disabled = false;
       button.removeAttribute('aria-busy');
     }
   };
-  feed.addEventListener('submit', thermalSubmit);
+  feed.addEventListener('submit', likeSubmit);
 
   let loading = false;
   const loadMore = async (event) => {

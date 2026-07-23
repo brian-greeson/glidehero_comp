@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { initializeActivityUi } from '../../public/scripts/app-ui/activity.js';
 
 describe('refreshed Activity interactions', () => {
-  it('updates a Thermal button from the JSON response', async () => {
+  it('updates a Like button from the JSON response', async () => {
     const listeners = new Map<string, (event: any) => void>();
     const button = {
       disabled: false,
@@ -12,17 +12,17 @@ describe('refreshed Activity interactions', () => {
       removeAttribute: vi.fn(),
       getAttribute: vi.fn(() => 'false'),
     };
-    const label = { textContent: 'Send a Thermal' };
+    const label = { textContent: 'Send a Like' };
     const count = { textContent: '2' };
     const status = { textContent: '' };
     const form: any = {
-      action: '/activities/activity-id/thermal',
+      action: '/activities/activity-id/like',
       dataset: {},
       querySelector(selector: string) {
-        if (selector === '[data-thermal-button]') return button;
-        if (selector === '[data-thermal-label]') return label;
-        if (selector === '[data-thermal-count]') return count;
-        if (selector === '[data-thermal-status]') return status;
+        if (selector === '[data-like-button]') return button;
+        if (selector === '[data-like-label]') return label;
+        if (selector === '[data-like-count]') return count;
+        if (selector === '[data-like-status]') return status;
         return null;
       },
     };
@@ -39,8 +39,8 @@ describe('refreshed Activity interactions', () => {
     await submit!({ target: { closest: () => form }, preventDefault: vi.fn() });
 
     expect(fetchImpl).toHaveBeenCalledWith(form.action, { method: 'POST', headers: { Accept: 'application/json' } });
-    expect(label.textContent).toBe('Thermal sent');
+    expect(label.textContent).toBe('Like sent');
     expect(count.textContent).toBe('3');
-    expect(status.textContent).toBe('Thermal sent.');
+    expect(status.textContent).toBe('Like sent.');
   });
 });

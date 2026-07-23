@@ -203,7 +203,7 @@ Release 4 publishes one Activity row for each newly completed flight in the
 same transaction as flight completion. It intentionally performs no historical
 activity backfill, so flights completed before the Release 4 code is deployed do
 not gain Activity cards. Reprocessing an existing flight does not republish it;
-deleting a flight cascades to its activity and Thermals.
+deleting a flight cascades to its activity and Likes.
 
 Roll out the web and worker processes in this order:
 

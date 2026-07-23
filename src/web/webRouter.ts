@@ -31,7 +31,7 @@ import {
 import type { SessionCookie } from './sessionCookie.js';
 import { PilotNotFoundError, type FollowService } from '../services/followService.js';
 import type { ActivityService } from '../services/activityService.js';
-import { ActivityCursorError, ActivityNotFoundError, SelfThermalError } from '../services/activityService.js';
+import { ActivityCursorError, ActivityNotFoundError, SelfLikeError } from '../services/activityService.js';
 import type { FlightThumbnailDeliveryService } from '../services/flightThumbnailDeliveryService.js';
 import { WORKER_STATUS_TTL_SECONDS, type WorkerControlService } from '../services/workerControlService.js';
 
@@ -819,7 +819,7 @@ export function createWebRouter(dependencies: {
 
   router.get('/activity', (req, res, next) => activityFeedRequest(req, res, next, false));
 
-  router.post('/activities/:activityId/thermal', async (req, res, next) => {
+  router.post('/activities/:activityId/like', async (req, res, next) => {
     const wantsJson = req.get('accept')?.toLowerCase().includes('application/json') ?? false;
     const fail = (status: number, code: string, message: string) => {
       if (wantsJson) {
@@ -830,7 +830,7 @@ export function createWebRouter(dependencies: {
     };
     const currentUser = res.locals.currentUser;
     if (!currentUser) {
-      fail(401, 'unauthorized', 'Sign in before sending a Thermal.');
+      fail(401, 'unauthorized', 'Sign in before sending a Like.');
       return;
     }
     const parsedActivityId = pilotUserIdSchema.safeParse(req.params.activityId);
@@ -840,7 +840,7 @@ export function createWebRouter(dependencies: {
     }
     if (!dependencies.activity) throw new Error('Activity service is not configured.');
     try {
-      const result = await dependencies.activity.toggleThermal({
+      const result = await dependencies.activity.toggleLike({
         viewerUserId: currentUser.userId,
         activityId: parsedActivityId.data,
       });
@@ -854,8 +854,8 @@ export function createWebRouter(dependencies: {
         fail(404, 'not_found', 'Activity not found.');
         return;
       }
-      if (error instanceof SelfThermalError) {
-        fail(403, 'forbidden', 'You cannot send a Thermal to your own activity.');
+      if (error instanceof SelfLikeError) {
+        fail(403, 'forbidden', 'You cannot send a Like to your own activity.');
         return;
       }
       next(error);

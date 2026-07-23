@@ -167,7 +167,7 @@ personal-record events, and positive `Took the Lead`/`Reclaimed the Lead` events
 when entering or re-entering first place; progress that did not award an
 achievement, `lost` events, and lower-rank changes are omitted. Reprocessing
 refreshes joined card details without changing publication order, and deleting
-a flight removes its activity and Thermals.
+a flight removes its activity and Likes.
 
 Flight activity cards and Profile recent-flight rows show the same responsive
 territory preview: an 800-by-450 image on wider layouts and a 450-by-450 image
@@ -176,8 +176,8 @@ it does not render the track or other flights' territory. Missing previews use
 one standard image-only fallback. Private preview objects are delivered through
 24-hour presigned URLs.
 
-Each activity supports one Thermal per reacting pilot. The toggle inserts or
-removes that pilot's Thermal and returns the current count; Thermal actions are
+Each activity supports one Like per reacting pilot. The toggle inserts or
+removes that pilot's Like and returns the current count; Like actions are
 not gated by whether the activity is currently visible in the viewer's feed.
 The activity owner can see the count but cannot react to their own activity.
 There are no reactor lists. Activities carry a generic source type for future
@@ -249,7 +249,7 @@ Included features:
 - Durable General, State, and Country Arena leadership and one-time leadership
   achievements.
 - Authenticated pilot following, Activity feed, grouped flight accomplishments,
-  and Thermal reactions.
+  and Like reactions.
 - Responsive flight territory previews in Activity and Profile recent flights.
 - Optional grid overlay and foreground live-position trail on every map.
 - Flight statistics after upload.
