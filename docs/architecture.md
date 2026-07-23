@@ -742,6 +742,16 @@ Dashboard breadcrumbs rank the unfinished cards by completion ratio and show
 the closest three. Arena progress reads constrain each Arena lookup to the grid
 coordinates inside its bounding box before applying exact `ST_Covers` checks.
 
+`user_arena_progress` is the durable personal Arena projection: it stores only
+the canonical Arena rows a pilot has touched (claimed cells and completed Launch
+visits), while `user_achievement_progress` stores the compact dashboard summary
+derived from the same Arena snapshot. `UserArenaProgressService` rebuilds the
+Arena projection transactionally; the user-arena-progress backfill runs that
+rebuild and updates the achievement summary together so the two projections do
+not describe different claim history. The operational backfill is dry-run by
+default and must be applied only after workers are paused and drained, migrations
+are deployed, and a verification pass is ready.
+
 `npm run backfill:arena-achievements` is a one-time historical as-of replay.
 It defaults to dry-run, supports explicit `--apply`, preserves earliest source
 attribution, and reconstructs strict launch-tag records. Dry-run uses one
@@ -753,6 +763,16 @@ maintains cumulative Arena state in memory; the live evaluator remains unchanged
 A typed failure says
 whether earlier batches may remain committed. Workers must be paused and drained
 for the catalog rebuild and backfill, then restarted only after verification.
+
+`npm run backfill:user-arena-progress` repairs the durable personal Arena
+projection for every user in deterministic UUID order. Each user is rebuilt in
+one transaction and the returned Arena snapshot updates that user's
+`user_achievement_progress` row in the same transaction. It defaults to a
+rollback-only dry-run, reports inserted/updated/deleted Arena rows and derived
+achievement rows, and accepts `--apply` for rerunnable persistence. The required
+deployment order is pause and drain workers, run migrations, run the apply
+backfill after reviewing its dry-run, run `verify:release-backfills`, and resume
+workers only after verification.
 
 ## 12. Shared type declarations
 

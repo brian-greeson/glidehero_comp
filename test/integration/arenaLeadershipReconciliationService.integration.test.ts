@@ -137,6 +137,16 @@ describe('Arena leadership reconciliation', () => {
       'SELECT event_key FROM arena_leadership_events WHERE arena_id = $1',
       [seeded.general],
     );
+    await database.pool.query(
+      `INSERT INTO user_arena_progress (user_id, arena_id, claimed_cell_count, visited)
+       VALUES ($1, $3, 2, FALSE), ($2, $3, 2, FALSE)`,
+      [seeded.userA, seeded.userB, seeded.general],
+    );
+    await database.pool.query(
+      `INSERT INTO user_achievement_progress (user_id, projection_version)
+       VALUES ($1, 2), ($2, 2)`,
+      [seeded.userA, seeded.userB],
+    );
 
     const tyingFlight = await addClaimFlight(seeded.userB!, { x: 0, timestamp: '2026-01-03T00:00:00Z' });
     const tied = await database.db.transaction((transaction) => service.applyFlightInTransaction!(transaction, {
@@ -150,6 +160,10 @@ describe('Arena leadership reconciliation', () => {
     });
     expect(tied.achievements).toEqual({ newlyEarned: ['took_lead_in_arena'], alreadyEarned: 0 });
 
+    await database.pool.query(
+      `UPDATE user_arena_progress SET claimed_cell_count = 3 WHERE user_id = $1 AND arena_id = $2`,
+      [seeded.userB, seeded.general],
+    );
     const takingFlight = await addClaimFlight(seeded.userB!, { x: 1, timestamp: '2026-01-04T00:00:00Z' });
     const took = await database.db.transaction((transaction) => service.applyFlightInTransaction!(transaction, {
       arenaIds: [seeded.general], flightId: takingFlight,
@@ -166,6 +180,144 @@ describe('Arena leadership reconciliation', () => {
     );
     expect(events.rows.map(({ event_type }) => event_type)).toEqual(['took', 'took', 'lost']);
     expect(events.rows.some(({ event_key }) => event_key === initialEvents.rows[0]?.event_key)).toBe(true);
+  });
+
+  it('uses projected post-flight totals and projected next rank', async () => {
+    const seeded = await seed();
+    const service = createArenaLeadershipReconciliationService(database.db, { cellSize });
+    await service.reconcile({ arenaIds: [seeded.general] });
+
+    // The projection is maintained before leadership evaluation. Deliberately
+    // give pilot B two pre-flight cells so the read is distinguishable from a
+    // historical competition-claims rescan (which sees only one here).
+    await database.pool.query(
+      `INSERT INTO user_arena_progress (user_id, arena_id, claimed_cell_count, visited)
+       VALUES ($1, $3, 2, FALSE), ($2, $3, 3, FALSE)`,
+      [seeded.userA, seeded.userB, seeded.general],
+    );
+    await database.pool.query(
+      `INSERT INTO user_achievement_progress (user_id, projection_version)
+       VALUES ($1, 2), ($2, 2)`,
+      [seeded.userA, seeded.userB],
+    );
+    const flight = await addClaimFlight(seeded.userB!, { x: 0, timestamp: '2026-01-03T00:00:00Z' });
+    const result = await database.db.transaction((transaction) => service.applyFlightInTransaction!(transaction, {
+      arenaIds: [seeded.general], flightId: flight,
+    }));
+
+    expect(result.arenas[0]).toMatchObject({
+      leadingCellCount: 3,
+      nextRankCellCount: 2,
+      currentLeaderUserIds: [seeded.userB],
+    });
+  });
+
+  it('excludes zero, equal, above-maximum, and incomplete v1 progress from next rank', async () => {
+    const seeded = await seed();
+    const service = createArenaLeadershipReconciliationService(database.db, { cellSize });
+    await service.reconcile({ arenaIds: [seeded.general] });
+
+    await database.pool.query(
+      `INSERT INTO users (email) VALUES
+       ('arena-eligible-below@example.com'), ('arena-above@example.com'), ('arena-incomplete@example.com')`,
+    );
+    const extraUsers = await database.pool.query<{ id: string; email: string }>(
+      `SELECT user_id AS id, email FROM users
+       WHERE email IN ('arena-eligible-below@example.com', 'arena-above@example.com', 'arena-incomplete@example.com')
+       ORDER BY email`,
+    );
+    const eligibleBelowUser = extraUsers.rows.find((row) => row.email === 'arena-eligible-below@example.com')!.id;
+    const aboveUser = extraUsers.rows.find((row) => row.email === 'arena-above@example.com')!.id;
+    const incompleteUser = extraUsers.rows.find((row) => row.email === 'arena-incomplete@example.com')!.id;
+    await database.pool.query(
+      `INSERT INTO user_arena_progress (user_id, arena_id, claimed_cell_count, visited)
+       VALUES ($1, $3, 0, FALSE), ($2, $3, 3, FALSE), ($4, $3, 1, FALSE), ($5, $3, 4, FALSE), ($6, $3, 2, FALSE)`,
+      [seeded.userA, seeded.userB, seeded.general, eligibleBelowUser, aboveUser, incompleteUser],
+    );
+    await database.pool.query(
+      `INSERT INTO user_achievement_progress (user_id, projection_version)
+       VALUES ($1, 2), ($2, 2), ($3, 2), ($4, 2), ($5, 1)`,
+      [seeded.userA, seeded.userB, eligibleBelowUser, aboveUser, incompleteUser],
+    );
+
+    const flight = await addClaimFlight(seeded.userB!, { x: 0, timestamp: '2026-01-03T00:00:00Z' });
+    const result = await database.db.transaction((transaction) => service.applyFlightInTransaction!(transaction, {
+      arenaIds: [seeded.general], flightId: flight,
+    }));
+
+    expect(result.arenas[0]).toMatchObject({ leadingCellCount: 3, nextRankCellCount: 1 });
+  });
+
+  it('uses the partial progress index for the next-rank scan', async () => {
+    const seeded = await seed();
+    await database.pool.query(
+      `INSERT INTO user_arena_progress (user_id, arena_id, claimed_cell_count)
+       VALUES ($1, $2, 2)`,
+      [seeded.userA, seeded.general],
+    );
+    const client = await database.pool.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query('SET LOCAL enable_seqscan = off');
+      const explain = await client.query<{ 'QUERY PLAN': unknown[] }>(
+        `EXPLAIN (FORMAT JSON)
+         SELECT COALESCE(MAX(claimed_cell_count), 0)::integer AS count
+         FROM user_arena_progress progress
+         WHERE arena_id = $1
+           AND claimed_cell_count > 0
+           AND claimed_cell_count < $2
+           AND EXISTS (
+             SELECT 1 FROM user_achievement_progress summary
+             WHERE summary.user_id = progress.user_id AND summary.projection_version = 2
+           )`,
+        [seeded.general, 3],
+      );
+      expect(JSON.stringify(explain.rows[0]?.['QUERY PLAN'])).toContain('user_arena_progress_arena_id_claimed_cell_count_idx');
+    } finally {
+      await client.query('ROLLBACK');
+      client.release();
+    }
+  });
+
+  it('falls back to full reconciliation when an affected projection is missing or undersized', async () => {
+    const seeded = await seed();
+    const service = createArenaLeadershipReconciliationService(database.db, { cellSize });
+    await service.reconcile({ arenaIds: [seeded.general] });
+
+    // A plausible detailed count is still unsafe when B's summary is legacy v1.
+    await database.pool.query(
+      `INSERT INTO user_arena_progress (user_id, arena_id, claimed_cell_count, visited)
+       VALUES ($1, $2, 2, FALSE), ($3, $2, 3, FALSE)`,
+      [seeded.userA, seeded.general, seeded.userB],
+    );
+    await database.pool.query(
+      `INSERT INTO user_achievement_progress (user_id, projection_version)
+       VALUES ($1, 2), ($2, 1)`,
+      [seeded.userA, seeded.userB],
+    );
+    const firstFlight = await addClaimFlight(seeded.userB!, { x: 0, timestamp: '2026-01-03T00:00:00Z' });
+    const first = await database.db.transaction((transaction) => service.applyFlightInTransaction!(transaction, {
+      arenaIds: [seeded.general], flightId: firstFlight,
+    }));
+    expect(first.arenas[0]).toMatchObject({ leadingCellCount: 2, currentLeaderUserIds: [seeded.userA, seeded.userB].sort() });
+
+    // Existing but undersized B projection: the next flight must also use the
+    // full historical reconciliation and produce B's actual three-cell lead.
+    await database.pool.query(
+      `INSERT INTO user_arena_progress (user_id, arena_id, claimed_cell_count, visited)
+       VALUES ($1, $2, 0, FALSE)
+       ON CONFLICT (user_id, arena_id) DO UPDATE SET claimed_cell_count = EXCLUDED.claimed_cell_count`,
+      [seeded.userB, seeded.general],
+    );
+    const secondFlight = await addClaimFlight(seeded.userB!, { x: 1, timestamp: '2026-01-04T00:00:00Z' });
+    const second = await database.db.transaction((transaction) => service.applyFlightInTransaction!(transaction, {
+      arenaIds: [seeded.general], flightId: secondFlight,
+    }));
+    expect(second.arenas[0]).toMatchObject({
+      leadingCellCount: 3,
+      nextRankCellCount: 2,
+      currentLeaderUserIds: [seeded.userB],
+    });
   });
 
   it('applies exclusive State/Country ownership while preserving cross-type and General overlap', async () => {

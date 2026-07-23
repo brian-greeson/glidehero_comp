@@ -4,6 +4,10 @@ import { userAchievementProgress } from '../db/schema.js';
 import type { ArenaAchievementSnapshot } from './arenaAchievementService.js';
 import { arenaCellOwnershipPredicateSql, claimCellCenterSql } from './arenaGeometrySql.js';
 
+/** Version indicating the detailed user_arena_progress projection is complete. */
+export const USER_ACHIEVEMENT_PROGRESS_COMPLETE_VERSION = 2;
+const USER_ACHIEVEMENT_PROGRESS_INITIAL_VERSION = 1;
+
 type DatabaseTransaction = Parameters<Parameters<Database['transaction']>[0]>[0];
 
 /** The persisted, presentation-independent values used to build achievement cards. */
@@ -219,16 +223,19 @@ export function createUserAchievementProgressService(database: Pick<Database, 'e
     return row ? mapProgress(row) : null;
   }
 
-  async function upsertInTransaction(transaction: UserAchievementProgressTransaction, userId: string, snapshot: UserAchievementProgressSnapshot): Promise<UserAchievementProgress> {
+  async function upsertInTransaction(transaction: UserAchievementProgressTransaction, userId: string, snapshot: UserAchievementProgressSnapshot, options: { promoteToComplete?: boolean } = {}): Promise<UserAchievementProgress> {
     const values = snapshotToProjection(snapshot);
     const updatedAt = new Date();
     const [row] = await transaction.insert(userAchievementProgress).values({
       userId,
       ...values,
+      projectionVersion: options.promoteToComplete ? USER_ACHIEVEMENT_PROGRESS_COMPLETE_VERSION : USER_ACHIEVEMENT_PROGRESS_INITIAL_VERSION,
       updatedAt,
     }).onConflictDoUpdate({
       target: userAchievementProgress.userId,
-      set: { ...values, updatedAt },
+      set: { ...values, updatedAt,
+        ...(options.promoteToComplete ? { projectionVersion: USER_ACHIEVEMENT_PROGRESS_COMPLETE_VERSION } : {}),
+      },
     }).returning({
       userId: userAchievementProgress.userId,
       lifetimeUniqueCellCount: userAchievementProgress.lifetimeUniqueCellCount,
@@ -248,7 +255,7 @@ export function createUserAchievementProgressService(database: Pick<Database, 'e
 
   /** Ensure a newly-created pilot has a transactionally-owned zero projection row. */
   function initializeInTransaction(transaction: UserAchievementProgressTransaction, userId: string): Promise<UserAchievementProgress> {
-    return upsertInTransaction(transaction, userId, EMPTY_PROGRESS);
+    return upsertInTransaction(transaction, userId, EMPTY_PROGRESS, { promoteToComplete: true });
   }
 
   /** Find pilots whose current claims or completed-flight origins are covered by Arenas. */
@@ -315,8 +322,8 @@ export function createUserAchievementProgressService(database: Pick<Database, 'e
     calculate: (userId: string) => calculateWith(database, options, userId),
     upsertInTransaction,
     initializeInTransaction,
-    upsertFromArenaSnapshotInTransaction(transaction: UserAchievementProgressTransaction, userId: string, snapshot: ArenaAchievementSnapshot) {
-      return upsertInTransaction(transaction, userId, snapshotFromArenaFacts(snapshot));
+    upsertFromArenaSnapshotInTransaction(transaction: UserAchievementProgressTransaction, userId: string, snapshot: ArenaAchievementSnapshot, options?: { promoteToComplete?: boolean }) {
+      return upsertInTransaction(transaction, userId, snapshotFromArenaFacts(snapshot), options);
     },
     async rebuildInTransaction(transaction: UserAchievementProgressTransaction, userId: string) {
       const snapshot = await calculateWith(transaction, options, userId);

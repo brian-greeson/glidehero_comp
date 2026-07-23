@@ -61,6 +61,40 @@ successful apply. If a later batch fails, earlier committed batches remain
 applied; resolve the failure and rerun the command. A dry-run reports the
 scope without persisting any projections.
 
+## User Arena progress projection backfill
+
+`user_arena_progress` is the durable per-pilot Arena projection used by Arena
+progress reads. It is rebuilt from canonical personal cells and completed Launch
+origins; the same transaction updates the compact `user_achievement_progress`
+summary from the returned Arena snapshot. To deploy this projection safely:
+
+1. Pause and drain the flight workers.
+2. Deploy the application and run the checked-in migrations:
+
+   ```sh
+   npm run db:migrate
+   ```
+
+3. Run the rollback-only dry-run, review its per-user and row-change counts,
+   then run the apply command:
+
+   ```sh
+   npm run backfill:user-arena-progress
+   npm run backfill:user-arena-progress -- --apply
+   ```
+
+4. Run the read-only release verifier and confirm the user-arena-progress and
+   user-achievement-progress checks pass or skip as expected:
+
+   ```sh
+   npm run verify:release-backfills
+   ```
+
+5. Resume the workers only after verification. The command is rerunnable and
+   commits one user transaction at a time; a failed apply may leave earlier
+   users committed, so resolve the failure and rerun after verifying the partial
+   state.
+
 ## Flight territory thumbnail rollout and backfill
 
 Newly completed flights generate two private WebP previews after database and

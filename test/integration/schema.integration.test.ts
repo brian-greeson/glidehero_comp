@@ -40,6 +40,8 @@ describe('authentication schema', () => {
       'pilot_follows',
       'profiles',
       'track_points',
+      'user_achievement_progress',
+      'user_arena_progress',
       'user_grid_claims',
       'user_passwords',
       'users',

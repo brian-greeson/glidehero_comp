@@ -1,7 +1,8 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { and, eq, sql } from 'drizzle-orm';
-import { achievementRecordEvents, achievementRecords, achievements, competitionGridClaims, flightProgress, flights, igcFiles, personalGridClaims as userGridClaims, trackPoints, users } from '../../src/db/schema.js';
+import { achievementRecordEvents, achievementRecords, achievements, competitionGridClaims, flightProgress, flights, igcFiles, personalGridClaims as userGridClaims, trackPoints, userAchievementProgress, userArenaProgress, users } from '../../src/db/schema.js';
 import { createGridClaimService } from '../../src/services/gridClaimService.js';
+import { createUserArenaProgressService } from '../../src/services/userArenaProgressService.js';
 import type { ArenaAchievementService } from '../../src/services/arenaAchievementService.js';
 import { createAdminFlightService } from '../../src/services/adminFlightService.js';
 import { resetAndMigrateTestDatabase } from './database.js';
@@ -719,15 +720,28 @@ describe('GridClaimService with PostGIS', () => {
   });
 
   it('rolls back claims, progression, and awards when Arena evaluation fails in the caller transaction', async () => {
-    const flight = await persistFlight([[100, 100], [9_100, 100]]);
+    const flight = await persistFlight([[100_100, 100], [109_100, 100]]);
+    const arenaId = await persistArena({
+      sourceId: 10_000,
+      name: 'Evaluator rollback Arena',
+      arenaType: 'general',
+      shape: 'POLYGON((100000 0,110000 0,110000 1000,100000 1000,100000 0))',
+    });
     const failingArenaAchievements: ArenaAchievementService = {
-      evaluateInTransaction: async () => { throw new Error('forced Arena evaluator failure'); },
+      evaluateInTransaction: vi.fn(),
+      evaluateTransitionInTransaction: async () => { throw new Error('forced Arena evaluator failure'); },
     };
     const service = createGridClaimService(database.db, { cellSize: 1_000 }, undefined, failingArenaAchievements);
     await expect(service.process(flight)).rejects.toThrow('forced Arena evaluator failure');
     expect(await database.db.select().from(userGridClaims).where(eq(userGridClaims.claimFlight, flight.flightId))).toEqual([]);
+    expect(await database.db.select().from(competitionGridClaims).where(eq(competitionGridClaims.claimFlight, flight.flightId))).toEqual([]);
     expect(await database.db.select().from(flightProgress).where(eq(flightProgress.flightId, flight.flightId))).toEqual([]);
     expect(await database.db.select().from(achievements).where(eq(achievements.userId, flight.userId))).toEqual([]);
+    expect(await database.db.select().from(userArenaProgress).where(and(
+      eq(userArenaProgress.userId, flight.userId),
+      eq(userArenaProgress.arenaId, arenaId),
+    ))).toEqual([]);
+    expect(await database.db.select().from(userAchievementProgress).where(eq(userAchievementProgress.userId, flight.userId))).toEqual([]);
   });
 
   it('serializes concurrent flights through Arena awards and keeps one monotonic tag record history', async () => {
@@ -842,6 +856,63 @@ describe('GridClaimService with PostGIS', () => {
     await expect(service.reprocess({ flightId: flight.flightId })).resolves.toMatchObject({ status: 'completed' });
     expect(calls).toHaveLength(2);
     expect(calls[1]).toEqual(calls[0]);
+  });
+
+  it('rebuilds stale Arena progress and summary on reprocess without a transition evaluation', async () => {
+    const flight = await persistFlight([[100, 100], [2_100, 100]]);
+    const arenaId = await persistArena({
+      sourceId: 10_010,
+      name: 'Reprocess projection Arena',
+      arenaType: 'general',
+      shape: 'POLYGON((0 0,1000 0,1000 1000,0 1000,0 0))',
+    });
+    const evaluateTransitionInTransaction = vi.fn(async () => ({ newlyEarned: [], alreadyEarned: 0, record: null }));
+    const service = createGridClaimService(
+      database.db,
+      { cellSize: 1_000 },
+      undefined,
+      {
+        evaluateInTransaction: vi.fn(),
+        evaluateTransitionInTransaction,
+      },
+      { reconcile: vi.fn(), reconcileInTransaction: vi.fn(async () => ({ arenas: [], eventsBuilt: 0, achievements: { newlyEarned: [], alreadyEarned: 0 } })) } as never,
+    );
+
+    await service.process(flight);
+    const before = await database.db.select().from(userArenaProgress)
+      .where(and(eq(userArenaProgress.userId, flight.userId), eq(userArenaProgress.arenaId, arenaId)));
+    expect(before).toHaveLength(1);
+    const beforeSnapshot = await createUserArenaProgressService(database.db, { cellSize: 1_000 }).getSnapshot(flight.userId);
+    const [beforeSummary] = await database.db.select({
+      lifetimeUniqueCellCount: userAchievementProgress.lifetimeUniqueCellCount,
+      generalArenasExplored: userAchievementProgress.generalArenasExplored,
+    }).from(userAchievementProgress).where(eq(userAchievementProgress.userId, flight.userId));
+    expect(beforeSummary).toMatchObject({
+      lifetimeUniqueCellCount: beforeSnapshot.lifetimeUniqueCellCount,
+      generalArenasExplored: beforeSnapshot.rows.filter((row) => row.arenaType === 'general' && Number(row.claimedCells) > 0).length,
+    });
+
+    const points = await toWgs84([[10_100, 100], [12_100, 100]]);
+    for (const [sequenceNumber, point] of points.entries()) {
+      await database.db.update(trackPoints).set({ latitude: point.latitude, longitude: point.longitude })
+        .where(and(eq(trackPoints.flightId, flight.flightId), eq(trackPoints.sequenceNumber, sequenceNumber)));
+    }
+    await expect(service.reprocess({ flightId: flight.flightId })).resolves.toMatchObject({ status: 'completed' });
+
+    expect(evaluateTransitionInTransaction).toHaveBeenCalledOnce();
+    expect(await database.db.select().from(userArenaProgress)
+      .where(and(eq(userArenaProgress.userId, flight.userId), eq(userArenaProgress.arenaId, arenaId)))).toEqual([]);
+    const snapshot = await createUserArenaProgressService(database.db, { cellSize: 1_000 }).getSnapshot(flight.userId);
+    const [summary] = await database.db.select({
+      lifetimeUniqueCellCount: userAchievementProgress.lifetimeUniqueCellCount,
+      generalArenasExplored: userAchievementProgress.generalArenasExplored,
+      projectionVersion: userAchievementProgress.projectionVersion,
+    }).from(userAchievementProgress).where(eq(userAchievementProgress.userId, flight.userId));
+    expect(summary).toMatchObject({
+      lifetimeUniqueCellCount: snapshot.lifetimeUniqueCellCount,
+      generalArenasExplored: snapshot.rows.filter((row) => row.arenaType === 'general' && Number(row.claimedCells) > 0).length,
+      projectionVersion: 2,
+    });
   });
 
   it('rolls back rebuilt claims, progression, and leadership writes when correction reconciliation fails', async () => {

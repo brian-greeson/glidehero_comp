@@ -307,6 +307,25 @@ export const arenaLeadershipEvents = pgTable(
   ],
 );
 
+/** Current personal progress projection for each Arena a pilot has touched. */
+export const userArenaProgress = pgTable(
+  'user_arena_progress',
+  {
+    userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    arenaId: uuid('arena_id').notNull().references(() => arenas.id, { onDelete: 'cascade' }),
+    claimedCellCount: integer('claimed_cell_count').notNull().default(0),
+    visited: boolean('visited').notNull().default(false),
+    updatedAt: timestamp('updated_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.userId, table.arenaId] }),
+    check('user_arena_progress_claimed_cell_count_nonnegative', sql`${table.claimedCellCount} >= 0`),
+    index('user_arena_progress_arena_id_claimed_cell_count_idx')
+      .on(table.arenaId, table.claimedCellCount)
+      .where(sql`${table.claimedCellCount} > 0`),
+  ],
+);
+
 export const trackPoints = pgTable(
   'track_points',
   {

@@ -1,6 +1,7 @@
 import { fileURLToPath } from 'node:url';
 import { resolve } from 'node:path';
 import { sql } from 'drizzle-orm';
+import { lockArenaCatalogExclusive, lockArenaCatalogShared } from '../services/arenaCatalogLock.js';
 import type { Database } from '../db/client.js';
 import { createDatabase } from '../db/client.js';
 import { awardAchievement } from '../services/achievementService.js';
@@ -134,6 +135,7 @@ async function correctClaimTimestampBatch(
   cellSize: number,
   summary: ArenaLeadershipBackfillSummary,
 ): Promise<void> {
+  await lockArenaCatalogShared(transaction);
   for (const flight of flights) {
     const corrected = await transaction.execute(sql`
       ${gridClaimCandidateCtes({ flightId: flight.flightId, cellSize })},
@@ -167,6 +169,7 @@ async function processBatch(
   cellSize: number,
   summary: ArenaLeadershipBackfillSummary,
 ): Promise<Candidate[]> {
+  await lockArenaCatalogExclusive(transaction);
   const ids = arenas.map((arena) => arena.id);
   const candidates: Candidate[] = [];
   for (const arena of arenas) {

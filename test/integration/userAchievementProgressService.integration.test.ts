@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { flights, igcFiles, personalGridClaims, users } from '../../src/db/schema.js';
-import { createUserAchievementProgressService } from '../../src/services/userAchievementProgressService.js';
+import { eq } from 'drizzle-orm';
+import { flights, igcFiles, personalGridClaims, userAchievementProgress, users } from '../../src/db/schema.js';
+import { createUserAchievementProgressService, USER_ACHIEVEMENT_PROGRESS_COMPLETE_VERSION } from '../../src/services/userAchievementProgressService.js';
 import { resetAndMigrateTestDatabase } from './database.js';
 
 let database: Awaited<ReturnType<typeof resetAndMigrateTestDatabase>>;
@@ -30,6 +31,28 @@ async function createArena(sourceId: number, type: 'launch' | 'general' | 'state
 }
 
 describe('userAchievementProgressService', () => {
+  it('initializes new users as complete v2 and preserves v1 for incremental writes', async () => {
+    const [user] = await database.db.insert(users).values({ email: `version-${crypto.randomUUID()}@example.com` }).returning({ id: users.id });
+    const service = createUserAchievementProgressService(database.db, { cellSize: 1_000 });
+    const initialized = await database.db.transaction((tx) => service.initializeInTransaction(tx, user!.id));
+    expect(initialized.projectionVersion).toBe(USER_ACHIEVEMENT_PROGRESS_COMPLETE_VERSION);
+    await database.db.update(userAchievementProgress).set({ projectionVersion: 1 }).where(eq(userAchievementProgress.userId, user!.id));
+    const snapshot = { lifetimeUniqueCellCount: 1, launchArenasVisited: 0, generalArenasExplored: 0, statesFlownIn: 0, countriesFlownIn: 0, bestGeneralArenaId: null, bestGeneralClaimedCellCount: 0, bestGeneralClaimableCellCount: 0 };
+    await database.db.transaction((tx) => service.upsertInTransaction(tx, user!.id, snapshot));
+    await expect(service.get(user!.id)).resolves.toMatchObject({ projectionVersion: 1 });
+  });
+
+  it('inserts incremental projections as v1 and explicitly promotes authoritative snapshots', async () => {
+    const [user] = await database.db.insert(users).values({ email: `promotion-${crypto.randomUUID()}@example.com` }).returning({ id: users.id });
+    const service = createUserAchievementProgressService(database.db, { cellSize: 1_000 });
+    const snapshot = { lifetimeUniqueCellCount: 0, launchArenasVisited: 0, generalArenasExplored: 0, statesFlownIn: 0, countriesFlownIn: 0, bestGeneralArenaId: null, bestGeneralClaimedCellCount: 0, bestGeneralClaimableCellCount: 0 };
+    await database.db.transaction((tx) => service.upsertInTransaction(tx, user!.id, snapshot));
+    await expect(service.get(user!.id)).resolves.toMatchObject({ projectionVersion: 1 });
+    const arenaSnapshot = { rows: [], lifetimeUniqueCellCount: 0 };
+    await database.db.transaction((tx) => service.upsertFromArenaSnapshotInTransaction(tx, user!.id, arenaSnapshot, { promoteToComplete: true }));
+    await expect(service.get(user!.id)).resolves.toMatchObject({ projectionVersion: USER_ACHIEVEMENT_PROGRESS_COMPLETE_VERSION });
+  });
+
   it('calculates authoritative progress and persists an idempotent projection', async () => {
     const [user] = await database.db.insert(users).values({ email: `progress-${crypto.randomUUID()}@example.com` }).returning({ id: users.id });
     const userId = user!.id;
@@ -60,6 +83,7 @@ describe('userAchievementProgressService', () => {
 
     const rebuilt = await database.db.transaction((tx) => service.rebuildInTransaction(tx, userId));
     expect(rebuilt).toMatchObject({ userId, bestGeneralArenaId: generalId });
+    expect(rebuilt.projectionVersion).toBe(1);
     await expect(service.get(userId)).resolves.toMatchObject({ userId, lifetimeUniqueCellCount: 2, bestGeneralArenaId: generalId });
     const second = await database.db.transaction((tx) => service.rebuildInTransaction(tx, userId));
     expect(second.bestGeneralArenaId).toBe(generalId);

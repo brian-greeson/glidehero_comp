@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
+  checkUserAchievementProgress,
   printReleaseBackfillSpotCheck,
   summarizeReleaseBackfillSpotCheck,
 } from '../../src/scripts/verifyReleaseBackfills.js';
@@ -26,6 +27,40 @@ describe('release backfill spot checks', () => {
   it('skips a check with no eligible records', () => {
     expect(summarizeReleaseBackfillSpotCheck('example', [])).toEqual({
       name: 'example', status: 'SKIP', sampled: 0, present: 0, missingIds: [],
+    });
+  });
+
+  it('requires complete v2 user achievement progress while rejecting legacy v1', async () => {
+    const database = {
+      execute: vi.fn(async () => ({
+        rows: [
+          { id: 'legacy', projectionVersion: 1 },
+          { id: 'complete', projectionVersion: 2 },
+        ],
+      })),
+    };
+
+    await expect(checkUserAchievementProgress(database as never)).resolves.toEqual({
+      name: 'user-achievement-progress',
+      status: 'FAIL',
+      sampled: 2,
+      present: 1,
+      missingIds: ['legacy'],
+    });
+  });
+
+  it('passes complete user achievement progress and skips when no users are eligible', async () => {
+    const database = {
+      execute: vi.fn()
+        .mockResolvedValueOnce({ rows: [{ id: 'complete', projectionVersion: 2 }] })
+        .mockResolvedValueOnce({ rows: [] }),
+    };
+
+    await expect(checkUserAchievementProgress(database as never)).resolves.toMatchObject({
+      status: 'PASS', sampled: 1, present: 1,
+    });
+    await expect(checkUserAchievementProgress(database as never)).resolves.toMatchObject({
+      status: 'SKIP', sampled: 0, present: 0,
     });
   });
 

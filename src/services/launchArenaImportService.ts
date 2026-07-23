@@ -4,6 +4,8 @@ import { launches } from '../db/schema.js';
 import { resolveLaunchTimeZone } from '../domain/competition/launchTimeZone.js';
 import type { LaunchImportRow } from '../domain/launch/mysqlLaunchDump.js';
 import { createUserAchievementProgressService, type UserAchievementProgressService } from './userAchievementProgressService.js';
+import { createUserArenaProgressService, type UserArenaProgressService } from './userArenaProgressService.js';
+import { lockArenaCatalogExclusive } from './arenaCatalogLock.js';
 
 export const XCONTEST_LAUNCH_SOURCE = 'xcontest-launch';
 export const LAUNCH_COUNTRY_ALIASES: Readonly<Record<string, string>> = {
@@ -11,7 +13,11 @@ export const LAUNCH_COUNTRY_ALIASES: Readonly<Record<string, string>> = {
 };
 
 export type LaunchArenaImportSummary = { imported: number; refreshed: number };
-type ImportOptions = { userAchievementProgress?: UserAchievementProgressService; reconcileProjection?: boolean };
+type ImportOptions = {
+  userAchievementProgress?: UserAchievementProgressService;
+  userArenaProgress?: Pick<UserArenaProgressService, 'rebuildAllInTransaction'>;
+  reconcileProjection?: boolean;
+};
 
 /** Names are compared case-insensitively, with source whitespace normalized. */
 export function normalizeLaunchCountryName(name: string): string {
@@ -75,7 +81,11 @@ export async function importLaunchArenas(
   cellSize: number,
 ): Promise<LaunchArenaImportSummary> {
   const progress = createUserAchievementProgressService(database, { cellSize });
-  return database.transaction((transaction) => importLaunchArenasInTransaction(transaction, rows, cellSize, { userAchievementProgress: progress }));
+  const arenaProgress = createUserArenaProgressService(database, { cellSize });
+  return database.transaction((transaction) => importLaunchArenasInTransaction(transaction, rows, cellSize, {
+    userAchievementProgress: progress,
+    userArenaProgress: arenaProgress,
+  }));
 }
 
 /** Import into a caller-owned transaction (used by the one-time rebuild). */
@@ -87,6 +97,7 @@ export async function importLaunchArenasInTransaction(
 ): Promise<LaunchArenaImportSummary> {
   if (!Number.isInteger(cellSize) || cellSize <= 0) throw new RangeError('Grid cell size must be a positive integer.');
   if (rows.length === 0) throw new RangeError('Launch source is empty.');
+  await lockArenaCatalogExclusive(transaction);
   const ids = rows.map((row) => row.id);
   if (new Set(ids).size !== ids.length) throw new RangeError('Launch source contains duplicate IDs.');
   for (const row of rows) {
@@ -155,7 +166,11 @@ export async function importLaunchArenasInTransaction(
     }
     if (options.reconcileProjection !== false) {
       const progress = options.userAchievementProgress ?? createUserAchievementProgressService(transaction, { cellSize });
-      await progress.rebuildAllInTransaction(transaction);
+      const arenaProgress = options.userArenaProgress ?? createUserArenaProgressService(transaction, { cellSize });
+      const snapshots = await arenaProgress.rebuildAllInTransaction(transaction);
+      for (const { userId, snapshot } of snapshots) {
+        await progress.upsertFromArenaSnapshotInTransaction(transaction, userId, snapshot, { promoteToComplete: true });
+      }
     }
     return { imported: rows.length, refreshed: rows.length };
 }

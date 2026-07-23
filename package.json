@@ -29,6 +29,7 @@
     "backfill:flight-thumbnails": "tsx --env-file-if-exists=.env src/scripts/backfillFlightThumbnails.ts",
     "backfill:arena-achievements": "tsx --env-file-if-exists=.env src/scripts/backfillArenaAchievements.ts",
     "backfill:arena-leadership": "tsx --env-file-if-exists=.env src/scripts/backfillArenaLeadership.ts",
+    "backfill:user-arena-progress": "tsx --env-file-if-exists=.env src/scripts/backfillUserArenaProgress.ts",
     "backfill:user-achievement-progress": "tsx --env-file-if-exists=.env src/scripts/backfillUserAchievementProgress.ts",
     "verify:release-backfills": "tsx --env-file-if-exists=.env src/scripts/verifyReleaseBackfills.ts"
   },

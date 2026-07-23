@@ -1,7 +1,7 @@
 import { sql } from 'drizzle-orm';
 import type { Database } from '../db/client.js';
 import type { AchievementKey } from '../domain/achievement/catalog.js';
-import { awardAchievement, awardAchievementRecordInTransaction, type AchievementAwardResult, type AchievementRecordResult } from './achievementService.js';
+import { awardAchievementsInBatch, awardAchievementRecordInTransaction, type AchievementRecordResult } from './achievementService.js';
 import { arenaCellOwnershipPredicateSql, claimCellCenterSql } from './arenaGeometrySql.js';
 import {
   generalCoverageMilestones,
@@ -60,6 +60,94 @@ function numberOrNull(value: number | string | null): number | null {
 
 function crossedThresholds(count: number, thresholds: readonly number[]): number[] {
   return thresholds.filter((threshold) => count >= threshold);
+}
+
+type ArenaOrdinaryCandidate = {
+  key: string;
+  details: Record<string, unknown>;
+  value?: number;
+};
+
+function byId<T extends { id: string }>(rows: readonly T[]): T[] {
+  return [...rows].sort((left, right) => left.id.localeCompare(right.id));
+}
+
+function completeLaunch(rows: readonly ArenaAchievementSnapshotRow[]): ArenaAchievementSnapshotRow | undefined {
+  return byId(rows.filter((row) => {
+    const total = numberOrNull(row.claimableCellCount);
+    return total !== null && total > 0 && Number(row.claimedCells) === total;
+  }))[0];
+}
+
+function generalCoverage(rows: readonly ArenaAchievementSnapshotRow[]): number {
+  return rows.reduce((best, row) => {
+    const total = numberOrNull(row.claimableCellCount);
+    if (total === null || total <= 0) return best;
+    return Math.max(best, Number(row.claimedCells) * 100 / total);
+  }, 0);
+}
+
+function bestCoverageArena(rows: readonly ArenaAchievementSnapshotRow[], threshold: number): ArenaAchievementSnapshotRow | undefined {
+  return byId(rows.filter((row) => {
+    const total = numberOrNull(row.claimableCellCount);
+    return total !== null && total > 0 && Number(row.claimedCells) * 100 >= threshold * total;
+  }))[0];
+}
+
+function ordinaryCandidates(
+  snapshot: readonly ArenaAchievementSnapshotRow[],
+  before?: readonly ArenaAchievementSnapshotRow[],
+): ArenaOrdinaryCandidate[] {
+  const launchRows = byId(snapshot.filter((row) => row.arenaType === 'launch'));
+  const beforeLaunchRows = before ? before.filter((row) => row.arenaType === 'launch') : [];
+  const visitedLaunches = launchRows.filter((row) => row.visited).length;
+  const beforeVisitedLaunches = beforeLaunchRows.filter((row) => row.visited).length;
+  const firstOriginArena = launchRows.find((row) => row.firstFromLaunch);
+  const firstOriginCrossed = firstOriginArena && (!before || beforeVisitedLaunches === 0);
+  const candidates: ArenaOrdinaryCandidate[] = [];
+  if (firstOriginCrossed) {
+    candidates.push({ key: 'first_flight_from_launch', details: { arenaId: firstOriginArena.id, visitedLaunchCount: visitedLaunches } });
+  }
+  for (const threshold of crossedThresholds(visitedLaunches, launchVisitMilestones)) {
+    if (!before || beforeVisitedLaunches < threshold) candidates.push({ key: `launches_visited_${threshold}`, details: { visitedLaunches }, value: threshold });
+  }
+
+  const completed = completeLaunch(launchRows);
+  const beforeCompleted = completeLaunch(beforeLaunchRows);
+  if (completed && (!before || !beforeCompleted)) {
+    candidates.push({ key: 'complete_a_launch_arena', details: {
+      arenaId: completed.id,
+      claimedCells: Number(completed.claimedCells),
+      totalCells: Number(completed.claimableCellCount),
+    } });
+  }
+
+  const generalRows = byId(snapshot.filter((row) => row.arenaType === 'general'));
+  const beforeGeneralRows = before ? before.filter((row) => row.arenaType === 'general') : [];
+  const exploredGenerals = generalRows.filter((row) => Number(row.claimedCells) > 0).length;
+  const beforeExploredGenerals = beforeGeneralRows.filter((row) => Number(row.claimedCells) > 0).length;
+  if (exploredGenerals > 0 && (!before || beforeExploredGenerals === 0)) candidates.push({ key: 'first_cells_in_general_arena', details: { exploredArenaCount: exploredGenerals } });
+  for (const threshold of crossedThresholds(exploredGenerals, generalExplorationMilestones)) {
+    if (!before || beforeExploredGenerals < threshold) candidates.push({ key: `general_arenas_explored_${threshold}`, details: { exploredArenaCount: exploredGenerals }, value: threshold });
+  }
+
+  const coverage = generalCoverage(generalRows);
+  const beforeCoverage = generalCoverage(beforeGeneralRows);
+  for (const threshold of generalCoverageMilestones) {
+    if ((!before || beforeCoverage < threshold) && coverage >= threshold) {
+      const bestArena = bestCoverageArena(generalRows, threshold);
+      candidates.push({ key: `general_coverage_${threshold}`, details: { arenaId: bestArena?.id, bestCoveragePercentage: coverage }, value: threshold });
+    }
+  }
+
+  for (const [type, prefix] of [['state', 'states_flown_in'], ['country', 'countries_flown_in']] as const) {
+    const count = snapshot.filter((row) => row.arenaType === type && Number(row.claimedCells) > 0).length;
+    const beforeCount = before ? before.filter((row) => row.arenaType === type && Number(row.claimedCells) > 0).length : 0;
+    for (const threshold of crossedThresholds(count, regionalMilestones)) {
+      if (!before || beforeCount < threshold) candidates.push({ key: `${prefix}_${threshold}`, details: { arenaCount: count }, value: threshold });
+    }
+  }
+  return candidates;
 }
 
 /** Evaluates Arena achievements in a caller-owned transaction after claims exist. */
@@ -176,41 +264,15 @@ export async function awardArenaAchievementsFromSnapshotInTransaction(
   input: ArenaAchievementEvaluationInput,
   snapshot: readonly ArenaAchievementSnapshotRow[],
 ): Promise<ArenaAchievementEvaluation> {
-  const newlyEarned: AchievementKey[] = [];
-  let alreadyEarned = 0;
-  const award = async (key: string, details: Record<string, unknown>, value?: number) => {
-    const result: AchievementAwardResult = await awardAchievement(database, {
-      userId: input.userId,
-      key,
-      earnedAt: input.earnedAt,
-      sourceFlightId: input.sourceFlightId,
-      ...(value === undefined ? {} : { value }),
-      details,
-    });
-    if (result.newlyEarned) newlyEarned.push(result.key);
-    else alreadyEarned += 1;
-  };
-
+  const ordinary = await awardAchievementsInBatch(database, ordinaryCandidates(snapshot).map((candidate) => ({
+    userId: input.userId,
+    key: candidate.key,
+    earnedAt: input.earnedAt,
+    sourceFlightId: input.sourceFlightId,
+    ...(candidate.value === undefined ? {} : { value: candidate.value }),
+    details: candidate.details,
+  })));
   const launchRows = snapshot.filter((row) => row.arenaType === 'launch');
-  const visitedLaunches = launchRows.filter((row) => row.visited).length;
-  const firstOriginArena = launchRows.find((row) => row.firstFromLaunch);
-  if (firstOriginArena) {
-    await award('first_flight_from_launch', { arenaId: firstOriginArena.id, visitedLaunchCount: visitedLaunches });
-  }
-  for (const threshold of crossedThresholds(visitedLaunches, launchVisitMilestones)) {
-    await award(`launches_visited_${threshold}`, { visitedLaunches }, threshold);
-  }
-
-  const completeLaunch = launchRows.find((row) => {
-    const total = numberOrNull(row.claimableCellCount);
-    return total !== null && total > 0 && Number(row.claimedCells) === total;
-  });
-  if (completeLaunch) await award('complete_a_launch_arena', {
-    arenaId: completeLaunch.id,
-    claimedCells: Number(completeLaunch.claimedCells),
-    totalCells: Number(completeLaunch.claimableCellCount),
-  });
-
   const taggedCount = launchRows.filter((row) => row.tagged).length;
   let record: AchievementRecordResult | null = null;
   if (taggedCount > 0) {
@@ -223,55 +285,49 @@ export async function awardArenaAchievementsFromSnapshotInTransaction(
       details: { taggedLaunches: taggedCount },
     });
   }
-
-  const generalRows = snapshot.filter((row) => row.arenaType === 'general');
-  const exploredGenerals = generalRows.filter((row) => Number(row.claimedCells) > 0).length;
-  if (exploredGenerals > 0) await award('first_cells_in_general_arena', { exploredArenaCount: exploredGenerals });
-  for (const threshold of crossedThresholds(exploredGenerals, generalExplorationMilestones)) {
-    await award(`general_arenas_explored_${threshold}`, { exploredArenaCount: exploredGenerals }, threshold);
-  }
-  const coverage = generalRows.some((row) => {
-    const total = numberOrNull(row.claimableCellCount);
-    return total !== null && total > 0 && Number(row.claimedCells) >= 0;
-  })
-    ? generalRows.reduce((best, row) => {
-      const total = numberOrNull(row.claimableCellCount);
-      if (total === null || total <= 0) return best;
-      return Math.max(best, Number(row.claimedCells) * 100 / total);
-    }, 0)
-    : 0;
-  for (const threshold of generalCoverageMilestones) {
-    const reached = generalRows.some((row) => {
-      const total = numberOrNull(row.claimableCellCount);
-      return total !== null && total > 0
-        && Number(row.claimedCells) * 100 >= threshold * total;
-    });
-    if (reached) {
-      const bestArena = generalRows.find((row) => {
-        const total = numberOrNull(row.claimableCellCount);
-        return total !== null && total > 0
-          && Number(row.claimedCells) * 100 >= threshold * total;
-      });
-      await award(`general_coverage_${threshold}`, {
-        arenaId: bestArena?.id,
-        bestCoveragePercentage: coverage,
-      }, threshold);
-    }
-  }
-
-  for (const [type, prefix] of [['state', 'states_flown_in'], ['country', 'countries_flown_in']] as const) {
-    const count = snapshot.filter((row) => row.arenaType === type && Number(row.claimedCells) > 0).length;
-    for (const threshold of crossedThresholds(count, regionalMilestones)) {
-      await award(`${prefix}_${threshold}`, { arenaCount: count }, threshold);
-    }
-  }
-  return { newlyEarned, alreadyEarned, record };
+  return { newlyEarned: ordinary.newlyEarned, alreadyEarned: ordinary.alreadyEarned, record };
 }
+
+/** Persist only ordinary achievements crossed by this flight's Arena transition. */
+export async function evaluateArenaAchievementTransitionInTransaction(
+  database: ArenaAchievementTransaction,
+  input: ArenaAchievementEvaluationInput,
+  before: ArenaAchievementSnapshot,
+  after: ArenaAchievementSnapshot,
+): Promise<ArenaAchievementEvaluation> {
+  const ordinary = await awardAchievementsInBatch(database, ordinaryCandidates(after.rows, before.rows).map((candidate) => ({
+    userId: input.userId,
+    key: candidate.key,
+    earnedAt: input.earnedAt,
+    sourceFlightId: input.sourceFlightId,
+    ...(candidate.value === undefined ? {} : { value: candidate.value }),
+    details: candidate.details,
+  })));
+  const taggedCount = after.rows.filter((row) => row.arenaType === 'launch' && row.tagged).length;
+  const record = taggedCount > 0
+    ? await awardAchievementRecordInTransaction(database, {
+      userId: input.userId,
+      key: 'most_launches_tagged_one_flight',
+      value: taggedCount,
+      earnedAt: input.earnedAt,
+      sourceFlightId: input.sourceFlightId,
+      details: { taggedLaunches: taggedCount },
+    })
+    : null;
+  return { newlyEarned: ordinary.newlyEarned, alreadyEarned: ordinary.alreadyEarned, record, snapshot: after };
+}
+
+// Plural alias follows the existing evaluator's public naming convention.
+export const evaluateArenaAchievementsTransitionInTransaction = evaluateArenaAchievementTransitionInTransaction;
 
 export type ArenaAchievementService = {
   evaluateInTransaction: typeof evaluateArenaAchievementsInTransaction;
+  evaluateTransitionInTransaction: typeof evaluateArenaAchievementTransitionInTransaction;
 };
 
 export function createArenaAchievementService(): ArenaAchievementService {
-  return { evaluateInTransaction: evaluateArenaAchievementsInTransaction };
+  return {
+    evaluateInTransaction: evaluateArenaAchievementsInTransaction,
+    evaluateTransitionInTransaction: evaluateArenaAchievementTransitionInTransaction,
+  };
 }

@@ -7,6 +7,8 @@ import {
   type ArenaLeadershipReconciliationService,
 } from './arenaLeadershipReconciliationService.js';
 import { createUserAchievementProgressService, type UserAchievementProgressService } from './userAchievementProgressService.js';
+import { createUserArenaProgressService, type UserArenaProgressService } from './userArenaProgressService.js';
+import { lockArenaCatalogExclusive } from './arenaCatalogLock.js';
 
 const STATE_ABBREVIATIONS = new Set([
   'AL', 'AK', 'AZ', 'AR', 'CA', 'CO', 'CT', 'DE', 'FL', 'GA', 'HI', 'ID', 'IL', 'IN', 'IA', 'KS', 'KY', 'LA',
@@ -30,6 +32,7 @@ type ImportOptions = {
   arenaLeadership?: ArenaLeadershipReconciliationService;
   reconcile?: boolean;
   userAchievementProgress?: UserAchievementProgressService;
+  userArenaProgress?: Pick<UserArenaProgressService, 'rebuildAllInTransaction'>;
   reconcileProjection?: boolean;
 };
 
@@ -96,9 +99,11 @@ export async function importStateArenas(
   }
   const leadership = arenaLeadership ?? createArenaLeadershipReconciliationService(database, { cellSize });
   const progress = createUserAchievementProgressService(database, { cellSize });
+  const arenaProgress = createUserArenaProgressService(database, { cellSize });
   return database.transaction((transaction) => importStateArenasInTransaction(transaction, states, cellSize, {
     arenaLeadership: leadership,
     userAchievementProgress: progress,
+    userArenaProgress: arenaProgress,
   }));
 }
 
@@ -113,6 +118,7 @@ export async function importStateArenasInTransaction(
     throw new RangeError('State Arena importer requires a positive grid cell size.');
   }
   if (states.length === 0) throw new RangeError('State Arena source is empty.');
+  await lockArenaCatalogExclusive(transaction);
 
   const sourceIds = states.map((state) => stateArenaSourceId(state.fips));
   if (new Set(sourceIds).size !== sourceIds.length) throw new RangeError('Duplicate State Arena source IDs.');
@@ -184,11 +190,15 @@ export async function importStateArenasInTransaction(
         WHERE arena_type = 'state'
           AND source_id IN (${sql.join(sourceIds.map((sourceId) => sql`${sourceId}`), sql`, `)})
       `);
-      await leadership.reconcileInTransaction(transaction, { arenaIds: ids.rows.map((row) => row.id) });
       if (options.reconcileProjection !== false) {
         const progress = options.userAchievementProgress ?? createUserAchievementProgressService(transaction, { cellSize });
-        await progress.rebuildAllInTransaction(transaction);
+        const arenaProgress = options.userArenaProgress ?? createUserArenaProgressService(transaction, { cellSize });
+        const snapshots = await arenaProgress.rebuildAllInTransaction(transaction);
+        for (const { userId, snapshot } of snapshots) {
+          await progress.upsertFromArenaSnapshotInTransaction(transaction, userId, snapshot, { promoteToComplete: true });
+        }
       }
+      await leadership.reconcileInTransaction(transaction, { arenaIds: ids.rows.map((row) => row.id) });
     }
 
     return { imported: states.length };

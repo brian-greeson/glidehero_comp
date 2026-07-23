@@ -6,6 +6,7 @@ import { parseConfig } from '../config.js';
 import { createDatabase, type Database } from '../db/client.js';
 import { createBucketClient } from '../resources/bucketClient.js';
 import { flightThumbnailKeys } from '../services/flightThumbnailService.js';
+import { USER_ACHIEVEMENT_PROGRESS_COMPLETE_VERSION } from '../services/userAchievementProgressService.js';
 
 const SAMPLE_SIZE = 2;
 
@@ -20,6 +21,7 @@ not be performed.
 
 type CheckStatus = 'PASS' | 'FAIL' | 'SKIP' | 'ERROR';
 type SampleRow = { id: string; artifactPresent: boolean };
+type UserAchievementProgressSample = { id: string; projectionVersion: number | string | null };
 type ThumbnailFlight = { id: string; userId: string };
 
 export type ReleaseBackfillSpotCheck = {
@@ -117,20 +119,82 @@ async function checkArenaLeadership(database: Database): Promise<ReleaseBackfill
   return summarizeReleaseBackfillSpotCheck('arena-leadership', result.rows);
 }
 
-async function checkUserAchievementProgress(database: Database): Promise<ReleaseBackfillSpotCheck> {
-  const result = await database.execute<SampleRow>(sql`
+export async function checkUserAchievementProgress(database: Database): Promise<ReleaseBackfillSpotCheck> {
+  const result = await database.execute<UserAchievementProgressSample>(sql`
     WITH sample AS (
       SELECT user_id AS id
       FROM profiles
       ORDER BY created_at, user_id
       LIMIT ${SAMPLE_SIZE}
     )
-    SELECT sample.id, (progress.user_id IS NOT NULL) AS "artifactPresent"
+    SELECT sample.id, progress.projection_version AS "projectionVersion"
     FROM sample
     LEFT JOIN user_achievement_progress progress ON progress.user_id = sample.id
     ORDER BY sample.id
   `);
-  return summarizeReleaseBackfillSpotCheck('user-achievement-progress', result.rows);
+  return summarizeReleaseBackfillSpotCheck('user-achievement-progress', result.rows.map((row) => ({
+    id: row.id,
+    artifactPresent: Number(row.projectionVersion) === USER_ACHIEVEMENT_PROGRESS_COMPLETE_VERSION,
+  })));
+}
+
+async function checkUserArenaProgress(database: Database): Promise<ReleaseBackfillSpotCheck> {
+  const result = await database.execute<SampleRow>(sql`
+    WITH eligible AS (
+      SELECT DISTINCT claims.claim_user AS id
+      FROM user_grid_claims claims
+      INNER JOIN arenas arena
+        ON arena.arena_type IN ('general', 'state', 'country')
+       AND ST_Covers(
+         arena.area,
+         ST_SetSRID(ST_MakePoint((claims.x * 500) + 250, (claims.y * 500) + 250), 6933)
+       )
+       AND (
+         arena.arena_type = 'general'
+         OR (
+           arena.external_id IS NOT NULL
+           AND btrim(arena.external_id) <> ''
+           AND NOT EXISTS (
+             SELECT 1 FROM arenas peer
+             WHERE peer.arena_type = arena.arena_type
+               AND peer.id <> arena.id
+               AND peer.external_id IS NOT NULL
+               AND btrim(peer.external_id) <> ''
+               AND peer.external_id COLLATE "C" < arena.external_id COLLATE "C"
+               AND ST_Covers(
+                 peer.area,
+                 ST_SetSRID(ST_MakePoint((claims.x * 500) + 250, (claims.y * 500) + 250), 6933)
+               )
+           )
+         )
+       )
+      UNION
+      SELECT DISTINCT flight.user_id AS id
+      FROM flights flight
+      INNER JOIN arenas arena
+        ON arena.arena_type = 'launch'
+       AND flight.launch_latitude IS NOT NULL
+       AND flight.launch_longitude IS NOT NULL
+       AND flight.processing_status = 'completed'
+       AND ST_Covers(
+         arena.area,
+         ST_Transform(
+           ST_SetSRID(ST_MakePoint(flight.launch_longitude, flight.launch_latitude), 4326),
+           6933
+         )
+       )
+    ), sample AS (
+      SELECT id FROM eligible ORDER BY id LIMIT ${SAMPLE_SIZE}
+    )
+    SELECT sample.id,
+      EXISTS (
+        SELECT 1 FROM user_arena_progress progress
+        WHERE progress.user_id = sample.id
+      ) AS "artifactPresent"
+    FROM sample
+    ORDER BY sample.id
+  `);
+  return summarizeReleaseBackfillSpotCheck('user-arena-progress', result.rows);
 }
 
 function isNotFound(error: unknown): boolean {
@@ -239,6 +303,7 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
     )));
     checks.push(await runCheck('arena-achievements', () => checkArenaAchievements(db)));
     checks.push(await runCheck('arena-leadership', () => checkArenaLeadership(db)));
+    checks.push(await runCheck('user-arena-progress', () => checkUserArenaProgress(db)));
     checks.push(await runCheck('user-achievement-progress', () => checkUserAchievementProgress(db)));
     for (const check of checks) printReleaseBackfillSpotCheck(check);
     const unsuccessful = checks.filter((check) => check.status === 'FAIL' || check.status === 'ERROR');

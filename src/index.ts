@@ -35,6 +35,7 @@ import { createFlightThumbnailService } from './services/flightThumbnailService.
 import { createFlightThumbnailLifecycleService } from './services/flightThumbnailLifecycleService.js';
 import { createFlightThumbnailDeliveryService } from './services/flightThumbnailDeliveryService.js';
 import { createUserAchievementProgressService } from './services/userAchievementProgressService.js';
+import { createUserArenaProgressService } from './services/userArenaProgressService.js';
 import { createWorkerControlService } from './services/workerControlService.js';
 
 const config = parseConfig(process.env);
@@ -63,9 +64,10 @@ const valkey = await createValkeyClient(config.valkeyUrl);
 const workerControl = createWorkerControlService(valkey);
 const arenaLeadership = createArenaLeadershipReconciliationService(db, { cellSize: config.gridClaimCellSize });
 const userAchievementProgress = createUserAchievementProgressService(db, { cellSize: config.gridClaimCellSize });
+const userArenaProgress = createUserArenaProgressService(db, { cellSize: config.gridClaimCellSize });
 const auth = createAuthService(db, { sessionTtlSeconds: config.sessionTtlSeconds }, userAchievementProgress);
-const gridClaim = createGridClaimService(db, { cellSize: config.gridClaimCellSize }, undefined, undefined, arenaLeadership, userAchievementProgress);
-const adminAreas = createAdminAreaService(db, { cellSize: config.gridClaimCellSize }, arenaLeadership);
+const gridClaim = createGridClaimService(db, { cellSize: config.gridClaimCellSize }, undefined, undefined, arenaLeadership, userAchievementProgress, userArenaProgress);
+const adminAreas = createAdminAreaService(db, { cellSize: config.gridClaimCellSize }, arenaLeadership, userArenaProgress, userAchievementProgress);
 const arenas = createArenaService(db, { cellSize: config.gridClaimCellSize });
 const arenaProgress = createArenaProgressService(db, { cellSize: config.gridClaimCellSize });
 const monthlyCoverage = createMonthlyCoverageService(db, { cellSize: config.gridClaimCellSize });
@@ -88,7 +90,7 @@ const adminFlights = createAdminFlightService(db, gridClaim, {
   bucketName: config.bucket.bucketName,
   uploadQueue,
   thumbnailLifecycle,
-}, { arenaLeadership, cellSize: config.gridClaimCellSize, userAchievementProgress }, activity);
+}, { arenaLeadership, cellSize: config.gridClaimCellSize, userAchievementProgress, userArenaProgress }, activity);
 const adminUsers = createAdminUserService(db, {
   uploadQueue,
   s3Client,

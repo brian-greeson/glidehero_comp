@@ -1,6 +1,6 @@
 import { getTableConfig } from 'drizzle-orm/pg-core';
 import { describe, expect, it } from 'vitest';
-import { arenaCurrentLeaders, arenaLeadershipEvents, arenaLeadershipStates, arenas, launches } from '../../src/db/schema.js';
+import { arenaCurrentLeaders, arenaLeadershipEvents, arenaLeadershipStates, arenas, launches, userArenaProgress } from '../../src/db/schema.js';
 
 describe('launch schema', () => {
   it('preserves the source launch fields and lookup indexes', () => {
@@ -82,5 +82,29 @@ describe('Arena leadership schema', () => {
       'arena_leadership_events_arena_id_user_id_claim_timestamp_idx',
       'arena_leadership_events_source_flight_id_idx',
     ]);
+  });
+});
+
+describe('User Arena progress schema', () => {
+  it('stores one nonnegative progress projection per user and Arena', () => {
+    const config = getTableConfig(userArenaProgress);
+
+    expect(config.columns.map((column) => column.name)).toEqual([
+      'user_id', 'arena_id', 'claimed_cell_count', 'visited', 'updated_at',
+    ]);
+    expect(config.primaryKeys).toHaveLength(1);
+    expect(config.primaryKeys[0]?.columns.map((column) => column.name)).toEqual(['user_id', 'arena_id']);
+    expect(config.columns.find((column) => column.name === 'claimed_cell_count')).toMatchObject({ notNull: true, default: 0 });
+    expect(config.columns.find((column) => column.name === 'visited')).toMatchObject({ notNull: true, default: false });
+    expect(config.columns.find((column) => column.name === 'updated_at')).toMatchObject({ notNull: true, hasDefault: true });
+    expect(config.checks.map((constraint) => constraint.name)).toEqual([
+      'user_arena_progress_claimed_cell_count_nonnegative',
+    ]);
+    expect(config.indexes.map((index) => index.config.name)).toEqual([
+      'user_arena_progress_arena_id_claimed_cell_count_idx',
+    ]);
+
+    expect(config.foreignKeys).toHaveLength(2);
+    expect(config.foreignKeys.every((foreignKey) => foreignKey.onDelete === 'cascade')).toBe(true);
   });
 });

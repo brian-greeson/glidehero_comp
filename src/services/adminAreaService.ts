@@ -7,7 +7,9 @@ import {
   createArenaLeadershipReconciliationService,
   type ArenaLeadershipReconciliationService,
 } from './arenaLeadershipReconciliationService.js';
-import { createUserAchievementProgressService } from './userAchievementProgressService.js';
+import { createUserAchievementProgressService, type UserAchievementProgressService } from './userAchievementProgressService.js';
+import { createUserArenaProgressService, type UserArenaProgressService } from './userArenaProgressService.js';
+import { lockArenaCatalogExclusive } from './arenaCatalogLock.js';
 
 export type AdminAreaSummary = {
   id: string;
@@ -75,9 +77,10 @@ export function createAdminAreaService(
   database: Database,
   options: { cellSize: number },
   arenaLeadership: ArenaLeadershipReconciliationService = createArenaLeadershipReconciliationService(database, options),
+  userArenaProgress: Pick<UserArenaProgressService, 'findUsersAffectedByArenasInTransaction' | 'rebuildUsersInTransaction'> = createUserArenaProgressService(database, options),
+  userAchievementProgress: Pick<UserAchievementProgressService, 'upsertFromArenaSnapshotInTransaction'> = createUserAchievementProgressService(database, options),
 ): AdminAreaService {
   const { cellSize } = options;
-  const userAchievementProgress = createUserAchievementProgressService(database, options);
 
   async function resolveCountry(executor: Pick<Database, 'execute'>, countryArenaId: string): Promise<AdminCountryOption> {
     if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(countryArenaId)) {
@@ -161,6 +164,7 @@ export function createAdminAreaService(
 
     async create(input) {
       const id = await database.transaction(async (transaction) => {
+        await lockArenaCatalogExclusive(transaction);
         const country = await resolveCountry(transaction, input.countryArenaId);
         const result = await transaction.execute<{ id: string }>(sql`
           WITH geometry AS (SELECT ${normalizedArenaGeometrySql(input.geometries)} AS area),
@@ -179,8 +183,11 @@ export function createAdminAreaService(
         `);
         const createdId = result.rows[0]?.id;
         if (!createdId) throw new RangeError('Arena geometry must contain at least one valid polygon and one claimable grid cell.');
-        const affectedUsers = await userAchievementProgress.findUsersAffectedByArenasInTransaction(transaction, [createdId]);
-        await userAchievementProgress.rebuildUsersInTransaction(transaction, affectedUsers);
+        const affectedUsers = await userArenaProgress.findUsersAffectedByArenasInTransaction(transaction, [createdId]);
+        const snapshots = await userArenaProgress.rebuildUsersInTransaction(transaction, affectedUsers);
+        for (const { userId, snapshot } of snapshots) {
+          await userAchievementProgress.upsertFromArenaSnapshotInTransaction(transaction, userId, snapshot, { promoteToComplete: true });
+        }
         await arenaLeadership.reconcileInTransaction(transaction, { arenaIds: [createdId] });
         return createdId;
       });
@@ -192,6 +199,7 @@ export function createAdminAreaService(
 
     async update(id, input) {
       const updated = await database.transaction(async (transaction) => {
+        await lockArenaCatalogExclusive(transaction);
         const country = await resolveCountry(transaction, input.countryArenaId);
         const arenaTypeResult = await transaction.execute<{ arenaType: AdminAreaSummary['arenaType'] }>(sql`
           SELECT arena_type AS "arenaType" FROM arenas WHERE id = ${id}
@@ -211,7 +219,7 @@ export function createAdminAreaService(
           `);
           oldPeerIds = peers.rows.map((peer) => peer.id);
         }
-        const oldAffectedUsers = await userAchievementProgress.findUsersAffectedByArenasInTransaction(
+        const oldAffectedUsers = await userArenaProgress.findUsersAffectedByArenasInTransaction(
           transaction,
           [id, ...oldPeerIds],
         );
@@ -262,11 +270,14 @@ export function createAdminAreaService(
           `);
           for (const peer of peers.rows) newAffectedArenaIds.add(peer.id);
         }
-        const newAffectedUsers = await userAchievementProgress.findUsersAffectedByArenasInTransaction(
+        const newAffectedUsers = await userArenaProgress.findUsersAffectedByArenasInTransaction(
           transaction,
           [...newAffectedArenaIds],
         );
-        await userAchievementProgress.rebuildUsersInTransaction(transaction, [...oldAffectedUsers, ...newAffectedUsers]);
+        const snapshots = await userArenaProgress.rebuildUsersInTransaction(transaction, [...oldAffectedUsers, ...newAffectedUsers]);
+        for (const { userId, snapshot } of snapshots) {
+          await userAchievementProgress.upsertFromArenaSnapshotInTransaction(transaction, userId, snapshot, { promoteToComplete: true });
+        }
         if (row.arenaType !== 'launch') {
           await arenaLeadership.reconcileInTransaction(transaction, { arenaIds: [...new Set([row.id, ...oldPeerIds, ...newAffectedArenaIds])] });
         }

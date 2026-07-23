@@ -7,6 +7,7 @@ import { flightUploadPrefix, type FlightUploadQueueService } from './flightUploa
 import { hashPassword } from './passwordService.js';
 import type { ArenaLeadershipReconciliationService } from './arenaLeadershipReconciliationService.js';
 import { findEligibleArenaIdsForCompetitionUser } from './arenaClaimImpact.js';
+import { lockArenaCatalogShared } from './arenaCatalogLock.js';
 import type { UserAchievementProgressService } from './userAchievementProgressService.js';
 
 export type AdminUserSummary = {
@@ -189,6 +190,7 @@ export function createAdminUserService(database: Database, cleanup: CleanupOptio
       await deleteStoredObjects(input.userId, storedFiles.map(({ bucketKey }) => bucketKey));
       await cleanup.uploadQueue.removeTerminalJobsForUser(input.userId);
       await database.transaction(async (tx) => {
+        await lockArenaCatalogShared(tx);
         const arenaIds = await findEligibleArenaIdsForCompetitionUser(tx, {
           userId: input.userId,
           cellSize: cleanup.cellSize,

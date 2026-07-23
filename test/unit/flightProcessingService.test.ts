@@ -72,6 +72,7 @@ function databaseDouble(options: { events?: string[]; transactionError?: Error; 
       await callback({
         insert: vi.fn(() => ({ values: txInsertValues })),
         update: vi.fn(() => ({ set: txUpdateSet })),
+        execute: vi.fn(async () => ({ rows: [] })),
       });
       options.events?.push('ingest-committed');
     } catch (error) {
@@ -155,6 +156,30 @@ describe('FlightProcessingService', () => {
         }),
       }),
     ]);
+  });
+
+  it('passes injected Arena projection dependencies through to grid claim processing', () => {
+    const userAchievementProgress = { upsertFromArenaSnapshotInTransaction: vi.fn() };
+    const userArenaProgress = { applyFlightInTransaction: vi.fn() };
+    const { database } = databaseDouble();
+
+    createFlightProcessingService(database as never, {
+      bucketName: 'glidehero-files',
+      s3Client: { send: vi.fn() } as never,
+      gridClaimCellSize: 1000,
+      userAchievementProgress: userAchievementProgress as never,
+      userArenaProgress: userArenaProgress as never,
+    });
+
+    expect(createGridClaimService).toHaveBeenCalledWith(
+      database,
+      { cellSize: 1000 },
+      undefined,
+      undefined,
+      undefined,
+      userAchievementProgress,
+      userArenaProgress,
+    );
   });
 
   it('keeps the flight and source when parsing fails', async () => {

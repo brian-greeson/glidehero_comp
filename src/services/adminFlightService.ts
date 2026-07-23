@@ -12,7 +12,9 @@ import { findEligibleArenaIdsForCompetitionFlight } from './arenaClaimImpact.js'
 import type { FlightThumbnailLifecycleService } from './flightThumbnailLifecycleService.js';
 import { flightThumbnailErrorDetails } from './flightThumbnailService.js';
 import { lockUserProgression } from './gridClaimService.js';
+import { lockArenaCatalogShared } from './arenaCatalogLock.js';
 import type { UserAchievementProgressService } from './userAchievementProgressService.js';
+import type { UserArenaProgressService } from './userArenaProgressService.js';
 import type { ActivityService } from './activityService.js';
 
 export type AdminFlight = {
@@ -59,7 +61,8 @@ type StorageOptions = {
 type ArenaLeadershipOptions = {
   arenaLeadership: ArenaLeadershipReconciliationService;
   cellSize: number;
-  userAchievementProgress?: Pick<UserAchievementProgressService, 'rebuildInTransaction'>;
+  userAchievementProgress?: Pick<UserAchievementProgressService, 'rebuildInTransaction' | 'upsertFromArenaSnapshotInTransaction'>;
+  userArenaProgress?: Pick<UserArenaProgressService, 'rebuildInTransaction'>;
 };
 
 function isMissingObject(error: unknown): boolean {
@@ -109,7 +112,10 @@ export function createAdminFlightService(
     if (!storage) throw new Error('Admin flight storage is not configured.');
 
     await database.transaction(async (tx) => {
-      if (flight.processingStatus === 'completed' && arenaLeadershipOptions?.userAchievementProgress) {
+      const hasProjectionDependencies = flight.processingStatus === 'completed'
+        && Boolean(arenaLeadershipOptions?.userArenaProgress || arenaLeadershipOptions?.userAchievementProgress);
+      await lockArenaCatalogShared(tx);
+      if (hasProjectionDependencies) {
         await lockUserProgression(tx, input.userId);
       }
       const arenaIds = await findEligibleArenaIdsForCompetitionFlight(tx, {
@@ -117,8 +123,19 @@ export function createAdminFlightService(
         cellSize: configuredCellSize,
       });
       await tx.delete(igcFiles).where(and(eq(igcFiles.id, flight.igcFileId), eq(igcFiles.userId, input.userId)));
-      if (flight.processingStatus === 'completed' && arenaLeadershipOptions?.userAchievementProgress) {
-        await arenaLeadershipOptions.userAchievementProgress.rebuildInTransaction(tx, input.userId);
+      if (flight.processingStatus === 'completed') {
+        if (arenaLeadershipOptions?.userArenaProgress) {
+          const snapshot = await arenaLeadershipOptions.userArenaProgress.rebuildInTransaction(tx, input.userId);
+          if (arenaLeadershipOptions.userAchievementProgress?.upsertFromArenaSnapshotInTransaction) {
+            await arenaLeadershipOptions.userAchievementProgress.upsertFromArenaSnapshotInTransaction(tx, input.userId, snapshot, { promoteToComplete: true });
+          } else if (arenaLeadershipOptions.userAchievementProgress?.rebuildInTransaction) {
+            // Keep legacy optional wiring functional while the shared Arena
+            // projection dependency is introduced.
+            await arenaLeadershipOptions.userAchievementProgress.rebuildInTransaction(tx, input.userId);
+          }
+        } else if (arenaLeadershipOptions?.userAchievementProgress) {
+          await arenaLeadershipOptions.userAchievementProgress.rebuildInTransaction(tx, input.userId);
+        }
       }
       if (arenaIds.length > 0) {
         const arenaLeadership = arenaLeadershipOptions?.arenaLeadership;

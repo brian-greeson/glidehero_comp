@@ -10,8 +10,10 @@ import {
   type ArenaLeadershipReconciliationService,
 } from './arenaLeadershipReconciliationService.js';
 import { createUserAchievementProgressService, type UserAchievementProgressService } from './userAchievementProgressService.js';
+import { createUserArenaProgressService, type UserArenaProgressService } from './userArenaProgressService.js';
 import { findEligibleArenaIdsForCompetitionFlight } from './arenaClaimImpact.js';
 import { viewportCtes, type ViewportBounds } from './viewportGrid.js';
+import { lockArenaCatalogShared } from './arenaCatalogLock.js';
 
 export type GridClaimProcessResult = {
   flightId: string;
@@ -42,7 +44,11 @@ export interface TransactionalGridClaimService extends GridClaimService {
   processInTransaction(
     transaction: GridClaimTransaction,
     input: { flightId: string; userId: string; launchTimezone: string },
-    options?: { evaluateAchievements?: boolean; evaluateLeadership?: boolean },
+    options?: {
+      evaluateAchievements?: boolean;
+      evaluateArenaAchievements?: boolean;
+      evaluateLeadership?: boolean;
+    },
   ): Promise<GridClaimProcessResult>;
 }
 
@@ -61,14 +67,21 @@ export function createGridClaimService(
   arenaAchievements: ArenaAchievementService = createArenaAchievementService(),
   arenaLeadership: ArenaLeadershipReconciliationService = createArenaLeadershipReconciliationService(database, options),
   userAchievementProgress: UserAchievementProgressService = createUserAchievementProgressService(database, options),
+  userArenaProgress: UserArenaProgressService = createUserArenaProgressService(database, options),
 ): TransactionalGridClaimService {
   async function processInTransaction(
     transaction: GridClaimTransaction,
     input: { flightId: string; userId: string; launchTimezone: string },
-    evaluationOptions: { evaluateAchievements?: boolean; evaluateLeadership?: boolean } = {},
+    evaluationOptions: {
+      evaluateAchievements?: boolean;
+      evaluateArenaAchievements?: boolean;
+      evaluateLeadership?: boolean;
+    } = {},
   ): Promise<GridClaimProcessResult> {
     const evaluateAchievements = evaluationOptions.evaluateAchievements ?? true;
+    const evaluateArenaAchievements = evaluationOptions.evaluateArenaAchievements ?? evaluateAchievements;
     const evaluateLeadership = evaluationOptions.evaluateLeadership ?? true;
+    await lockArenaCatalogShared(transaction);
     await lockUserProgression(transaction, input.userId);
     const [flight] = await transaction
       .select({ startedAt: flights.startedAt, createdAt: flights.createdAt })
@@ -97,6 +110,24 @@ export function createGridClaimService(
         enclosedCells: result.enclosedCellCount,
       });
     }
+
+    const shouldEvaluateArenaAchievements = evaluateArenaAchievements && result.progressionVersion === 1 && Boolean(flight);
+    let arenaEvaluation: ArenaAchievementEvaluation = { newlyEarned: [], alreadyEarned: 0, record: null };
+    if (shouldEvaluateArenaAchievements) {
+      const { before, after } = await userArenaProgress.applyFlightInTransaction(transaction, {
+        userId: input.userId,
+        flightId: input.flightId,
+        previousLifetimeUniqueCellCount: result.personalCellTotalAfter - result.newPersonalCellCount,
+        lifetimeUniqueCellCount: result.personalCellTotalAfter,
+      });
+      arenaEvaluation = await arenaAchievements.evaluateTransitionInTransaction(transaction, {
+        userId: input.userId,
+        sourceFlightId: input.flightId,
+        cellSize: options.cellSize,
+        earnedAt: result.evaluatedAt,
+      }, before, after);
+      await userAchievementProgress.upsertFromArenaSnapshotInTransaction(transaction, input.userId, after);
+    }
     if (evaluateLeadership) {
       const arenaIds = await findEligibleArenaIdsForCompetitionFlight(transaction, {
         flightId: input.flightId,
@@ -110,18 +141,6 @@ export function createGridClaimService(
           await arenaLeadership.reconcileInTransaction(transaction, { arenaIds });
         }
       }
-    }
-    const arenaEvaluation = flight && evaluateAchievements
-      ? await arenaAchievements.evaluateInTransaction(transaction, {
-        userId: input.userId,
-        sourceFlightId: input.flightId,
-        cellSize: options.cellSize,
-        earnedAt: result.evaluatedAt,
-      })
-      : { newlyEarned: [], alreadyEarned: 0, record: null };
-    if (flight && evaluateAchievements && 'snapshot' in arenaEvaluation && arenaEvaluation.snapshot
-      && arenaEvaluation.snapshot.rows.every((row) => typeof row.arenaType === 'string')) {
-      await userAchievementProgress.upsertFromArenaSnapshotInTransaction(transaction, input.userId, arenaEvaluation.snapshot);
     }
     result.arenaAchievements = {
       newlyEarned: arenaEvaluation.newlyEarned,
@@ -168,6 +187,7 @@ export function createGridClaimService(
     processInTransaction,
     async reprocess({ flightId }) {
       return database.transaction(async (tx) => {
+        await lockArenaCatalogShared(tx);
         const [flight] = await tx
           .select({ userId: flights.userId, processingStatus: flights.processingStatus, launchTimezone: flights.launchTimezone })
           .from(flights)
@@ -188,7 +208,13 @@ export function createGridClaimService(
           flightId,
           userId: flight.userId,
           launchTimezone: flight.launchTimezone,
-        }, { evaluateLeadership: false });
+        }, { evaluateArenaAchievements: false, evaluateLeadership: false });
+        // Reprocessing replaces the flight's claims, so rebuild the durable
+        // Arena projection from canonical claims even when this is the first
+        // progression evaluation. Reprocess correction must never evaluate
+        // transition achievements a second time.
+        const arenaSnapshot = await userArenaProgress.rebuildInTransaction(tx, flight.userId);
+        await userAchievementProgress.upsertFromArenaSnapshotInTransaction(tx, flight.userId, arenaSnapshot, { promoteToComplete: true });
         const newArenaIds = await findEligibleArenaIdsForCompetitionFlight(tx, {
           flightId,
           cellSize: options.cellSize,

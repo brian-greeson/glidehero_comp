@@ -14,6 +14,7 @@ import {
 } from '../domain/arena/leadership.js';
 import { awardAchievement } from './achievementService.js';
 import { arenaCellOwnershipPredicateSql } from './arenaGeometrySql.js';
+import { USER_ACHIEVEMENT_PROGRESS_COMPLETE_VERSION } from './userAchievementProgressService.js';
 
 type DatabaseTransaction = Parameters<Parameters<Database['transaction']>[0]>[0];
 export type ArenaLeadershipTransaction = Pick<DatabaseTransaction, 'execute' | 'insert' | 'select'>;
@@ -341,7 +342,7 @@ export function createArenaLeadershipReconciliationService(database: Database, o
     `);
     const normalizedClaims = claimResult.rows.map(normalizedClaim);
     const fallbackIds: string[] = [];
-    const incrementalArenas: StoredArena[] = [];
+    const incrementalCandidates: StoredArena[] = [];
     for (const arena of arenas) {
       const state = stateByArena.get(arena.arenaId);
       const claims = claimsForArena(normalizedClaims, arena.arenaId).sort(compareArenaLeadershipClaims);
@@ -354,8 +355,56 @@ export function createArenaLeadershipReconciliationService(database: Database, o
         || (first.claimTimestamp.getTime() === cursorTimestamp.getTime() && first.sourceFlightId <= (cursorFlightId ?? ''))
       );
       if (!state || (state.leadingCellCount > 0 && (!cursorTimestamp || !cursorFlightId)) || precedesCursor) fallbackIds.push(arena.arenaId);
-      else incrementalArenas.push(arena);
+      else incrementalCandidates.push(arena);
     }
+
+    // user_arena_progress is maintained before leadership evaluation and is
+    // therefore the authoritative post-flight total for each affected pilot.
+    // Missing or undersized rows cannot safely produce a pre-flight total;
+    // rebuild that Arena from the historical claims instead.
+    const incrementalUserIds = [...new Set(normalizedClaims
+      .filter((claim) => incrementalCandidates.some((arena) => arena.arenaId === claim.arenaId))
+      .map((claim) => claim.userId))];
+    const projectedTotals = new Map<string, number>();
+    if (incrementalCandidates.length > 0 && incrementalUserIds.length > 0) {
+      const projectionResult = await transaction.execute<{
+        arenaId: string;
+        userId: string;
+        claimedCells: number | string;
+      }>(sql`
+        SELECT arena_id AS "arenaId", user_id AS "userId", claimed_cell_count AS "claimedCells"
+        FROM user_arena_progress
+        WHERE arena_id IN (${sql.join(incrementalCandidates.map((arena) => sql`${arena.arenaId}`), sql`, `)})
+          AND user_id IN (${sql.join(incrementalUserIds.map((userId) => sql`${userId}`), sql`, `)})
+          AND EXISTS (
+            SELECT 1 FROM user_achievement_progress summary
+            WHERE summary.user_id = user_arena_progress.user_id
+              AND summary.projection_version = ${USER_ACHIEVEMENT_PROGRESS_COMPLETE_VERSION}
+          )
+      `);
+      for (const row of projectionResult.rows) {
+        const claimedCells = Number(row.claimedCells);
+        if (Number.isSafeInteger(claimedCells) && claimedCells >= 0) {
+          projectedTotals.set(`${row.arenaId}:${row.userId}`, claimedCells);
+        }
+      }
+    }
+
+    const incrementalArenas = incrementalCandidates.filter((arena) => {
+      const claims = claimsForArena(normalizedClaims, arena.arenaId);
+      const newCounts = new Map<string, number>();
+      for (const claim of claims) newCounts.set(claim.userId, (newCounts.get(claim.userId) ?? 0) + 1);
+      let projectionIsSafe = true;
+      for (const [userId, added] of newCounts) {
+        const projected = projectedTotals.get(`${arena.arenaId}:${userId}`);
+        if (projected === undefined || projected < added) {
+          projectionIsSafe = false;
+          break;
+        }
+      }
+      if (!projectionIsSafe) fallbackIds.push(arena.arenaId);
+      return projectionIsSafe;
+    });
 
     const fallback = fallbackIds.length > 0
       ? await reconcileInTransaction(transaction, { arenaIds: fallbackIds, awardAchievements: false })
@@ -363,30 +412,6 @@ export function createArenaLeadershipReconciliationService(database: Database, o
     const summaries = [...fallback.arenas];
     const qualifyingEvents = [...(fallback.qualifyingEvents ?? [])];
     let eventsBuilt = fallback.eventsBuilt;
-
-    const incrementalUserIds = [...new Set(normalizedClaims
-      .filter((claim) => incrementalArenas.some((arena) => arena.arenaId === claim.arenaId))
-      .map((claim) => claim.userId))];
-    const incrementalTotals = new Map<string, number>();
-    if (incrementalArenas.length > 0 && incrementalUserIds.length > 0) {
-      const incrementalArenaIds = sql.join(incrementalArenas.map((arena) => sql`${arena.arenaId}`), sql`, `);
-      const incrementalUsers = sql.join(incrementalUserIds.map((userId) => sql`${userId}`), sql`, `);
-      const totalsResult = await transaction.execute<{ arenaId: string; userId: string; count: number | string }>(sql`
-        SELECT arena.id AS "arenaId", claim.claim_user AS "userId", COUNT(DISTINCT (claim.x, claim.y))::integer AS count
-        FROM competition_grid_claims claim
-        INNER JOIN arenas arena ON arena.id IN (${incrementalArenaIds})
-          AND ${arenaCellOwnershipPredicateSql({
-            arenaId: sql`arena.id`,
-            arenaType: sql`arena.arena_type`,
-            externalId: sql`arena.external_id`,
-            area: sql`arena.area`,
-            cellCenter: sql`ST_SetSRID(ST_MakePoint((claim.x + 0.5) * ${options.cellSize}, (claim.y + 0.5) * ${options.cellSize}), 6933)`,
-          })}
-        WHERE claim.claim_user IN (${incrementalUsers})
-        GROUP BY arena.id, claim.claim_user
-      `);
-      for (const row of totalsResult.rows) incrementalTotals.set(`${row.arenaId}:${row.userId}`, Number(row.count));
-    }
 
     for (const arena of incrementalArenas) {
       const state = stateByArena.get(arena.arenaId)!;
@@ -415,7 +440,7 @@ export function createArenaLeadershipReconciliationService(database: Database, o
       const newCounts = new Map<string, number>();
       for (const claim of claims) newCounts.set(claim.userId, (newCounts.get(claim.userId) ?? 0) + 1);
       for (const [userId, added] of newCounts) {
-        totals.set(userId, (incrementalTotals.get(`${arena.arenaId}:${userId}`) ?? 0) - added);
+        totals.set(userId, projectedTotals.get(`${arena.arenaId}:${userId}`)! - added);
       }
       const endedTenures = new Map<string, boolean>();
       const events: ArenaLeadershipReplayEvent[] = [];
@@ -460,22 +485,16 @@ export function createArenaLeadershipReconciliationService(database: Database, o
       let nextRankCellCount = Number(state.nextRankCellCount);
       if (!sameMembers(initialLeaderIds, leaderIds)) {
         const rankResult = await transaction.execute<{ count: number | string }>(sql`
-          WITH pilot_cells AS (
-            SELECT DISTINCT claim.claim_user, claim.x, claim.y
-            FROM competition_grid_claims claim
-            INNER JOIN arenas arena ON arena.id = ${arena.arenaId}
-              AND ${arenaCellOwnershipPredicateSql({
-                arenaId: sql`arena.id`,
-                arenaType: sql`arena.arena_type`,
-                externalId: sql`arena.external_id`,
-                area: sql`arena.area`,
-                cellCenter: sql`ST_SetSRID(ST_MakePoint((claim.x + 0.5) * ${options.cellSize}, (claim.y + 0.5) * ${options.cellSize}), 6933)`,
-              })}
-            WHERE TRUE
-          ), totals AS (
-            SELECT claim_user, COUNT(*)::integer AS cells FROM pilot_cells GROUP BY claim_user
-          )
-          SELECT COALESCE(MAX(cells) FILTER (WHERE cells < ${maximum}), 0)::integer AS count FROM totals
+          SELECT COALESCE(MAX(claimed_cell_count), 0)::integer AS count
+          FROM user_arena_progress progress
+          WHERE arena_id = ${arena.arenaId}
+            AND claimed_cell_count > 0
+            AND claimed_cell_count < ${maximum}
+            AND EXISTS (
+              SELECT 1 FROM user_achievement_progress summary
+              WHERE summary.user_id = progress.user_id
+                AND summary.projection_version = ${USER_ACHIEVEMENT_PROGRESS_COMPLETE_VERSION}
+            )
         `);
         nextRankCellCount = Number(rankResult.rows[0]?.count ?? 0);
       } else {

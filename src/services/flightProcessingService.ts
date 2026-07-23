@@ -8,6 +8,8 @@ import { parseIgcFlight } from '../domain/igc/parseIgcFlight.js';
 import { createActivityService } from './activityService.js';
 import { createGridClaimService } from './gridClaimService.js';
 import type { UserAchievementProgressService } from './userAchievementProgressService.js';
+import type { UserArenaProgressService } from './userArenaProgressService.js';
+import { lockArenaCatalogShared } from './arenaCatalogLock.js';
 
 const TRACK_POINT_INSERT_BATCH_SIZE = 1_000;
 export const duplicateFlightMessage = 'This flight has already been uploaded.';
@@ -48,10 +50,19 @@ export function createFlightProcessingService(
     bucketName: string;
     gridClaimCellSize: number;
     userAchievementProgress?: UserAchievementProgressService;
+    userArenaProgress?: UserArenaProgressService;
   },
 ): FlightProcessingService {
-  const gridClaim = options.userAchievementProgress
-    ? createGridClaimService(database, { cellSize: options.gridClaimCellSize }, undefined, undefined, undefined, options.userAchievementProgress)
+  const gridClaim = options.userAchievementProgress || options.userArenaProgress
+    ? createGridClaimService(
+      database,
+      { cellSize: options.gridClaimCellSize },
+      undefined,
+      undefined,
+      undefined,
+      options.userAchievementProgress,
+      options.userArenaProgress,
+    )
     : createGridClaimService(database, { cellSize: options.gridClaimCellSize });
   const activity = createActivityService();
 
@@ -113,6 +124,7 @@ export function createFlightProcessingService(
 
       try {
         await database.transaction(async (tx) => {
+          await lockArenaCatalogShared(tx);
           const fenced = await tx
             .update(flights)
             .set({

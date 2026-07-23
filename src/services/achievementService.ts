@@ -27,6 +27,11 @@ export type AchievementAwardResult = {
   newlyEarned: boolean;
 };
 
+export type AchievementBatchAwardResult = {
+  newlyEarned: AchievementKey[];
+  alreadyEarned: number;
+};
+
 export type AchievementRecordInput = {
   userId: string;
   key: string;
@@ -49,6 +54,59 @@ function detailsWithMetadata(input: { details?: Record<string, unknown>; value?:
     ...(input.value === undefined ? {} : { value: input.value }),
   };
 }
+
+/**
+ * Persist ordinary achievements in one insert. Inputs are validated before any
+ * database write and duplicate user/key pairs use their first supplied value.
+ */
+export async function awardAchievementsInBatch(
+  database: WriteDatabase,
+  inputs: readonly AchievementAwardInput[],
+): Promise<AchievementBatchAwardResult> {
+  const unique = new Map<string, { input: AchievementAwardInput; key: AchievementKey }>();
+  for (const input of inputs) {
+    const definition = getAchievementDefinition(input.key);
+    if (definition.kind === 'record') {
+      throw new Error(`Record achievement must use the personal-best record API: ${input.key}`);
+    }
+    const value = validateAchievementValue(input.key, input.value);
+    const dedupeKey = `${input.userId}\u0000${definition.key}`;
+    if (!unique.has(dedupeKey)) unique.set(dedupeKey, { input: { ...input, ...(value === undefined ? {} : { value }) }, key: definition.key });
+  }
+
+  if (unique.size === 0) return { newlyEarned: [], alreadyEarned: 0 };
+  const rows = [...unique.values()];
+  const inserted = await database
+    .insert(achievements)
+    .values(rows.map(({ input, key }) => {
+      const definition = getAchievementDefinition(key);
+      const value = validateAchievementValue(key, input.value);
+      return {
+        userId: input.userId,
+        achievementType: definition.kind,
+        achievementKey: definition.key,
+        sourceFlightId: input.sourceFlightId ?? null,
+        earnedAt: input.earnedAt ?? new Date(),
+        details: {
+          ...detailsWithMetadata({ details: input.details, value }),
+          category: definition.category,
+          kind: definition.kind,
+          ...(value === undefined ? {} : { threshold: definition.kind === 'threshold' ? definition.threshold : undefined }),
+        },
+      };
+    }))
+    .onConflictDoNothing({ target: [achievements.userId, achievements.achievementKey] })
+    .returning({ userId: achievements.userId, key: achievements.achievementKey });
+
+  const insertedKeys = new Set(inserted.map((row) => `${row.userId}\u0000${row.key}`));
+  return {
+    newlyEarned: rows.filter(({ input, key }) => insertedKeys.has(`${input.userId}\u0000${key}`)).map(({ key }) => key),
+    alreadyEarned: rows.length - inserted.length,
+  };
+}
+
+/** Alias retained for callers that prefer the shorter batch naming. */
+export const awardAchievementsBatch = awardAchievementsInBatch;
 
 export async function awardAchievement(
   database: WriteDatabase,
