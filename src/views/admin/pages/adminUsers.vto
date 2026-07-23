@@ -10,6 +10,16 @@
         {{ include "admin/components/adminUserForm.vto" { mode, selectedUser, currentUser, search } }}
         {{ include "admin/components/adminUserFlights.vto" { selectedUser, flights, deletableFlightCount, search, flightSort, flightDateSortUrl, uploadDateSortUrl } }}
         {{ if selectedUser }}
+          <section class="admin-user-card">
+            <h2>History</h2>
+            <p>Rebuild this user's achievements and Activity history from completed flights in flown order.</p>
+            <form method="post" action="/admin/users/{{ selectedUser.id }}/history/rebuild" data-confirm="Rebuild achievement and Activity history for {{ selectedUser.email }}? Existing achievements, flight progress, activities, and Activity likes will be deleted and recreated in flown order.">
+              <input type="hidden" name="q" value="{{ search }}">
+              <input type="hidden" name="sort" value="{{ flightSort.field }}">
+              <input type="hidden" name="direction" value="{{ flightSort.direction }}">
+              <button type="submit"{{ if completedFlightCount === 0 }} disabled{{ /if }}>Rebuild Achievement and Activity History</button>
+            </form>
+          </section>
           <section class="admin-user-card admin-user-delete">
             <h2>Delete user</h2><p>Permanently removes the account, terminal flights, claims, stored IGC files, and terminal upload records.</p>
             <form method="post" action="/admin/users/{{ selectedUser.id }}/delete" data-confirm="Delete {{ selectedUser.email }} and all terminal flight data permanently?">

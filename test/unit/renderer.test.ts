@@ -108,6 +108,7 @@ describe('Vento page renderer', () => {
       users: [],
       flights: [],
       deletableFlightCount: 0,
+      completedFlightCount: 0,
       search: '',
       searchParam: '',
       flightSort: { field: 'uploadDate', direction: 'desc' },
@@ -137,6 +138,7 @@ describe('Vento page renderer', () => {
         processingStatus: 'completed',
       }],
       deletableFlightCount: 1,
+      completedFlightCount: 1,
       search: 'pilot@example.com',
       searchParam: 'pilot%40example.com',
       flightSort: { field: 'flightDate', direction: 'asc' },
@@ -149,5 +151,40 @@ describe('Vento page renderer', () => {
     expect(sortedFlights).toContain('2026-07-15 08:30 UTC');
     expect(sortedFlights).toContain('name="sort" value="flightDate"');
     expect(sortedFlights).toContain('name="direction" value="asc"');
+    expect(sortedFlights).toContain(`<form method="post" action="/admin/users/${user.userId}/history/rebuild"`);
+    expect(sortedFlights).toContain('Rebuild Achievement and Activity History');
+    expect(sortedFlights).toContain('Rebuild achievement and Activity history for pilot@example.com? Existing achievements, flight progress, activities, and Activity likes will be deleted and recreated in flown order.');
+    expect(sortedFlights).toContain('name="q" value="pilot@example.com"');
+    expect(sortedFlights.indexOf('<h2>History</h2>')).toBeLessThan(sortedFlights.indexOf('<h2>Delete user</h2>'));
+
+    const noCompletedFlights = await createAdminUserPageRenderer()({
+      currentUser: user,
+      users: [{ id: user.userId, email: user.email, displayName: user.displayName }],
+      selectedUser: {
+        id: user.userId,
+        email: user.email,
+        displayName: user.displayName,
+        hasPassword: true,
+        lastLogin: new Date('2026-07-15T12:00:00Z'),
+        createdAt: new Date('2026-07-01T12:00:00Z'),
+        updatedAt: new Date('2026-07-15T12:00:00Z'),
+      },
+      flights: [{
+        id: '00000000-0000-4000-8000-000000000021',
+        flightDate: null,
+        uploadDate: '2026-07-15 08:30 UTC',
+        originalFilename: 'failed.igc',
+        processingStatus: 'failed',
+      }],
+      deletableFlightCount: 1,
+      completedFlightCount: 0,
+      search: '',
+      searchParam: '',
+      flightSort: { field: 'uploadDate', direction: 'desc' },
+      flightDateSortUrl: '',
+      uploadDateSortUrl: '',
+      mode: 'edit',
+    });
+    expect(noCompletedFlights).toMatch(/<button type="submit" disabled>Rebuild Achievement and Activity History<\/button>/);
   });
 });

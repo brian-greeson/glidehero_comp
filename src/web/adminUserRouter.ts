@@ -4,6 +4,7 @@ import { AppError } from '../domain/errors.js';
 import type { AdminFlightService, AdminUserFlightSort } from '../services/adminFlightService.js';
 import type { AdminUserService } from '../services/adminUserService.js';
 import type { AuthenticatedUser } from '../services/authService.js';
+import type { UserHistoryRebuildService } from '../services/userHistoryRebuildService.js';
 import type { AdminUserPageRenderer } from '../views/admin/renderer.js';
 
 const uuid = z.string().uuid();
@@ -66,6 +67,7 @@ function notice(query: Request['query']): { successMessage?: string; errorMessag
   let successMessage = {
     created: 'User created.', updated: 'User updated.', password: 'Password updated and existing sessions revoked.',
     deleted: 'User deleted.', flight_deleted: 'Flight deleted.', reprocessed: 'Flight cells reprocessed.', activity_regenerated: 'Flight activity regenerated.',
+    history_rebuilt: 'Achievement and Activity history rebuilt.',
   }[success];
   if (success === 'flights_deleted') {
     const count = (key: string) => {
@@ -83,6 +85,9 @@ function notice(query: Request['query']): { successMessage?: string; errorMessag
     duplicate_email: 'That email address already belongs to another user.',
     protected: 'The signed-in admin account is protected.',
     active_work: 'This user has uploading, queued, or processing flights and cannot be deleted yet.',
+    no_completed_flights: 'This user has no completed flights to rebuild.',
+    invalid_flight_history: 'Achievement and Activity history could not be rebuilt because a completed flight is missing its flight date.',
+    history_rebuild_failed: 'Achievement and Activity history could not be rebuilt.',
   }[error];
   return { successMessage, errorMessage };
 }
@@ -91,6 +96,7 @@ export function createAdminUserRouter(dependencies: {
   adminEmails: readonly string[];
   users: AdminUserService;
   flights: AdminFlightService;
+  historyRebuild: UserHistoryRebuildService;
   renderPage: AdminUserPageRenderer;
 }) {
   const router = Router();
@@ -125,6 +131,7 @@ export function createAdminUserRouter(dependencies: {
     res.status(200).type('html').send(await dependencies.renderPage({
       currentUser, users, selectedUser: selectedUser ?? undefined, flights,
       deletableFlightCount: flights.filter((flight) => flight.processingStatus !== 'processing').length,
+      completedFlightCount: flights.filter((flight) => flight.processingStatus === 'completed').length,
       search, searchParam: encodeURIComponent(search), mode, flightSort: sort,
       flightDateSortUrl: selectedUser ? sortLocation(selectedUser.id, search, 'flightDate', sort) : '',
       uploadDateSortUrl: selectedUser ? sortLocation(selectedUser.id, search, 'uploadDate', sort) : '',
@@ -196,6 +203,28 @@ export function createAdminUserRouter(dependencies: {
       if (result === 'completed') { res.redirect(303, `/admin/users?success=deleted${search ? `&q=${encodeURIComponent(search)}` : ''}`); return; }
       res.redirect(303, userLocation(userId.data, search, { kind: 'error', value: result }));
     } catch (error) { next(error); }
+  });
+
+  router.post('/admin/users/:userId/history/rebuild', async (req, res) => {
+    const userId = uuid.safeParse(req.params.userId);
+    const body = formBody(req.body);
+    const search = queryValue(body.q);
+    const sort = flightSort(body);
+    if (!userId.success) { res.redirect(303, '/admin/users?error=invalid'); return; }
+    try {
+      const result = await dependencies.historyRebuild.rebuild(userId.data);
+      res.redirect(303, userLocation(userId.data, search, result.status === 'completed'
+        ? { kind: 'success', value: 'history_rebuilt' }
+        : { kind: 'error', value: result.status }, sort));
+    } catch (error) {
+      console.error('Unable to rebuild user achievement and Activity history', { userId: userId.data, error });
+      res.redirect(303, userLocation(
+        userId.data,
+        search,
+        { kind: 'error', value: 'history_rebuild_failed' },
+        sort,
+      ));
+    }
   });
 
   router.post('/admin/users/:userId/flights/:flightId/reprocess', async (req, res, next) => {

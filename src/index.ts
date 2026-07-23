@@ -44,6 +44,7 @@ import { createUserAchievementProgressService } from './services/userAchievement
 import { createUserArenaProgressService } from './services/userArenaProgressService.js';
 import { createWorkerControlService } from './services/workerControlService.js';
 import { createFlightProcessingControlService } from './services/flightProcessingControlService.js';
+import { createUserHistoryRebuildService } from './services/userHistoryRebuildService.js';
 
 const config = parseConfig(process.env);
 const { db } = createDatabase(config.databaseUrl);
@@ -108,6 +109,9 @@ const adminUsers = createAdminUserService(db, {
   cellSize: config.gridClaimCellSize,
   userAchievementProgress,
 });
+const userHistoryRebuild = createUserHistoryRebuildService(db, {
+  cellSize: config.gridClaimCellSize,
+});
 const failedFlightCleanup = createFailedFlightCleanupService(db, uploadQueue, {
   s3Client,
   bucketName: config.bucket.bucketName,
@@ -129,6 +133,7 @@ const webMiddleware = [
     adminEmails: config.adminEmails,
     users: adminUsers,
     flights: adminFlights,
+    historyRebuild: userHistoryRebuild,
     renderPage: createAdminUserPageRenderer(),
   }),
   createWebRouter({

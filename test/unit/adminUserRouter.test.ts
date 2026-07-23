@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { createApp } from '../../src/app.js';
 import type { AdminFlightService } from '../../src/services/adminFlightService.js';
 import type { AdminUserService } from '../../src/services/adminUserService.js';
+import type { UserHistoryRebuildService } from '../../src/services/userHistoryRebuildService.js';
 import { createAdminUserRouter } from '../../src/web/adminUserRouter.js';
 import { withServer } from '../support/http.js';
 
@@ -42,8 +43,24 @@ function dependencies() {
     deleteAllUserFlights: vi.fn(async () => ({ deleted: 2, skipped: 1, failed: 1 })),
     createDownloadUrl: vi.fn(async () => ({ url: 'https://objects.example.test/download', filename: 'flight.igc' })),
   };
+  const historyRebuild: UserHistoryRebuildService = {
+    rebuild: vi.fn(async () => ({ status: 'completed' as const, summary: {
+      completedFlights: 1,
+      activitiesDeleted: 1,
+      achievementsDeleted: 1,
+      achievementRecordEventsDeleted: 0,
+      achievementRecordsDeleted: 0,
+      flightProgressDeleted: 1,
+      userAchievementProgressDeleted: 1,
+      activitiesCreated: 1,
+      achievementsCreated: 1,
+      achievementRecordEventsCreated: 0,
+      achievementRecordsCreated: 0,
+      flightProgressCreated: 1,
+    } })),
+  };
   const renderPage = vi.fn(async () => '<html><body>User management</body></html>');
-  return { users, flights, renderPage };
+  return { users, flights, historyRebuild, renderPage };
 }
 
 function app(currentUser: typeof admin | null, deps: ReturnType<typeof dependencies>) {
@@ -68,7 +85,7 @@ describe('adminUserRouter', () => {
         { field: 'uploadDate', direction: 'desc' },
       );
       expect(deps.renderPage).toHaveBeenCalledWith(expect.objectContaining({
-        mode: 'edit', search: 'pilot@example.com', deletableFlightCount: 1,
+        mode: 'edit', search: 'pilot@example.com', deletableFlightCount: 1, completedFlightCount: 1,
         flightSort: { field: 'uploadDate', direction: 'desc' },
         flightDateSortUrl: `/admin/users/${pilotId}?q=pilot%40example.com&sort=flightDate&direction=asc`,
         uploadDateSortUrl: `/admin/users/${pilotId}?q=pilot%40example.com&sort=uploadDate&direction=asc`,
@@ -148,5 +165,96 @@ describe('adminUserRouter', () => {
       );
       expect(deps.flights.regenerateActivity).toHaveBeenCalledWith({ userId: pilotId, flightId });
     });
+  });
+
+  it('protects and invokes a user-scoped history rebuild while preserving page state', async () => {
+    const deps = dependencies();
+    await withServer(app(null, deps), async (baseUrl) => {
+      const response = await fetch(`${baseUrl}/admin/users/${pilotId}/history/rebuild`, {
+        method: 'POST',
+        redirect: 'manual',
+      });
+      expect(response.status).toBe(403);
+      expect(deps.historyRebuild.rebuild).not.toHaveBeenCalled();
+    });
+
+    await withServer(app(admin, deps), async (baseUrl) => {
+      const response = await fetch(`${baseUrl}/admin/users/${pilotId}/history/rebuild`, {
+        method: 'POST',
+        redirect: 'manual',
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+          q: 'pilot@example.com', sort: 'flightDate', direction: 'asc',
+        }),
+      });
+      expect(response.status).toBe(303);
+      expect(deps.historyRebuild.rebuild).toHaveBeenCalledWith(pilotId);
+      expect(response.headers.get('location')).toBe(
+        `/admin/users/${pilotId}?q=pilot%40example.com&success=history_rebuilt&sort=flightDate&direction=asc`,
+      );
+
+      await fetch(`${baseUrl}${response.headers.get('location')}`);
+      expect(deps.renderPage).toHaveBeenLastCalledWith(expect.objectContaining({
+        successMessage: 'Achievement and Activity history rebuilt.',
+      }));
+    });
+  });
+
+  it.each([
+    ['not_found', 'User not found.'],
+    ['no_completed_flights', 'This user has no completed flights to rebuild.'],
+    ['invalid_flight_history', 'Achievement and Activity history could not be rebuilt because a completed flight is missing its flight date.'],
+  ] as const)('reports the controlled history rebuild result %s', async (status, errorMessage) => {
+    const deps = dependencies();
+    vi.mocked(deps.historyRebuild.rebuild).mockResolvedValue({ status });
+
+    await withServer(app(admin, deps), async (baseUrl) => {
+      const response = await fetch(`${baseUrl}/admin/users/${pilotId}/history/rebuild`, {
+        method: 'POST',
+        redirect: 'manual',
+      });
+      expect(response.status).toBe(303);
+      expect(response.headers.get('location')).toBe(
+        `/admin/users/${pilotId}?error=${status}&sort=uploadDate&direction=desc`,
+      );
+
+      await fetch(`${baseUrl}${response.headers.get('location')}`);
+      expect(deps.renderPage).toHaveBeenLastCalledWith(expect.objectContaining({ errorMessage }));
+    });
+  });
+
+  it('reports an atomic rebuild failure on the selected user page with page state preserved', async () => {
+    const deps = dependencies();
+    const failure = new Error('replay failed');
+    vi.mocked(deps.historyRebuild.rebuild).mockRejectedValue(failure);
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+
+    try {
+      await withServer(app(admin, deps), async (baseUrl) => {
+        const response = await fetch(`${baseUrl}/admin/users/${pilotId}/history/rebuild`, {
+          method: 'POST',
+          redirect: 'manual',
+          headers: { 'content-type': 'application/x-www-form-urlencoded' },
+          body: new URLSearchParams({
+            q: 'pilot@example.com', sort: 'flightDate', direction: 'asc',
+          }),
+        });
+        expect(response.status).toBe(303);
+        expect(response.headers.get('location')).toBe(
+          `/admin/users/${pilotId}?q=pilot%40example.com&error=history_rebuild_failed&sort=flightDate&direction=asc`,
+        );
+
+        await fetch(`${baseUrl}${response.headers.get('location')}`);
+        expect(deps.renderPage).toHaveBeenLastCalledWith(expect.objectContaining({
+          errorMessage: 'Achievement and Activity history could not be rebuilt.',
+        }));
+      });
+      expect(consoleError).toHaveBeenCalledWith(
+        'Unable to rebuild user achievement and Activity history',
+        { userId: pilotId, error: failure },
+      );
+    } finally {
+      consoleError.mockRestore();
+    }
   });
 });

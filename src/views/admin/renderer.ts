@@ -56,6 +56,7 @@ export type AdminUserPageRenderer = (model: {
   selectedUser?: AdminUserDetail;
   flights: AdminUserFlight[];
   deletableFlightCount: number;
+  completedFlightCount: number;
   search: string;
   searchParam: string;
   flightSort: AdminUserFlightSort;
