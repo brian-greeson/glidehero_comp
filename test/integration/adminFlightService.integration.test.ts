@@ -132,6 +132,28 @@ describe('adminFlightService management', () => {
     expect(presign).toHaveBeenCalledOnce();
   });
 
+  it('allows completed legacy flights without processed_at to regenerate activity', async () => {
+    const legacy = await storedFlight('completed');
+    const failed = await storedFlight('failed', legacy.user);
+    const regenerateFlightActivity = vi.fn(async () => 'completed' as const);
+    const service = createAdminFlightService(
+      database.db,
+      { reprocess: vi.fn() },
+      undefined,
+      undefined,
+      { regenerateFlightActivity },
+    );
+
+    await expect(service.regenerateActivity({ userId: legacy.user.id, flightId: legacy.flight.id }))
+      .resolves.toBe('completed');
+    expect(regenerateFlightActivity).toHaveBeenCalledWith({ flightId: legacy.flight.id });
+    await expect(service.regenerateActivity({ userId: legacy.user.id, flightId: failed.flight.id }))
+      .resolves.toBe('not_completed');
+    await expect(service.regenerateActivity({ userId: crypto.randomUUID(), flightId: legacy.flight.id }))
+      .resolves.toBe('not_found');
+    expect(regenerateFlightActivity).toHaveBeenCalledTimes(1);
+  });
+
   it('deletes each terminal user flight independently, skips active work, and continues after a failure', async () => {
     const first = await storedFlight('completed');
     await storedFlight('failed', first.user);

@@ -75,6 +75,36 @@ describe('activityService.listFeed', () => {
     });
   });
 
+  it('regenerates legacy completed-flight activity at upload time and prefers modern completion time', async () => {
+    if (!database) throw new Error('Test database was not initialized.');
+    const auth = createAuthService(database.db, { sessionTtlSeconds: 604800 });
+    const pilot = await auth.signup({ email: 'regenerate@example.com', password: 'correct horse battery staple', displayName: 'Regenerate Pilot' });
+    const flightInput = {
+      startedAt: new Date('2026-07-20T12:00:00Z'), launchTimezone: 'UTC',
+      launchLatitude: 0, launchLongitude: 0, durationSeconds: 60, distanceMeters: 1_000,
+      directCellCount: 1, enclosedCellCount: 0,
+    };
+    const legacyFlightId = await createFlight(pilot.user.userId, flightInput);
+    const modernFlightId = await createFlight(pilot.user.userId, flightInput);
+    const legacyUploadTime = new Date('2026-07-01T12:00:00Z');
+    const modernUploadTime = new Date('2026-07-02T12:00:00Z');
+    const modernCompletionTime = new Date('2026-07-02T12:05:00Z');
+    await database.db.update(flights).set({ createdAt: legacyUploadTime, processedAt: null }).where(eq(flights.id, legacyFlightId));
+    await database.db.update(flights).set({ createdAt: modernUploadTime, processedAt: modernCompletionTime }).where(eq(flights.id, modernFlightId));
+
+    const service = createActivityService(database.db);
+    await expect(service.regenerateFlightActivity({ flightId: legacyFlightId })).resolves.toBe('completed');
+    await expect(service.regenerateFlightActivity({ flightId: legacyFlightId })).resolves.toBe('completed');
+    await expect(service.regenerateFlightActivity({ flightId: modernFlightId })).resolves.toBe('completed');
+
+    const legacyActivity = await database.db.select({ publishedAt: activities.publishedAt })
+      .from(activities).where(eq(activities.sourceFlightId, legacyFlightId));
+    const modernActivity = await database.db.select({ publishedAt: activities.publishedAt })
+      .from(activities).where(eq(activities.sourceFlightId, modernFlightId));
+    expect(legacyActivity).toEqual([{ publishedAt: legacyUploadTime }]);
+    expect(modernActivity).toEqual([{ publishedAt: modernCompletionTime }]);
+  });
+
   it('loads and groups every accomplishment for a flight in bounded batches', async () => {
     if (!database) throw new Error('Test database was not initialized.');
     const auth = createAuthService(database.db, { sessionTtlSeconds: 604800 });

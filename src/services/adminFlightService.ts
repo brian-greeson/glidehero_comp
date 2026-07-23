@@ -214,7 +214,7 @@ export function createAdminFlightService(
     async regenerateActivity(input) {
       const flight = await storedFlight(input);
       if (!flight) return 'not_found';
-      if (flight.processingStatus !== 'completed' || !flight.processedAt) return 'not_completed';
+      if (flight.processingStatus !== 'completed') return 'not_completed';
       if (!activity) throw new Error('Activity dependencies are not configured.');
       return activity.regenerateFlightActivity({ flightId: input.flightId });
     },

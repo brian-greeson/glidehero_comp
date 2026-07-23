@@ -420,12 +420,17 @@ export function createActivityService(database?: Database): ActivityService {
     async regenerateFlightActivity({ flightId }) {
       if (!database) throw new Error('Activity writes require a database.');
       const [flight] = await database
-        .select({ userId: flights.userId, processingStatus: flights.processingStatus, processedAt: flights.processedAt })
+        .select({
+          userId: flights.userId,
+          processingStatus: flights.processingStatus,
+          processedAt: flights.processedAt,
+          createdAt: flights.createdAt,
+        })
         .from(flights)
         .where(eq(flights.id, flightId))
         .limit(1);
       if (!flight) return 'not_found';
-      if (flight.processingStatus !== 'completed' || !flight.processedAt) return 'not_completed';
+      if (flight.processingStatus !== 'completed') return 'not_completed';
 
       await database
         .insert(activities)
@@ -433,11 +438,11 @@ export function createActivityService(database?: Database): ActivityService {
           actorUserId: flight.userId,
           activityType: 'flight',
           sourceFlightId: flightId,
-          publishedAt: flight.processedAt,
+          publishedAt: flight.processedAt ?? flight.createdAt,
         })
         .onConflictDoUpdate({
           target: activities.sourceFlightId,
-          set: { actorUserId: flight.userId, publishedAt: flight.processedAt },
+          set: { actorUserId: flight.userId, publishedAt: flight.processedAt ?? flight.createdAt },
         });
       return 'completed';
     },
