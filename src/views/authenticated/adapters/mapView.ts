@@ -11,6 +11,7 @@ export type ProductionMapInput = {
   territoryTileMinimumZoom?: number;
   territoryTileMaximumZoom?: number;
   arenaSourceId?: number;
+  focusArenaSourceId?: number;
 };
 
 /** Build an endpoint-backed map model. Map data is loaded by MapLibre after render. */
@@ -32,5 +33,6 @@ export function createMapPageModel(
     ...(input.territoryTileMinimumZoom === undefined ? {} : { territoryTileMinimumZoom: input.territoryTileMinimumZoom }),
     ...(input.territoryTileMaximumZoom === undefined ? {} : { territoryTileMaximumZoom: input.territoryTileMaximumZoom }),
     ...(input.arenaSourceId === undefined ? {} : { arenaSourceId: input.arenaSourceId }),
+    ...(input.focusArenaSourceId === undefined ? {} : { focusArenaSourceId: input.focusArenaSourceId }),
   };
 }

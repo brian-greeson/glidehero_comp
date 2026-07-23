@@ -88,6 +88,7 @@ function mapHarness() {
     getLayer: vi.fn((id: string) => (layers.has(id) ? { id } : undefined)),
     setFilter: vi.fn(),
     setLayoutProperty: vi.fn(),
+    fitBounds: vi.fn(),
     setPaintProperty: vi.fn(),
     querySourceFeatures: vi.fn(() => []),
     getCanvas: vi.fn(() => ({ style: { cursor: '' } })),
@@ -156,7 +157,7 @@ function pilot(userId: string, displayName = userId, claimedCellCount = 3) {
   };
 }
 
-function globalDashboardHarness(fetchImpl: any, search = '') {
+function globalDashboardHarness(fetchImpl: any, search = '', dataset: Record<string, string> = {}) {
   const map = mapHarness();
   const mapElement = element();
   mapElement.dataset = {
@@ -165,6 +166,7 @@ function globalDashboardHarness(fetchImpl: any, search = '') {
     territoryColor: '#1769AA',
     territoryTileMinimumZoom: '4',
     territoryTileMaximumZoom: '14',
+    ...dataset,
   };
   mapElement.clientWidth = 600;
   const allTime = element();
@@ -312,6 +314,32 @@ describe('Personal dashboard controller', () => {
     harness.move({ west: -105, east: -103 });
     await vi.waitFor(() => expect(fetchImpl).toHaveBeenCalledTimes(2));
     expect(fetchImpl.mock.calls[1]?.[0]).toContain('/v1/personal-stats?west=-105');
+  });
+});
+
+describe('Launch Arena map focus', () => {
+  it('loads and fits the launch boundary while keeping global coverage', async () => {
+    const fetchImpl = vi.fn(async (url: string) => {
+      if (url === '/v1/arenas/745/boundary') {
+        return jsonResponse({ bbox: [-106, 39, -105, 40], type: 'Feature', geometry: {} });
+      }
+      return jsonResponse({ leaders: [], currentPilot: null });
+    });
+    const harness = globalDashboardHarness(fetchImpl, '', { focusArenaSourceId: '745' });
+
+    await harness.load();
+
+    expect(fetchImpl).toHaveBeenCalledWith('/v1/arenas/745/boundary', expect.any(Object));
+    expect(harness.map.addSource).toHaveBeenCalledWith(
+      'arena-focus-boundary',
+      expect.objectContaining({ type: 'geojson' }),
+    );
+    expect(harness.map.fitBounds).toHaveBeenCalledWith(
+      [[-106, 39], [-105, 40]],
+      { padding: 60, duration: 0 },
+    );
+    expect(fetchImpl.mock.calls.some(([url]) => String(url).includes('/competition-territory'))).toBe(false);
+    expect(fetchImpl.mock.calls.some(([url]) => String(url).includes('/v1/arenas/745/competition-leaderboard'))).toBe(false);
   });
 });
 

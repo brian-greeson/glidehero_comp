@@ -25,7 +25,8 @@
         data-territory-color="{{ if typeof territoryColor !== 'undefined' }}{{ territoryColor }}{{ /if }}"
         data-territory-tile-minimum-zoom="{{ if typeof territoryTileMinimumZoom !== 'undefined' }}{{ if territoryTileMinimumZoom === 0 }}0{{ else }}{{ territoryTileMinimumZoom }}{{ /if }}{{ else }}0{{ /if }}"
         data-territory-tile-maximum-zoom="{{ if typeof territoryTileMaximumZoom !== 'undefined' }}{{ if territoryTileMaximumZoom === 0 }}0{{ else }}{{ territoryTileMaximumZoom }}{{ /if }}{{ else }}22{{ /if }}"
-        {{ if typeof arenaSourceId !== 'undefined' && arenaSourceId }}data-arena-source-id="{{ arenaSourceId }}"{{ /if }}></div>
+        {{ if typeof arenaSourceId !== 'undefined' && arenaSourceId }}data-arena-source-id="{{ arenaSourceId }}"{{ /if }}
+        {{ if typeof focusArenaSourceId !== 'undefined' && focusArenaSourceId }}data-focus-arena-source-id="{{ focusArenaSourceId }}"{{ /if }}></div>
       {{ /if }}
       <span class="map-scale">500 m</span>
       {{ if preview }}

@@ -50,6 +50,7 @@ export function initializeCompetitionCoverage({
   if (!root || !mapElement || !maplibre) return;
 
   const arenaSourceId = mapElement.dataset.arenaSourceId || null;
+  const focusArenaSourceId = mapElement.dataset.focusArenaSourceId || null;
   const currentUserId = mapElement.dataset.currentUserId;
   const colorRegistry = createCompetitionColorRegistry(
     currentUserId,
@@ -198,16 +199,17 @@ export function initializeCompetitionCoverage({
     map.once('error', () => setStatus('Map unavailable. Check your connection and try again.'));
     map.once('load', async () => {
       try {
-        if (arenaSourceId) {
+        if (arenaSourceId || focusArenaSourceId) {
+          const boundarySourceId = arenaSourceId ?? focusArenaSourceId;
           const boundary = await jsonRequest(
-            `/v1/arenas/${encodeURIComponent(arenaSourceId)}/boundary`,
+            `/v1/arenas/${encodeURIComponent(boundarySourceId)}/boundary`,
             fetchImpl,
           );
-          map.addSource('competition-arena-boundary', { type: 'geojson', data: boundary });
+          map.addSource('arena-focus-boundary', { type: 'geojson', data: boundary });
           map.addLayer({
-            id: 'competition-arena-boundary',
+            id: 'arena-focus-boundary',
             type: 'line',
-            source: 'competition-arena-boundary',
+            source: 'arena-focus-boundary',
             paint: { 'line-color': '#0f172a', 'line-width': 3 },
           });
           if (!initialViewport) {

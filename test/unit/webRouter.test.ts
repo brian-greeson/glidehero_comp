@@ -518,6 +518,23 @@ describe('webRouter', () => {
     });
   });
 
+  it('focuses Launch Arenas without scoping the map data to the launch area', async () => {
+    const { app, arenas, renderAuthenticatedPage } = dependencies();
+    vi.mocked(arenas.getByRoute).mockResolvedValueOnce({ ...arena, arenaType: 'launch' });
+    await withServer(app, async (baseUrl) => {
+      const response = await fetch(`${baseUrl}/arena/us/boulder-745`, {
+        headers: { cookie: 'glidehero_session=valid-token' },
+      });
+      expect(response.status).toBe(200);
+      expect(renderAuthenticatedPage).toHaveBeenCalledWith(expect.objectContaining({
+        page: 'map', location: arena.name, focusArenaSourceId: arena.sourceId,
+      }));
+      expect(renderAuthenticatedPage).toHaveBeenLastCalledWith(
+        expect.not.objectContaining({ arenaSourceId: arena.sourceId }),
+      );
+    });
+  });
+
   it('renders the site-wide 404 page model for every unmatched route', async () => {
     const { app, renderPage } = dependencies();
     await withServer(app, async (baseUrl) => {

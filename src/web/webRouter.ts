@@ -912,7 +912,9 @@ export function createWebRouter(dependencies: {
       const mapHref = month ? `${arena.path}?month=${encodeURIComponent(month)}` : arena.path;
       await renderAuthenticated(res, dependencies.renderAuthenticatedPage, 200, productionMap(currentUser, {
         mode: 'competitive', period: month ? 'current-month' : 'all-time', location: arena.name, mapHref,
-        arenaSourceId: arena.sourceId,
+        ...(arena.arenaType === 'launch'
+          ? { focusArenaSourceId: arena.sourceId }
+          : { arenaSourceId: arena.sourceId }),
       }));
     } catch (error) {
       next(error);

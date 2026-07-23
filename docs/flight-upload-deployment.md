@@ -25,6 +25,38 @@ npm run backfill:flight-progress -- --apply
 The flight-progress command is rerunnable: completed flights that already have
 `flight_progress` are skipped, and achievement keys are unique per user.
 
+## User achievement progress projection backfill
+
+The `user_achievement_progress` table is a current, rebuildable read
+projection used by the dashboard and Achievements page. The migration creates
+the table, but it does not populate projection rows for pilots who already
+exist. After deploying the schema and application code, run the backfill for
+existing pilots. Pause and drain the flight workers first so the projection is
+not rebuilt while new claims or completed-flight evaluations are being written.
+
+The command requires the production `DATABASE_URL` and uses the fixed
+500-meter application grid. The default is a rollback-only dry-run:
+
+```sh
+npm run db:migrate
+npm run backfill:user-achievement-progress
+```
+
+Review the inspected-user count, inserted/updated projection counts, failures,
+and elapsed time. Apply only after reviewing the dry-run:
+
+```sh
+npm run backfill:user-achievement-progress -- --apply
+```
+
+Apply mode commits each user batch independently, with a default batch size of
+10. Set `USER_ACHIEVEMENT_PROGRESS_BACKFILL_BATCH_SIZE` to another positive
+integer when a different transaction size is needed. The backfill is
+rerunnable and verifies that every profile has a projection row after a
+successful apply. If a later batch fails, earlier committed batches remain
+applied; resolve the failure and rerun the command. A dry-run reports the
+scope without persisting any projections.
+
 ## Flight territory thumbnail rollout and backfill
 
 Newly completed flights generate two private WebP previews after database and

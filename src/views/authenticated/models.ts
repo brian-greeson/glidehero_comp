@@ -109,6 +109,7 @@ export type MapPageModel = AuthenticatedShellModel & {
   territoryTileMinimumZoom?: number;
   territoryTileMaximumZoom?: number;
   arenaSourceId?: number;
+  focusArenaSourceId?: number;
   mapEmptyState?: string;
 };
 
