@@ -76,8 +76,8 @@ export function createErrorPageRenderer(): ErrorPageRenderer {
           ? 'Well\u2026 that landing could have gone better.'
           : 'We hit a little turbulence.',
         errorMessage: isNotFound
-          ? 'This route seems to be tangled in a tree. Let\u2019s pack up and head home.'
-          : 'Glide Hero hit an unexpected snag. Pack up, head home, and try launching again.',
+          ? 'This route seems to be tangled in a tree. Don\'t worry, the arborist is on their way.'
+          : 'Glide Hero hit an unexpected snag.  try launching again.',
         pageStylesheet: undefined,
         pageScript: undefined,
       })
