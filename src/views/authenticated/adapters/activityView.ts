@@ -1,10 +1,17 @@
-import type { ActivityFeedItem, ActivityPeriodStatistics, ActivityStatistics } from '../../../services/activityService.js';
+import type {
+  ActivityAccomplishment,
+  ActivityFeedItem,
+  ActivityPeriodStatistics,
+  ActivityStatisticWinner,
+  ActivityStatistics,
+} from '../../../services/activityService.js';
 import type { PilotSearchResult } from '../../../services/followService.js';
 import type {
   ActivityPeriodStatisticsView,
   ActivityPilotResultView,
   ActivityStatisticsView,
   ActivityStatisticWinnerView,
+  AchievementView,
 } from '../models.js';
 import { resolveAchievementArtworkKey } from '../achievementArtwork.js';
 import type { FlightThumbnailUrls } from '../../../services/flightThumbnailDeliveryService.js';
@@ -22,6 +29,18 @@ function colorFor(userId: string): string {
   let hash = 0;
   for (const character of userId) hash = (hash * 31 + character.charCodeAt(0)) | 0;
   return avatarColors[Math.abs(hash) % avatarColors.length]!;
+}
+
+function accomplishmentToView(accomplishment: ActivityAccomplishment): AchievementView {
+  return {
+    key: accomplishment.id,
+    artworkKey: resolveAchievementArtworkKey(accomplishment),
+    title: accomplishment.title,
+    description: accomplishment.description,
+    badgeLabel: accomplishment.badgeLabel,
+    tone: accomplishment.tone,
+    href: accomplishment.arenaPath,
+  };
 }
 
 export function activityPilotResultToView(result: PilotSearchResult): ActivityPilotResultView {
@@ -84,16 +103,8 @@ export function activityFeedItemToView(item: ActivityFeedItem, options: { thumbn
     distance: item.distance,
     totalCellCount: item.totalCellCount,
     achievements: item.accomplishments.map((accomplishment) => ({
-      key: accomplishment.id,
-      artworkKey: resolveAchievementArtworkKey(accomplishment),
-      title: accomplishment.title,
-      description: accomplishment.description,
-      badgeLabel: accomplishment.badgeLabel,
-      tone: accomplishment.tone,
-      category: accomplishment.category,
-      kind: accomplishment.kind,
+      ...accomplishmentToView(accomplishment),
       earnedDate: item.flightDate,
-      href: accomplishment.arenaPath,
     })),
     likeCount: item.likeCount,
     viewerHasLiked: item.viewerHasLiked,
@@ -106,13 +117,23 @@ export function activityFeedToViews(items: readonly ActivityFeedItem[], options:
 }
 
 function winnerToView(
-  winner: { flightId: string; value: number } | null,
+  winner: ActivityStatisticWinner | null,
   formatValue: (value: number) => string,
 ): ActivityStatisticWinnerView | null {
   if (!winner) return null;
+  const achievements = winner.accomplishments.map(accomplishmentToView);
   return {
     href: `/flights/${winner.flightId}`,
     value: formatValue(winner.value),
+    pilot: {
+      userId: winner.actorUserId,
+      displayName: winner.actorDisplayName,
+      initials: initials(winner.actorDisplayName),
+      color: colorFor(winner.actorUserId),
+      href: `/pilots/${winner.actorUserId}`,
+    },
+    achievements: achievements.slice(0, 3),
+    achievementOverflowCount: Math.max(0, achievements.length - 3),
   };
 }
 
@@ -128,7 +149,7 @@ function activityPeriodStatisticsToView(statistics: ActivityPeriodStatistics): A
       : '0',
     mostAccomplishments: winnerToView(
       statistics.mostAccomplishments,
-      (value) => countWithLabel(value, 'accomplishment'),
+      (value) => countWithLabel(value, 'achievement'),
     ),
     mostCells: winnerToView(
       statistics.mostCells,

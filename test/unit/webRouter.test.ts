@@ -1202,9 +1202,27 @@ describe('webRouter', () => {
         },
         monthly: {
           flightCount: 3,
-          mostAccomplishments: { flightId: pilotProfile.userId, value: 2 },
-          mostCells: { flightId: pilotProfile.userId, value: 42 },
-          greatestFivePointDistance: { flightId: pilotProfile.userId, value: 12_345 },
+          mostAccomplishments: {
+            flightId: pilotProfile.userId,
+            value: 2,
+            actorUserId: pilotProfile.userId,
+            actorDisplayName: pilotProfile.displayName,
+            accomplishments: [],
+          },
+          mostCells: {
+            flightId: pilotProfile.userId,
+            value: 42,
+            actorUserId: pilotProfile.userId,
+            actorDisplayName: pilotProfile.displayName,
+            accomplishments: [],
+          },
+          greatestFivePointDistance: {
+            flightId: pilotProfile.userId,
+            value: 12_345,
+            actorUserId: pilotProfile.userId,
+            actorDisplayName: pilotProfile.displayName,
+            accomplishments: [],
+          },
         },
       });
       const search = await fetch(`${baseUrl}/activity?q=%20cloud%20`, {
@@ -1239,9 +1257,21 @@ describe('webRouter', () => {
         activityStats: expect.objectContaining({
           monthly: {
             flightCount: '3',
-            mostAccomplishments: { href: `/flights/${pilotProfile.userId}`, value: '2 accomplishments' },
-            mostCells: { href: `/flights/${pilotProfile.userId}`, value: '42 cells' },
-            greatestFivePointDistance: { href: `/flights/${pilotProfile.userId}`, value: '12.3 km' },
+            mostAccomplishments: expect.objectContaining({
+              href: `/flights/${pilotProfile.userId}`,
+              value: '2 achievements',
+              pilot: expect.objectContaining({ displayName: 'Cloud Dancer' }),
+            }),
+            mostCells: expect.objectContaining({
+              href: `/flights/${pilotProfile.userId}`,
+              value: '42 cells',
+              pilot: expect.objectContaining({ displayName: 'Cloud Dancer' }),
+            }),
+            greatestFivePointDistance: expect.objectContaining({
+              href: `/flights/${pilotProfile.userId}`,
+              value: '12.3 km',
+              pilot: expect.objectContaining({ displayName: 'Cloud Dancer' }),
+            }),
           },
         }),
         activityPilotResults: [expect.objectContaining({

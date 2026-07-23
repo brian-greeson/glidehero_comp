@@ -9,6 +9,28 @@ describe('Activity page rendering', () => {
       user: { displayName: 'Viewer' },
       showFooter: true,
     });
+    const pilot = {
+      userId: 'pilot-id',
+      displayName: 'Alex Summit',
+      initials: 'AS',
+      color: '#1769aa',
+      href: '/pilots/pilot-id',
+    };
+    const achievements = [1, 2, 3].map((value) => ({
+      key: `achievement-${value}`,
+      artworkKey: 'cell-explorer' as const,
+      title: `${value} Cells`,
+      description: 'Claim cells.',
+      badgeLabel: String(value),
+      tone: 'green' as const,
+    }));
+    const winner = (href: string, value: string, options: { achievements?: typeof achievements; overflow?: number } = {}) => ({
+      href,
+      value,
+      pilot,
+      achievements: options.achievements ?? [],
+      achievementOverflowCount: options.overflow ?? 0,
+    });
     const html = await createAuthenticatedPageRenderer()({
       ...shell,
       page: 'activity',
@@ -26,9 +48,9 @@ describe('Activity page rendering', () => {
       activityStats: {
         monthly: {
           flightCount: '2',
-          mostAccomplishments: { href: '/flights/accomplishments-flight', value: '4 accomplishments' },
-          mostCells: { href: '/flights/cells-flight', value: '32 cells' },
-          greatestFivePointDistance: { href: '/flights/distance-flight', value: '18.4 km' },
+          mostAccomplishments: winner('/flights/accomplishments-flight', '4 achievements', { achievements, overflow: 1 }),
+          mostCells: winner('/flights/cells-flight', '32 cells'),
+          greatestFivePointDistance: winner('/flights/distance-flight', '18.4 km'),
         },
         daily: {
           flightCount: '0',
@@ -45,9 +67,13 @@ describe('Activity page rendering', () => {
     expect(html).toContain('href="/flights/accomplishments-flight"');
     expect(html).toContain('href="/flights/cells-flight"');
     expect(html).toContain('href="/flights/distance-flight"');
+    expect(html).toContain('Most achievements in one flight');
+    expect(html).toContain('Most territory in one flight');
+    expect(html).toContain('Longest 5 point flight');
+    expect(html).toContain('activity-stat-tile__overflow">+1');
     expect(html.match(/No qualifying flight/g)).toHaveLength(3);
     expect(html).toContain('>Following</a>');
-    expect(html).toContain('>Yours</a>');
+    expect(html).toContain('>My activity</a>');
     expect(html).not.toContain('>All</a>');
   });
 });

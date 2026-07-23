@@ -1,10 +1,11 @@
 <section class="activity-pilot-search" aria-labelledby="activity-pilot-search-title">
   <form method="get" action="/activity" class="activity-pilot-search__form">
-    <label id="activity-pilot-search-title" for="activity-pilot-query">Find pilots</label>
+    <label class="sr-only" id="activity-pilot-search-title" for="activity-pilot-query">Find pilots</label>
     <div class="activity-pilot-search__controls">
-      <input id="activity-pilot-query" name="q" type="search" value="{{ if typeof activitySearch !== 'undefined' }}{{ activitySearch }}{{ /if }}" placeholder="Search pilots" autocomplete="off">
+      <span class="activity-pilot-search__icon">{{ include "authenticated/components/icon.vto" { name: "people" } }}</span>
+      <input id="activity-pilot-query" name="q" type="search" value="{{ if typeof activitySearch !== 'undefined' }}{{ activitySearch }}{{ /if }}" placeholder="Find pilots" autocomplete="off">
       {{ if typeof activityScope !== 'undefined' && activityScope !== 'all' }}<input type="hidden" name="scope" value="{{ activityScope }}">{{ /if }}
-      <button type="submit">Search</button>
+      <button class="sr-only" type="submit" tabindex="-1">Search pilots</button>
     </div>
   </form>
   {{ if typeof activitySearch !== 'undefined' && activitySearch }}

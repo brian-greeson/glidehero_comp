@@ -124,6 +124,9 @@ export type ActivityEventView = {
 export type ActivityStatisticWinnerView = {
   href: string;
   value: string;
+  pilot: PilotView;
+  achievements: AchievementView[];
+  achievementOverflowCount: number;
 };
 
 export type ActivityPeriodStatisticsView = {

@@ -312,30 +312,41 @@ describe('activityService.listFeed', () => {
       viewerUserId: viewer.user.userId,
       now: new Date('2026-07-23T12:00:00Z'),
     });
-    expect(stats).toEqual({
-      daily: {
-        flightCount: 1,
-        mostAccomplishments: { flightId: followedFlightId, value: 3 },
-        mostCells: { flightId: followedFlightId, value: 8 },
-        greatestFivePointDistance: { flightId: followedFlightId, value: 10_000 },
+    expect(stats.daily).toMatchObject({
+      flightCount: 1,
+      mostAccomplishments: {
+        flightId: followedFlightId,
+        value: 3,
+        actorUserId: followed.user.userId,
+        actorDisplayName: 'Alpine Pilot',
       },
-      monthly: {
-        flightCount: 2,
-        mostAccomplishments: { flightId: followedFlightId, value: 3 },
-        mostCells: { flightId: followedFlightId, value: 8 },
-        greatestFivePointDistance: { flightId: followedFlightId, value: 10_000 },
-      },
+      mostCells: { flightId: followedFlightId, value: 8, actorDisplayName: 'Alpine Pilot' },
+      greatestFivePointDistance: { flightId: followedFlightId, value: 10_000, actorDisplayName: 'Alpine Pilot' },
     });
-    await expect(service.getStatistics({
+    expect(stats.daily.mostAccomplishments?.accomplishments).toHaveLength(3);
+    expect(stats.monthly).toMatchObject({
+      flightCount: 2,
+      mostAccomplishments: {
+        flightId: followedFlightId,
+        value: 3,
+        actorUserId: followed.user.userId,
+        actorDisplayName: 'Alpine Pilot',
+      },
+      mostCells: { flightId: followedFlightId, value: 8, actorDisplayName: 'Alpine Pilot' },
+      greatestFivePointDistance: { flightId: followedFlightId, value: 10_000, actorDisplayName: 'Alpine Pilot' },
+    });
+    expect(stats.monthly.mostAccomplishments?.accomplishments).toHaveLength(3);
+    const yours = await service.getStatistics({
       viewerUserId: viewer.user.userId,
       scope: 'yours',
       now: new Date('2026-07-23T12:00:00Z'),
-    })).resolves.toEqual({
+    });
+    expect(yours).toMatchObject({
       daily: { flightCount: 0, mostAccomplishments: null, mostCells: null, greatestFivePointDistance: null },
       monthly: {
         flightCount: 1,
-        mostAccomplishments: { flightId: viewerFlightId, value: 0 },
-        mostCells: { flightId: viewerFlightId, value: 2 },
+        mostAccomplishments: { flightId: viewerFlightId, value: 0, actorDisplayName: 'Viewer Pilot' },
+        mostCells: { flightId: viewerFlightId, value: 2, actorDisplayName: 'Viewer Pilot' },
         greatestFivePointDistance: null,
       },
     });
@@ -387,9 +398,9 @@ describe('activityService.listFeed', () => {
       now: new Date('2026-07-23T12:00:00Z'),
     })).daily;
     expect(daily.flightCount).toBe(4);
-    expect(daily.mostAccomplishments).toEqual({ flightId: missingScoreId, value: 0 });
-    expect(daily.mostCells).toEqual({ flightId: tiedLowerId, value: 4 });
-    expect(daily.greatestFivePointDistance).toEqual({ flightId: tiedLowerId, value: 5_000 });
+    expect(daily.mostAccomplishments).toMatchObject({ flightId: missingScoreId, value: 0 });
+    expect(daily.mostCells).toMatchObject({ flightId: tiedLowerId, value: 4 });
+    expect(daily.greatestFivePointDistance).toMatchObject({ flightId: tiedLowerId, value: 5_000 });
   });
 
   it('keeps launch-local months correct at UTC boundaries for the extreme IANA offsets', async () => {

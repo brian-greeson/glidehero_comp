@@ -1,0 +1,23 @@
+{{ if winner }}
+  <a class="activity-stat-tile activity-stat-tile--winner activity-stat-tile--{{ kind }}" href="{{ winner.href }}" aria-label="{{ label }}: {{ winner.pilot.displayName }}, {{ winner.value }}">
+    <span class="activity-stat-tile__label">{{ label }}</span>
+    <span class="activity-stat-tile__winner">
+      {{ include "authenticated/components/initialsAvatar.vto" { initials: winner.pilot.initials, color: winner.pilot.color } }}
+      <span class="activity-stat-tile__winner-copy">
+        <strong>{{ winner.pilot.displayName }}</strong>
+        <span>{{ winner.value }}</span>
+      </span>
+    </span>
+    {{ if kind === "achievements" && winner.achievements.length }}
+      <span class="activity-stat-tile__badges" aria-label="{{ winner.value }}">
+        {{ for achievement of winner.achievements }}{{ include "authenticated/components/achievementBadge.vto" { achievement } }}{{ /for }}
+        {{ if winner.achievementOverflowCount > 0 }}<span class="activity-stat-tile__overflow">+{{ winner.achievementOverflowCount }}</span>{{ /if }}
+      </span>
+    {{ /if }}
+  </a>
+{{ else }}
+  <div class="activity-stat-tile activity-stat-tile--empty">
+    <span class="activity-stat-tile__label">{{ label }}</span>
+    <span class="activity-stat-tile__empty">No qualifying flight</span>
+  </div>
+{{ /if }}

@@ -19,12 +19,29 @@ describe('activityFeedItemToView', () => {
   });
 
   it('formats both statistics periods and preserves missing winners', () => {
+    const accomplishments = [1, 2, 3, 4].map((value) => ({
+      id: `achievement-${value}`,
+      achievementKey: 'unique_cells_milestone',
+      title: `${value} Cells`,
+      description: 'Claim cells.',
+      badgeLabel: String(value),
+      category: 'general',
+      kind: 'threshold',
+      tone: 'green' as const,
+    }));
+    const winner = (flightId: string, value: number, flightAccomplishments = accomplishments.slice(0, 1)) => ({
+      flightId,
+      value,
+      actorUserId: 'pilot-id',
+      actorDisplayName: 'Alex Summit',
+      accomplishments: flightAccomplishments,
+    });
     const view = activityStatsToView({
       monthly: {
         flightCount: 12,
-        mostAccomplishments: { flightId: 'monthly-accomplishments', value: 3 },
-        mostCells: { flightId: 'monthly-cells', value: 1 },
-        greatestFivePointDistance: { flightId: 'monthly-distance', value: 12_345 },
+        mostAccomplishments: winner('monthly-accomplishments', 4, accomplishments),
+        mostCells: winner('monthly-cells', 1),
+        greatestFivePointDistance: winner('monthly-distance', 12_345),
       },
       daily: {
         flightCount: 0,
@@ -34,12 +51,18 @@ describe('activityFeedItemToView', () => {
       },
     });
 
-    expect(view.monthly).toEqual({
+    expect(view.monthly).toMatchObject({
       flightCount: '12',
-      mostAccomplishments: { href: '/flights/monthly-accomplishments', value: '3 accomplishments' },
+      mostAccomplishments: {
+        href: '/flights/monthly-accomplishments',
+        value: '4 achievements',
+        pilot: { displayName: 'Alex Summit', initials: 'AS', href: '/pilots/pilot-id' },
+        achievementOverflowCount: 1,
+      },
       mostCells: { href: '/flights/monthly-cells', value: '1 cell' },
       greatestFivePointDistance: { href: '/flights/monthly-distance', value: '12.3 km' },
     });
+    expect(view.monthly.mostAccomplishments?.achievements).toHaveLength(3);
     expect(view.daily).toEqual({
       flightCount: '0',
       mostAccomplishments: null,

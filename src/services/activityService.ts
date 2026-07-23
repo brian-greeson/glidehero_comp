@@ -53,6 +53,9 @@ export type ActivityFeedPage = {
 export type ActivityStatisticWinner = {
   flightId: string;
   value: number;
+  actorUserId: string;
+  actorDisplayName: string;
+  accomplishments: ActivityAccomplishment[];
 };
 
 export type ActivityPeriodStatistics = {
@@ -350,7 +353,12 @@ export function createActivityService(database?: Database): ActivityService {
       if (scope !== 'following' && scope !== 'yours') throw new Error('Activity statistics scope is invalid.');
       if (!Number.isFinite(now.getTime())) throw new Error('Activity statistics current time is invalid.');
 
-      type WinnerJson = { flightId?: unknown; value?: unknown } | null;
+      type WinnerJson = {
+        flightId?: unknown;
+        value?: unknown;
+        actorUserId?: unknown;
+        actorDisplayName?: unknown;
+      } | null;
       type StatisticsRow = {
         period: 'daily' | 'monthly';
         flightCount: number | string;
@@ -371,6 +379,8 @@ export function createActivityService(database?: Database): ActivityService {
         scoped_flights AS MATERIALIZED (
           SELECT
             flight.flight_id,
+            activity.actor_user_id,
+            actor.display_name AS actor_display_name,
             flight.started_at,
             coalesce(flight_progress.direct_cell_count, 0) + coalesce(flight_progress.enclosed_cell_count, 0) AS total_cells,
             flight_scores.five_point_distance_meters,
@@ -462,19 +472,34 @@ export function createActivityService(database?: Database): ActivityService {
           count(*)::int AS "flightCount",
           (
             array_agg(
-              jsonb_build_object('flightId', flight_id, 'value', accomplishment_count)
+              jsonb_build_object(
+                'flightId', flight_id,
+                'value', accomplishment_count,
+                'actorUserId', actor_user_id,
+                'actorDisplayName', actor_display_name
+              )
               ORDER BY accomplishment_count DESC, started_at DESC, flight_id ASC
             )
           )[1] AS "mostAccomplishments",
           (
             array_agg(
-              jsonb_build_object('flightId', flight_id, 'value', total_cells)
+              jsonb_build_object(
+                'flightId', flight_id,
+                'value', total_cells,
+                'actorUserId', actor_user_id,
+                'actorDisplayName', actor_display_name
+              )
               ORDER BY total_cells DESC, started_at DESC, flight_id ASC
             )
           )[1] AS "mostCells",
           (
             array_agg(
-              jsonb_build_object('flightId', flight_id, 'value', five_point_distance_meters)
+              jsonb_build_object(
+                'flightId', flight_id,
+                'value', five_point_distance_meters,
+                'actorUserId', actor_user_id,
+                'actorDisplayName', actor_display_name
+              )
               ORDER BY five_point_distance_meters DESC, started_at DESC, flight_id ASC
             ) FILTER (WHERE five_point_distance_meters IS NOT NULL)
           )[1] AS "greatestFivePointDistance"
@@ -490,8 +515,20 @@ export function createActivityService(database?: Database): ActivityService {
       });
       const statistics: ActivityStatistics = { daily: emptyPeriod(), monthly: emptyPeriod() };
       const winner = (value: WinnerJson): ActivityStatisticWinner | null => {
-        if (!value || typeof value.flightId !== 'string' || !Number.isFinite(Number(value.value))) return null;
-        return { flightId: value.flightId, value: Number(value.value) };
+        if (
+          !value
+          || typeof value.flightId !== 'string'
+          || typeof value.actorUserId !== 'string'
+          || typeof value.actorDisplayName !== 'string'
+          || !Number.isFinite(Number(value.value))
+        ) return null;
+        return {
+          flightId: value.flightId,
+          value: Number(value.value),
+          actorUserId: value.actorUserId,
+          actorDisplayName: value.actorDisplayName,
+          accomplishments: [],
+        };
       };
       for (const row of rows.rows) {
         statistics[row.period] = {
@@ -500,6 +537,17 @@ export function createActivityService(database?: Database): ActivityService {
           mostCells: winner(row.mostCells),
           greatestFivePointDistance: winner(row.greatestFivePointDistance),
         };
+      }
+      const accomplishmentWinnerIds = [...new Set(
+        [statistics.daily.mostAccomplishments, statistics.monthly.mostAccomplishments]
+          .filter((candidate): candidate is ActivityStatisticWinner => candidate !== null)
+          .map((candidate) => candidate.flightId),
+      )];
+      const accomplishments = await loadFlightAccomplishments(database, accomplishmentWinnerIds);
+      for (const period of [statistics.daily, statistics.monthly]) {
+        if (period.mostAccomplishments) {
+          period.mostAccomplishments.accomplishments = accomplishments.get(period.mostAccomplishments.flightId) ?? [];
+        }
       }
       return statistics;
     },
