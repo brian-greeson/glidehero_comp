@@ -6,29 +6,35 @@
         <span>{{ flights.length }} flights</span>
         <form method="post" action="/admin/users/{{ selectedUser.id }}/flights/delete-all" data-confirm="Are you sure you want to delete {{ if deletableFlightCount === 0 }}0{{ else }}{{ deletableFlightCount }}{{ /if }} {{ if deletableFlightCount === 1 }}flight{{ else }}flights{{ /if }}?">
           <input type="hidden" name="q" value="{{ search }}">
+          <input type="hidden" name="sort" value="{{ flightSort.field }}">
+          <input type="hidden" name="direction" value="{{ flightSort.direction }}">
           <button type="submit" class="admin-user-danger"{{ if deletableFlightCount === 0 }} disabled{{ /if }}>Delete all flights</button>
         </form>
       </div>
     </div>
     <div class="admin-table-wrap">
       <table class="admin-flight-table">
-        <thead><tr><th scope="col">Flight date</th><th scope="col">File</th><th scope="col">Status</th><th scope="col"><span class="sr-only">Actions</span></th></tr></thead>
+        <thead><tr>
+          <th scope="col" aria-sort="{{ if flightSort.field === 'flightDate' }}{{ if flightSort.direction === 'asc' }}ascending{{ else }}descending{{ /if }}{{ else }}none{{ /if }}"><a class="admin-flight-sort" href="{{ flightDateSortUrl }}">Flight date <span aria-hidden="true">{{ if flightSort.field === 'flightDate' }}{{ if flightSort.direction === 'asc' }}↑{{ else }}↓{{ /if }}{{ else }}↕{{ /if }}</span></a></th>
+          <th scope="col" aria-sort="{{ if flightSort.field === 'uploadDate' }}{{ if flightSort.direction === 'asc' }}ascending{{ else }}descending{{ /if }}{{ else }}none{{ /if }}"><a class="admin-flight-sort" href="{{ uploadDateSortUrl }}">Upload date <span aria-hidden="true">{{ if flightSort.field === 'uploadDate' }}{{ if flightSort.direction === 'asc' }}↑{{ else }}↓{{ /if }}{{ else }}↕{{ /if }}</span></a></th>
+          <th scope="col">File</th><th scope="col">Status</th><th scope="col"><span class="sr-only">Actions</span></th>
+        </tr></thead>
         <tbody>
           {{ for flight of flights }}
             <tr>
-              <td>{{ flight.flightDate ?? '—' }}</td><td>{{ flight.originalFilename }}</td><td>{{ flight.processingStatus }}</td>
+              <td>{{ flight.flightDate ?? '—' }}</td><td>{{ flight.uploadDate }}</td><td>{{ flight.originalFilename }}</td><td>{{ flight.processingStatus }}</td>
               <td class="admin-flight-actions">
                 {{ if flight.processingStatus !== 'processing' }}
                   <a href="/admin/users/{{ selectedUser.id }}/flights/{{ flight.id }}/igc">Download IGC</a>
-                  {{ if flight.processingStatus === 'completed' }}<form method="post" action="/admin/users/{{ selectedUser.id }}/flights/{{ flight.id }}/reprocess"><input type="hidden" name="q" value="{{ search }}"><button type="submit" class="admin-reprocess-button">Reprocess</button></form><form method="post" action="/admin/users/{{ selectedUser.id }}/flights/{{ flight.id }}/activity/regenerate"><input type="hidden" name="q" value="{{ search }}"><button type="submit" class="admin-reprocess-button">Regenerate activity</button></form>{{ /if }}
-                  <form method="post" action="/admin/users/{{ selectedUser.id }}/flights/{{ flight.id }}/delete" data-confirm="Delete {{ flight.originalFilename }} permanently?"><input type="hidden" name="q" value="{{ search }}"><button type="submit" class="admin-user-danger">Delete</button></form>
+                  {{ if flight.processingStatus === 'completed' }}<form method="post" action="/admin/users/{{ selectedUser.id }}/flights/{{ flight.id }}/reprocess"><input type="hidden" name="q" value="{{ search }}"><input type="hidden" name="sort" value="{{ flightSort.field }}"><input type="hidden" name="direction" value="{{ flightSort.direction }}"><button type="submit" class="admin-reprocess-button">Reprocess</button></form><form method="post" action="/admin/users/{{ selectedUser.id }}/flights/{{ flight.id }}/activity/regenerate"><input type="hidden" name="q" value="{{ search }}"><input type="hidden" name="sort" value="{{ flightSort.field }}"><input type="hidden" name="direction" value="{{ flightSort.direction }}"><button type="submit" class="admin-reprocess-button">Regenerate activity</button></form>{{ /if }}
+                  <form method="post" action="/admin/users/{{ selectedUser.id }}/flights/{{ flight.id }}/delete" data-confirm="Delete {{ flight.originalFilename }} permanently?"><input type="hidden" name="q" value="{{ search }}"><input type="hidden" name="sort" value="{{ flightSort.field }}"><input type="hidden" name="direction" value="{{ flightSort.direction }}"><button type="submit" class="admin-user-danger">Delete</button></form>
                 {{ else }}
                   <span class="muted">Processing management coming later</span>
                 {{ /if }}
               </td>
             </tr>
           {{ /for }}
-          {{ if flights.length === 0 }}<tr><td colspan="4" class="muted">No flights found for this user.</td></tr>{{ /if }}
+          {{ if flights.length === 0 }}<tr><td colspan="5" class="muted">No flights found for this user.</td></tr>{{ /if }}
         </tbody>
       </table>
     </div>

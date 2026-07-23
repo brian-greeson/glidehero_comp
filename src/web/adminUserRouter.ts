@@ -1,7 +1,7 @@
 import { Router, type NextFunction, type Request, type Response } from 'express';
 import { z } from 'zod';
 import { AppError } from '../domain/errors.js';
-import type { AdminFlightService } from '../services/adminFlightService.js';
+import type { AdminFlightService, AdminUserFlightSort } from '../services/adminFlightService.js';
 import type { AdminUserService } from '../services/adminUserService.js';
 import type { AuthenticatedUser } from '../services/authService.js';
 import type { AdminUserPageRenderer } from '../views/admin/renderer.js';
@@ -15,6 +15,8 @@ const createSchema = accountSchema.extend({ password, passwordConfirmation: pass
   .refine(({ password, passwordConfirmation }) => password === passwordConfirmation);
 const passwordSchema = z.object({ password, passwordConfirmation: password, q: z.string().optional() })
   .refine(({ password, passwordConfirmation }) => password === passwordConfirmation);
+const flightSortField = z.enum(['flightDate', 'uploadDate']);
+const flightSortDirection = z.enum(['asc', 'desc']);
 
 function formBody(body: unknown): Record<string, unknown> {
   return body && typeof body === 'object' && !Array.isArray(body) ? body as Record<string, unknown> : {};
@@ -24,12 +26,38 @@ function queryValue(value: unknown): string {
   return typeof value === 'string' ? value.slice(0, 200) : '';
 }
 
-function userLocation(userId: string, search: string, status?: { kind: 'success' | 'error'; value: string }): string {
+function flightSort(values: Record<string, unknown>): AdminUserFlightSort {
+  return {
+    field: flightSortField.catch('uploadDate').parse(values.sort),
+    direction: flightSortDirection.catch('desc').parse(values.direction),
+  };
+}
+
+function userLocation(
+  userId: string,
+  search: string,
+  status?: { kind: 'success' | 'error'; value: string },
+  sort?: AdminUserFlightSort,
+): string {
   const query = new URLSearchParams();
   if (search) query.set('q', search);
   if (status) query.set(status.kind, status.value);
+  if (sort) {
+    query.set('sort', sort.field);
+    query.set('direction', sort.direction);
+  }
   const suffix = query.toString();
   return `/admin/users/${userId}${suffix ? `?${suffix}` : ''}`;
+}
+
+function sortLocation(
+  userId: string,
+  search: string,
+  field: AdminUserFlightSort['field'],
+  current: AdminUserFlightSort,
+): string {
+  const direction = current.field === field && current.direction === 'asc' ? 'desc' : 'asc';
+  return userLocation(userId, search, undefined, { field, direction });
 }
 
 function notice(query: Request['query']): { successMessage?: string; errorMessage?: string } {
@@ -87,16 +115,20 @@ export function createAdminUserRouter(dependencies: {
     userId?: string,
   ) {
     const search = queryValue(req.query.q);
+    const sort = flightSort(req.query);
     const [users, selectedUser] = await Promise.all([
       dependencies.users.list(search),
       userId ? dependencies.users.get(userId) : undefined,
     ]);
     if (userId && !selectedUser) throw new AppError(404, 'invalid_request', 'User not found.');
-    const flights = selectedUser ? await dependencies.flights.listUserFlights(selectedUser.id) : [];
+    const flights = selectedUser ? await dependencies.flights.listUserFlights(selectedUser.id, sort) : [];
     res.status(200).type('html').send(await dependencies.renderPage({
       currentUser, users, selectedUser: selectedUser ?? undefined, flights,
       deletableFlightCount: flights.filter((flight) => flight.processingStatus !== 'processing').length,
-      search, searchParam: encodeURIComponent(search), mode, ...notice(req.query),
+      search, searchParam: encodeURIComponent(search), mode, flightSort: sort,
+      flightDateSortUrl: selectedUser ? sortLocation(selectedUser.id, search, 'flightDate', sort) : '',
+      uploadDateSortUrl: selectedUser ? sortLocation(selectedUser.id, search, 'uploadDate', sort) : '',
+      ...notice(req.query),
     }));
   }
 
@@ -169,30 +201,36 @@ export function createAdminUserRouter(dependencies: {
   router.post('/admin/users/:userId/flights/:flightId/reprocess', async (req, res, next) => {
     const userId = uuid.safeParse(req.params.userId);
     const flightId = uuid.safeParse(req.params.flightId);
-    const search = queryValue(formBody(req.body).q);
+    const body = formBody(req.body);
+    const search = queryValue(body.q);
+    const sort = flightSort(body);
     if (!userId.success || !flightId.success) { res.redirect(303, '/admin/users?error=invalid'); return; }
     try {
       const result = await dependencies.flights.reprocessFlight({ userId: userId.data, flightId: flightId.data });
       res.redirect(303, userLocation(userId.data, search, result.status === 'completed'
-        ? { kind: 'success', value: 'reprocessed' } : { kind: 'error', value: 'reprocess' }));
+        ? { kind: 'success', value: 'reprocessed' } : { kind: 'error', value: 'reprocess' }, sort));
     } catch (error) { next(error); }
   });
 
   router.post('/admin/users/:userId/flights/:flightId/activity/regenerate', async (req, res, next) => {
     const userId = uuid.safeParse(req.params.userId);
     const flightId = uuid.safeParse(req.params.flightId);
-    const search = queryValue(formBody(req.body).q);
+    const body = formBody(req.body);
+    const search = queryValue(body.q);
+    const sort = flightSort(body);
     if (!userId.success || !flightId.success) { res.redirect(303, '/admin/users?error=invalid'); return; }
     try {
       const result = await dependencies.flights.regenerateActivity({ userId: userId.data, flightId: flightId.data });
       res.redirect(303, userLocation(userId.data, search, result === 'completed'
-        ? { kind: 'success', value: 'activity_regenerated' } : { kind: 'error', value: 'activity' }));
+        ? { kind: 'success', value: 'activity_regenerated' } : { kind: 'error', value: 'activity' }, sort));
     } catch (error) { next(error); }
   });
 
   router.post('/admin/users/:userId/flights/delete-all', async (req, res, next) => {
     const userId = uuid.safeParse(req.params.userId);
-    const search = queryValue(formBody(req.body).q);
+    const body = formBody(req.body);
+    const search = queryValue(body.q);
+    const sort = flightSort(body);
     if (!userId.success) { res.redirect(303, '/admin/users?error=invalid'); return; }
     try {
       const result = await dependencies.flights.deleteAllUserFlights(userId.data);
@@ -203,6 +241,8 @@ export function createAdminUserRouter(dependencies: {
         failed: String(result.failed),
       });
       if (search) query.set('q', search);
+      query.set('sort', sort.field);
+      query.set('direction', sort.direction);
       res.redirect(303, `/admin/users/${userId.data}?${query.toString()}`);
     } catch (error) { next(error); }
   });
@@ -210,12 +250,14 @@ export function createAdminUserRouter(dependencies: {
   router.post('/admin/users/:userId/flights/:flightId/delete', async (req, res, next) => {
     const userId = uuid.safeParse(req.params.userId);
     const flightId = uuid.safeParse(req.params.flightId);
-    const search = queryValue(formBody(req.body).q);
+    const body = formBody(req.body);
+    const search = queryValue(body.q);
+    const sort = flightSort(body);
     if (!userId.success || !flightId.success) { res.redirect(303, '/admin/users?error=invalid'); return; }
     try {
       const result = await dependencies.flights.deleteFlight({ userId: userId.data, flightId: flightId.data });
       res.redirect(303, userLocation(userId.data, search, result === 'processing'
-        ? { kind: 'error', value: 'processing' } : { kind: 'success', value: 'flight_deleted' }));
+        ? { kind: 'error', value: 'processing' } : { kind: 'success', value: 'flight_deleted' }, sort));
     } catch (error) { next(error); }
   });
 

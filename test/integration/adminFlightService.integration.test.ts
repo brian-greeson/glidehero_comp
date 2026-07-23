@@ -67,6 +67,37 @@ describe('adminFlightService management', () => {
     expect(reprocess).not.toHaveBeenCalled();
   });
 
+  it('sorts selected-user flights by flight date or upload date in either direction', async () => {
+    const first = await storedFlight();
+    const second = await storedFlight('completed', first.user);
+    const third = await storedFlight('completed', first.user);
+    await database.db.update(flights).set({
+      startedAt: new Date('2026-07-16T12:00:00Z'),
+      createdAt: new Date('2026-07-14T09:00:00Z'),
+    }).where(eq(flights.id, first.flight.id));
+    await database.db.update(flights).set({
+      startedAt: new Date('2026-07-14T12:00:00Z'),
+      createdAt: new Date('2026-07-16T09:00:00Z'),
+    }).where(eq(flights.id, second.flight.id));
+    await database.db.update(flights).set({
+      startedAt: null,
+      createdAt: new Date('2026-07-15T09:00:00Z'),
+    }).where(eq(flights.id, third.flight.id));
+    const { service } = serviceHarness();
+    const ids = async (sort: Parameters<typeof service.listUserFlights>[1]) => (
+      await service.listUserFlights(first.user.id, sort)
+    ).map(({ id }) => id);
+
+    await expect(ids({ field: 'flightDate', direction: 'asc' }))
+      .resolves.toEqual([second.flight.id, first.flight.id, third.flight.id]);
+    await expect(ids({ field: 'flightDate', direction: 'desc' }))
+      .resolves.toEqual([first.flight.id, second.flight.id, third.flight.id]);
+    await expect(ids({ field: 'uploadDate', direction: 'asc' }))
+      .resolves.toEqual([first.flight.id, third.flight.id, second.flight.id]);
+    await expect(ids({ field: 'uploadDate', direction: 'desc' }))
+      .resolves.toEqual([second.flight.id, third.flight.id, first.flight.id]);
+  });
+
   it('deletes a terminal object and cascades its database records, and repeat deletion succeeds', async () => {
     const stored = await storedFlight();
     await database.db.insert(trackPoints).values({

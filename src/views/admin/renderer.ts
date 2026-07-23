@@ -1,7 +1,7 @@
 import { resolve } from 'node:path';
 import vento from 'ventojs';
 import type { TerritoryTileConfig } from '../../config/territoryTiles.js';
-import type { AdminFlight, AdminUserFlight } from '../../services/adminFlightService.js';
+import type { AdminFlight, AdminUserFlight, AdminUserFlightSort } from '../../services/adminFlightService.js';
 import type { AuthenticatedUser } from '../../services/authService.js';
 import type { AdminUserDetail, AdminUserSummary } from '../../services/adminUserService.js';
 import type { WorkerControlState, WorkerLiveState } from '../../services/workerControlService.js';
@@ -49,6 +49,9 @@ export type AdminUserPageRenderer = (model: {
   deletableFlightCount: number;
   search: string;
   searchParam: string;
+  flightSort: AdminUserFlightSort;
+  flightDateSortUrl: string;
+  uploadDateSortUrl: string;
   mode: 'empty' | 'create' | 'edit';
   successMessage?: string;
   errorMessage?: string;

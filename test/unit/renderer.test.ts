@@ -99,8 +99,44 @@ describe('Vento page renderer', () => {
       deletableFlightCount: 0,
       search: '',
       searchParam: '',
+      flightSort: { field: 'uploadDate', direction: 'desc' },
+      flightDateSortUrl: '',
+      uploadDateSortUrl: '',
       mode: 'empty',
     });
     expect(users).toContain('admin-user-page');
+
+    const sortedFlights = await createAdminUserPageRenderer()({
+      currentUser: user,
+      users: [{ id: user.userId, email: user.email, displayName: user.displayName }],
+      selectedUser: {
+        id: user.userId,
+        email: user.email,
+        displayName: user.displayName,
+        hasPassword: true,
+        lastLogin: new Date('2026-07-15T12:00:00Z'),
+        createdAt: new Date('2026-07-01T12:00:00Z'),
+        updatedAt: new Date('2026-07-15T12:00:00Z'),
+      },
+      flights: [{
+        id: '00000000-0000-4000-8000-000000000020',
+        flightDate: '2026-07-14',
+        uploadDate: '2026-07-15 08:30 UTC',
+        originalFilename: 'flight.igc',
+        processingStatus: 'completed',
+      }],
+      deletableFlightCount: 1,
+      search: 'pilot@example.com',
+      searchParam: 'pilot%40example.com',
+      flightSort: { field: 'flightDate', direction: 'asc' },
+      flightDateSortUrl: `/admin/users/${user.userId}?sort=flightDate&direction=desc`,
+      uploadDateSortUrl: `/admin/users/${user.userId}?sort=uploadDate&direction=asc`,
+      mode: 'edit',
+    });
+    expect(sortedFlights).toContain('aria-sort="ascending"');
+    expect(sortedFlights).toContain('Upload date');
+    expect(sortedFlights).toContain('2026-07-15 08:30 UTC');
+    expect(sortedFlights).toContain('name="sort" value="flightDate"');
+    expect(sortedFlights).toContain('name="direction" value="asc"');
   });
 });

@@ -1,6 +1,6 @@
 import { DeleteObjectCommand, GetObjectCommand, HeadObjectCommand, type S3 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
-import { and, desc, eq } from 'drizzle-orm';
+import { and, asc, desc, eq, sql } from 'drizzle-orm';
 import type { Database } from '../db/client.js';
 import { flights, igcFiles, users } from '../db/schema.js';
 import type { GridClaimService } from './gridClaimService.js';
@@ -23,7 +23,14 @@ export type AdminFlight = {
   processingStatus: 'processing' | 'completed' | 'failed';
 };
 
-export type AdminUserFlight = Omit<AdminFlight, 'pilotEmail'>;
+export type AdminUserFlight = Omit<AdminFlight, 'pilotEmail'> & {
+  uploadDate: string;
+};
+
+export type AdminUserFlightSort = {
+  field: 'flightDate' | 'uploadDate';
+  direction: 'asc' | 'desc';
+};
 
 export type AdminBulkFlightDeleteResult = {
   deleted: number;
@@ -33,7 +40,7 @@ export type AdminBulkFlightDeleteResult = {
 
 export interface AdminFlightService {
   listRecentFlights(): Promise<AdminFlight[]>;
-  listUserFlights(userId: string): Promise<AdminUserFlight[]>;
+  listUserFlights(userId: string, sort?: AdminUserFlightSort): Promise<AdminUserFlight[]>;
   reprocessFlight(input: { flightId: string; userId?: string }): ReturnType<GridClaimService['reprocess']>;
   regenerateActivity(input: { flightId: string; userId: string }): Promise<'completed' | 'not_found' | 'not_completed'>;
   deleteFlight(input: { flightId: string; userId: string }): Promise<'deleted' | 'already_deleted' | 'processing'>;
@@ -160,21 +167,27 @@ export function createAdminFlightService(
       }));
     },
 
-    async listUserFlights(userId) {
+    async listUserFlights(userId, sort = { field: 'uploadDate', direction: 'desc' }) {
+      const order = sort.direction === 'asc' ? asc : desc;
+      const ordering = sort.field === 'flightDate'
+        ? [sql`${order(flights.startedAt)} nulls last`, order(flights.createdAt), order(flights.id)]
+        : [order(flights.createdAt), order(flights.id)];
       const rows = await database
         .select({
           id: flights.id,
           startedAt: flights.startedAt,
+          uploadedAt: flights.createdAt,
           originalFilename: igcFiles.originalFilename,
           processingStatus: flights.processingStatus,
         })
         .from(flights)
         .innerJoin(igcFiles, eq(flights.igcFileId, igcFiles.id))
         .where(eq(flights.userId, userId))
-        .orderBy(desc(flights.createdAt), desc(flights.id));
+        .orderBy(...ordering);
       return rows.map((flight) => ({
         id: flight.id,
         flightDate: flight.startedAt?.toISOString().slice(0, 10) ?? null,
+        uploadDate: `${flight.uploadedAt.toISOString().slice(0, 16).replace('T', ' ')} UTC`,
         originalFilename: flight.originalFilename,
         processingStatus: flight.processingStatus,
       }));

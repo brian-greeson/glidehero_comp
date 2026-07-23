@@ -27,7 +27,10 @@ function dependencies() {
   };
   const flights: AdminFlightService = {
     listRecentFlights: vi.fn(async () => []),
-    listUserFlights: vi.fn(async () => [{ id: flightId, flightDate: '2026-07-14', originalFilename: 'flight.igc', processingStatus: 'completed' as const }]),
+    listUserFlights: vi.fn(async () => [{
+      id: flightId, flightDate: '2026-07-14', uploadDate: '2026-07-15 08:30 UTC',
+      originalFilename: 'flight.igc', processingStatus: 'completed' as const,
+    }]),
     reprocessFlight: vi.fn(async () => ({ status: 'completed' as const, result: {
       flightId, cellSize: 1000, directCellCount: 1, enclosedCellCount: 0,
       newPersonalCellCount: 1, personalCellTotalAfter: 1, progressionVersion: 1,
@@ -60,9 +63,25 @@ describe('adminUserRouter', () => {
       const response = await fetch(`${baseUrl}/admin/users/${pilotId}?q=pilot%40example.com`);
       expect(response.status).toBe(200);
       expect(deps.users.list).toHaveBeenCalledWith('pilot@example.com');
-      expect(deps.flights.listUserFlights).toHaveBeenCalledWith(pilotId);
+      expect(deps.flights.listUserFlights).toHaveBeenCalledWith(
+        pilotId,
+        { field: 'uploadDate', direction: 'desc' },
+      );
       expect(deps.renderPage).toHaveBeenCalledWith(expect.objectContaining({
         mode: 'edit', search: 'pilot@example.com', deletableFlightCount: 1,
+        flightSort: { field: 'uploadDate', direction: 'desc' },
+        flightDateSortUrl: `/admin/users/${pilotId}?q=pilot%40example.com&sort=flightDate&direction=asc`,
+        uploadDateSortUrl: `/admin/users/${pilotId}?q=pilot%40example.com&sort=uploadDate&direction=asc`,
+      }));
+
+      await fetch(`${baseUrl}/admin/users/${pilotId}?sort=flightDate&direction=asc`);
+      expect(deps.flights.listUserFlights).toHaveBeenLastCalledWith(
+        pilotId,
+        { field: 'flightDate', direction: 'asc' },
+      );
+      expect(deps.renderPage).toHaveBeenLastCalledWith(expect.objectContaining({
+        flightDateSortUrl: `/admin/users/${pilotId}?sort=flightDate&direction=desc`,
+        uploadDateSortUrl: `/admin/users/${pilotId}?sort=uploadDate&direction=asc`,
       }));
 
       await fetch(`${baseUrl}/admin/users/${pilotId}?success=flights_deleted&deleted=2&skipped=1&failed=1`);
@@ -104,12 +123,14 @@ describe('adminUserRouter', () => {
       expect(deps.flights.deleteFlight).toHaveBeenCalledWith({ userId: pilotId, flightId });
       const bulkRemoved = await fetch(`${baseUrl}/admin/users/${pilotId}/flights/delete-all`, {
         method: 'POST', redirect: 'manual', headers: { 'content-type': 'application/x-www-form-urlencoded' },
-        body: new URLSearchParams({ q: 'pilot@example.com' }),
+        body: new URLSearchParams({
+          q: 'pilot@example.com', sort: 'flightDate', direction: 'asc',
+        }),
       });
       expect(bulkRemoved.status).toBe(303);
       expect(deps.flights.deleteAllUserFlights).toHaveBeenCalledWith(pilotId);
       expect(bulkRemoved.headers.get('location')).toBe(
-        `/admin/users/${pilotId}?success=flights_deleted&deleted=2&skipped=1&failed=1&q=pilot%40example.com`,
+        `/admin/users/${pilotId}?success=flights_deleted&deleted=2&skipped=1&failed=1&q=pilot%40example.com&sort=flightDate&direction=asc`,
       );
       const download = await fetch(`${baseUrl}/admin/users/${pilotId}/flights/${flightId}/igc`, { redirect: 'manual' });
       expect(download.status).toBe(302);
@@ -117,10 +138,14 @@ describe('adminUserRouter', () => {
 
       const activity = await fetch(`${baseUrl}/admin/users/${pilotId}/flights/${flightId}/activity/regenerate`, {
         method: 'POST', redirect: 'manual', headers: { 'content-type': 'application/x-www-form-urlencoded' },
-        body: new URLSearchParams({ q: 'pilot@example.com' }),
+        body: new URLSearchParams({
+          q: 'pilot@example.com', sort: 'uploadDate', direction: 'asc',
+        }),
       });
       expect(activity.status).toBe(303);
-      expect(activity.headers.get('location')).toBe(`/admin/users/${pilotId}?success=activity_regenerated&q=pilot%40example.com`);
+      expect(activity.headers.get('location')).toBe(
+        `/admin/users/${pilotId}?q=pilot%40example.com&success=activity_regenerated&sort=uploadDate&direction=asc`,
+      );
       expect(deps.flights.regenerateActivity).toHaveBeenCalledWith({ userId: pilotId, flightId });
     });
   });
