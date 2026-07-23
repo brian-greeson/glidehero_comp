@@ -34,6 +34,7 @@ function dependencies() {
       evaluatedAt: new Date('2026-07-20T00:00:00Z'),
       arenaAchievements: { newlyEarned: [], alreadyEarned: 0, record: null },
     } })),
+    regenerateActivity: vi.fn(async () => 'completed' as const),
     deleteFlight: vi.fn(async () => 'deleted' as const),
     deleteAllUserFlights: vi.fn(async () => ({ deleted: 2, skipped: 1, failed: 1 })),
     createDownloadUrl: vi.fn(async () => ({ url: 'https://objects.example.test/download', filename: 'flight.igc' })),
@@ -113,6 +114,14 @@ describe('adminUserRouter', () => {
       const download = await fetch(`${baseUrl}/admin/users/${pilotId}/flights/${flightId}/igc`, { redirect: 'manual' });
       expect(download.status).toBe(302);
       expect(download.headers.get('location')).toBe('https://objects.example.test/download');
+
+      const activity = await fetch(`${baseUrl}/admin/users/${pilotId}/flights/${flightId}/activity/regenerate`, {
+        method: 'POST', redirect: 'manual', headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({ q: 'pilot@example.com' }),
+      });
+      expect(activity.status).toBe(303);
+      expect(activity.headers.get('location')).toBe(`/admin/users/${pilotId}?success=activity_regenerated&q=pilot%40example.com`);
+      expect(deps.flights.regenerateActivity).toHaveBeenCalledWith({ userId: pilotId, flightId });
     });
   });
 });

@@ -395,6 +395,7 @@ export type ActivityService = {
     transaction: ActivityTransaction,
     input: PublishFlightActivityInput,
   ): Promise<{ id: string }>;
+  regenerateFlightActivity(input: { flightId: string }): Promise<'completed' | 'not_found' | 'not_completed'>;
   listFeed(input: { viewerUserId: string; limit?: number; before?: string; q?: string; scope?: ActivityFeedScope }): Promise<ActivityFeedPage>;
   toggleThermal(input: { viewerUserId: string; activityId: string }): Promise<{ reacted: boolean; totalCount: number }>;
 };
@@ -414,6 +415,31 @@ export function createActivityService(database?: Database): ActivityService {
         .returning({ id: activities.id });
       if (!activity) throw new Error('Activity insert returned no row.');
       return activity;
+    },
+
+    async regenerateFlightActivity({ flightId }) {
+      if (!database) throw new Error('Activity writes require a database.');
+      const [flight] = await database
+        .select({ userId: flights.userId, processingStatus: flights.processingStatus, processedAt: flights.processedAt })
+        .from(flights)
+        .where(eq(flights.id, flightId))
+        .limit(1);
+      if (!flight) return 'not_found';
+      if (flight.processingStatus !== 'completed' || !flight.processedAt) return 'not_completed';
+
+      await database
+        .insert(activities)
+        .values({
+          actorUserId: flight.userId,
+          activityType: 'flight',
+          sourceFlightId: flightId,
+          publishedAt: flight.processedAt,
+        })
+        .onConflictDoUpdate({
+          target: activities.sourceFlightId,
+          set: { actorUserId: flight.userId, publishedAt: flight.processedAt },
+        });
+      return 'completed';
     },
 
     async listFeed({ viewerUserId, limit = 20, before, scope = 'all' }) {

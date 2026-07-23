@@ -37,7 +37,7 @@ function notice(query: Request['query']): { successMessage?: string; errorMessag
   const error = typeof query.error === 'string' ? query.error : '';
   let successMessage = {
     created: 'User created.', updated: 'User updated.', password: 'Password updated and existing sessions revoked.',
-    deleted: 'User deleted.', flight_deleted: 'Flight deleted.', reprocessed: 'Flight cells reprocessed.',
+    deleted: 'User deleted.', flight_deleted: 'Flight deleted.', reprocessed: 'Flight cells reprocessed.', activity_regenerated: 'Flight activity regenerated.',
   }[success];
   if (success === 'flights_deleted') {
     const count = (key: string) => {
@@ -49,6 +49,7 @@ function notice(query: Request['query']): { successMessage?: string; errorMessag
   const errorMessage = {
     invalid: 'Enter valid values and make sure the password fields match.',
     reprocess: 'That flight could not be reprocessed.',
+    activity: 'That flight activity could not be regenerated.',
     processing: 'Processing flights cannot be managed in this release.',
     not_found: 'User not found.',
     duplicate_email: 'That email address already belongs to another user.',
@@ -174,6 +175,18 @@ export function createAdminUserRouter(dependencies: {
       const result = await dependencies.flights.reprocessFlight({ userId: userId.data, flightId: flightId.data });
       res.redirect(303, userLocation(userId.data, search, result.status === 'completed'
         ? { kind: 'success', value: 'reprocessed' } : { kind: 'error', value: 'reprocess' }));
+    } catch (error) { next(error); }
+  });
+
+  router.post('/admin/users/:userId/flights/:flightId/activity/regenerate', async (req, res, next) => {
+    const userId = uuid.safeParse(req.params.userId);
+    const flightId = uuid.safeParse(req.params.flightId);
+    const search = queryValue(formBody(req.body).q);
+    if (!userId.success || !flightId.success) { res.redirect(303, '/admin/users?error=invalid'); return; }
+    try {
+      const result = await dependencies.flights.regenerateActivity({ userId: userId.data, flightId: flightId.data });
+      res.redirect(303, userLocation(userId.data, search, result === 'completed'
+        ? { kind: 'success', value: 'activity_regenerated' } : { kind: 'error', value: 'activity' }));
     } catch (error) { next(error); }
   });
 

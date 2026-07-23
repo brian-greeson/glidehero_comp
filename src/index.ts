@@ -88,7 +88,7 @@ const adminFlights = createAdminFlightService(db, gridClaim, {
   bucketName: config.bucket.bucketName,
   uploadQueue,
   thumbnailLifecycle,
-}, { arenaLeadership, cellSize: config.gridClaimCellSize, userAchievementProgress });
+}, { arenaLeadership, cellSize: config.gridClaimCellSize, userAchievementProgress }, activity);
 const adminUsers = createAdminUserService(db, {
   uploadQueue,
   s3Client,

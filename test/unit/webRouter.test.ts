@@ -137,6 +137,7 @@ function dependencies() {
   const activity: ActivityService = {
     listFeed: vi.fn(async () => ({ items: [], nextCursor: null })),
     publishFlightInTransaction: vi.fn(async () => ({ id: '00000000-0000-4000-8000-000000000010' })),
+    regenerateFlightActivity: vi.fn(async () => 'completed' as const),
     toggleThermal: vi.fn(async () => ({ reacted: true, totalCount: 1 })),
   };
   const gridClaim: GridClaimService = {
@@ -343,6 +344,7 @@ describe('webRouter', () => {
           arenaAchievements: { newlyEarned: [], alreadyEarned: 0, record: null },
         },
       })),
+      regenerateActivity: vi.fn(async () => 'completed' as const),
       listUserFlights: vi.fn(async () => []),
       deleteFlight: vi.fn(async () => 'deleted' as const),
       deleteAllUserFlights: vi.fn(async () => ({ deleted: 0, skipped: 0, failed: 0 })),

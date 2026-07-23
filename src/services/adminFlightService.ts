@@ -13,6 +13,7 @@ import type { FlightThumbnailLifecycleService } from './flightThumbnailLifecycle
 import { flightThumbnailErrorDetails } from './flightThumbnailService.js';
 import { lockUserProgression } from './gridClaimService.js';
 import type { UserAchievementProgressService } from './userAchievementProgressService.js';
+import type { ActivityService } from './activityService.js';
 
 export type AdminFlight = {
   id: string;
@@ -34,6 +35,7 @@ export interface AdminFlightService {
   listRecentFlights(): Promise<AdminFlight[]>;
   listUserFlights(userId: string): Promise<AdminUserFlight[]>;
   reprocessFlight(input: { flightId: string; userId?: string }): ReturnType<GridClaimService['reprocess']>;
+  regenerateActivity(input: { flightId: string; userId: string }): Promise<'completed' | 'not_found' | 'not_completed'>;
   deleteFlight(input: { flightId: string; userId: string }): Promise<'deleted' | 'already_deleted' | 'processing'>;
   deleteAllUserFlights(userId: string): Promise<AdminBulkFlightDeleteResult>;
   createDownloadUrl(input: { flightId: string; userId: string }): Promise<{ url: string; filename: string } | null>;
@@ -72,6 +74,7 @@ export function createAdminFlightService(
   gridClaim: Pick<GridClaimService, 'reprocess'>,
   storage?: StorageOptions,
   arenaLeadershipOptions?: ArenaLeadershipOptions,
+  activity?: Pick<ActivityService, 'regenerateFlightActivity'>,
 ): AdminFlightService {
   const configuredCellSize = arenaLeadershipOptions?.cellSize;
   async function storedFlight(input: { flightId: string; userId: string }) {
@@ -83,6 +86,7 @@ export function createAdminFlightService(
         bucketKey: igcFiles.bucketKey,
         originalFilename: igcFiles.originalFilename,
         processingStatus: flights.processingStatus,
+        processedAt: flights.processedAt,
       })
       .from(flights)
       .innerJoin(igcFiles, eq(flights.igcFileId, igcFiles.id))
@@ -192,6 +196,14 @@ export function createAdminFlightService(
         }
       }
       return result;
+    },
+
+    async regenerateActivity(input) {
+      const flight = await storedFlight(input);
+      if (!flight) return 'not_found';
+      if (flight.processingStatus !== 'completed' || !flight.processedAt) return 'not_completed';
+      if (!activity) throw new Error('Activity dependencies are not configured.');
+      return activity.regenerateFlightActivity({ flightId: input.flightId });
     },
 
     deleteFlight,
