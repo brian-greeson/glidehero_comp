@@ -151,7 +151,9 @@ const profilePage: ProfilePageModel = {
   glider: { brand: 'Ozone', model: 'Enzo 3', color: 'Teal / White' },
 };
 
-const pages: Record<AuthenticatedShellModel['page'], AuthenticatedPageModel> = {
+type FixturePage = Exclude<AuthenticatedShellModel['page'], 'flight'>;
+
+const pages: Record<FixturePage, AuthenticatedPageModel> = {
   map: mapPage,
   activity: activityPage,
   achievements: achievementsPage,
@@ -159,5 +161,6 @@ const pages: Record<AuthenticatedShellModel['page'], AuthenticatedPageModel> = {
 };
 
 export function authenticatedPageFixture(page: AuthenticatedShellModel['page']): AuthenticatedPageModel {
+  if (page === 'flight') throw new Error('Flight detail fixtures require a real flight summary.');
   return pages[page];
 }

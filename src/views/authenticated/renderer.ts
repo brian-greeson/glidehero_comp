@@ -14,6 +14,7 @@ const templates: Record<AuthenticatedPage, string> = {
   activity: 'authenticated/pages/activity.vto',
   achievements: 'authenticated/pages/achievements.vto',
   profile: 'authenticated/pages/profile.vto',
+  flight: 'authenticated/pages/flight.vto',
 };
 
 export function createAuthenticatedPageRenderer(): AuthenticatedPageRenderer {
@@ -34,6 +35,8 @@ export function createAuthenticatedPageRenderer(): AuthenticatedPageRenderer {
             ? '/scripts/app-ui/profile.js'
             : model.page === 'achievements'
               ? '/scripts/app-ui/achievements.js'
+              : model.page === 'flight'
+                ? '/scripts/app-ui/flight.js'
             : undefined,
       ...model,
     })

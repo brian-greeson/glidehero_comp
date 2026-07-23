@@ -49,6 +49,7 @@ export function activityFeedItemToView(item: ActivityFeedItem, options: { thumbn
   const flight = item.activityType === 'flight' && item.sourceFlightId
     ? {
       id: item.sourceFlightId ?? item.id,
+      href: `/flights/${item.sourceFlightId}`,
       date: item.flightDate ?? 'Date unavailable',
       distance: item.distance ?? '—',
       cells: item.totalCellCount === undefined ? '—' : String(item.totalCellCount),

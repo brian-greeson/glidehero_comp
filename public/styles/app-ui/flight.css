@@ -1,0 +1,55 @@
+.app-ui-body--flight { overflow: hidden; }
+.app-ui-body--flight .app-ui-frame, .app-ui-body--flight .app-ui-main { height: 100svh; }
+.app-ui-main--flight { min-height: 0; }
+.flight-detail-page { display: grid; grid-template-columns: minmax(280px, 340px) minmax(0, 1fr); gap: .8rem; height: calc(100svh - var(--app-header-height)); padding: 1rem; background: var(--app-surface-soft); }
+.flight-detail-panel { min-width: 0; overflow-y: auto; border: 1px solid var(--app-border); border-radius: var(--app-radius); background: var(--app-surface); box-shadow: var(--app-shadow-sm); }
+.flight-detail-panel__pilot { padding: 1rem; border-bottom: 1px solid var(--app-border); }
+.flight-detail-panel__pilot-link { display: inline-flex; align-items: center; gap: .7rem; border-radius: .55rem; color: var(--app-ink); text-decoration: none; }
+.flight-detail-panel__pilot-link:focus-visible { outline: 3px solid var(--app-blue); outline-offset: 3px; }
+.flight-detail-panel__pilot-link > span { display: grid; gap: .15rem; }
+.flight-detail-panel__pilot-link small, .flight-detail-facts dt, .flight-cell-grid dt { color: var(--app-muted); font-size: .68rem; font-weight: 500; }
+.flight-detail-panel__pilot-link strong { font-size: .9rem; }
+.flight-detail-facts { display: grid; grid-template-columns: 1.5fr 1fr; margin: 0 0 .65rem; overflow: hidden; border: 1px solid var(--app-border); border-radius: .7rem; }
+.flight-detail-facts > div { display: grid; gap: .3rem; padding: .7rem; }
+.flight-detail-facts > div + div { border-left: 1px solid var(--app-border); }
+.flight-detail-facts dd { display: grid; gap: .15rem; margin: 0; font-size: .76rem; font-weight: 800; }
+.flight-detail-facts dd span { color: var(--app-muted); font-size: .65rem; font-weight: 500; }
+.flight-detail-section { padding: 1rem; border-bottom: 1px solid var(--app-border); }
+.flight-detail-section:last-child { border-bottom: 0; }
+.flight-detail-section h2 { margin: 0 0 .75rem; font-size: .75rem; letter-spacing: .03em; text-transform: uppercase; }
+.flight-cell-grid { display: grid; grid-template-columns: repeat(2, 1fr); margin: 0; overflow: hidden; border: 1px solid var(--app-border); border-radius: .7rem; }
+.flight-cell-grid > div { display: grid; gap: .2rem; padding: .7rem; }
+.flight-cell-grid > div:nth-child(even) { border-left: 1px solid var(--app-border); }
+.flight-cell-grid > div:nth-child(n+3) { border-top: 1px solid var(--app-border); }
+.flight-cell-grid dd { margin: 0; color: var(--app-blue); font-size: 1.05rem; font-weight: 850; }
+.flight-distance-list { display: grid; gap: .35rem; }
+.flight-distance-list button { display: flex; min-height: 42px; align-items: center; justify-content: space-between; padding: .55rem .7rem; border: 1px solid var(--app-border); border-radius: .55rem; color: var(--app-ink); background: var(--app-surface); cursor: pointer; }
+.flight-distance-list button[aria-pressed='true'] { border-color: var(--app-blue); color: var(--app-blue); background: #eff6ff; box-shadow: 0 0 0 1px var(--app-blue); }
+.flight-distance-list button:disabled { color: var(--app-muted); background: var(--app-surface-soft); cursor: not-allowed; opacity: .65; }
+.flight-distance-list button span { font-size: .7rem; }
+.flight-distance-list button strong { font-size: .76rem; font-variant-numeric: tabular-nums; }
+.flight-detail-achievements ul { display: grid; gap: .65rem; padding: 0; margin: 0; list-style: none; }
+.flight-detail-achievements li { display: grid; grid-template-columns: 56px 1fr; align-items: center; gap: .65rem; }
+.flight-detail-achievements .achievement-badge { width: 54px; height: 59px; }
+.flight-detail-achievements .achievement-badge__label { font-size: .62rem; }
+.flight-detail-achievements li > div { display: grid; gap: .2rem; }
+.flight-detail-achievements strong, .flight-detail-achievements a { color: var(--app-ink); font-size: .72rem; font-weight: 800; }
+.flight-detail-achievements li span, .flight-detail-achievements p { margin: 0; color: var(--app-muted); font-size: .65rem; line-height: 1.4; }
+.flight-detail-map-stage { position: relative; min-width: 0; overflow: hidden; border: 1px solid #aab9c9; border-radius: var(--app-radius); background: #728a91; }
+.flight-detail-map-stage > .flight-detail-map { position: absolute; inset: 0; width: 100%; height: 100%; }
+.flight-detail-map-status { position: absolute; z-index: 4; inset: 50% auto auto 50%; max-width: 24rem; margin: 0; padding: .75rem 1rem; transform: translate(-50%, -50%); border-radius: .6rem; color: var(--app-ink); background: var(--app-surface); box-shadow: var(--app-shadow); text-align: center; }
+.flight-detail-map-status[hidden] { display: none; }
+.flight-detail-panel.mobile-map-sheet, .flight-detail-panel .mobile-map-sheet__content { display: block; }
+.flight-detail-panel .mobile-map-sheet__handle { display: none; }
+
+@media (max-width: 900px) {
+  .app-ui-body--flight .app-header { position: fixed; right: 0; left: 0; }
+  .app-ui-body--flight .app-ui-main { height: 100svh; padding: 0; }
+  .flight-detail-page { display: block; height: 100svh; padding: var(--app-mobile-header-height) 0 var(--app-mobile-nav-height); }
+  .flight-detail-map-stage { height: 100%; border: 0; border-radius: 0; }
+  .flight-detail-panel.mobile-map-sheet { position: fixed; z-index: 20; right: 0; bottom: var(--app-mobile-nav-height); left: 0; display: block; height: clamp(30px, 5svh, 260px); overflow: hidden; border: 0; border-radius: 1.2rem 1.2rem 0 0; box-shadow: 0 -8px 30px rgb(15 35 60 / 18%); transition: height .24s ease; }
+  .flight-detail-panel.mobile-map-sheet.is-expanded { height: calc(99svh - var(--app-mobile-header-height) - var(--app-mobile-nav-height)); }
+  .flight-detail-panel .mobile-map-sheet__handle { display: grid; width: 100%; height: 30px; place-items: center; padding: 0; border: 0; background: var(--app-surface); cursor: ns-resize; touch-action: none; }
+  .flight-detail-panel .mobile-map-sheet__handle > span:first-child { width: 42px; height: 4px; border-radius: 99px; background: #b8c3d0; }
+  .flight-detail-panel .mobile-map-sheet__content { display: block; height: calc(100% - 30px); overflow-y: auto; overscroll-behavior: contain; }
+}

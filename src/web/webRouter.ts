@@ -39,6 +39,8 @@ import { ActivityCursorError, ActivityNotFoundError, SelfLikeError } from '../se
 import type { FlightThumbnailDeliveryService } from '../services/flightThumbnailDeliveryService.js';
 import { WORKER_STATUS_TTL_SECONDS, type WorkerControlService } from '../services/workerControlService.js';
 import type { FlightProcessingControlService } from '../services/flightProcessingControlService.js';
+import type { FlightDetailService } from '../services/flightDetailService.js';
+import { createFlightMapPayload, createFlightPageView } from '../views/authenticated/adapters/flightDetailView.js';
 
 const email = z.string().trim().toLowerCase().pipe(z.email());
 const password = z.string().min(3).max(128);
@@ -190,6 +192,7 @@ export function createWebRouter(dependencies: {
   territoryTileSettings?: TerritoryTileSettingsService;
   renderAdminMapSettingsPage?: AdminMapSettingsPageRenderer;
   thumbnailDelivery?: FlightThumbnailDeliveryService;
+  flightDetail?: FlightDetailService;
 }) {
   const router = Router();
   const territoryTileSettings = dependencies.territoryTileSettings ?? createTerritoryTileSettingsService();
@@ -264,7 +267,7 @@ export function createWebRouter(dependencies: {
     return Boolean(currentUser && isAdmin(currentUser.email));
   }
 
-  function authenticatedShell(page: 'map' | 'activity' | 'achievements' | 'profile', currentUser: AuthenticatedUser, options: { mapHref?: string; showFooter?: boolean } = {}) {
+  function authenticatedShell(page: 'map' | 'activity' | 'achievements' | 'profile' | 'flight', currentUser: AuthenticatedUser, options: { mapHref?: string; showFooter?: boolean } = {}) {
     return createAuthenticatedShellModel({
       page,
       user: currentUser,
@@ -714,6 +717,65 @@ export function createWebRouter(dependencies: {
       await renderAuthenticated(res, dependencies.renderAuthenticatedPage, 200, productionMap(currentUser, {
         mode: 'personal', period: selection.period, location: 'Personal Map', mapHref,
       }));
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.get('/flights/:flightId', async (req, res, next) => {
+    const currentUser = res.locals.currentUser;
+    if (!currentUser) {
+      res.redirect(302, '/');
+      return;
+    }
+    const parsedFlightId = pilotUserIdSchema.safeParse(req.params.flightId);
+    if (!parsedFlightId.success) {
+      next();
+      return;
+    }
+    if (!dependencies.flightDetail) throw new Error('Flight detail service is not configured.');
+    try {
+      const summary = await dependencies.flightDetail.getSummary(parsedFlightId.data);
+      if (!summary) {
+        next();
+        return;
+      }
+      const shell = authenticatedShell('flight', currentUser, { showFooter: false });
+      await renderAuthenticated(res, dependencies.renderAuthenticatedPage, 200, {
+        ...shell,
+        page: 'flight',
+        flight: {
+          ...createFlightPageView(summary),
+          mapStyleUrl: dependencies.mapTilerStyleUrl,
+        },
+      });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.get('/v1/flights/:flightId/map', async (req, res, next) => {
+    const currentUser = res.locals.currentUser;
+    if (!currentUser) {
+      next(new AppError(401, 'unauthorized', 'Sign in before viewing a flight map.'));
+      return;
+    }
+    const parsedFlightId = pilotUserIdSchema.safeParse(req.params.flightId);
+    if (!parsedFlightId.success) {
+      next();
+      return;
+    }
+    if (!dependencies.flightDetail) throw new Error('Flight detail service is not configured.');
+    try {
+      const [summary, mapData] = await Promise.all([
+        dependencies.flightDetail.getSummary(parsedFlightId.data),
+        dependencies.flightDetail.getMapData(parsedFlightId.data),
+      ]);
+      if (!summary || !mapData) {
+        next();
+        return;
+      }
+      res.status(200).set('Cache-Control', 'private, max-age=60').json(createFlightMapPayload(summary, mapData));
     } catch (error) {
       next(error);
     }

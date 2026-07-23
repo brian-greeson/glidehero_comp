@@ -1,4 +1,4 @@
-<picture class="flight-thumbnail" data-flight-thumbnail-picture>
+{{ if typeof flight.href !== 'undefined' && flight.href }}<a class="flight-thumbnail-link" href="{{ flight.href }}" aria-label="View flight from {{ flight.date }}">{{ /if }}<picture class="flight-thumbnail" data-flight-thumbnail-picture>
   {{ if typeof flight.thumbnail !== 'undefined' && flight.thumbnail }}<source media="(max-width: 767px)" srcset="{{ flight.thumbnail.squareUrl }}" type="image/webp">{{ /if }}
   <img data-flight-thumbnail src="{{ if typeof flight.thumbnail !== 'undefined' && flight.thumbnail }}{{ flight.thumbnail.wideUrl }}{{ else }}/flight-thumbnail-fallback.webp{{ /if }}" alt="Flight territory preview" loading="lazy" width="800" height="450">
-</picture>
+</picture>{{ if typeof flight.href !== 'undefined' && flight.href }}</a>{{ /if }}

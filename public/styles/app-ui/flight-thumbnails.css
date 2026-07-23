@@ -1,4 +1,6 @@
 .flight-thumbnail { display: block; overflow: hidden; width: 100%; aspect-ratio: 16 / 9; border-radius: .6rem; background: #d9e0dc; }
+.flight-thumbnail-link { display: block; border-radius: .6rem; }
+.flight-thumbnail-link:focus-visible { outline: 3px solid var(--app-blue); outline-offset: 3px; }
 .flight-thumbnail img { display: block; width: 100%; height: 100%; object-fit: cover; }
 .activity-card__flight-media { display: grid; align-content: start; gap: .65rem; min-width: 0; }
 @media (max-width: 767px) {

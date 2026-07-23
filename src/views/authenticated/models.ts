@@ -1,4 +1,4 @@
-export type AuthenticatedPage = 'map' | 'activity' | 'achievements' | 'profile';
+export type AuthenticatedPage = 'map' | 'activity' | 'achievements' | 'profile' | 'flight';
 
 export type AuthenticatedUserView = {
   displayName: string;
@@ -50,6 +50,7 @@ export type AchievementView = {
   target?: string;
   percent?: number;
   isInitiallyVisible?: boolean;
+  href?: string;
 };
 
 export type FlightView = {
@@ -62,6 +63,7 @@ export type FlightView = {
   achievements?: string;
   mapTone: 'orange' | 'blue' | 'cyan' | 'purple';
   thumbnail?: { wideUrl: string; squareUrl: string };
+  href?: string;
 };
 
 export type AuthenticatedShellModel = {
@@ -181,4 +183,33 @@ export type ProfilePageModel = AuthenticatedShellModel & {
   glider?: { imageSrc?: string; brand?: string; model?: string; color?: string };
 };
 
-export type AuthenticatedPageModel = MapPageModel | ActivityPageModel | AchievementsPageModel | ProfilePageModel;
+export type FlightDistanceView = {
+  key: 'track' | 'threePoint' | 'fourPoint' | 'fivePoint' | 'sixPoint';
+  label: string;
+  value: string;
+  available: boolean;
+};
+
+export type FlightPageModel = AuthenticatedShellModel & {
+  page: 'flight';
+  flight: {
+    id: string;
+    pilot: PilotView;
+    date: string;
+    time: string;
+    timezone: string;
+    duration: string;
+    directCells: string;
+    enclosedCells: string;
+    totalCells: string;
+    newPersonalCells: string;
+    distances: FlightDistanceView[];
+    defaultDistance: FlightDistanceView['key'];
+    territoryColor: string;
+    mapStyleUrl?: string;
+    mapDataUrl: string;
+    achievements: AchievementView[];
+  };
+};
+
+export type AuthenticatedPageModel = MapPageModel | ActivityPageModel | AchievementsPageModel | ProfilePageModel | FlightPageModel;

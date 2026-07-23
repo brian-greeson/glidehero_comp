@@ -1,0 +1,47 @@
+<div class="flight-detail-panel__pilot">
+  <a class="flight-detail-panel__pilot-link" href="{{ flight.pilot.href }}" aria-label="View {{ flight.pilot.displayName }}’s pilot profile">
+    {{ include "authenticated/components/initialsAvatar.vto" { initials: flight.pilot.initials, color: flight.pilot.color } }}
+    <span><small>Pilot</small><strong>{{ flight.pilot.displayName }}</strong></span>
+  </a>
+</div>
+<section class="flight-detail-section flight-detail-stats" aria-labelledby="flight-stats-heading">
+  <h2 id="flight-stats-heading">Stats</h2>
+  <dl class="flight-detail-facts">
+    <div><dt>Launched</dt><dd>{{ flight.date }}<span>{{ flight.time }} {{ flight.timezone }}</span></dd></div>
+    <div><dt>Duration</dt><dd>{{ flight.duration }}</dd></div>
+  </dl>
+  <dl class="flight-cell-grid">
+    <div><dt>Direct</dt><dd>{{ flight.directCells }}</dd></div>
+    <div><dt>Enclosed</dt><dd>{{ flight.enclosedCells }}</dd></div>
+    <div><dt>Total</dt><dd>{{ flight.totalCells }}</dd></div>
+    <div><dt>New personal</dt><dd>{{ flight.newPersonalCells }}</dd></div>
+  </dl>
+</section>
+<section class="flight-detail-section" aria-labelledby="flight-distances-heading">
+  <h2 id="flight-distances-heading">Distances</h2>
+  <div class="flight-distance-list" role="group" aria-label="Distance route shown on map">
+    {{ for distance of flight.distances }}
+      <button type="button" data-flight-map-distance="{{ distance.key }}" aria-pressed="{{ if distance.key === flight.defaultDistance }}true{{ else }}false{{ /if }}" {{ if !distance.available }}disabled{{ /if }}>
+        <span>{{ distance.label }}</span><strong>{{ distance.value }}</strong>
+      </button>
+    {{ /for }}
+  </div>
+</section>
+<section class="flight-detail-section flight-detail-achievements" aria-labelledby="flight-achievements-heading">
+  <h2 id="flight-achievements-heading">Achievements</h2>
+  {{ if flight.achievements.length }}
+    <ul>
+      {{ for achievement of flight.achievements }}
+        <li>
+          {{ include "authenticated/components/achievementBadge.vto" { achievement } }}
+          <div>
+            {{ if typeof achievement.href !== 'undefined' && achievement.href }}<a href="{{ achievement.href }}">{{ achievement.title }}</a>{{ else }}<strong>{{ achievement.title }}</strong>{{ /if }}
+            <span>{{ achievement.description }}</span>
+          </div>
+        </li>
+      {{ /for }}
+    </ul>
+  {{ else }}
+    <p>No achievements or other accomplishments from this flight.</p>
+  {{ /if }}
+</section>

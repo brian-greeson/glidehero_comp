@@ -20,6 +20,7 @@ import { createCurrentUserMiddleware } from '../../src/web/currentUserMiddleware
 import { createSessionCookie } from '../../src/web/sessionCookie.js';
 import { createWebRouter } from '../../src/web/webRouter.js';
 import { withServer } from '../support/http.js';
+import type { FlightDetailService, FlightDetailSummary } from '../../src/services/flightDetailService.js';
 
 const viewportStats = {
   claimedCellCount: 2,
@@ -217,6 +218,102 @@ function dependencies() {
 }
 
 describe('webRouter', () => {
+  it('serves completed flight detail HTML and map JSON to any authenticated pilot', async () => {
+    const base = dependencies();
+    const flightId = '00000000-0000-4000-8000-000000000020';
+    const points = [
+      { sequenceNumber: 1, recordedAt: '2026-07-23T14:00:00.000Z', latitude: 40, longitude: -105, gpsAltitudeMeters: 1_500 },
+      { sequenceNumber: 2, recordedAt: '2026-07-23T14:10:00.000Z', latitude: 40.1, longitude: -104.9, gpsAltitudeMeters: 1_600 },
+    ];
+    const summary: FlightDetailSummary = {
+      id: flightId,
+      ownerUserId: pilotProfile.userId,
+      ownerDisplayName: pilotProfile.displayName,
+      territoryColor: pilotProfile.territoryColor,
+      startedAt: new Date('2026-07-23T14:00:00.000Z'),
+      endedAt: new Date('2026-07-23T15:00:00.000Z'),
+      launchTimezone: 'America/Denver',
+      durationSeconds: 3_600,
+      launchLatitude: 40,
+      launchLongitude: -105,
+      progress: { directCellCount: 2, enclosedCellCount: 1, newPersonalCellCount: 1, personalCellTotalAfter: 10 },
+      scores: {
+        track: { distanceMeters: 12_345, calcVersion: 1, metadata: {} },
+        threePoint: null,
+        fourPoint: null,
+        fivePoint: { distanceMeters: 10_005, calcVersion: 1, metadata: { points } },
+        sixPoint: null,
+      },
+      accomplishments: [],
+    };
+    const flightDetail: FlightDetailService = {
+      getSummary: vi.fn(async () => summary),
+      getMapData: vi.fn(async () => ({
+        track: points.map((point) => ({ ...point, recordedAt: new Date(point.recordedAt), pressureAltitudeMeters: point.gpsAltitudeMeters })),
+        launch: { latitude: 40, longitude: -105 },
+        landing: { latitude: 40.1, longitude: -104.9 },
+        directCells: { type: 'FeatureCollection' as const, features: [] },
+        enclosedCells: { type: 'FeatureCollection' as const, features: [] },
+      })),
+    };
+    const router = createWebRouter({
+      auth: base.auth,
+      cookie: base.cookie,
+      profiles: base.profiles,
+      follow: base.follow,
+      activity: base.activity,
+      flightDetail,
+      gridClaim: base.gridClaim,
+      mapGrid: base.mapGrid,
+      coverage: base.coverage,
+      territoryTiles: base.territoryTiles,
+      arenas: base.arenas,
+      arenaProgress: base.arenaProgress,
+      renderPage: base.renderPage,
+      renderAuthenticatedPage: base.renderAuthenticatedPage,
+      renderAuthenticatedActivityFeed: base.renderAuthenticatedActivityFeed,
+      mapTilerStyleUrl: 'https://maps.example/style.json',
+    });
+    const app = createApp({ webMiddleware: [createCurrentUserMiddleware(base.auth, base.cookie), router] });
+
+    await withServer(app, async (baseUrl) => {
+      const anonymousPage = await fetch(`${baseUrl}/flights/${flightId}`, { redirect: 'manual' });
+      expect(anonymousPage.status).toBe(302);
+      const anonymousMap = await fetch(`${baseUrl}/v1/flights/${flightId}/map`);
+      expect(anonymousMap.status).toBe(401);
+
+      const headers = { cookie: 'glidehero_session=valid-token' };
+      expect((await fetch(`${baseUrl}/flights/not-a-uuid`, { headers })).status).toBe(404);
+      const page = await fetch(`${baseUrl}/flights/${flightId}`, { headers });
+      expect(page.status).toBe(200);
+      expect(base.renderAuthenticatedPage).toHaveBeenCalledWith(expect.objectContaining({
+        page: 'flight',
+        flight: expect.objectContaining({
+          id: flightId,
+          defaultDistance: 'fivePoint',
+          mapStyleUrl: 'https://maps.example/style.json',
+        }),
+      }));
+
+      const map = await fetch(`${baseUrl}/v1/flights/${flightId}/map`, { headers });
+      expect(map.status).toBe(200);
+      expect(map.headers.get('cache-control')).toBe('private, max-age=60');
+      expect(await map.json()).toMatchObject({
+        territoryColor: pilotProfile.territoryColor,
+        track: { geometry: { coordinates: [[-105, 40], [-104.9, 40.1]] } },
+        scores: { fivePoint: { turnpoints: { features: [{ properties: {} }, { properties: {} }] } } },
+      });
+    });
+
+    vi.mocked(flightDetail.getSummary).mockResolvedValueOnce(null);
+    await withServer(app, async (baseUrl) => {
+      const missing = await fetch(`${baseUrl}/flights/${flightId}`, {
+        headers: { cookie: 'glidehero_session=valid-token' },
+      });
+      expect(missing.status).toBe(404);
+    });
+  });
+
   it('serves bounded viewport and Arena grids only to authenticated users', async () => {
     const { app, mapGrid, arenas } = dependencies();
     await withServer(app, async (baseUrl) => {

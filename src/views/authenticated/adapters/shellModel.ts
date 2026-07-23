@@ -9,6 +9,7 @@ const pageLabels: Record<AuthenticatedPage, string> = {
   activity: 'Activity',
   achievements: 'Achievements',
   profile: 'Profile',
+  flight: 'Flight',
 };
 
 /** Return up to two initials for the compact account avatar. */

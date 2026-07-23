@@ -136,6 +136,13 @@ The authenticated Activity surface is also owned by `webRouter.ts`:
 Pilot display names in competition leaderboards link to `/pilots/:userId`; the
 profile page exposes the same Follow/Unfollow control used by Activity search.
 
+Completed-flight detail is authenticated but not owner-restricted:
+`GET /flights/:flightId` renders the flight page and
+`GET /v1/flights/:flightId/map` returns its map GeoJSON. Invalid, missing, and
+non-completed flight IDs return 404. The JSON endpoint adapts persisted track,
+claim-cell, and score metadata for MapLibre; it does not trust browser input to
+select or expose a flight.
+
 Self-following has no persisted row or control. Feed visibility always includes
 the viewer's own activities and actors currently followed, so following reveals
 earlier Release 4 activity and unfollowing hides it on the next read. The
@@ -190,6 +197,12 @@ visibility, stable keyset pagination, joined flight summaries, grouped
 accomplishments, and Like toggling. Feed reads batch-load accomplishment
 sources for the visible page and calculate Like counts/viewer state in the
 same query rather than issuing one query per card.
+
+`flightDetailService.ts` owns the completed-flight summary and map reads used by
+the detail routes. It loads the pilot, launch-local time inputs, progress,
+stored distance scores and score-point metadata, accomplishments, track points,
+and persisted direct/enclosed cells. The authenticated presentation adapter
+converts those results to display values and controller-ready GeoJSON.
 
 Flight cards link the pilot to their profile and derive launch-time-zone date,
 duration, distance, direct-plus-enclosed total cells, and Launch Arena name/link
@@ -578,6 +591,17 @@ thumbnail pair used by Activity flight cards and Profile recent-flight rows.
 `app.js` installs a delegated image-error fallback and also repairs images that
 failed before the module initialized. Missing or unavailable private objects
 therefore remain an image-only standard fallback rather than broken content.
+Each production thumbnail is the only flight-card/profile-row element linked
+to `/flights/:flightId`; this applies equally to the server-rendered Activity
+load-more fragment.
+
+`flightDetailMap.js` initializes the completed-flight MapLibre view from
+authenticated `/v1/flights/:flightId/map` JSON. It renders direct and enclosed
+cells, the track, launch/landing markers, and the selected stored score route.
+The flight template server-renders all Track/3/4/5/6 distance choices and an
+aria-live loading/error target. `app-ui/mapSheet.js` provides the shared
+click/swipe expansion behavior used by the map page and the mobile flight-detail
+sheet.
 
 ### On-demand territory tiles
 

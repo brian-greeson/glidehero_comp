@@ -44,6 +44,7 @@ describe('flight thumbnail view delivery', () => {
       ...base, activityType: 'flight', sourceFlightId: 'flight-1', flightDate: 'Jul 22, 2026', distance: '1 km', totalCellCount: 2,
     }, { thumbnailUrls: new Map([['flight-1', { wideUrl: 'wide', squareUrl: 'square' }]]) });
     expect(flight.flight?.thumbnail).toEqual({ wideUrl: 'wide', squareUrl: 'square' });
+    expect(flight.flight?.href).toBe('/flights/flight-1');
   });
 
   it('uses aspect-ratio responsive CSS and delegated image fallback handling', () => {

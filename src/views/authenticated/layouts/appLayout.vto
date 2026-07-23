@@ -10,7 +10,7 @@
     <link rel="stylesheet" href="/styles/app-ui/app.css">
     <link rel="stylesheet" href="/styles/app-ui/flight-thumbnails.css">
     <link rel="stylesheet" href="{{ pageStylesheet }}">
-    {{ if page === 'map' }}<link rel="stylesheet" href="https://unpkg.com/maplibre-gl@5.16.0/dist/maplibre-gl.css">{{ /if }}
+    {{ if page === 'map' || page === 'flight' }}<link rel="stylesheet" href="https://unpkg.com/maplibre-gl@5.16.0/dist/maplibre-gl.css">{{ /if }}
     <title>{{ title }}</title>
   </head>
   <body class="app-ui-body app-ui-body--{{ page }}">
@@ -23,7 +23,7 @@
       {{ include "authenticated/components/mobileBottomNav.vto" { page, navigation } }}
       {{ include "authenticated/components/flightUploadDialog.vto" }}
     </div>
-    {{ if page === 'map' }}<script src="https://unpkg.com/maplibre-gl@5.16.0/dist/maplibre-gl.js"></script>{{ /if }}
+    {{ if page === 'map' || page === 'flight' }}<script src="https://unpkg.com/maplibre-gl@5.16.0/dist/maplibre-gl.js"></script>{{ /if }}
     <script type="module" src="/scripts/app-ui/app.js"></script>
     {{ if pageScript }}<script type="module" src="{{ pageScript }}"></script>{{ /if }}
   </body>

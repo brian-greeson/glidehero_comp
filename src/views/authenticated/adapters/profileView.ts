@@ -69,6 +69,7 @@ export function pilotProfileToView(summary: PilotProfileSummary, options: Profil
 
   const flights = summary.recentFlights.map((flight, index) => ({
     id: flight.flightId,
+    href: `/flights/${flight.flightId}`,
     date: flight.flightDate || 'Date unavailable',
     distance: flight.distance || '—',
     cells: formatCount(flight.totalCellCount),
