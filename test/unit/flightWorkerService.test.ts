@@ -61,6 +61,7 @@ describe('FlightWorkerService', () => {
   });
 
   it('keeps a completed queue item when best-effort thumbnail generation fails', async () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
     const limit = vi.fn(async () => []);
     const database = {
       select: vi.fn(() => ({ from: vi.fn(() => ({ leftJoin: vi.fn(() => ({ where: vi.fn(() => ({ limit })) })) })) })),
@@ -78,12 +79,25 @@ describe('FlightWorkerService', () => {
       s3Client: { send: vi.fn(async () => ({ Body: { transformToByteArray: vi.fn(async () => Uint8Array.from([1, 2, 3])) } })) } as never,
       bucketName: 'flights',
       consumerName: 'worker-1',
-      thumbnailLifecycle: { generateForFlight: vi.fn(async () => { throw new Error('MapTiler unavailable'); }) },
+      thumbnailLifecycle: {
+        generateForFlight: vi.fn(async () => {
+          throw new Error('MapTiler thumbnail generation failed.', { cause: new Error('MapTiler returned HTTP 401.') });
+        }),
+      },
     });
 
     await worker.processJob('1-0', job.id);
 
     expect(saved.map((value) => value.status)).toEqual(['completed']);
+    expect(consoleError).toHaveBeenCalledWith('Unable to generate flight thumbnail', {
+      flightId: 'flight-1',
+      errorName: 'Error',
+      errorMessage: 'MapTiler thumbnail generation failed.',
+      causeName: 'Error',
+      causeMessage: 'MapTiler returned HTTP 401.',
+      httpStatusCode: 401,
+    });
+    consoleError.mockRestore();
   });
 
   it('acknowledges a terminal duplicate delivery without touching PostgreSQL', async () => {

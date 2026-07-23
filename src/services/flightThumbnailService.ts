@@ -1,5 +1,6 @@
 import { PutObjectCommand, type S3 } from '@aws-sdk/client-s3';
 import sharp from 'sharp';
+import { signMapTilerUrl } from './mapTilerCredentials.js';
 
 const MAP_ID = 'outdoor-v4';
 const STATIC_MAP_ORIGIN = 'https://api.maptiler.com';
@@ -53,6 +54,37 @@ export class FlightThumbnailGenerationError extends Error {
     super(message, options);
     this.name = 'FlightThumbnailGenerationError';
   }
+}
+
+export function flightThumbnailErrorDetails(error: unknown): {
+  errorName: string;
+  errorMessage: string;
+  causeName?: string;
+  causeMessage?: string;
+  httpStatusCode?: number;
+  errorCode?: string;
+} {
+  const top = error instanceof Error ? error : undefined;
+  const cause = top?.cause;
+  const causeRecord = cause && typeof cause === 'object' ? cause as { message?: unknown; code?: unknown; Code?: unknown; $metadata?: { httpStatusCode?: unknown } } : undefined;
+  const causeMessage = cause instanceof Error
+    ? cause.message
+    : typeof causeRecord?.message === 'string' ? causeRecord.message : undefined;
+  const statusFromMessage = causeMessage?.match(/MapTiler returned HTTP (\d{3})\.?/)?.[1];
+  const statusFromMetadata = typeof causeRecord?.$metadata?.httpStatusCode === 'number'
+    ? causeRecord.$metadata.httpStatusCode
+    : undefined;
+  const errorCode = typeof causeRecord?.code === 'string'
+    ? causeRecord.code
+    : typeof causeRecord?.Code === 'string' ? causeRecord.Code : undefined;
+  return {
+    errorName: top?.name ?? 'UnknownError',
+    errorMessage: top?.message ?? String(error),
+    ...(cause instanceof Error ? { causeName: cause.name } : {}),
+    ...(causeMessage ? { causeMessage } : {}),
+    ...(statusFromMetadata ?? statusFromMessage ? { httpStatusCode: statusFromMetadata ?? Number(statusFromMessage) } : {}),
+    ...(errorCode ? { errorCode } : {}),
+  };
 }
 
 export type ProjectedExtent = { minX: number; minY: number; maxX: number; maxY: number };
@@ -205,12 +237,15 @@ export function buildFlightThumbnailStaticMapUrl(input: {
   extent: ReturnType<typeof computeFlightThumbnailExtent>;
   width: number;
   height: number;
-  mapTilerApiKey: string;
+  mapTilerCredentials: string;
   viewport?: FlightThumbnailViewport;
 }): string {
   const { min, max } = input.viewport ?? computeFlightThumbnailViewport(input.extent, input.width, input.height);
   const bounds = [min.longitude, min.latitude, max.longitude, max.latitude].map((value) => value.toFixed(6)).join(',');
-  return `${STATIC_MAP_ORIGIN}/maps/${MAP_ID}/static/${bounds}/${input.width}x${input.height}.png?key=${encodeURIComponent(input.mapTilerApiKey)}&padding=0`;
+  return signMapTilerUrl(
+    `${STATIC_MAP_ORIGIN}/maps/${MAP_ID}/static/${bounds}/${input.width}x${input.height}.png?padding=0`,
+    input.mapTilerCredentials,
+  );
 }
 
 function cellKey(cell: ThumbnailCell): string {
@@ -295,7 +330,7 @@ async function defaultFetchImage(url: string): Promise<Uint8Array> {
 }
 
 export function createFlightThumbnailService(options: {
-  mapTilerApiKey: string;
+  mapTilerCredentials: string;
   bucketName: string;
   bucketFolder: string;
   cellSize: number;
@@ -303,7 +338,7 @@ export function createFlightThumbnailService(options: {
   fetchImage?: (url: string) => Promise<Uint8Array>;
   putObject?: FlightThumbnailPutObject;
 }): FlightThumbnailService {
-  if (!options.mapTilerApiKey.trim()) throw new RangeError('MapTiler API key is required.');
+  if (!options.mapTilerCredentials.trim()) throw new RangeError('MapTiler credentials are required.');
   if (!options.bucketName.trim()) throw new RangeError('Thumbnail bucket name is required.');
   if (!options.bucketFolder.replace(/^\/+|\/+$/g, '').trim()) throw new RangeError('Thumbnail bucket folder is required.');
   if (!Number.isFinite(options.cellSize) || options.cellSize <= 0) throw new RangeError('Thumbnail cell size must be positive.');
@@ -322,7 +357,7 @@ export function createFlightThumbnailService(options: {
   async function render(input: FlightThumbnailInput, variant: ThumbnailVariant, extent: ReturnType<typeof computeFlightThumbnailExtent>, startCell: ThumbnailCell, endCell: ThumbnailCell): Promise<Uint8Array> {
     const [width, height] = variant.split('x').map(Number) as [number, number];
     const viewport = computeFlightThumbnailViewport(extent, width, height);
-    const url = buildFlightThumbnailStaticMapUrl({ extent, width, height, mapTilerApiKey: options.mapTilerApiKey, viewport });
+    const url = buildFlightThumbnailStaticMapUrl({ extent, width, height, mapTilerCredentials: options.mapTilerCredentials, viewport });
     let baseImage: Uint8Array;
     try {
       baseImage = await fetchImage(url);

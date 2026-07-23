@@ -284,7 +284,7 @@ experience level or cross-country distance.
 - PostgreSQL with PostGIS enabled and permission to create tables in the target database
 - Valkey or Redis-compatible storage reachable through a `redis://` or `rediss://` URL
 - Private S3-compatible object storage with browser-upload CORS configured
-- A MapTiler API key
+- A MapTiler API key and server-side MapTiler Credentials
 
 ## Local setup
 
@@ -385,6 +385,7 @@ attribute. Terminate HTTPS before traffic reaches the application, apply checked
 migrations with `npm run db:migrate`, and provide configuration through the
 deployment secret store. Production requires at least one web process and one
 `npm run worker` process sharing PostgreSQL, Valkey, object storage, and
-`BUCKET_FOLDER` configuration. The worker also requires `MAPTILER_API_KEY` and
+`BUCKET_FOLDER` configuration. The worker also requires `MAPTILER_CREDENTIALS`;
+the browser-facing map styles use `MAPTILER_API_KEY` and
 permission to write and delete thumbnail objects. The web process requires read
 credentials so it can issue private 24-hour thumbnail URLs.

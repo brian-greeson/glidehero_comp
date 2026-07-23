@@ -619,9 +619,11 @@ use the normal client.
 After a new flight reaches a completed queue state,
 `FlightThumbnailLifecycleService` reloads that flight's persisted Personal
 direct/enclosed claim cells and its first/last track points.
-`FlightThumbnailService` requests MapTiler's `outdoor-v4` static basemap, uses
-the WGS84 ellipsoidal EPSG:6933 transform to align the application grid, and
-composites the cells locally with Sharp. It writes deterministic private WebP
+`FlightThumbnailService` requests MapTiler's `outdoor-v4` static basemap using
+server-side MapTiler Credentials to sign each request, uses the WGS84
+ellipsoidal EPSG:6933 transform to align the application grid, and composites
+the cells locally with Sharp. Browser-facing map styles continue to use the
+public API key. It writes deterministic private WebP
 objects at:
 
 ```text
