@@ -116,7 +116,7 @@ export const flights = pgTable(
 
 export type TotalDistanceMetadata = Record<string, never>;
 
-export interface SixPointDistanceMetadata {
+export interface NPointDistanceMetadata {
   points: Array<{
     sequenceNumber: number;
     recordedAt: string;
@@ -134,13 +134,64 @@ export const flightScores = pgTable(
     totalDistanceMeters: doublePrecision('total_distance_meters').notNull(),
     totalDistanceCalcVersion: integer('total_distance_calc_version').notNull().default(1),
     totalDistanceMetadata: jsonb('total_distance_metadata').$type<TotalDistanceMetadata>().notNull(),
+    threePointDistanceMeters: doublePrecision('three_point_distance_meters'),
+    threePointDistanceCalcVersion: integer('three_point_distance_calc_version'),
+    threePointDistanceMetadata: jsonb('three_point_distance_metadata').$type<NPointDistanceMetadata>(),
+    fourPointDistanceMeters: doublePrecision('four_point_distance_meters'),
+    fourPointDistanceCalcVersion: integer('four_point_distance_calc_version'),
+    fourPointDistanceMetadata: jsonb('four_point_distance_metadata').$type<NPointDistanceMetadata>(),
+    fivePointDistanceMeters: doublePrecision('five_point_distance_meters'),
+    fivePointDistanceCalcVersion: integer('five_point_distance_calc_version'),
+    fivePointDistanceMetadata: jsonb('five_point_distance_metadata').$type<NPointDistanceMetadata>(),
     sixPointDistanceMeters: doublePrecision('six_point_distance_meters'),
     sixPointDistanceCalcVersion: integer('six_point_distance_calc_version'),
-    sixPointDistanceMetadata: jsonb('six_point_distance_metadata').$type<SixPointDistanceMetadata>(),
+    sixPointDistanceMetadata: jsonb('six_point_distance_metadata').$type<NPointDistanceMetadata>(),
   },
   (table) => [
     check('flight_scores_total_distance_meters_nonnegative', sql`${table.totalDistanceMeters} >= 0`),
     check('flight_scores_total_distance_calc_version_positive', sql`${table.totalDistanceCalcVersion} > 0`),
+    check('flight_scores_three_point_distance_meters_nonnegative', sql`${table.threePointDistanceMeters} >= 0`),
+    check('flight_scores_three_point_distance_calc_version_positive', sql`${table.threePointDistanceCalcVersion} > 0`),
+    check(
+      'flight_scores_three_point_distance_complete',
+      sql`(
+        ${table.threePointDistanceMeters} IS NULL
+        AND ${table.threePointDistanceCalcVersion} IS NULL
+        AND ${table.threePointDistanceMetadata} IS NULL
+      ) OR (
+        ${table.threePointDistanceMeters} IS NOT NULL
+        AND ${table.threePointDistanceCalcVersion} IS NOT NULL
+        AND ${table.threePointDistanceMetadata} IS NOT NULL
+      )`,
+    ),
+    check('flight_scores_four_point_distance_meters_nonnegative', sql`${table.fourPointDistanceMeters} >= 0`),
+    check('flight_scores_four_point_distance_calc_version_positive', sql`${table.fourPointDistanceCalcVersion} > 0`),
+    check(
+      'flight_scores_four_point_distance_complete',
+      sql`(
+        ${table.fourPointDistanceMeters} IS NULL
+        AND ${table.fourPointDistanceCalcVersion} IS NULL
+        AND ${table.fourPointDistanceMetadata} IS NULL
+      ) OR (
+        ${table.fourPointDistanceMeters} IS NOT NULL
+        AND ${table.fourPointDistanceCalcVersion} IS NOT NULL
+        AND ${table.fourPointDistanceMetadata} IS NOT NULL
+      )`,
+    ),
+    check('flight_scores_five_point_distance_meters_nonnegative', sql`${table.fivePointDistanceMeters} >= 0`),
+    check('flight_scores_five_point_distance_calc_version_positive', sql`${table.fivePointDistanceCalcVersion} > 0`),
+    check(
+      'flight_scores_five_point_distance_complete',
+      sql`(
+        ${table.fivePointDistanceMeters} IS NULL
+        AND ${table.fivePointDistanceCalcVersion} IS NULL
+        AND ${table.fivePointDistanceMetadata} IS NULL
+      ) OR (
+        ${table.fivePointDistanceMeters} IS NOT NULL
+        AND ${table.fivePointDistanceCalcVersion} IS NOT NULL
+        AND ${table.fivePointDistanceMetadata} IS NOT NULL
+      )`,
+    ),
     check('flight_scores_six_point_distance_meters_nonnegative', sql`${table.sixPointDistanceMeters} >= 0`),
     check('flight_scores_six_point_distance_calc_version_positive', sql`${table.sixPointDistanceCalcVersion} > 0`),
     check(

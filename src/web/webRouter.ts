@@ -973,11 +973,11 @@ export function createWebRouter(dependencies: {
     }
 
     try {
-      const [queueSummary, workerControlState, workerStatuses, sixPointSolverState] = await Promise.all([
+      const [queueSummary, workerControlState, workerStatuses, nPointSolverState] = await Promise.all([
         dependencies.uploadQueue.queueSummary(),
         dependencies.workerControl.getState(),
         dependencies.workerControl.listStatuses(),
-        dependencies.flightProcessingControl.getSixPointSolverState(),
+        dependencies.flightProcessingControl.getNPointSolverState(),
       ]);
       res.status(200).type('html').send(await dependencies.renderAdminFlightProcessingPage({
         currentUser,
@@ -988,7 +988,7 @@ export function createWebRouter(dependencies: {
           heartbeat: new Date(status.heartbeatAt).toISOString(),
           online: Date.now() - status.heartbeatAt <= WORKER_STATUS_TTL_SECONDS * 1_000,
         })),
-        sixPointSolverState,
+        nPointSolverState,
         workerControlSuccess: req.query.worker === 'paused' || req.query.worker === 'running',
         workerControlError: req.query.worker === 'error',
         solverControlSuccess: req.query.solver === 'enabled' || req.query.solver === 'disabled',
@@ -1021,7 +1021,7 @@ export function createWebRouter(dependencies: {
     }
   });
 
-  router.post('/admin/flight-processing/six-point-solver', async (req, res, next) => {
+  router.post('/admin/flight-processing/n-point-solver', async (req, res, next) => {
     const currentUser = res.locals.currentUser;
     if (!currentUser || !hasAdminAccess(currentUser)) {
       next(new AppError(403, 'unauthorized', 'Admin access is required.'));
@@ -1038,7 +1038,7 @@ export function createWebRouter(dependencies: {
     }
 
     try {
-      await dependencies.flightProcessingControl.setSixPointSolverState(parsed.data.state);
+      await dependencies.flightProcessingControl.setNPointSolverState(parsed.data.state);
       res.redirect(303, `/admin/flight-processing?solver=${parsed.data.state}`);
     } catch {
       res.redirect(303, '/admin/flight-processing?solver=error');

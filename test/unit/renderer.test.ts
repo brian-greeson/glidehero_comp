@@ -66,7 +66,7 @@ describe('Vento page renderer', () => {
       currentUser: user,
       queueSummary: { queued: 0, processing: 0, failed: 0, oldestQueuedAgeSeconds: 0 },
       workerControlState: 'paused',
-      sixPointSolverState: 'enabled',
+      nPointSolverState: 'enabled',
       workers: [{
         workerId: 'worker-1',
         state: 'processing',
@@ -80,7 +80,9 @@ describe('Vento page renderer', () => {
       }],
     });
     expect(flightProcessing).toContain('<h1>Flight Processing</h1>');
+    expect(flightProcessing).toContain('<h2>N-point solver</h2>');
     expect(flightProcessing).toContain('Current state: <strong>enabled</strong>');
+    expect(flightProcessing).toContain('3-, 4-, 5-, and 6-point scores remain empty');
     expect(flightProcessing).toContain('Disable solver');
     expect(flightProcessing).toContain('Global control state: <strong>paused</strong>');
     expect(flightProcessing).toContain('worker-1');

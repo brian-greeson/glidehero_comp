@@ -4,7 +4,7 @@ import type { TerritoryTileConfig } from '../../config/territoryTiles.js';
 import type { AdminFlight, AdminUserFlight, AdminUserFlightSort } from '../../services/adminFlightService.js';
 import type { AuthenticatedUser } from '../../services/authService.js';
 import type { AdminUserDetail, AdminUserSummary } from '../../services/adminUserService.js';
-import type { SixPointSolverState } from '../../services/flightProcessingControlService.js';
+import type { NPointSolverState } from '../../services/flightProcessingControlService.js';
 import type { WorkerControlState, WorkerLiveState } from '../../services/workerControlService.js';
 
 export type AdminWorkerStatus = {
@@ -32,7 +32,7 @@ export type AdminFlightProcessingPageRenderer = (model: {
   queueSummary?: { queued: number; processing: number; failed: number; oldestQueuedAgeSeconds: number | null };
   workerControlState: WorkerControlState;
   workers: AdminWorkerStatus[];
-  sixPointSolverState: SixPointSolverState;
+  nPointSolverState: NPointSolverState;
   workerControlSuccess?: boolean;
   workerControlError?: boolean;
   solverControlSuccess?: boolean;

@@ -1,9 +1,13 @@
 import type { IgcFix } from './types.js';
 
 export const TOTAL_DISTANCE_CALC_VERSION = 1;
+export const THREE_POINT_DISTANCE_CALC_VERSION = 1;
+export const FOUR_POINT_DISTANCE_CALC_VERSION = 1;
+export const FIVE_POINT_DISTANCE_CALC_VERSION = 1;
 export const SIX_POINT_DISTANCE_CALC_VERSION = 1;
 
 const EARTH_RADIUS_METERS = 6_371_000;
+const MINIMUM_POINT_COUNT = 3;
 const SIX_POINT_COUNT = 6;
 const LEG_COUNT = SIX_POINT_COUNT - 1;
 
@@ -25,14 +29,21 @@ export type DistanceCoordinate = {
   longitude: number;
 };
 
-export type SixPointIndices = readonly [number, number, number, number, number, number];
+export type NPointCount = 3 | 4 | 5 | 6;
 
-export type SixPointDistance = {
-  distanceMeters: number;
-  pointIndices: SixPointIndices;
+type PointIndicesByCount = {
+  3: readonly [number, number, number];
+  4: readonly [number, number, number, number];
+  5: readonly [number, number, number, number, number];
+  6: readonly [number, number, number, number, number, number];
 };
 
-export type SixPointDistancePointMetadata = {
+export type PointDistance<PointCount extends NPointCount> = {
+  distanceMeters: number;
+  pointIndices: PointIndicesByCount[PointCount];
+};
+
+export type PointDistancePointMetadata = {
   sequenceNumber: number;
   recordedAt: string;
   latitude: number;
@@ -40,17 +51,61 @@ export type SixPointDistancePointMetadata = {
   gpsAltitudeMeters: number;
 };
 
-export type SixPointDistanceMetadata = SixPointDistance & {
-  calculationVersion: typeof SIX_POINT_DISTANCE_CALC_VERSION;
-  points: readonly [
-    SixPointDistancePointMetadata,
-    SixPointDistancePointMetadata,
-    SixPointDistancePointMetadata,
-    SixPointDistancePointMetadata,
-    SixPointDistancePointMetadata,
-    SixPointDistancePointMetadata,
+type PointMetadataByCount = {
+  3: readonly [PointDistancePointMetadata, PointDistancePointMetadata, PointDistancePointMetadata];
+  4: readonly [
+    PointDistancePointMetadata,
+    PointDistancePointMetadata,
+    PointDistancePointMetadata,
+    PointDistancePointMetadata,
+  ];
+  5: readonly [
+    PointDistancePointMetadata,
+    PointDistancePointMetadata,
+    PointDistancePointMetadata,
+    PointDistancePointMetadata,
+    PointDistancePointMetadata,
+  ];
+  6: readonly [
+    PointDistancePointMetadata,
+    PointDistancePointMetadata,
+    PointDistancePointMetadata,
+    PointDistancePointMetadata,
+    PointDistancePointMetadata,
+    PointDistancePointMetadata,
   ];
 };
+
+type CalculationVersionByCount = {
+  3: typeof THREE_POINT_DISTANCE_CALC_VERSION;
+  4: typeof FOUR_POINT_DISTANCE_CALC_VERSION;
+  5: typeof FIVE_POINT_DISTANCE_CALC_VERSION;
+  6: typeof SIX_POINT_DISTANCE_CALC_VERSION;
+};
+
+export type PointDistanceMetadata<PointCount extends NPointCount> = PointDistance<PointCount> & {
+  calculationVersion: CalculationVersionByCount[PointCount];
+  points: PointMetadataByCount[PointCount];
+};
+
+export type NPointDistances = {
+  threePointDistance: PointDistance<3>;
+  fourPointDistance: PointDistance<4>;
+  fivePointDistance: PointDistance<5>;
+  sixPointDistance: PointDistance<6>;
+};
+
+export type NPointDistanceMetadata = {
+  threePointDistance: PointDistanceMetadata<3>;
+  fourPointDistance: PointDistanceMetadata<4>;
+  fivePointDistance: PointDistanceMetadata<5>;
+  sixPointDistance: PointDistanceMetadata<6>;
+};
+
+export type SixPointIndices = PointIndicesByCount[6];
+export type SixPointDistance = PointDistance<6>;
+export type SixPointDistancePointMetadata = PointDistancePointMetadata;
+export type SixPointDistanceMetadata = PointDistanceMetadata<6>;
 
 type MetadataSourcePoint = DistanceCoordinate & {
   sequenceNumber: number;
@@ -96,14 +151,14 @@ function distanceBetweenUnitVectors(
 }
 
 /**
- * Finds the exact longest five-leg path through six chronologically ordered
- * fixes. All fixes are considered; callers that need isolation from the event
- * loop should use calculateSixPointDistanceInWorker.
+ * Finds the exact longest paths through three, four, five, and six
+ * chronologically ordered fixes in one dynamic-programming pass. All fixes are
+ * considered.
  */
-export function calculateSixPointDistance(points: readonly DistanceCoordinate[]): SixPointDistance {
+export function calculateNPointDistances(points: readonly DistanceCoordinate[]): NPointDistances {
   const pointCount = points.length;
   if (pointCount < SIX_POINT_COUNT) {
-    throw new RangeError(`Six-point distance requires at least ${SIX_POINT_COUNT} points.`);
+    throw new RangeError(`N-point solver requires at least ${SIX_POINT_COUNT} points.`);
   }
 
   const x = new Float64Array(pointCount);
@@ -122,6 +177,7 @@ export function calculateSixPointDistance(points: readonly DistanceCoordinate[])
   let previousScores = new Float64Array(pointCount);
   let previousRanks = Int32Array.from({ length: pointCount }, (_, index) => index);
   const predecessorLayers: Int32Array[] = [];
+  const distances: Partial<NPointDistances> = {};
 
   for (let leg = 1; leg <= LEG_COUNT; leg += 1) {
     const scores = new Float64Array(pointCount);
@@ -153,37 +209,53 @@ export function calculateSixPointDistance(points: readonly DistanceCoordinate[])
     predecessorLayers.push(predecessors);
     previousScores = scores;
     previousRanks = rankPaths(previousRanks, predecessors, leg);
-  }
 
-  let finalIndex = LEG_COUNT;
-  for (let index = LEG_COUNT + 1; index < pointCount; index += 1) {
-    if (
-      previousScores[index]! > previousScores[finalIndex]!
-      || (
-        previousScores[index] === previousScores[finalIndex]
-        && previousRanks[index]! < previousRanks[finalIndex]!
-      )
-    ) {
-      finalIndex = index;
+    if (leg >= MINIMUM_POINT_COUNT - 1) {
+      let finalIndex = leg;
+      for (let index = leg + 1; index < pointCount; index += 1) {
+        if (
+          previousScores[index]! > previousScores[finalIndex]!
+          || (
+            previousScores[index] === previousScores[finalIndex]
+            && previousRanks[index]! < previousRanks[finalIndex]!
+          )
+        ) {
+          finalIndex = index;
+        }
+      }
+
+      const pointCountForResult = leg + 1 as NPointCount;
+      const indices = new Array<number>(pointCountForResult);
+      indices[leg] = finalIndex;
+      for (let predecessorLeg = leg; predecessorLeg > 0; predecessorLeg -= 1) {
+        indices[predecessorLeg - 1]
+          = predecessorLayers[predecessorLeg - 1]![indices[predecessorLeg]!]!;
+      }
+
+      const distance = {
+        distanceMeters: previousScores[finalIndex]!,
+        pointIndices: indices,
+      };
+      if (pointCountForResult === 3) {
+        distances.threePointDistance = distance as unknown as PointDistance<3>;
+      } else if (pointCountForResult === 4) {
+        distances.fourPointDistance = distance as unknown as PointDistance<4>;
+      } else if (pointCountForResult === 5) {
+        distances.fivePointDistance = distance as unknown as PointDistance<5>;
+      } else {
+        distances.sixPointDistance = distance as unknown as PointDistance<6>;
+      }
     }
   }
 
-  const indices = new Array<number>(SIX_POINT_COUNT);
-  indices[LEG_COUNT] = finalIndex;
-  for (let leg = LEG_COUNT; leg > 0; leg -= 1) {
-    indices[leg - 1] = predecessorLayers[leg - 1]![indices[leg]!]!;
-  }
-
-  return {
-    distanceMeters: previousScores[finalIndex]!,
-    pointIndices: indices as unknown as SixPointIndices,
-  };
+  return distances as NPointDistances;
 }
 
-export function mapSixPointDistanceMetadata(
+function mapPointDistanceMetadata<PointCount extends NPointCount>(
   points: readonly MetadataSourcePoint[],
-  distance: SixPointDistance,
-): SixPointDistanceMetadata {
+  distance: PointDistance<PointCount>,
+  calculationVersion: CalculationVersionByCount[PointCount],
+): PointDistanceMetadata<PointCount> {
   const selectedPoints = distance.pointIndices.map((index) => {
     const point = points[index];
     if (!point) throw new RangeError(`Point index ${index} is outside the supplied metadata.`);
@@ -194,11 +266,52 @@ export function mapSixPointDistanceMetadata(
       longitude: point.longitude,
       gpsAltitudeMeters: point.gpsAltitudeMeters,
     };
-  }) as unknown as SixPointDistanceMetadata['points'];
+  }) as unknown as PointMetadataByCount[PointCount];
 
   return {
     ...distance,
-    calculationVersion: SIX_POINT_DISTANCE_CALC_VERSION,
+    calculationVersion,
     points: selectedPoints,
   };
+}
+
+export function mapNPointDistanceMetadata(
+  points: readonly MetadataSourcePoint[],
+  distances: NPointDistances,
+): NPointDistanceMetadata {
+  return {
+    threePointDistance: mapPointDistanceMetadata(
+      points,
+      distances.threePointDistance,
+      THREE_POINT_DISTANCE_CALC_VERSION,
+    ),
+    fourPointDistance: mapPointDistanceMetadata(
+      points,
+      distances.fourPointDistance,
+      FOUR_POINT_DISTANCE_CALC_VERSION,
+    ),
+    fivePointDistance: mapPointDistanceMetadata(
+      points,
+      distances.fivePointDistance,
+      FIVE_POINT_DISTANCE_CALC_VERSION,
+    ),
+    sixPointDistance: mapPointDistanceMetadata(
+      points,
+      distances.sixPointDistance,
+      SIX_POINT_DISTANCE_CALC_VERSION,
+    ),
+  };
+}
+
+/** @deprecated Use calculateNPointDistances to calculate every route in one pass. */
+export function calculateSixPointDistance(points: readonly DistanceCoordinate[]): SixPointDistance {
+  return calculateNPointDistances(points).sixPointDistance;
+}
+
+/** @deprecated Use mapNPointDistanceMetadata to map every route in one call. */
+export function mapSixPointDistanceMetadata(
+  points: readonly MetadataSourcePoint[],
+  distance: SixPointDistance,
+): SixPointDistanceMetadata {
+  return mapPointDistanceMetadata<6>(points, distance, SIX_POINT_DISTANCE_CALC_VERSION);
 }

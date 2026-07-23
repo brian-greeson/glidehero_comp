@@ -86,10 +86,19 @@ describe('authentication schema', () => {
        ORDER BY column_name`,
     );
     expect(columns.rows).toEqual([
+      { column_name: 'five_point_distance_calc_version', data_type: 'integer', is_nullable: 'YES', column_default: null },
+      { column_name: 'five_point_distance_metadata', data_type: 'jsonb', is_nullable: 'YES', column_default: null },
+      { column_name: 'five_point_distance_meters', data_type: 'double precision', is_nullable: 'YES', column_default: null },
       { column_name: 'flight_id', data_type: 'uuid', is_nullable: 'NO', column_default: null },
+      { column_name: 'four_point_distance_calc_version', data_type: 'integer', is_nullable: 'YES', column_default: null },
+      { column_name: 'four_point_distance_metadata', data_type: 'jsonb', is_nullable: 'YES', column_default: null },
+      { column_name: 'four_point_distance_meters', data_type: 'double precision', is_nullable: 'YES', column_default: null },
       { column_name: 'six_point_distance_calc_version', data_type: 'integer', is_nullable: 'YES', column_default: null },
       { column_name: 'six_point_distance_metadata', data_type: 'jsonb', is_nullable: 'YES', column_default: null },
       { column_name: 'six_point_distance_meters', data_type: 'double precision', is_nullable: 'YES', column_default: null },
+      { column_name: 'three_point_distance_calc_version', data_type: 'integer', is_nullable: 'YES', column_default: null },
+      { column_name: 'three_point_distance_metadata', data_type: 'jsonb', is_nullable: 'YES', column_default: null },
+      { column_name: 'three_point_distance_meters', data_type: 'double precision', is_nullable: 'YES', column_default: null },
       { column_name: 'total_distance_calc_version', data_type: 'integer', is_nullable: 'NO', column_default: '1' },
       { column_name: 'total_distance_metadata', data_type: 'jsonb', is_nullable: 'NO', column_default: null },
       { column_name: 'total_distance_meters', data_type: 'double precision', is_nullable: 'NO', column_default: null },
@@ -103,12 +112,36 @@ describe('authentication schema', () => {
     );
     expect(constraints.rows).toEqual(expect.arrayContaining([
       {
+        conname: 'flight_scores_five_point_distance_calc_version_positive',
+        definition: 'CHECK ((five_point_distance_calc_version > 0))',
+      },
+      {
+        conname: 'flight_scores_five_point_distance_meters_nonnegative',
+        definition: 'CHECK ((five_point_distance_meters >= (0)::double precision))',
+      },
+      {
+        conname: 'flight_scores_four_point_distance_calc_version_positive',
+        definition: 'CHECK ((four_point_distance_calc_version > 0))',
+      },
+      {
+        conname: 'flight_scores_four_point_distance_meters_nonnegative',
+        definition: 'CHECK ((four_point_distance_meters >= (0)::double precision))',
+      },
+      {
         conname: 'flight_scores_six_point_distance_calc_version_positive',
         definition: 'CHECK ((six_point_distance_calc_version > 0))',
       },
       {
         conname: 'flight_scores_six_point_distance_meters_nonnegative',
         definition: 'CHECK ((six_point_distance_meters >= (0)::double precision))',
+      },
+      {
+        conname: 'flight_scores_three_point_distance_calc_version_positive',
+        definition: 'CHECK ((three_point_distance_calc_version > 0))',
+      },
+      {
+        conname: 'flight_scores_three_point_distance_meters_nonnegative',
+        definition: 'CHECK ((three_point_distance_meters >= (0)::double precision))',
       },
       {
         conname: 'flight_scores_total_distance_calc_version_positive',
@@ -120,11 +153,13 @@ describe('authentication schema', () => {
       },
       { conname: 'flight_scores_pkey', definition: 'PRIMARY KEY (flight_id)' },
     ]));
-    const completenessConstraint = constraints.rows.find(
-      ({ conname }) => conname === 'flight_scores_six_point_distance_complete',
-    );
-    expect(completenessConstraint?.definition).toContain('six_point_distance_meters IS NULL');
-    expect(completenessConstraint?.definition).toContain('six_point_distance_metadata IS NOT NULL');
+    for (const pointCount of ['three', 'four', 'five', 'six']) {
+      const completenessConstraint = constraints.rows.find(
+        ({ conname }) => conname === `flight_scores_${pointCount}_point_distance_complete`,
+      );
+      expect(completenessConstraint?.definition).toContain(`${pointCount}_point_distance_meters IS NULL`);
+      expect(completenessConstraint?.definition).toContain(`${pointCount}_point_distance_metadata IS NOT NULL`);
+    }
 
     const foreignKeys = await database.pool.query<{ referenced_table: string; column_name: string; confdeltype: string }>(
       `SELECT referenced.relname AS referenced_table,

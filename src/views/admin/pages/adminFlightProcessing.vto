@@ -11,20 +11,20 @@
       </div>
       {{ if workerControlSuccess }}<p class="success" role="status">Worker control state was updated.</p>{{ /if }}
       {{ if workerControlError }}<p class="error" role="alert">We could not update the worker control state.</p>{{ /if }}
-      {{ if solverControlSuccess }}<p class="success" role="status">Six-point solver state was updated.</p>{{ /if }}
-      {{ if solverControlError }}<p class="error" role="alert">We could not update the six-point solver state.</p>{{ /if }}
+      {{ if solverControlSuccess }}<p class="success" role="status">N-point solver state was updated.</p>{{ /if }}
+      {{ if solverControlError }}<p class="error" role="alert">We could not update the N-point solver state.</p>{{ /if }}
 
       {{ include "admin/components/adminQueueSummary.vto" { queueSummary: queueSummary } }}
 
       <section class="admin-worker-control">
-        <h2>Six-point solver</h2>
+        <h2>N-point solver</h2>
         <p>
-          Current state: <strong>{{ sixPointSolverState }}</strong>.
-          Disabled flights still complete, but their six-point score remains empty.
+          Current state: <strong>{{ nPointSolverState }}</strong>.
+          Disabled flights still complete, but their 3-, 4-, 5-, and 6-point scores remain empty.
         </p>
-        <form method="post" action="/admin/flight-processing/six-point-solver">
-          <input type="hidden" name="state" value="{{ if sixPointSolverState === 'enabled' }}disabled{{ else }}enabled{{ /if }}">
-          <button type="submit">{{ if sixPointSolverState === 'enabled' }}Disable solver{{ else }}Enable solver{{ /if }}</button>
+        <form method="post" action="/admin/flight-processing/n-point-solver">
+          <input type="hidden" name="state" value="{{ if nPointSolverState === 'enabled' }}disabled{{ else }}enabled{{ /if }}">
+          <button type="submit">{{ if nPointSolverState === 'enabled' }}Disable solver{{ else }}Enable solver{{ /if }}</button>
         </form>
       </section>
 

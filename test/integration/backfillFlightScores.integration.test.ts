@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { eq } from 'drizzle-orm';
 import { flightScores, flights, igcFiles, trackPoints, users } from '../../src/db/schema.js';
-import type { SixPointDistanceMetadata } from '../../src/domain/igc/distance.js';
+import type { PointDistanceMetadata } from '../../src/domain/igc/distance.js';
 import {
   runFlightScoreBackfill,
   upsertFlightScores,
@@ -87,10 +87,31 @@ describe('flight-score backfill with PostgreSQL', () => {
       flightId: completedFlightId,
       totalDistanceCalcVersion: 1,
       totalDistanceMetadata: {},
+      threePointDistanceCalcVersion: 1,
+      fourPointDistanceCalcVersion: 1,
+      fivePointDistanceCalcVersion: 1,
       sixPointDistanceCalcVersion: 1,
     });
     expect(stored?.totalDistanceMeters).toBeGreaterThan(0);
+    expect(stored?.threePointDistanceMeters).toBeGreaterThan(0);
+    expect(stored?.fourPointDistanceMeters).toBeGreaterThan(0);
+    expect(stored?.fivePointDistanceMeters).toBeGreaterThan(0);
     expect(stored?.sixPointDistanceMeters).toBeGreaterThan(0);
+    expect(stored?.threePointDistanceMetadata).toMatchObject({
+      calculationVersion: 1,
+      points: expect.any(Array),
+    });
+    expect(stored?.fourPointDistanceMetadata).toMatchObject({
+      calculationVersion: 1,
+      points: expect.any(Array),
+    });
+    expect(stored?.fivePointDistanceMetadata).toMatchObject({
+      calculationVersion: 1,
+      points: expect.any(Array),
+    });
+    expect(stored?.threePointDistanceMetadata?.points).toHaveLength(3);
+    expect(stored?.fourPointDistanceMetadata?.points).toHaveLength(4);
+    expect(stored?.fivePointDistanceMetadata?.points).toHaveLength(5);
     expect(stored?.sixPointDistanceMetadata).toMatchObject({
       calculationVersion: 1,
       pointIndices: [0, 1, 2, 3, 4, 5],
@@ -122,10 +143,28 @@ describe('flight-score backfill with PostgreSQL', () => {
       latitude: 40,
       longitude: sequenceNumber,
       gpsAltitudeMeters: 1_000 + sequenceNumber,
-    })) as unknown as SixPointDistanceMetadata['points'];
-    const newerMetadata = {
+    })) as unknown as PointDistanceMetadata<6>['points'];
+    const newerThreePointMetadata = {
       calculationVersion: 2 as const,
-      distanceMeters: 2_002,
+      distanceMeters: 2_003,
+      pointIndices: [0, 1, 2] as const,
+      points: scorePoints.slice(0, 3),
+    };
+    const newerFourPointMetadata = {
+      calculationVersion: 2 as const,
+      distanceMeters: 2_004,
+      pointIndices: [0, 1, 2, 3] as const,
+      points: scorePoints.slice(0, 4),
+    };
+    const newerFivePointMetadata = {
+      calculationVersion: 2 as const,
+      distanceMeters: 2_005,
+      pointIndices: [0, 1, 2, 3, 4] as const,
+      points: scorePoints.slice(0, 5),
+    };
+    const newerSixPointMetadata = {
+      calculationVersion: 2 as const,
+      distanceMeters: 2_006,
       pointIndices: [0, 1, 2, 3, 4, 5] as const,
       points: [...scorePoints],
     };
@@ -134,15 +173,48 @@ describe('flight-score backfill with PostgreSQL', () => {
       totalDistanceMeters: 1_001,
       totalDistanceCalcVersion: 2,
       totalDistanceMetadata: {},
-      sixPointDistanceMeters: 2_002,
+      threePointDistanceMeters: 2_003,
+      threePointDistanceCalcVersion: 2,
+      threePointDistanceMetadata: newerThreePointMetadata,
+      fourPointDistanceMeters: 2_004,
+      fourPointDistanceCalcVersion: 2,
+      fourPointDistanceMetadata: newerFourPointMetadata,
+      fivePointDistanceMeters: 2_005,
+      fivePointDistanceCalcVersion: 2,
+      fivePointDistanceMetadata: newerFivePointMetadata,
+      sixPointDistanceMeters: 2_006,
       sixPointDistanceCalcVersion: 2,
-      sixPointDistanceMetadata: newerMetadata,
+      sixPointDistanceMetadata: newerSixPointMetadata,
     });
 
     await expect(upsertFlightScores(database.db, flightId, {
       totalDistanceMeters: 101,
       totalDistanceCalcVersion: 1,
       totalDistanceMetadata: {},
+      threePointDistanceMeters: 203,
+      threePointDistanceCalcVersion: 1,
+      threePointDistanceMetadata: {
+        calculationVersion: 1,
+        distanceMeters: 203,
+        pointIndices: [0, 1, 2],
+        points: scorePoints.slice(0, 3),
+      } as unknown as PointDistanceMetadata<3>,
+      fourPointDistanceMeters: 204,
+      fourPointDistanceCalcVersion: 1,
+      fourPointDistanceMetadata: {
+        calculationVersion: 1,
+        distanceMeters: 204,
+        pointIndices: [0, 1, 2, 3],
+        points: scorePoints.slice(0, 4),
+      } as unknown as PointDistanceMetadata<4>,
+      fivePointDistanceMeters: 205,
+      fivePointDistanceCalcVersion: 1,
+      fivePointDistanceMetadata: {
+        calculationVersion: 1,
+        distanceMeters: 205,
+        pointIndices: [0, 1, 2, 3, 4],
+        points: scorePoints.slice(0, 5),
+      } as unknown as PointDistanceMetadata<5>,
       sixPointDistanceMeters: 202,
       sixPointDistanceCalcVersion: 1,
       sixPointDistanceMetadata: {
@@ -158,9 +230,15 @@ describe('flight-score backfill with PostgreSQL', () => {
       expect.objectContaining({
         totalDistanceMeters: 1_001,
         totalDistanceCalcVersion: 2,
-        sixPointDistanceMeters: 2_002,
+        threePointDistanceMeters: 2_003,
+        threePointDistanceCalcVersion: 2,
+        fourPointDistanceMeters: 2_004,
+        fourPointDistanceCalcVersion: 2,
+        fivePointDistanceMeters: 2_005,
+        fivePointDistanceCalcVersion: 2,
+        sixPointDistanceMeters: 2_006,
         sixPointDistanceCalcVersion: 2,
-        sixPointDistanceMetadata: newerMetadata,
+        sixPointDistanceMetadata: newerSixPointMetadata,
       }),
     ]);
   });

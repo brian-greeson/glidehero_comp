@@ -2,7 +2,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { igcFiles } from '../../src/db/schema.js';
-import type { SixPointDistance } from '../../src/domain/igc/distance.js';
+import type { NPointDistances } from '../../src/domain/igc/distance.js';
 import { createAuthService } from '../../src/services/authService.js';
 import { createFlightProcessingService } from '../../src/services/flightProcessingService.js';
 import { resetAndMigrateTestDatabase } from './database.js';
@@ -39,21 +39,23 @@ async function storeFile(userId: string, bucketKey: string, originalFilename: st
   return stored;
 }
 
-const injectedSixPointDistance: SixPointDistance = {
-  distanceMeters: 1_234,
-  pointIndices: [0, 1, 2, 3, 4, 5],
+const injectedNPointDistances: NPointDistances = {
+  threePointDistance: { distanceMeters: 300, pointIndices: [0, 2, 5] },
+  fourPointDistance: { distanceMeters: 400, pointIndices: [0, 1, 3, 5] },
+  fivePointDistance: { distanceMeters: 500, pointIndices: [0, 1, 2, 4, 5] },
+  sixPointDistance: { distanceMeters: 1_234, pointIndices: [0, 1, 2, 3, 4, 5] },
 };
 
-function processor(options: { useRealSixPointCalculator?: boolean; sixPointSolverEnabled?: boolean } = {}) {
+function processor(options: { useRealNPointCalculator?: boolean; nPointSolverEnabled?: boolean } = {}) {
   if (!database) throw new Error('Test database was not initialized.');
   return createFlightProcessingService(database.db, {
     s3Client: { send: async () => { throw new Error('Worker-provided source should avoid object reads.'); } } as never,
     bucketName: 'test-flights',
     gridClaimCellSize: 1_000,
-    ...(options.useRealSixPointCalculator
+    ...(options.useRealNPointCalculator
       ? {}
-      : { calculateSixPointDistance: async () => injectedSixPointDistance }),
-    isSixPointSolverEnabled: async () => options.sixPointSolverEnabled ?? true,
+      : { calculateNPointDistances: async () => injectedNPointDistances }),
+    isNPointSolverEnabled: async () => options.nPointSolverEnabled ?? true,
   });
 }
 
@@ -115,7 +117,7 @@ describe('FlightProcessingService with a real IGC file', () => {
     const pilot = await auth.signup({ email: 'pilot@example.com', password: 'correct horse battery staple' });
     const stored = await storeFile(pilot.user.userId, 'flights/known-good.igc', 'known-good.igc');
 
-    const result = await processor({ useRealSixPointCalculator: true }).process({
+    const result = await processor({ useRealNPointCalculator: true }).process({
       ownerUserId: pilot.user.userId,
       igcFileId: stored.id,
       bucketKey: 'flights/known-good.igc',
@@ -139,6 +141,48 @@ describe('FlightProcessingService with a real IGC file', () => {
       total_distance_meters: number;
       total_distance_calc_version: number;
       total_distance_metadata: Record<string, never>;
+      three_point_distance_meters: number;
+      three_point_distance_calc_version: number;
+      three_point_distance_metadata: {
+        calculationVersion: number;
+        distanceMeters: number;
+        pointIndices: number[];
+        points: Array<{
+          sequenceNumber: number;
+          recordedAt: string;
+          latitude: number;
+          longitude: number;
+          gpsAltitudeMeters: number;
+        }>;
+      };
+      four_point_distance_meters: number;
+      four_point_distance_calc_version: number;
+      four_point_distance_metadata: {
+        calculationVersion: number;
+        distanceMeters: number;
+        pointIndices: number[];
+        points: Array<{
+          sequenceNumber: number;
+          recordedAt: string;
+          latitude: number;
+          longitude: number;
+          gpsAltitudeMeters: number;
+        }>;
+      };
+      five_point_distance_meters: number;
+      five_point_distance_calc_version: number;
+      five_point_distance_metadata: {
+        calculationVersion: number;
+        distanceMeters: number;
+        pointIndices: number[];
+        points: Array<{
+          sequenceNumber: number;
+          recordedAt: string;
+          latitude: number;
+          longitude: number;
+          gpsAltitudeMeters: number;
+        }>;
+      };
       six_point_distance_meters: number;
       six_point_distance_calc_version: number;
       six_point_distance_metadata: {
@@ -161,6 +205,15 @@ describe('FlightProcessingService with a real IGC file', () => {
               fs.total_distance_meters,
               fs.total_distance_calc_version,
               fs.total_distance_metadata,
+              fs.three_point_distance_meters,
+              fs.three_point_distance_calc_version,
+              fs.three_point_distance_metadata,
+              fs.four_point_distance_meters,
+              fs.four_point_distance_calc_version,
+              fs.four_point_distance_metadata,
+              fs.five_point_distance_meters,
+              fs.five_point_distance_calc_version,
+              fs.five_point_distance_metadata,
               fs.six_point_distance_meters,
               fs.six_point_distance_calc_version,
               fs.six_point_distance_metadata,
@@ -193,10 +246,121 @@ describe('FlightProcessingService with a real IGC file', () => {
         first_fix: new Date('2026-05-10T18:50:26.000Z'),
         total_distance_calc_version: 1,
         total_distance_metadata: {},
+        three_point_distance_calc_version: 1,
+        four_point_distance_calc_version: 1,
+        five_point_distance_calc_version: 1,
         six_point_distance_calc_version: 1,
       }),
     ]);
     expect(persisted.rows[0]?.total_distance_meters).toBe(persisted.rows[0]?.cumulative_distance_meters);
+    expect(persisted.rows[0]?.three_point_distance_meters).toBeCloseTo(24_089.859916730784, 8);
+    expect(persisted.rows[0]?.three_point_distance_metadata).toEqual({
+      calculationVersion: 1,
+      distanceMeters: 24_089.859916730784,
+      pointIndices: [2691, 7161, 9224],
+      points: [
+        {
+          sequenceNumber: 2691,
+          recordedAt: '2026-05-10T19:35:18.000Z',
+          latitude: 40.01558333333333,
+          longitude: -105.29353333333333,
+          gpsAltitudeMeters: 3010,
+        },
+        {
+          sequenceNumber: 7161,
+          recordedAt: '2026-05-10T20:50:01.000Z',
+          latitude: 40.098483333333334,
+          longitude: -105.18663333333333,
+          gpsAltitudeMeters: 2488,
+        },
+        {
+          sequenceNumber: 9224,
+          recordedAt: '2026-05-10T21:24:24.000Z',
+          latitude: 40.061733333333336,
+          longitude: -105.30841666666667,
+          gpsAltitudeMeters: 2835,
+        },
+      ],
+    });
+    expect(persisted.rows[0]?.four_point_distance_meters).toBeCloseTo(28_726.374353149327, 8);
+    expect(persisted.rows[0]?.four_point_distance_metadata).toEqual({
+      calculationVersion: 1,
+      distanceMeters: 28_726.374353149327,
+      pointIndices: [1490, 2692, 7161, 9224],
+      points: [
+        {
+          sequenceNumber: 1490,
+          recordedAt: '2026-05-10T19:15:17.000Z',
+          latitude: 40.05703333333334,
+          longitude: -105.29931666666667,
+          gpsAltitudeMeters: 2358,
+        },
+        {
+          sequenceNumber: 2692,
+          recordedAt: '2026-05-10T19:35:19.000Z',
+          latitude: 40.01555,
+          longitude: -105.29343333333334,
+          gpsAltitudeMeters: 3007,
+        },
+        {
+          sequenceNumber: 7161,
+          recordedAt: '2026-05-10T20:50:01.000Z',
+          latitude: 40.098483333333334,
+          longitude: -105.18663333333333,
+          gpsAltitudeMeters: 2488,
+        },
+        {
+          sequenceNumber: 9224,
+          recordedAt: '2026-05-10T21:24:24.000Z',
+          latitude: 40.061733333333336,
+          longitude: -105.30841666666667,
+          gpsAltitudeMeters: 2835,
+        },
+      ],
+    });
+    expect(persisted.rows[0]?.five_point_distance_meters).toBeCloseTo(33_416.10832975811, 8);
+    expect(persisted.rows[0]?.five_point_distance_metadata).toEqual({
+      calculationVersion: 1,
+      distanceMeters: 33_416.10832975811,
+      pointIndices: [2691, 7161, 9223, 9634, 10708],
+      points: [
+        {
+          sequenceNumber: 2691,
+          recordedAt: '2026-05-10T19:35:18.000Z',
+          latitude: 40.01558333333333,
+          longitude: -105.29353333333333,
+          gpsAltitudeMeters: 3010,
+        },
+        {
+          sequenceNumber: 7161,
+          recordedAt: '2026-05-10T20:50:01.000Z',
+          latitude: 40.098483333333334,
+          longitude: -105.18663333333333,
+          gpsAltitudeMeters: 2488,
+        },
+        {
+          sequenceNumber: 9223,
+          recordedAt: '2026-05-10T21:24:23.000Z',
+          latitude: 40.06163333333333,
+          longitude: -105.3083,
+          gpsAltitudeMeters: 2833,
+        },
+        {
+          sequenceNumber: 9634,
+          recordedAt: '2026-05-10T21:31:14.000Z',
+          latitude: 40.0991,
+          longitude: -105.29686666666667,
+          gpsAltitudeMeters: 2375,
+        },
+        {
+          sequenceNumber: 10708,
+          recordedAt: '2026-05-10T21:49:08.000Z',
+          latitude: 40.05375,
+          longitude: -105.29303333333333,
+          gpsAltitudeMeters: 1808,
+        },
+      ],
+    });
     expect(persisted.rows[0]?.six_point_distance_meters).toBeCloseTo(38_052.62276617665, 8);
     expect(persisted.rows[0]?.six_point_distance_metadata).toEqual({
       calculationVersion: 1,
@@ -263,13 +427,13 @@ describe('FlightProcessingService with a real IGC file', () => {
 
   }, 180_000);
 
-  it('completes with an empty six-point score when the solver was disabled at processing start', async () => {
+  it('completes with empty N-point scores when the solver was disabled at processing start', async () => {
     if (!database) throw new Error('Test database was not initialized.');
     const auth = createAuthService(database.db, { sessionTtlSeconds: 60 });
     const pilot = await auth.signup({ email: 'solver-disabled@example.com', password: 'correct horse battery staple' });
     const stored = await storeFile(pilot.user.userId, 'flights/solver-disabled.igc', 'solver-disabled.igc');
 
-    const result = await processor({ sixPointSolverEnabled: false }).process({
+    const result = await processor({ nPointSolverEnabled: false }).process({
       ownerUserId: pilot.user.userId,
       igcFileId: stored.id,
       bucketKey: 'flights/solver-disabled.igc',
@@ -281,11 +445,29 @@ describe('FlightProcessingService with a real IGC file', () => {
     expect(result.status).toBe('completed');
     const score = await database.pool.query<{
       total_distance_meters: number;
+      three_point_distance_meters: number | null;
+      three_point_distance_calc_version: number | null;
+      three_point_distance_metadata: unknown | null;
+      four_point_distance_meters: number | null;
+      four_point_distance_calc_version: number | null;
+      four_point_distance_metadata: unknown | null;
+      five_point_distance_meters: number | null;
+      five_point_distance_calc_version: number | null;
+      five_point_distance_metadata: unknown | null;
       six_point_distance_meters: number | null;
       six_point_distance_calc_version: number | null;
       six_point_distance_metadata: unknown | null;
     }>(
       `SELECT total_distance_meters,
+              three_point_distance_meters,
+              three_point_distance_calc_version,
+              three_point_distance_metadata,
+              four_point_distance_meters,
+              four_point_distance_calc_version,
+              four_point_distance_metadata,
+              five_point_distance_meters,
+              five_point_distance_calc_version,
+              five_point_distance_metadata,
               six_point_distance_meters,
               six_point_distance_calc_version,
               six_point_distance_metadata
@@ -293,6 +475,15 @@ describe('FlightProcessingService with a real IGC file', () => {
     );
     expect(score.rows).toEqual([expect.objectContaining({
       total_distance_meters: expect.any(Number),
+      three_point_distance_meters: null,
+      three_point_distance_calc_version: null,
+      three_point_distance_metadata: null,
+      four_point_distance_meters: null,
+      four_point_distance_calc_version: null,
+      four_point_distance_metadata: null,
+      five_point_distance_meters: null,
+      five_point_distance_calc_version: null,
+      five_point_distance_metadata: null,
       six_point_distance_meters: null,
       six_point_distance_calc_version: null,
       six_point_distance_metadata: null,

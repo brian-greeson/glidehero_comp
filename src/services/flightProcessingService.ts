@@ -4,14 +4,17 @@ import type { Database } from '../db/client.js';
 import { flightScores, flights, trackPoints } from '../db/schema.js';
 import { resolveLaunchTimeZone } from '../domain/competition/launchTimeZone.js';
 import {
-  mapSixPointDistanceMetadata,
+  FIVE_POINT_DISTANCE_CALC_VERSION,
+  FOUR_POINT_DISTANCE_CALC_VERSION,
+  mapNPointDistanceMetadata,
+  THREE_POINT_DISTANCE_CALC_VERSION,
   SIX_POINT_DISTANCE_CALC_VERSION,
   TOTAL_DISTANCE_CALC_VERSION,
-  type SixPointDistance,
+  type NPointDistances,
 } from '../domain/igc/distance.js';
 import { IgcParseError } from '../domain/igc/errors.js';
 import { parseIgcFlight } from '../domain/igc/parseIgcFlight.js';
-import { calculateSixPointDistanceInWorker } from '../domain/igc/sixPointDistanceWorkerAdapter.js';
+import { calculateNPointDistancesInWorker } from '../domain/igc/nPointDistanceWorkerAdapter.js';
 import { createActivityService } from './activityService.js';
 import { createGridClaimService } from './gridClaimService.js';
 import type { UserAchievementProgressService } from './userAchievementProgressService.js';
@@ -58,11 +61,11 @@ export function createFlightProcessingService(
     gridClaimCellSize: number;
     userAchievementProgress?: UserAchievementProgressService;
     userArenaProgress?: UserArenaProgressService;
-    calculateSixPointDistance?: (points: readonly {
+    calculateNPointDistances?: (points: readonly {
       latitude: number;
       longitude: number;
-    }[]) => Promise<SixPointDistance>;
-    isSixPointSolverEnabled?: () => Promise<boolean>;
+    }[]) => Promise<NPointDistances>;
+    isNPointSolverEnabled?: () => Promise<boolean>;
   },
 ): FlightProcessingService {
   const gridClaim = options.userAchievementProgress || options.userArenaProgress
@@ -77,7 +80,7 @@ export function createFlightProcessingService(
     )
     : createGridClaimService(database, { cellSize: options.gridClaimCellSize });
   const activity = createActivityService();
-  const calculateSixPointDistance = options.calculateSixPointDistance ?? calculateSixPointDistanceInWorker;
+  const calculateNPointDistances = options.calculateNPointDistances ?? calculateNPointDistancesInWorker;
 
   async function fail(flightId: string, processingToken: string, message: string): Promise<FlightProcessingOutcome> {
     const updated = await database
@@ -91,7 +94,7 @@ export function createFlightProcessingService(
 
   return {
     async process(input) {
-      const sixPointSolverEnabled = await (options.isSixPointSolverEnabled?.() ?? Promise.resolve(true));
+      const nPointSolverEnabled = await (options.isNPointSolverEnabled?.() ?? Promise.resolve(true));
       let flight: { id: string } | undefined;
       try {
         [flight] = await database
@@ -135,11 +138,11 @@ export function createFlightProcessingService(
         latitude: parsed.launchLatitude,
         longitude: parsed.launchLongitude,
       });
-      const sixPointDistance = sixPointSolverEnabled
-        ? await calculateSixPointDistance(parsed.points)
+      const nPointDistances = nPointSolverEnabled
+        ? await calculateNPointDistances(parsed.points)
         : undefined;
-      const sixPointDistanceMetadata = sixPointDistance
-        ? mapSixPointDistanceMetadata(parsed.points, sixPointDistance)
+      const nPointDistanceMetadata = nPointDistances
+        ? mapNPointDistanceMetadata(parsed.points, nPointDistances)
         : undefined;
 
       try {
@@ -168,12 +171,36 @@ export function createFlightProcessingService(
             totalDistanceMeters: parsed.distanceMeters,
             totalDistanceCalcVersion: TOTAL_DISTANCE_CALC_VERSION,
             totalDistanceMetadata: {},
-            sixPointDistanceMeters: sixPointDistance?.distanceMeters ?? null,
-            sixPointDistanceCalcVersion: sixPointDistance ? SIX_POINT_DISTANCE_CALC_VERSION : null,
-            sixPointDistanceMetadata: sixPointDistanceMetadata
+            threePointDistanceMeters: nPointDistances?.threePointDistance.distanceMeters ?? null,
+            threePointDistanceCalcVersion: nPointDistances ? THREE_POINT_DISTANCE_CALC_VERSION : null,
+            threePointDistanceMetadata: nPointDistanceMetadata
               ? {
-                  ...sixPointDistanceMetadata,
-                  points: [...sixPointDistanceMetadata.points],
+                  ...nPointDistanceMetadata.threePointDistance,
+                  points: [...nPointDistanceMetadata.threePointDistance.points],
+                }
+              : null,
+            fourPointDistanceMeters: nPointDistances?.fourPointDistance.distanceMeters ?? null,
+            fourPointDistanceCalcVersion: nPointDistances ? FOUR_POINT_DISTANCE_CALC_VERSION : null,
+            fourPointDistanceMetadata: nPointDistanceMetadata
+              ? {
+                  ...nPointDistanceMetadata.fourPointDistance,
+                  points: [...nPointDistanceMetadata.fourPointDistance.points],
+                }
+              : null,
+            fivePointDistanceMeters: nPointDistances?.fivePointDistance.distanceMeters ?? null,
+            fivePointDistanceCalcVersion: nPointDistances ? FIVE_POINT_DISTANCE_CALC_VERSION : null,
+            fivePointDistanceMetadata: nPointDistanceMetadata
+              ? {
+                  ...nPointDistanceMetadata.fivePointDistance,
+                  points: [...nPointDistanceMetadata.fivePointDistance.points],
+                }
+              : null,
+            sixPointDistanceMeters: nPointDistances?.sixPointDistance.distanceMeters ?? null,
+            sixPointDistanceCalcVersion: nPointDistances ? SIX_POINT_DISTANCE_CALC_VERSION : null,
+            sixPointDistanceMetadata: nPointDistanceMetadata
+              ? {
+                  ...nPointDistanceMetadata.sixPointDistance,
+                  points: [...nPointDistanceMetadata.sixPointDistance.points],
                 }
               : null,
           });

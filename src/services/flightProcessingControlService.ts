@@ -1,13 +1,13 @@
 import type { GlideClient } from '@valkey/valkey-glide';
 
-export const SIX_POINT_SOLVER_CONTROL_KEY = 'glidehero:flight-processing:six-point-solver';
+export const N_POINT_SOLVER_CONTROL_KEY = 'glidehero:flight-processing:n-point-solver';
 
-export type SixPointSolverState = 'enabled' | 'disabled';
+export type NPointSolverState = 'enabled' | 'disabled';
 
 export interface FlightProcessingControlService {
-  getSixPointSolverState(): Promise<SixPointSolverState>;
-  setSixPointSolverState(state: SixPointSolverState): Promise<void>;
-  isSixPointSolverEnabled(): Promise<boolean>;
+  getNPointSolverState(): Promise<NPointSolverState>;
+  setNPointSolverState(state: NPointSolverState): Promise<void>;
+  isNPointSolverEnabled(): Promise<boolean>;
 }
 
 function decode(value: unknown): string | null {
@@ -22,21 +22,21 @@ function decode(value: unknown): string | null {
 export function createFlightProcessingControlService(
   valkey: Pick<GlideClient, 'get' | 'set'>,
 ): FlightProcessingControlService {
-  const getSixPointSolverState = async (): Promise<SixPointSolverState> => (
-    decode(await valkey.get(SIX_POINT_SOLVER_CONTROL_KEY)) === 'disabled'
+  const getNPointSolverState = async (): Promise<NPointSolverState> => (
+    decode(await valkey.get(N_POINT_SOLVER_CONTROL_KEY)) === 'disabled'
       ? 'disabled'
       : 'enabled'
   );
 
   return {
-    getSixPointSolverState,
+    getNPointSolverState,
 
-    async setSixPointSolverState(state) {
-      await valkey.set(SIX_POINT_SOLVER_CONTROL_KEY, state);
+    async setNPointSolverState(state) {
+      await valkey.set(N_POINT_SOLVER_CONTROL_KEY, state);
     },
 
-    async isSixPointSolverEnabled() {
-      return (await getSixPointSolverState()) === 'enabled';
+    async isNPointSolverEnabled() {
+      return (await getNPointSolverState()) === 'enabled';
     },
   };
 }

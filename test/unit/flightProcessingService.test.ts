@@ -12,7 +12,7 @@ vi.mock('../../src/services/gridClaimService.js', () => ({
 
 afterEach(() => {
   gridClaim.processInTransaction.mockReset();
-  calculateSixPointDistance.mockClear();
+  calculateNPointDistances.mockClear();
 });
 
 const ownerUserId = '00000000-0000-4000-8000-000000000001';
@@ -31,11 +31,25 @@ const validIgc = [
   'B1200054000070N10500070WA0123601236',
 ].join('\n');
 
-const sixPointDistance = {
-  distanceMeters: 1_234,
-  pointIndices: [0, 1, 2, 3, 4, 5] as const,
+const nPointDistances = {
+  threePointDistance: {
+    distanceMeters: 300,
+    pointIndices: [0, 2, 5] as const,
+  },
+  fourPointDistance: {
+    distanceMeters: 400,
+    pointIndices: [0, 1, 3, 5] as const,
+  },
+  fivePointDistance: {
+    distanceMeters: 500,
+    pointIndices: [0, 1, 2, 4, 5] as const,
+  },
+  sixPointDistance: {
+    distanceMeters: 1_234,
+    pointIndices: [0, 1, 2, 3, 4, 5] as const,
+  },
 };
-const calculateSixPointDistance = vi.fn(async () => sixPointDistance);
+const calculateNPointDistances = vi.fn(async () => nPointDistances);
 
 function databaseDouble(options: { events?: string[]; transactionError?: Error; flightInsertError?: unknown; fenceLost?: boolean } = {}) {
   const insertedPoints: unknown[] = [];
@@ -138,7 +152,7 @@ describe('FlightProcessingService', () => {
       bucketName: 'glidehero-files',
       s3Client: { send } as never,
       gridClaimCellSize: 1000,
-      calculateSixPointDistance,
+      calculateNPointDistances,
     });
 
     expect(createGridClaimService).toHaveBeenCalledWith(database, { cellSize: 1000 });
@@ -167,7 +181,8 @@ describe('FlightProcessingService', () => {
       expect.objectContaining({ flightId, sequenceNumber: 4 }),
       expect.objectContaining({ flightId, sequenceNumber: 5 }),
     ]);
-    expect(calculateSixPointDistance).toHaveBeenCalledWith(
+    expect(calculateNPointDistances).toHaveBeenCalledOnce();
+    expect(calculateNPointDistances).toHaveBeenCalledWith(
       expect.arrayContaining([
         expect.objectContaining({ sequenceNumber: 0, latitude: 40, longitude: -105 }),
         expect.objectContaining({ sequenceNumber: 5 }),
@@ -178,6 +193,45 @@ describe('FlightProcessingService', () => {
       totalDistanceMeters: expect.any(Number),
       totalDistanceCalcVersion: 1,
       totalDistanceMetadata: {},
+      threePointDistanceMeters: 300,
+      threePointDistanceCalcVersion: 1,
+      threePointDistanceMetadata: {
+        calculationVersion: 1,
+        distanceMeters: 300,
+        pointIndices: [0, 2, 5],
+        points: [
+          expect.objectContaining({ sequenceNumber: 0 }),
+          expect.objectContaining({ sequenceNumber: 2 }),
+          expect.objectContaining({ sequenceNumber: 5 }),
+        ],
+      },
+      fourPointDistanceMeters: 400,
+      fourPointDistanceCalcVersion: 1,
+      fourPointDistanceMetadata: {
+        calculationVersion: 1,
+        distanceMeters: 400,
+        pointIndices: [0, 1, 3, 5],
+        points: [
+          expect.objectContaining({ sequenceNumber: 0 }),
+          expect.objectContaining({ sequenceNumber: 1 }),
+          expect.objectContaining({ sequenceNumber: 3 }),
+          expect.objectContaining({ sequenceNumber: 5 }),
+        ],
+      },
+      fivePointDistanceMeters: 500,
+      fivePointDistanceCalcVersion: 1,
+      fivePointDistanceMetadata: {
+        calculationVersion: 1,
+        distanceMeters: 500,
+        pointIndices: [0, 1, 2, 4, 5],
+        points: [
+          expect.objectContaining({ sequenceNumber: 0 }),
+          expect.objectContaining({ sequenceNumber: 1 }),
+          expect.objectContaining({ sequenceNumber: 2 }),
+          expect.objectContaining({ sequenceNumber: 4 }),
+          expect.objectContaining({ sequenceNumber: 5 }),
+        ],
+      },
       sixPointDistanceMeters: 1_234,
       sixPointDistanceCalcVersion: 1,
       sixPointDistanceMetadata: {
@@ -213,9 +267,9 @@ describe('FlightProcessingService', () => {
     ]);
   });
 
-  it('snapshots a disabled solver before flight creation and completes with empty six-point fields', async () => {
+  it('snapshots a disabled solver before flight creation and completes with empty N-point fields', async () => {
     const { database, insertedScores } = databaseDouble();
-    const isSixPointSolverEnabled = vi.fn(async () => {
+    const isNPointSolverEnabled = vi.fn(async () => {
       expect(database.insert).not.toHaveBeenCalled();
       return false;
     });
@@ -223,8 +277,8 @@ describe('FlightProcessingService', () => {
       bucketName: 'glidehero-files',
       s3Client: { send: vi.fn() } as never,
       gridClaimCellSize: 1000,
-      calculateSixPointDistance,
-      isSixPointSolverEnabled,
+      calculateNPointDistances,
+      isNPointSolverEnabled,
     });
 
     await expect(service.process({
@@ -236,14 +290,23 @@ describe('FlightProcessingService', () => {
       source: validIgc,
     })).resolves.toEqual({ status: 'completed', flightId });
 
-    expect(isSixPointSolverEnabled).toHaveBeenCalledOnce();
-    expect(calculateSixPointDistance).not.toHaveBeenCalled();
+    expect(isNPointSolverEnabled).toHaveBeenCalledOnce();
+    expect(calculateNPointDistances).not.toHaveBeenCalled();
     expect(insertedScores).toEqual([
       expect.objectContaining({
         flightId,
         totalDistanceMeters: expect.any(Number),
         totalDistanceCalcVersion: 1,
         totalDistanceMetadata: {},
+        threePointDistanceMeters: null,
+        threePointDistanceCalcVersion: null,
+        threePointDistanceMetadata: null,
+        fourPointDistanceMeters: null,
+        fourPointDistanceCalcVersion: null,
+        fourPointDistanceMetadata: null,
+        fivePointDistanceMeters: null,
+        fivePointDistanceCalcVersion: null,
+        fivePointDistanceMetadata: null,
         sixPointDistanceMeters: null,
         sixPointDistanceCalcVersion: null,
         sixPointDistanceMetadata: null,
@@ -251,15 +314,15 @@ describe('FlightProcessingService', () => {
     ]);
   });
 
-  it('fails processing when the enabled six-point solver fails', async () => {
+  it('fails processing when the enabled N-point solver fails', async () => {
     const { database, transaction } = databaseDouble();
     const solverError = new Error('solver failed');
     const service = createFlightProcessingService(database as never, {
       bucketName: 'glidehero-files',
       s3Client: { send: vi.fn() } as never,
       gridClaimCellSize: 1000,
-      calculateSixPointDistance: vi.fn(async () => { throw solverError; }),
-      isSixPointSolverEnabled: async () => true,
+      calculateNPointDistances: vi.fn(async () => { throw solverError; }),
+      isNPointSolverEnabled: async () => true,
     });
 
     await expect(service.process({
@@ -283,7 +346,7 @@ describe('FlightProcessingService', () => {
       bucketName: 'glidehero-files',
       s3Client: { send: vi.fn() } as never,
       gridClaimCellSize: 1000,
-      calculateSixPointDistance,
+      calculateNPointDistances,
       userAchievementProgress: userAchievementProgress as never,
       userArenaProgress: userArenaProgress as never,
     });
@@ -306,7 +369,7 @@ describe('FlightProcessingService', () => {
       bucketName: 'glidehero-files',
       s3Client: { send } as never,
       gridClaimCellSize: 1000,
-      calculateSixPointDistance,
+      calculateNPointDistances,
     });
 
     await expect(service.process({ ownerUserId, igcFileId, bucketKey, contentHash: 'a'.repeat(64), processingToken })).resolves.toEqual({
@@ -332,7 +395,7 @@ describe('FlightProcessingService', () => {
       bucketName: 'glidehero-files',
       s3Client: { send } as never,
       gridClaimCellSize: 1000,
-      calculateSixPointDistance,
+      calculateNPointDistances,
     });
 
     await expect(service.process({ ownerUserId, igcFileId, bucketKey, contentHash: 'a'.repeat(64), processingToken })).resolves.toEqual({
@@ -358,7 +421,7 @@ describe('FlightProcessingService', () => {
       bucketName: 'glidehero-files',
       s3Client: { send } as never,
       gridClaimCellSize: 1000,
-      calculateSixPointDistance,
+      calculateNPointDistances,
     });
 
     await expect(service.process({ ownerUserId, igcFileId, bucketKey, contentHash: 'a'.repeat(64), processingToken })).rejects.toBe(persistenceError);
@@ -371,7 +434,7 @@ describe('FlightProcessingService', () => {
       bucketName: 'glidehero-files',
       s3Client: { send: vi.fn() } as never,
       gridClaimCellSize: 1000,
-      calculateSixPointDistance,
+      calculateNPointDistances,
     });
 
     await expect(service.process({
@@ -392,7 +455,7 @@ describe('FlightProcessingService', () => {
       bucketName: 'glidehero-files',
       s3Client: { send } as never,
       gridClaimCellSize: 1000,
-      calculateSixPointDistance,
+      calculateNPointDistances,
     });
 
     await expect(service.process({ ownerUserId, igcFileId, bucketKey, contentHash: 'a'.repeat(64), processingToken })).rejects.toBe(claimError);
@@ -415,7 +478,7 @@ describe('FlightProcessingService', () => {
       bucketName: 'glidehero-files',
       s3Client: { send } as never,
       gridClaimCellSize: 1000,
-      calculateSixPointDistance,
+      calculateNPointDistances,
     });
 
     await expect(service.process({ ownerUserId, igcFileId, bucketKey, contentHash: 'a'.repeat(64), processingToken }))
@@ -435,7 +498,7 @@ describe('FlightProcessingService', () => {
       bucketName: 'glidehero-files',
       s3Client: { send } as never,
       gridClaimCellSize: 1000,
-      calculateSixPointDistance,
+      calculateNPointDistances,
     });
 
     await expect(service.process({ ownerUserId, igcFileId, bucketKey, contentHash: 'a'.repeat(64), processingToken }))

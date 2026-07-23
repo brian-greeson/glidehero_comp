@@ -15,11 +15,27 @@ const points = Array.from({ length: 7 }, (_, sequenceNumber) => ({
   gpsAltitudeMeters: 1_000 + sequenceNumber,
 }));
 
+const nPointDistances = {
+  threePointDistance: { distanceMeters: 300, pointIndices: [0, 1, 6] as const },
+  fourPointDistance: { distanceMeters: 400, pointIndices: [0, 1, 2, 6] as const },
+  fivePointDistance: { distanceMeters: 500, pointIndices: [0, 1, 2, 3, 6] as const },
+  sixPointDistance: { distanceMeters: 600, pointIndices: [0, 1, 2, 3, 4, 6] as const },
+};
+
 const missingScore = (id: string): FlightScoreCandidate => ({
   id,
   totalDistanceMeters: null,
   totalDistanceCalcVersion: null,
   totalDistanceMetadata: null,
+  threePointDistanceMeters: null,
+  threePointDistanceCalcVersion: null,
+  threePointDistanceMetadata: null,
+  fourPointDistanceMeters: null,
+  fourPointDistanceCalcVersion: null,
+  fourPointDistanceMetadata: null,
+  fivePointDistanceMeters: null,
+  fivePointDistanceCalcVersion: null,
+  fivePointDistanceMetadata: null,
   sixPointDistanceMeters: null,
   sixPointDistanceCalcVersion: null,
   sixPointDistanceMetadata: null,
@@ -50,9 +66,9 @@ describe('flight score backfill traversal', () => {
     const cursors: Array<string | undefined> = [];
     const loadTrackPoints = vi.fn(async () => points);
     const calculateTotalDistance = vi.fn(() => 123);
-    const calculateSixPointDistance = vi.fn(async (received: readonly (typeof points)[number][]) => {
+    const calculateNPointDistances = vi.fn(async (received: readonly (typeof points)[number][]) => {
       expect(received).toBe(points);
-      return { distanceMeters: 456, pointIndices: [0, 1, 2, 3, 4, 6] as const };
+      return nPointDistances;
     });
     const writeScores = vi.fn(async () => true);
 
@@ -67,14 +83,14 @@ describe('flight score backfill traversal', () => {
       },
       loadTrackPoints,
       calculateTotalDistance,
-      calculateSixPointDistance,
+      calculateNPointDistances,
       writeScores,
     });
 
     expect(cursors).toEqual([undefined, 'flight-2', 'flight-3']);
     expect(loadTrackPoints).toHaveBeenCalledTimes(3);
     expect(calculateTotalDistance).toHaveBeenCalledTimes(3);
-    expect(calculateSixPointDistance).toHaveBeenCalledTimes(3);
+    expect(calculateNPointDistances).toHaveBeenCalledTimes(3);
     expect(writeScores).not.toHaveBeenCalled();
     expect(summary).toEqual({
       mode: 'dry-run',
@@ -84,6 +100,12 @@ describe('flight score backfill traversal', () => {
       skipped: 0,
       written: 0,
       failed: 0,
+      routes: {
+        threePoint: { calculated: 3, skipped: 0, updated: 0 },
+        fourPoint: { calculated: 3, skipped: 0, updated: 0 },
+        fivePoint: { calculated: 3, skipped: 0, updated: 0 },
+        sixPoint: { calculated: 3, skipped: 0, updated: 0 },
+      },
     });
   });
 
@@ -102,10 +124,7 @@ describe('flight score backfill traversal', () => {
       listFlights: async (cursor) => cursor ? [] : [currentTotal],
       loadTrackPoints: async () => points,
       calculateTotalDistance,
-      calculateSixPointDistance: async () => ({
-        distanceMeters: 654,
-        pointIndices: [0, 1, 2, 3, 4, 5],
-      }),
+      calculateNPointDistances: async () => nPointDistances,
       writeScores,
     });
 
@@ -114,10 +133,51 @@ describe('flight score backfill traversal', () => {
       totalDistanceMeters: 321,
       totalDistanceCalcVersion: 1,
       totalDistanceMetadata: {},
-      sixPointDistanceMeters: 654,
+      threePointDistanceMeters: 300,
+      fourPointDistanceMeters: 400,
+      fivePointDistanceMeters: 500,
+      sixPointDistanceMeters: 600,
       sixPointDistanceCalcVersion: 1,
     }));
     expect(summary).toMatchObject({ inspected: 1, calculated: 1, skipped: 0, written: 1, failed: 0 });
+  });
+
+  it('preserves an independently newer route while calculating the other routes in one pass', async () => {
+    const calculateNPointDistances = vi.fn(async () => nPointDistances);
+    const writeScores = vi.fn(async () => true);
+    const newerThreePoint: FlightScoreCandidate = {
+      ...missingScore('flight-1'),
+      totalDistanceMeters: 321,
+      totalDistanceCalcVersion: 1,
+      totalDistanceMetadata: {},
+      threePointDistanceMeters: 999,
+      threePointDistanceCalcVersion: 2,
+      threePointDistanceMetadata: { points: [{ sequenceNumber: 99 }] },
+    };
+
+    const summary = await runFlightScoreBackfill(undefined as never, {
+      apply: true,
+      listFlights: async (cursor) => cursor ? [] : [newerThreePoint],
+      loadTrackPoints: async () => points,
+      calculateNPointDistances,
+      writeScores,
+    });
+
+    expect(calculateNPointDistances).toHaveBeenCalledOnce();
+    expect(writeScores).toHaveBeenCalledWith('flight-1', expect.objectContaining({
+      threePointDistanceMeters: 999,
+      threePointDistanceCalcVersion: 2,
+      threePointDistanceMetadata: newerThreePoint.threePointDistanceMetadata,
+      fourPointDistanceMeters: 400,
+      fivePointDistanceMeters: 500,
+      sixPointDistanceMeters: 600,
+    }));
+    expect(summary.routes).toEqual({
+      threePoint: { calculated: 0, skipped: 1, updated: 0 },
+      fourPoint: { calculated: 1, skipped: 0, updated: 1 },
+      fivePoint: { calculated: 1, skipped: 0, updated: 1 },
+      sixPoint: { calculated: 1, skipped: 0, updated: 1 },
+    });
   });
 
   it('skips current rows and continues sequentially after a calculation failure', async () => {
@@ -126,6 +186,15 @@ describe('flight score backfill traversal', () => {
       totalDistanceMeters: 1,
       totalDistanceCalcVersion: 1,
       totalDistanceMetadata: {},
+      threePointDistanceMeters: 1,
+      threePointDistanceCalcVersion: 1,
+      threePointDistanceMetadata: { points: [] },
+      fourPointDistanceMeters: 1,
+      fourPointDistanceCalcVersion: 1,
+      fourPointDistanceMetadata: { points: [] },
+      fivePointDistanceMeters: 1,
+      fivePointDistanceCalcVersion: 1,
+      fivePointDistanceMetadata: { points: [] },
       sixPointDistanceMeters: 2,
       sixPointDistanceCalcVersion: 1,
       sixPointDistanceMetadata: { points: [] },
@@ -135,7 +204,7 @@ describe('flight score backfill traversal', () => {
       apply: true,
       listFlights: async (cursor) => cursor ? [] : [current, missingScore('flight-2')],
       loadTrackPoints: async () => points,
-      calculateSixPointDistance: async () => { throw new Error('sensitive detail'); },
+      calculateNPointDistances: async () => { throw new Error('sensitive detail'); },
       writeScores: vi.fn(async () => true),
       logger,
     });

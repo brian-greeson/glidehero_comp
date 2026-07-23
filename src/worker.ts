@@ -50,7 +50,7 @@ const processor = createFlightProcessingService(db, {
   bucketName: config.bucket.bucketName,
   gridClaimCellSize: config.gridClaimCellSize,
   userAchievementProgress,
-  isSixPointSolverEnabled: () => flightProcessingControl.isSixPointSolverEnabled(),
+  isNPointSolverEnabled: () => flightProcessingControl.isNPointSolverEnabled(),
 });
 const worker = createFlightWorkerService(db, valkey, queue, processor, {
   s3Client,

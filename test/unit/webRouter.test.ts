@@ -363,9 +363,9 @@ describe('webRouter', () => {
       clearStatus: vi.fn(async () => undefined),
     };
     const flightProcessingControl = {
-      getSixPointSolverState: vi.fn(async () => 'enabled' as const),
-      setSixPointSolverState: vi.fn(async () => undefined),
-      isSixPointSolverEnabled: vi.fn(async () => true),
+      getNPointSolverState: vi.fn(async () => 'enabled' as const),
+      setNPointSolverState: vi.fn(async () => undefined),
+      isNPointSolverEnabled: vi.fn(async () => true),
     };
     const uploadQueue = {
       queueSummary: vi.fn(async () => ({
@@ -420,11 +420,11 @@ describe('webRouter', () => {
       expect(await flightProcessing.text()).toContain('Flight processing');
       expect(workerControl.getState).toHaveBeenCalledOnce();
       expect(workerControl.listStatuses).toHaveBeenCalledOnce();
-      expect(flightProcessingControl.getSixPointSolverState).toHaveBeenCalledOnce();
+      expect(flightProcessingControl.getNPointSolverState).toHaveBeenCalledOnce();
       expect(renderAdminFlightProcessingPage).toHaveBeenCalledWith(expect.objectContaining({
         queueSummary: { queued: 2, processing: 1, failed: 0, oldestQueuedAgeSeconds: 12 },
         workerControlState: 'paused',
-        sixPointSolverState: 'enabled',
+        nPointSolverState: 'enabled',
         workers: [expect.objectContaining({ workerId: 'worker-1', online: true })],
       }));
 
@@ -473,7 +473,7 @@ describe('webRouter', () => {
       expect(invalidControl.status).toBe(303);
       expect(invalidControl.headers.get('location')).toBe('/admin/flight-processing?worker=error');
 
-      const disableSolver = await fetch(`${baseUrl}/admin/flight-processing/six-point-solver`, {
+      const disableSolver = await fetch(`${baseUrl}/admin/flight-processing/n-point-solver`, {
         method: 'POST',
         redirect: 'manual',
         headers: { cookie: 'glidehero_session=valid-token', 'content-type': 'application/x-www-form-urlencoded' },
@@ -481,10 +481,10 @@ describe('webRouter', () => {
       });
       expect(disableSolver.status).toBe(303);
       expect(disableSolver.headers.get('location')).toBe('/admin/flight-processing?solver=disabled');
-      expect(flightProcessingControl.setSixPointSolverState).toHaveBeenCalledWith('disabled');
+      expect(flightProcessingControl.setNPointSolverState).toHaveBeenCalledWith('disabled');
 
-      flightProcessingControl.setSixPointSolverState.mockRejectedValueOnce(new Error('Valkey write failed'));
-      const failedSolver = await fetch(`${baseUrl}/admin/flight-processing/six-point-solver`, {
+      flightProcessingControl.setNPointSolverState.mockRejectedValueOnce(new Error('Valkey write failed'));
+      const failedSolver = await fetch(`${baseUrl}/admin/flight-processing/n-point-solver`, {
         method: 'POST',
         redirect: 'manual',
         headers: { cookie: 'glidehero_session=valid-token', 'content-type': 'application/x-www-form-urlencoded' },
@@ -493,7 +493,7 @@ describe('webRouter', () => {
       expect(failedSolver.status).toBe(303);
       expect(failedSolver.headers.get('location')).toBe('/admin/flight-processing?solver=error');
 
-      const invalidSolver = await fetch(`${baseUrl}/admin/flight-processing/six-point-solver`, {
+      const invalidSolver = await fetch(`${baseUrl}/admin/flight-processing/n-point-solver`, {
         method: 'POST',
         redirect: 'manual',
         headers: { cookie: 'glidehero_session=valid-token', 'content-type': 'application/x-www-form-urlencoded' },

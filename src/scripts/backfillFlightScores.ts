@@ -4,14 +4,17 @@ import { asc, eq, sql } from 'drizzle-orm';
 import { createDatabase, type Database } from '../db/client.js';
 import { trackPoints } from '../db/schema.js';
 import {
-  mapSixPointDistanceMetadata,
+  FIVE_POINT_DISTANCE_CALC_VERSION,
+  FOUR_POINT_DISTANCE_CALC_VERSION,
+  mapNPointDistanceMetadata,
   SIX_POINT_DISTANCE_CALC_VERSION,
+  THREE_POINT_DISTANCE_CALC_VERSION,
   TOTAL_DISTANCE_CALC_VERSION,
   totalDistanceMeters,
-  type SixPointDistance,
-  type SixPointDistanceMetadata,
+  type NPointDistances,
+  type PointDistanceMetadata,
 } from '../domain/igc/distance.js';
-import { calculateSixPointDistanceInWorker } from '../domain/igc/sixPointDistanceWorkerAdapter.js';
+import { calculateNPointDistancesInWorker } from '../domain/igc/nPointDistanceWorkerAdapter.js';
 import type { IgcFix } from '../domain/igc/types.js';
 
 export const DEFAULT_FLIGHT_SCORE_BACKFILL_BATCH_SIZE = 10;
@@ -23,6 +26,8 @@ const BATCH_SIZE = '--batch-size';
 export const flightScoreBackfillUsage = `Usage: npm run backfill:flight-scores [-- --dry-run|--apply] [--batch-size <positive integer>]
 
 Dry-run is the default and does not write flight scores. Pass --apply to persist them.
+Calculates the best chronologically ordered 3-, 4-, 5-, and 6-point routes in one solver pass.
+Existing route scores with newer calculation versions are preserved independently.
 Pause and drain the flight worker before running in apply mode.
 `;
 
@@ -39,6 +44,15 @@ export type FlightScoreCandidate = {
   totalDistanceMeters: number | null;
   totalDistanceCalcVersion: number | null;
   totalDistanceMetadata: unknown | null;
+  threePointDistanceMeters: number | null;
+  threePointDistanceCalcVersion: number | null;
+  threePointDistanceMetadata: unknown | null;
+  fourPointDistanceMeters: number | null;
+  fourPointDistanceCalcVersion: number | null;
+  fourPointDistanceMetadata: unknown | null;
+  fivePointDistanceMeters: number | null;
+  fivePointDistanceCalcVersion: number | null;
+  fivePointDistanceMetadata: unknown | null;
   sixPointDistanceMeters: number | null;
   sixPointDistanceCalcVersion: number | null;
   sixPointDistanceMetadata: unknown | null;
@@ -48,9 +62,24 @@ export type FlightScoreValues = {
   totalDistanceMeters: number;
   totalDistanceCalcVersion: number;
   totalDistanceMetadata: Record<string, never>;
+  threePointDistanceMeters: number;
+  threePointDistanceCalcVersion: number;
+  threePointDistanceMetadata: PointDistanceMetadata<3>;
+  fourPointDistanceMeters: number;
+  fourPointDistanceCalcVersion: number;
+  fourPointDistanceMetadata: PointDistanceMetadata<4>;
+  fivePointDistanceMeters: number;
+  fivePointDistanceCalcVersion: number;
+  fivePointDistanceMetadata: PointDistanceMetadata<5>;
   sixPointDistanceMeters: number;
   sixPointDistanceCalcVersion: number;
-  sixPointDistanceMetadata: SixPointDistanceMetadata;
+  sixPointDistanceMetadata: PointDistanceMetadata<6>;
+};
+
+export type RouteBackfillCounters = {
+  calculated: number;
+  skipped: number;
+  updated: number;
 };
 
 export type FlightScoreBackfillSummary = {
@@ -61,6 +90,12 @@ export type FlightScoreBackfillSummary = {
   skipped: number;
   written: number;
   failed: number;
+  routes: {
+    threePoint: RouteBackfillCounters;
+    fourPoint: RouteBackfillCounters;
+    fivePoint: RouteBackfillCounters;
+    sixPoint: RouteBackfillCounters;
+  };
 };
 
 export type FlightScoreBackfillOptions = {
@@ -71,7 +106,7 @@ export type FlightScoreBackfillOptions = {
   listFlights?: (cursor: string | undefined, limit: number) => Promise<FlightScoreCandidate[]>;
   loadTrackPoints?: (flightId: string) => Promise<IgcFix[]>;
   calculateTotalDistance?: (points: readonly IgcFix[]) => number;
-  calculateSixPointDistance?: (points: readonly IgcFix[]) => Promise<SixPointDistance>;
+  calculateNPointDistances?: (points: readonly IgcFix[]) => Promise<NPointDistances>;
   writeScores?: (flightId: string, values: FlightScoreValues) => Promise<boolean>;
 };
 
@@ -126,12 +161,17 @@ function totalScoreNeedsCalculation(flight: FlightScoreCandidate): boolean {
     );
 }
 
-function sixPointScoreNeedsCalculation(flight: FlightScoreCandidate): boolean {
-  return flight.sixPointDistanceCalcVersion === null
-    || flight.sixPointDistanceCalcVersion < SIX_POINT_DISTANCE_CALC_VERSION
+function routeScoreNeedsCalculation(
+  calculationVersion: number | null,
+  distanceMeters: number | null,
+  metadata: unknown | null,
+  currentVersion: number,
+): boolean {
+  return calculationVersion === null
+    || calculationVersion < currentVersion
     || (
-      flight.sixPointDistanceCalcVersion === SIX_POINT_DISTANCE_CALC_VERSION
-      && (flight.sixPointDistanceMeters === null || flight.sixPointDistanceMetadata === null)
+      calculationVersion === currentVersion
+      && (distanceMeters === null || metadata === null)
     );
 }
 
@@ -147,6 +187,15 @@ export async function selectFlightScoreBatch(
       scores.total_distance_meters AS "totalDistanceMeters",
       scores.total_distance_calc_version AS "totalDistanceCalcVersion",
       scores.total_distance_metadata AS "totalDistanceMetadata",
+      scores.three_point_distance_meters AS "threePointDistanceMeters",
+      scores.three_point_distance_calc_version AS "threePointDistanceCalcVersion",
+      scores.three_point_distance_metadata AS "threePointDistanceMetadata",
+      scores.four_point_distance_meters AS "fourPointDistanceMeters",
+      scores.four_point_distance_calc_version AS "fourPointDistanceCalcVersion",
+      scores.four_point_distance_metadata AS "fourPointDistanceMetadata",
+      scores.five_point_distance_meters AS "fivePointDistanceMeters",
+      scores.five_point_distance_calc_version AS "fivePointDistanceCalcVersion",
+      scores.five_point_distance_metadata AS "fivePointDistanceMetadata",
       scores.six_point_distance_meters AS "sixPointDistanceMeters",
       scores.six_point_distance_calc_version AS "sixPointDistanceCalcVersion",
       scores.six_point_distance_metadata AS "sixPointDistanceMetadata"
@@ -182,13 +231,80 @@ export async function upsertFlightScores(
   values: FlightScoreValues,
 ): Promise<boolean> {
   const totalMetadata = JSON.stringify(values.totalDistanceMetadata);
+  const threePointMetadata = JSON.stringify(values.threePointDistanceMetadata);
+  const fourPointMetadata = JSON.stringify(values.fourPointDistanceMetadata);
+  const fivePointMetadata = JSON.stringify(values.fivePointDistanceMetadata);
   const sixPointMetadata = JSON.stringify(values.sixPointDistanceMetadata);
+  const totalNeedsUpdate = sql`
+    flight_scores.total_distance_calc_version IS NULL
+    OR flight_scores.total_distance_calc_version < ${TOTAL_DISTANCE_CALC_VERSION}
+    OR (
+      flight_scores.total_distance_calc_version = ${TOTAL_DISTANCE_CALC_VERSION}
+      AND (
+        flight_scores.total_distance_meters IS NULL
+        OR flight_scores.total_distance_metadata IS NULL
+      )
+    )
+  `;
+  const threePointNeedsUpdate = sql`
+    flight_scores.three_point_distance_calc_version IS NULL
+    OR flight_scores.three_point_distance_calc_version < ${THREE_POINT_DISTANCE_CALC_VERSION}
+    OR (
+      flight_scores.three_point_distance_calc_version = ${THREE_POINT_DISTANCE_CALC_VERSION}
+      AND (
+        flight_scores.three_point_distance_meters IS NULL
+        OR flight_scores.three_point_distance_metadata IS NULL
+      )
+    )
+  `;
+  const fourPointNeedsUpdate = sql`
+    flight_scores.four_point_distance_calc_version IS NULL
+    OR flight_scores.four_point_distance_calc_version < ${FOUR_POINT_DISTANCE_CALC_VERSION}
+    OR (
+      flight_scores.four_point_distance_calc_version = ${FOUR_POINT_DISTANCE_CALC_VERSION}
+      AND (
+        flight_scores.four_point_distance_meters IS NULL
+        OR flight_scores.four_point_distance_metadata IS NULL
+      )
+    )
+  `;
+  const fivePointNeedsUpdate = sql`
+    flight_scores.five_point_distance_calc_version IS NULL
+    OR flight_scores.five_point_distance_calc_version < ${FIVE_POINT_DISTANCE_CALC_VERSION}
+    OR (
+      flight_scores.five_point_distance_calc_version = ${FIVE_POINT_DISTANCE_CALC_VERSION}
+      AND (
+        flight_scores.five_point_distance_meters IS NULL
+        OR flight_scores.five_point_distance_metadata IS NULL
+      )
+    )
+  `;
+  const sixPointNeedsUpdate = sql`
+    flight_scores.six_point_distance_calc_version IS NULL
+    OR flight_scores.six_point_distance_calc_version < ${SIX_POINT_DISTANCE_CALC_VERSION}
+    OR (
+      flight_scores.six_point_distance_calc_version = ${SIX_POINT_DISTANCE_CALC_VERSION}
+      AND (
+        flight_scores.six_point_distance_meters IS NULL
+        OR flight_scores.six_point_distance_metadata IS NULL
+      )
+    )
+  `;
   const result = await database.execute<{ flightId: string }>(sql`
     INSERT INTO flight_scores (
       flight_id,
       total_distance_meters,
       total_distance_calc_version,
       total_distance_metadata,
+      three_point_distance_meters,
+      three_point_distance_calc_version,
+      three_point_distance_metadata,
+      four_point_distance_meters,
+      four_point_distance_calc_version,
+      four_point_distance_metadata,
+      five_point_distance_meters,
+      five_point_distance_calc_version,
+      five_point_distance_metadata,
       six_point_distance_meters,
       six_point_distance_calc_version,
       six_point_distance_metadata
@@ -197,107 +313,100 @@ export async function upsertFlightScores(
       ${values.totalDistanceMeters},
       ${values.totalDistanceCalcVersion},
       ${totalMetadata}::jsonb,
+      ${values.threePointDistanceMeters},
+      ${values.threePointDistanceCalcVersion},
+      ${threePointMetadata}::jsonb,
+      ${values.fourPointDistanceMeters},
+      ${values.fourPointDistanceCalcVersion},
+      ${fourPointMetadata}::jsonb,
+      ${values.fivePointDistanceMeters},
+      ${values.fivePointDistanceCalcVersion},
+      ${fivePointMetadata}::jsonb,
       ${values.sixPointDistanceMeters},
       ${values.sixPointDistanceCalcVersion},
       ${sixPointMetadata}::jsonb
     )
     ON CONFLICT (flight_id) DO UPDATE SET
       total_distance_meters = CASE
-        WHEN flight_scores.total_distance_calc_version IS NULL
-          OR flight_scores.total_distance_calc_version < ${TOTAL_DISTANCE_CALC_VERSION}
-          OR (
-            flight_scores.total_distance_calc_version = ${TOTAL_DISTANCE_CALC_VERSION}
-            AND (
-              flight_scores.total_distance_meters IS NULL
-              OR flight_scores.total_distance_metadata IS NULL
-            )
-          )
+        WHEN ${totalNeedsUpdate}
         THEN EXCLUDED.total_distance_meters
         ELSE flight_scores.total_distance_meters
       END,
       total_distance_calc_version = CASE
-        WHEN flight_scores.total_distance_calc_version IS NULL
-          OR flight_scores.total_distance_calc_version < ${TOTAL_DISTANCE_CALC_VERSION}
-          OR (
-            flight_scores.total_distance_calc_version = ${TOTAL_DISTANCE_CALC_VERSION}
-            AND (
-              flight_scores.total_distance_meters IS NULL
-              OR flight_scores.total_distance_metadata IS NULL
-            )
-          )
+        WHEN ${totalNeedsUpdate}
         THEN EXCLUDED.total_distance_calc_version
         ELSE flight_scores.total_distance_calc_version
       END,
       total_distance_metadata = CASE
-        WHEN flight_scores.total_distance_calc_version IS NULL
-          OR flight_scores.total_distance_calc_version < ${TOTAL_DISTANCE_CALC_VERSION}
-          OR (
-            flight_scores.total_distance_calc_version = ${TOTAL_DISTANCE_CALC_VERSION}
-            AND (
-              flight_scores.total_distance_meters IS NULL
-              OR flight_scores.total_distance_metadata IS NULL
-            )
-          )
+        WHEN ${totalNeedsUpdate}
         THEN EXCLUDED.total_distance_metadata
         ELSE flight_scores.total_distance_metadata
       END,
+      three_point_distance_meters = CASE
+        WHEN ${threePointNeedsUpdate}
+        THEN EXCLUDED.three_point_distance_meters
+        ELSE flight_scores.three_point_distance_meters
+      END,
+      three_point_distance_calc_version = CASE
+        WHEN ${threePointNeedsUpdate}
+        THEN EXCLUDED.three_point_distance_calc_version
+        ELSE flight_scores.three_point_distance_calc_version
+      END,
+      three_point_distance_metadata = CASE
+        WHEN ${threePointNeedsUpdate}
+        THEN EXCLUDED.three_point_distance_metadata
+        ELSE flight_scores.three_point_distance_metadata
+      END,
+      four_point_distance_meters = CASE
+        WHEN ${fourPointNeedsUpdate}
+        THEN EXCLUDED.four_point_distance_meters
+        ELSE flight_scores.four_point_distance_meters
+      END,
+      four_point_distance_calc_version = CASE
+        WHEN ${fourPointNeedsUpdate}
+        THEN EXCLUDED.four_point_distance_calc_version
+        ELSE flight_scores.four_point_distance_calc_version
+      END,
+      four_point_distance_metadata = CASE
+        WHEN ${fourPointNeedsUpdate}
+        THEN EXCLUDED.four_point_distance_metadata
+        ELSE flight_scores.four_point_distance_metadata
+      END,
+      five_point_distance_meters = CASE
+        WHEN ${fivePointNeedsUpdate}
+        THEN EXCLUDED.five_point_distance_meters
+        ELSE flight_scores.five_point_distance_meters
+      END,
+      five_point_distance_calc_version = CASE
+        WHEN ${fivePointNeedsUpdate}
+        THEN EXCLUDED.five_point_distance_calc_version
+        ELSE flight_scores.five_point_distance_calc_version
+      END,
+      five_point_distance_metadata = CASE
+        WHEN ${fivePointNeedsUpdate}
+        THEN EXCLUDED.five_point_distance_metadata
+        ELSE flight_scores.five_point_distance_metadata
+      END,
       six_point_distance_meters = CASE
-        WHEN flight_scores.six_point_distance_calc_version IS NULL
-          OR flight_scores.six_point_distance_calc_version < ${SIX_POINT_DISTANCE_CALC_VERSION}
-          OR (
-            flight_scores.six_point_distance_calc_version = ${SIX_POINT_DISTANCE_CALC_VERSION}
-            AND (
-              flight_scores.six_point_distance_meters IS NULL
-              OR flight_scores.six_point_distance_metadata IS NULL
-            )
-          )
+        WHEN ${sixPointNeedsUpdate}
         THEN EXCLUDED.six_point_distance_meters
         ELSE flight_scores.six_point_distance_meters
       END,
       six_point_distance_calc_version = CASE
-        WHEN flight_scores.six_point_distance_calc_version IS NULL
-          OR flight_scores.six_point_distance_calc_version < ${SIX_POINT_DISTANCE_CALC_VERSION}
-          OR (
-            flight_scores.six_point_distance_calc_version = ${SIX_POINT_DISTANCE_CALC_VERSION}
-            AND (
-              flight_scores.six_point_distance_meters IS NULL
-              OR flight_scores.six_point_distance_metadata IS NULL
-            )
-          )
+        WHEN ${sixPointNeedsUpdate}
         THEN EXCLUDED.six_point_distance_calc_version
         ELSE flight_scores.six_point_distance_calc_version
       END,
       six_point_distance_metadata = CASE
-        WHEN flight_scores.six_point_distance_calc_version IS NULL
-          OR flight_scores.six_point_distance_calc_version < ${SIX_POINT_DISTANCE_CALC_VERSION}
-          OR (
-            flight_scores.six_point_distance_calc_version = ${SIX_POINT_DISTANCE_CALC_VERSION}
-            AND (
-              flight_scores.six_point_distance_meters IS NULL
-              OR flight_scores.six_point_distance_metadata IS NULL
-            )
-          )
+        WHEN ${sixPointNeedsUpdate}
         THEN EXCLUDED.six_point_distance_metadata
         ELSE flight_scores.six_point_distance_metadata
       END
-    WHERE flight_scores.total_distance_calc_version IS NULL
-      OR flight_scores.total_distance_calc_version < ${TOTAL_DISTANCE_CALC_VERSION}
-      OR (
-        flight_scores.total_distance_calc_version = ${TOTAL_DISTANCE_CALC_VERSION}
-        AND (
-          flight_scores.total_distance_meters IS NULL
-          OR flight_scores.total_distance_metadata IS NULL
-        )
-      )
-      OR flight_scores.six_point_distance_calc_version IS NULL
-      OR flight_scores.six_point_distance_calc_version < ${SIX_POINT_DISTANCE_CALC_VERSION}
-      OR (
-        flight_scores.six_point_distance_calc_version = ${SIX_POINT_DISTANCE_CALC_VERSION}
-        AND (
-          flight_scores.six_point_distance_meters IS NULL
-          OR flight_scores.six_point_distance_metadata IS NULL
-        )
-      )
+    WHERE ${totalNeedsUpdate}
+      OR ${threePointNeedsUpdate}
+      OR ${fourPointNeedsUpdate}
+      OR ${fivePointNeedsUpdate}
+      OR ${sixPointNeedsUpdate}
     RETURNING flight_id AS "flightId"
   `);
   return result.rows.length > 0;
@@ -319,19 +428,23 @@ function currentTotalValues(flight: FlightScoreCandidate): Pick<
   };
 }
 
-function currentSixPointValues(flight: FlightScoreCandidate): Pick<
-  FlightScoreValues,
-  'sixPointDistanceMeters' | 'sixPointDistanceCalcVersion' | 'sixPointDistanceMetadata'
-> {
-  if (
-    flight.sixPointDistanceMeters === null
-    || flight.sixPointDistanceCalcVersion === null
-    || flight.sixPointDistanceMetadata === null
-  ) throw new Error('Current six-point score is incomplete.');
+function currentRouteValues<PointCount extends 3 | 4 | 5 | 6>(
+  distanceMeters: number | null,
+  calculationVersion: number | null,
+  metadata: unknown | null,
+  label: string,
+): {
+  distanceMeters: number;
+  calculationVersion: number;
+  metadata: PointDistanceMetadata<PointCount>;
+} {
+  if (distanceMeters === null || calculationVersion === null || metadata === null) {
+    throw new Error(`Current ${label} score is incomplete.`);
+  }
   return {
-    sixPointDistanceMeters: flight.sixPointDistanceMeters,
-    sixPointDistanceCalcVersion: flight.sixPointDistanceCalcVersion,
-    sixPointDistanceMetadata: flight.sixPointDistanceMetadata as SixPointDistanceMetadata,
+    distanceMeters,
+    calculationVersion,
+    metadata: metadata as PointDistanceMetadata<PointCount>,
   };
 }
 
@@ -349,8 +462,8 @@ export async function runFlightScoreBackfill(
   const loadTrackPoints = options.loadTrackPoints
     ?? ((flightId) => selectOrderedTrackPoints(database, flightId));
   const calculateTotal = options.calculateTotalDistance ?? totalDistanceMeters;
-  const calculateSixPoint = options.calculateSixPointDistance
-    ?? calculateSixPointDistanceInWorker;
+  const calculateNPoint = options.calculateNPointDistances
+    ?? calculateNPointDistancesInWorker;
   const writeScores = options.writeScores
     ?? ((flightId, values) => upsertFlightScores(database, flightId, values));
   const summary: FlightScoreBackfillSummary = {
@@ -361,6 +474,12 @@ export async function runFlightScoreBackfill(
     skipped: 0,
     written: 0,
     failed: 0,
+    routes: {
+      threePoint: { calculated: 0, skipped: 0, updated: 0 },
+      fourPoint: { calculated: 0, skipped: 0, updated: 0 },
+      fivePoint: { calculated: 0, skipped: 0, updated: 0 },
+      sixPoint: { calculated: 0, skipped: 0, updated: 0 },
+    },
   };
 
   let cursor: string | undefined;
@@ -370,8 +489,36 @@ export async function runFlightScoreBackfill(
     for (const flight of batch) {
       summary.inspected += 1;
       const needsTotal = totalScoreNeedsCalculation(flight);
-      const needsSixPoint = sixPointScoreNeedsCalculation(flight);
-      if (!needsTotal && !needsSixPoint) {
+      const needsThreePoint = routeScoreNeedsCalculation(
+        flight.threePointDistanceCalcVersion,
+        flight.threePointDistanceMeters,
+        flight.threePointDistanceMetadata,
+        THREE_POINT_DISTANCE_CALC_VERSION,
+      );
+      const needsFourPoint = routeScoreNeedsCalculation(
+        flight.fourPointDistanceCalcVersion,
+        flight.fourPointDistanceMeters,
+        flight.fourPointDistanceMetadata,
+        FOUR_POINT_DISTANCE_CALC_VERSION,
+      );
+      const needsFivePoint = routeScoreNeedsCalculation(
+        flight.fivePointDistanceCalcVersion,
+        flight.fivePointDistanceMeters,
+        flight.fivePointDistanceMetadata,
+        FIVE_POINT_DISTANCE_CALC_VERSION,
+      );
+      const needsSixPoint = routeScoreNeedsCalculation(
+        flight.sixPointDistanceCalcVersion,
+        flight.sixPointDistanceMeters,
+        flight.sixPointDistanceMetadata,
+        SIX_POINT_DISTANCE_CALC_VERSION,
+      );
+      const needsAnyRoute = needsThreePoint || needsFourPoint || needsFivePoint || needsSixPoint;
+      if (!needsThreePoint) summary.routes.threePoint.skipped += 1;
+      if (!needsFourPoint) summary.routes.fourPoint.skipped += 1;
+      if (!needsFivePoint) summary.routes.fivePoint.skipped += 1;
+      if (!needsSixPoint) summary.routes.sixPoint.skipped += 1;
+      if (!needsTotal && !needsAnyRoute) {
         summary.skipped += 1;
         continue;
       }
@@ -385,16 +532,84 @@ export async function runFlightScoreBackfill(
               totalDistanceMetadata: {},
             }
           : currentTotalValues(flight);
-        const sixPointValues = needsSixPoint
-          ? (() => calculateSixPoint(points).then((distance) => ({
-              sixPointDistanceMeters: distance.distanceMeters,
-              sixPointDistanceCalcVersion: SIX_POINT_DISTANCE_CALC_VERSION,
-              sixPointDistanceMetadata: mapSixPointDistanceMetadata(points, distance),
-            })))()
-          : Promise.resolve(currentSixPointValues(flight));
-        const values: FlightScoreValues = { ...totalValues, ...await sixPointValues };
+        const calculatedMetadata = needsAnyRoute
+          ? mapNPointDistanceMetadata(points, await calculateNPoint(points))
+          : undefined;
+        const threePoint = needsThreePoint
+          ? {
+              distanceMeters: calculatedMetadata!.threePointDistance.distanceMeters,
+              calculationVersion: THREE_POINT_DISTANCE_CALC_VERSION,
+              metadata: calculatedMetadata!.threePointDistance,
+            }
+          : currentRouteValues<3>(
+              flight.threePointDistanceMeters,
+              flight.threePointDistanceCalcVersion,
+              flight.threePointDistanceMetadata,
+              'three-point',
+            );
+        const fourPoint = needsFourPoint
+          ? {
+              distanceMeters: calculatedMetadata!.fourPointDistance.distanceMeters,
+              calculationVersion: FOUR_POINT_DISTANCE_CALC_VERSION,
+              metadata: calculatedMetadata!.fourPointDistance,
+            }
+          : currentRouteValues<4>(
+              flight.fourPointDistanceMeters,
+              flight.fourPointDistanceCalcVersion,
+              flight.fourPointDistanceMetadata,
+              'four-point',
+            );
+        const fivePoint = needsFivePoint
+          ? {
+              distanceMeters: calculatedMetadata!.fivePointDistance.distanceMeters,
+              calculationVersion: FIVE_POINT_DISTANCE_CALC_VERSION,
+              metadata: calculatedMetadata!.fivePointDistance,
+            }
+          : currentRouteValues<5>(
+              flight.fivePointDistanceMeters,
+              flight.fivePointDistanceCalcVersion,
+              flight.fivePointDistanceMetadata,
+              'five-point',
+            );
+        const sixPoint = needsSixPoint
+          ? {
+              distanceMeters: calculatedMetadata!.sixPointDistance.distanceMeters,
+              calculationVersion: SIX_POINT_DISTANCE_CALC_VERSION,
+              metadata: calculatedMetadata!.sixPointDistance,
+            }
+          : currentRouteValues<6>(
+              flight.sixPointDistanceMeters,
+              flight.sixPointDistanceCalcVersion,
+              flight.sixPointDistanceMetadata,
+              'six-point',
+            );
+        const values: FlightScoreValues = {
+          ...totalValues,
+          threePointDistanceMeters: threePoint.distanceMeters,
+          threePointDistanceCalcVersion: threePoint.calculationVersion,
+          threePointDistanceMetadata: threePoint.metadata,
+          fourPointDistanceMeters: fourPoint.distanceMeters,
+          fourPointDistanceCalcVersion: fourPoint.calculationVersion,
+          fourPointDistanceMetadata: fourPoint.metadata,
+          fivePointDistanceMeters: fivePoint.distanceMeters,
+          fivePointDistanceCalcVersion: fivePoint.calculationVersion,
+          fivePointDistanceMetadata: fivePoint.metadata,
+          sixPointDistanceMeters: sixPoint.distanceMeters,
+          sixPointDistanceCalcVersion: sixPoint.calculationVersion,
+          sixPointDistanceMetadata: sixPoint.metadata,
+        };
         summary.calculated += 1;
-        if (options.apply && await writeScores(flight.id, values)) summary.written += 1;
+        if (needsThreePoint) summary.routes.threePoint.calculated += 1;
+        if (needsFourPoint) summary.routes.fourPoint.calculated += 1;
+        if (needsFivePoint) summary.routes.fivePoint.calculated += 1;
+        if (needsSixPoint) summary.routes.sixPoint.calculated += 1;
+        if (options.apply && await writeScores(flight.id, values)) {
+          summary.written += 1;
+          if (needsThreePoint) summary.routes.threePoint.updated += 1;
+          if (needsFourPoint) summary.routes.fourPoint.updated += 1;
+          if (needsFivePoint) summary.routes.fivePoint.updated += 1;
+          if (needsSixPoint) summary.routes.sixPoint.updated += 1;
+        }
       } catch {
         summary.failed += 1;
         logger.error(`Unable to calculate flight scores for flight ${flight.id}.`);
@@ -414,6 +629,22 @@ export function printFlightScoreBackfillSummary(
   logger.log(`Flights calculated: ${summary.calculated}`);
   logger.log(`Flights skipped: ${summary.skipped}`);
   logger.log(`Score rows written: ${summary.written}`);
+  logger.log(
+    `3-point routes: ${summary.routes.threePoint.calculated} calculated, `
+      + `${summary.routes.threePoint.skipped} skipped, ${summary.routes.threePoint.updated} updated`,
+  );
+  logger.log(
+    `4-point routes: ${summary.routes.fourPoint.calculated} calculated, `
+      + `${summary.routes.fourPoint.skipped} skipped, ${summary.routes.fourPoint.updated} updated`,
+  );
+  logger.log(
+    `5-point routes: ${summary.routes.fivePoint.calculated} calculated, `
+      + `${summary.routes.fivePoint.skipped} skipped, ${summary.routes.fivePoint.updated} updated`,
+  );
+  logger.log(
+    `6-point routes: ${summary.routes.sixPoint.calculated} calculated, `
+      + `${summary.routes.sixPoint.skipped} skipped, ${summary.routes.sixPoint.updated} updated`,
+  );
   logger.log(`Failures: ${summary.failed}`);
 }
 
