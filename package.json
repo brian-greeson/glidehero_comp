@@ -32,6 +32,7 @@
     "backfill:arena-leadership": "tsx --env-file-if-exists=.env src/scripts/backfillArenaLeadership.ts",
     "backfill:user-arena-progress": "tsx --env-file-if-exists=.env src/scripts/backfillUserArenaProgress.ts",
     "backfill:user-achievement-progress": "tsx --env-file-if-exists=.env src/scripts/backfillUserAchievementProgress.ts",
+    "rebuild:user-history": "tsx --env-file-if-exists=.env src/scripts/rebuildUserHistory.ts",
     "verify:release-backfills": "tsx --env-file-if-exists=.env src/scripts/verifyReleaseBackfills.ts"
   },
   "author": "Mountain Sentry",

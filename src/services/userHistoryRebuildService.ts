@@ -22,7 +22,10 @@ import { createActivityService } from './activityService.js';
 import { gridClaimCandidateCtes } from './gridClaimCandidates.js';
 import { lockUserProgression } from './gridClaimService.js';
 import { createProgressionAchievementService } from './progressionAchievementService.js';
-import { createUserAchievementProgressService } from './userAchievementProgressService.js';
+import {
+  createUserAchievementProgressService,
+  type UserAchievementProgressService,
+} from './userAchievementProgressService.js';
 
 type RebuildTransaction = Parameters<Parameters<Database['transaction']>[0]>[0];
 
@@ -30,6 +33,42 @@ type CompletedFlight = {
   id: string;
   startedAt: Date | null;
 };
+
+export type UserHistoryRebuildFlight = {
+  id: string;
+  startedAt: Date;
+};
+
+export type UserHistoryRebuildSnapshot = {
+  userId: string;
+  email: string;
+  completedFlights: readonly UserHistoryRebuildFlight[];
+};
+
+export type UserHistoryRebuildInspection =
+  | { status: 'not_found'; email: string }
+  | {
+      status: 'no_completed_flights';
+      userId: string;
+      email: string;
+      completedFlightCount: 0;
+      invalidFlightIds: [];
+    }
+  | {
+      status: 'invalid_flight_history';
+      userId: string;
+      email: string;
+      completedFlightCount: number;
+      invalidFlightIds: string[];
+    }
+  | {
+      status: 'ready';
+      userId: string;
+      email: string;
+      completedFlightCount: number;
+      invalidFlightIds: [];
+      snapshot: UserHistoryRebuildSnapshot;
+    };
 
 type CandidateCell = { x: number; y: number };
 
@@ -72,10 +111,46 @@ export type UserHistoryRebuildService = {
   rebuild(userId: string): Promise<UserHistoryRebuildResult>;
 };
 
+export const USER_HISTORY_REBUILD_BATCH_SIZE = 5;
+
+export type BatchedUserHistoryRebuildSummary = UserHistoryRebuildSummary & {
+  totalBatches: number;
+  committedBatches: number;
+  committedFlights: number;
+  resetCommitted: boolean;
+  finalizationCommitted: boolean;
+};
+
+export type UserHistoryBatchedRebuildService = UserHistoryRebuildService & {
+  inspectByEmail(email: string): Promise<UserHistoryRebuildInspection>;
+  rebuildSnapshot(
+    snapshot: UserHistoryRebuildSnapshot,
+    callbacks?: {
+      onBatchCommitted?: (progress: {
+        batchNumber: number;
+        totalBatches: number;
+        flightCount: number;
+      }) => void;
+    },
+  ): Promise<BatchedUserHistoryRebuildSummary>;
+};
+
+export class BatchedUserHistoryRebuildError extends Error {
+  constructor(
+    public readonly summary: BatchedUserHistoryRebuildSummary,
+    cause: unknown,
+  ) {
+    super(`Batched user history rebuild failed: ${cause instanceof Error ? cause.message : String(cause)}`, { cause });
+    this.name = 'BatchedUserHistoryRebuildError';
+  }
+}
+
 export type UserHistoryRebuildOptions = {
   cellSize: number;
   /** Integration-test seam used to prove the caller-owned transaction is atomic. */
   afterReset?: (transaction: RebuildTransaction) => Promise<void>;
+  /** Integration-test seam used to prove earlier flight batches remain committed. */
+  afterBatch?: (transaction: RebuildTransaction, batchNumber: number) => Promise<void>;
 };
 
 function parseCandidateCells(value: unknown): CandidateCell[] {
@@ -167,8 +242,8 @@ async function restoreLeadershipAchievements(
   }
 }
 
-async function countUserHistory(transaction: RebuildTransaction, userId: string) {
-  const [counts] = await transaction.execute<{
+async function countUserHistory(database: Pick<Database, 'execute'>, userId: string) {
+  const [counts] = await database.execute<{
     achievements: number | string;
     achievementRecords: number | string;
     achievementRecordEvents: number | string;
@@ -185,15 +260,181 @@ async function countUserHistory(transaction: RebuildTransaction, userId: string)
   };
 }
 
+function emptySummary(completedFlights: number): UserHistoryRebuildSummary {
+  return {
+    completedFlights,
+    activitiesDeleted: 0,
+    achievementsDeleted: 0,
+    achievementRecordEventsDeleted: 0,
+    achievementRecordsDeleted: 0,
+    flightProgressDeleted: 0,
+    userAchievementProgressDeleted: 0,
+    activitiesCreated: 0,
+    achievementsCreated: 0,
+    achievementRecordEventsCreated: 0,
+    achievementRecordsCreated: 0,
+    flightProgressCreated: 0,
+  };
+}
+
+async function resetUserHistory(
+  transaction: RebuildTransaction,
+  userId: string,
+  completedFlightCount: number,
+): Promise<UserHistoryRebuildSummary> {
+  const summary = emptySummary(completedFlightCount);
+  summary.activitiesDeleted = (await transaction.delete(activities)
+    .where(eq(activities.actorUserId, userId)).returning({ id: activities.id })).length;
+  summary.achievementRecordEventsDeleted = (await transaction.delete(achievementRecordEvents)
+    .where(eq(achievementRecordEvents.userId, userId)).returning({ id: achievementRecordEvents.id })).length;
+  summary.achievementRecordsDeleted = (await transaction.delete(achievementRecords)
+    .where(eq(achievementRecords.userId, userId)).returning({ id: achievementRecords.id })).length;
+  summary.achievementsDeleted = (await transaction.delete(achievements)
+    .where(eq(achievements.userId, userId)).returning({ id: achievements.id })).length;
+  summary.flightProgressDeleted = (await transaction.delete(flightProgress)
+    .where(eq(flightProgress.userId, userId)).returning({ id: flightProgress.flightId })).length;
+  summary.userAchievementProgressDeleted = (await transaction.delete(userAchievementProgress)
+    .where(eq(userAchievementProgress.userId, userId)).returning({ id: userAchievementProgress.userId })).length;
+  return summary;
+}
+
+type UserHistoryReplayState = {
+  seenCells: Set<string>;
+  totalRecord: number | null;
+  enclosedRecord: number | null;
+  historicalFlightIds: string[];
+  finalArenaSnapshot: ArenaAchievementSnapshot | null;
+};
+
+function emptyReplayState(): UserHistoryReplayState {
+  return {
+    seenCells: new Set<string>(),
+    totalRecord: null,
+    enclosedRecord: null,
+    historicalFlightIds: [],
+    finalArenaSnapshot: null,
+  };
+}
+
+async function replayFlights(
+  transaction: RebuildTransaction,
+  userId: string,
+  completedFlights: readonly UserHistoryRebuildFlight[],
+  state: UserHistoryReplayState,
+  cellSize: number,
+): Promise<{ activitiesCreated: number; flightProgressCreated: number }> {
+  const progressionAchievements = createProgressionAchievementService();
+  const activity = createActivityService();
+
+  for (const flight of completedFlights) {
+    const candidates = await selectCandidateCells(transaction, flight.id, cellSize);
+    const previousTotal = state.seenCells.size;
+    const newCells = candidates.cells.filter((cell) => !state.seenCells.has(cellKey(cell)));
+    for (const cell of candidates.cells) state.seenCells.add(cellKey(cell));
+    const personalCellTotalAfter = state.seenCells.size;
+
+    await transaction.insert(flightProgress).values({
+      flightId: flight.id,
+      userId,
+      directCellCount: candidates.directCellCount,
+      enclosedCellCount: candidates.enclosedCellCount,
+      newPersonalCellCount: newCells.length,
+      personalCellTotalAfter,
+      progressionVersion: 1,
+      evaluatedAt: flight.startedAt,
+      updatedAt: flight.startedAt,
+    });
+
+    await progressionAchievements.awardUniqueCellMilestones(transaction, {
+      userId,
+      sourceFlightId: flight.id,
+      earnedAt: flight.startedAt,
+      flightStartedAt: flight.startedAt,
+      previousTotal,
+      newTotal: personalCellTotalAfter,
+      newCells: newCells.length,
+    });
+    await progressionAchievements.awardPersonalBestAchievements(transaction, {
+      userId,
+      sourceFlightId: flight.id,
+      earnedAt: flight.startedAt,
+      flightStartedAt: flight.startedAt,
+      directCells: candidates.directCellCount,
+      enclosedCells: candidates.enclosedCellCount,
+      previousRecords: { totalCells: state.totalRecord, enclosedCells: state.enclosedRecord },
+    });
+
+    const totalCells = candidates.directCellCount + candidates.enclosedCellCount;
+    if (totalCells > 0 && (state.totalRecord === null || totalCells > state.totalRecord)) {
+      state.totalRecord = totalCells;
+    }
+    if (candidates.enclosedCellCount > 0
+      && (state.enclosedRecord === null || candidates.enclosedCellCount > state.enclosedRecord)) {
+      state.enclosedRecord = candidates.enclosedCellCount;
+    }
+
+    state.historicalFlightIds.push(flight.id);
+    const arenaEvaluation = await evaluateArenaAchievementsInTransaction(transaction, {
+      userId,
+      sourceFlightId: flight.id,
+      cellSize,
+      earnedAt: flight.startedAt,
+      historicalFlightIds: state.historicalFlightIds,
+    });
+    if (!arenaEvaluation.snapshot) throw new Error('Arena achievement replay returned no progress snapshot.');
+    state.finalArenaSnapshot = arenaEvaluation.snapshot;
+
+    await activity.publishFlightInTransaction(transaction, {
+      actorUserId: userId,
+      sourceFlightId: flight.id,
+      publishedAt: flight.startedAt,
+    });
+  }
+
+  return {
+    activitiesCreated: completedFlights.length,
+    flightProgressCreated: completedFlights.length,
+  };
+}
+
+async function finalizeUserHistory(
+  transaction: RebuildTransaction,
+  userId: string,
+  state: UserHistoryReplayState,
+  progressProjection: UserAchievementProgressService,
+): Promise<void> {
+  await restoreLeadershipAchievements(transaction, userId);
+  if (!state.finalArenaSnapshot) throw new Error('Achievement history replay returned no final progress snapshot.');
+  await progressProjection.upsertFromArenaSnapshotInTransaction(
+    transaction,
+    userId,
+    state.finalArenaSnapshot,
+    { promoteToComplete: true },
+  );
+}
+
+function assignCreatedHistoryCounts(
+  summary: UserHistoryRebuildSummary,
+  counts: Awaited<ReturnType<typeof countUserHistory>>,
+): void {
+  summary.achievementsCreated = counts.achievements;
+  summary.achievementRecordsCreated = counts.achievementRecords;
+  summary.achievementRecordEventsCreated = counts.achievementRecordEvents;
+}
+
+function validCompletedFlights(completedFlights: readonly CompletedFlight[]): UserHistoryRebuildFlight[] {
+  return completedFlights.map((flight) => {
+    if (!flight.startedAt) throw new Error(`Completed flight ${flight.id} is missing its flight date.`);
+    return { id: flight.id, startedAt: flight.startedAt };
+  });
+}
+
 /** Rebuild one pilot's derived achievement and Activity history from flight time. */
 export function createUserHistoryRebuildService(
   database: Database,
   options: UserHistoryRebuildOptions,
-): UserHistoryRebuildService {
-  const progressionAchievements = createProgressionAchievementService();
-  const activity = createActivityService();
+): UserHistoryBatchedRebuildService {
   const progressProjection = createUserAchievementProgressService(database, { cellSize: options.cellSize });
-
   return {
     rebuild(userId) {
       return database.transaction(async (transaction): Promise<UserHistoryRebuildResult> => {
@@ -218,117 +459,138 @@ export function createUserHistoryRebuildService(
           return { status: 'invalid_flight_history' };
         }
 
-        const summary: UserHistoryRebuildSummary = {
-          completedFlights: completedFlights.length,
-          activitiesDeleted: (await transaction.delete(activities)
-            .where(eq(activities.actorUserId, userId)).returning({ id: activities.id })).length,
-          achievementRecordEventsDeleted: (await transaction.delete(achievementRecordEvents)
-            .where(eq(achievementRecordEvents.userId, userId)).returning({ id: achievementRecordEvents.id })).length,
-          achievementRecordsDeleted: (await transaction.delete(achievementRecords)
-            .where(eq(achievementRecords.userId, userId)).returning({ id: achievementRecords.id })).length,
-          achievementsDeleted: (await transaction.delete(achievements)
-            .where(eq(achievements.userId, userId)).returning({ id: achievements.id })).length,
-          flightProgressDeleted: (await transaction.delete(flightProgress)
-            .where(eq(flightProgress.userId, userId)).returning({ id: flightProgress.flightId })).length,
-          userAchievementProgressDeleted: (await transaction.delete(userAchievementProgress)
-            .where(eq(userAchievementProgress.userId, userId)).returning({ id: userAchievementProgress.userId })).length,
-          activitiesCreated: 0,
-          achievementsCreated: 0,
-          achievementRecordEventsCreated: 0,
-          achievementRecordsCreated: 0,
-          flightProgressCreated: 0,
-        };
-
+        const summary = await resetUserHistory(transaction, userId, completedFlights.length);
         await options.afterReset?.(transaction);
-
-        const seenCells = new Set<string>();
-        let totalRecord: number | null = null;
-        let enclosedRecord: number | null = null;
-        const historicalFlightIds: string[] = [];
-
-        let finalArenaSnapshot: ArenaAchievementSnapshot | null = null;
-        for (const flight of completedFlights as Array<CompletedFlight & { startedAt: Date }>) {
-          const candidates = await selectCandidateCells(transaction, flight.id, options.cellSize);
-          const previousTotal = seenCells.size;
-          const newCells = candidates.cells.filter((cell) => !seenCells.has(cellKey(cell)));
-          for (const cell of candidates.cells) seenCells.add(cellKey(cell));
-          const personalCellTotalAfter = seenCells.size;
-
-          await transaction.insert(flightProgress).values({
-            flightId: flight.id,
-            userId,
-            directCellCount: candidates.directCellCount,
-            enclosedCellCount: candidates.enclosedCellCount,
-            newPersonalCellCount: newCells.length,
-            personalCellTotalAfter,
-            progressionVersion: 1,
-            evaluatedAt: flight.startedAt,
-            updatedAt: flight.startedAt,
-          });
-          summary.flightProgressCreated += 1;
-
-          await progressionAchievements.awardUniqueCellMilestones(transaction, {
-            userId,
-            sourceFlightId: flight.id,
-            earnedAt: flight.startedAt,
-            flightStartedAt: flight.startedAt,
-            previousTotal,
-            newTotal: personalCellTotalAfter,
-            newCells: newCells.length,
-          });
-          await progressionAchievements.awardPersonalBestAchievements(transaction, {
-            userId,
-            sourceFlightId: flight.id,
-            earnedAt: flight.startedAt,
-            flightStartedAt: flight.startedAt,
-            directCells: candidates.directCellCount,
-            enclosedCells: candidates.enclosedCellCount,
-            previousRecords: { totalCells: totalRecord, enclosedCells: enclosedRecord },
-          });
-
-          const totalCells = candidates.directCellCount + candidates.enclosedCellCount;
-          if (totalCells > 0 && (totalRecord === null || totalCells > totalRecord)) totalRecord = totalCells;
-          if (candidates.enclosedCellCount > 0
-            && (enclosedRecord === null || candidates.enclosedCellCount > enclosedRecord)) {
-            enclosedRecord = candidates.enclosedCellCount;
-          }
-
-          historicalFlightIds.push(flight.id);
-          const arenaEvaluation = await evaluateArenaAchievementsInTransaction(transaction, {
-            userId,
-            sourceFlightId: flight.id,
-            cellSize: options.cellSize,
-            earnedAt: flight.startedAt,
-            historicalFlightIds,
-          });
-          if (!arenaEvaluation.snapshot) throw new Error('Arena achievement replay returned no progress snapshot.');
-          finalArenaSnapshot = arenaEvaluation.snapshot;
-        }
-
-        await restoreLeadershipAchievements(transaction, userId);
-        if (!finalArenaSnapshot) throw new Error('Achievement history replay returned no final progress snapshot.');
-        await progressProjection.upsertFromArenaSnapshotInTransaction(
+        const state = emptyReplayState();
+        const rebuiltRows = await replayFlights(
           transaction,
           userId,
-          finalArenaSnapshot,
-          { promoteToComplete: true },
+          validCompletedFlights(completedFlights),
+          state,
+          options.cellSize,
         );
-
-        for (const flight of completedFlights as Array<CompletedFlight & { startedAt: Date }>) {
-          await activity.publishFlightInTransaction(transaction, {
-            actorUserId: userId,
-            sourceFlightId: flight.id,
-            publishedAt: flight.startedAt,
-          });
-          summary.activitiesCreated += 1;
-        }
-
-        const rebuilt = await countUserHistory(transaction, userId);
-        summary.achievementsCreated = rebuilt.achievements;
-        summary.achievementRecordsCreated = rebuilt.achievementRecords;
-        summary.achievementRecordEventsCreated = rebuilt.achievementRecordEvents;
+        summary.activitiesCreated = rebuiltRows.activitiesCreated;
+        summary.flightProgressCreated = rebuiltRows.flightProgressCreated;
+        await finalizeUserHistory(transaction, userId, state, progressProjection);
+        assignCreatedHistoryCounts(summary, await countUserHistory(transaction, userId));
         return { status: 'completed', summary };
       });
+    },
+
+    async inspectByEmail(email) {
+      const normalizedEmail = email.trim().toLowerCase();
+      const [user] = await database
+        .select({ id: users.id, email: users.email })
+        .from(users)
+        .where(eq(users.email, normalizedEmail))
+        .limit(1);
+      if (!user) return { status: 'not_found', email: normalizedEmail };
+
+      const completedFlights = await database
+        .select({ id: flights.id, startedAt: flights.startedAt })
+        .from(flights)
+        .where(and(eq(flights.userId, user.id), eq(flights.processingStatus, 'completed')))
+        .orderBy(asc(flights.startedAt), asc(flights.id));
+      const invalidFlightIds = completedFlights
+        .filter((flight) => flight.startedAt === null)
+        .map((flight) => flight.id);
+      const base = {
+        userId: user.id,
+        email: user.email,
+        completedFlightCount: completedFlights.length,
+        invalidFlightIds,
+      };
+      if (completedFlights.length === 0) {
+        return {
+          status: 'no_completed_flights',
+          userId: user.id,
+          email: user.email,
+          completedFlightCount: 0,
+          invalidFlightIds: [],
+        };
+      }
+      if (invalidFlightIds.length > 0) return { ...base, status: 'invalid_flight_history' };
+      const snapshot: UserHistoryRebuildSnapshot = {
+        userId: user.id,
+        email: user.email,
+        completedFlights: validCompletedFlights(completedFlights),
+      };
+      return { ...base, status: 'ready', invalidFlightIds: [], snapshot };
+    },
+
+    async rebuildSnapshot(snapshot, callbacks) {
+      if (snapshot.completedFlights.length === 0) {
+        throw new Error('A user history rebuild snapshot must contain at least one completed flight.');
+      }
+      const totalBatches = Math.ceil(snapshot.completedFlights.length / USER_HISTORY_REBUILD_BATCH_SIZE);
+      const summary: BatchedUserHistoryRebuildSummary = {
+        ...emptySummary(snapshot.completedFlights.length),
+        totalBatches,
+        committedBatches: 0,
+        committedFlights: 0,
+        resetCommitted: false,
+        finalizationCommitted: false,
+      };
+      const state = emptyReplayState();
+
+      try {
+        const deleted = await database.transaction(async (transaction) => {
+          await lockArenaCatalogShared(transaction);
+          await lockUserProgression(transaction, snapshot.userId);
+          const result = await resetUserHistory(
+            transaction,
+            snapshot.userId,
+            snapshot.completedFlights.length,
+          );
+          await options.afterReset?.(transaction);
+          return result;
+        });
+        Object.assign(summary, deleted);
+        summary.resetCommitted = true;
+
+        for (let batchIndex = 0; batchIndex < totalBatches; batchIndex += 1) {
+          const start = batchIndex * USER_HISTORY_REBUILD_BATCH_SIZE;
+          const batch = snapshot.completedFlights.slice(start, start + USER_HISTORY_REBUILD_BATCH_SIZE);
+          const created = await database.transaction(async (transaction) => {
+            await lockArenaCatalogShared(transaction);
+            await lockUserProgression(transaction, snapshot.userId);
+            const result = await replayFlights(
+              transaction,
+              snapshot.userId,
+              batch,
+              state,
+              options.cellSize,
+            );
+            await options.afterBatch?.(transaction, batchIndex + 1);
+            return result;
+          });
+          summary.committedBatches += 1;
+          summary.committedFlights += batch.length;
+          summary.activitiesCreated += created.activitiesCreated;
+          summary.flightProgressCreated += created.flightProgressCreated;
+          callbacks?.onBatchCommitted?.({
+            batchNumber: batchIndex + 1,
+            totalBatches,
+            flightCount: batch.length,
+          });
+        }
+
+        await database.transaction(async (transaction) => {
+          await lockArenaCatalogShared(transaction);
+          await lockUserProgression(transaction, snapshot.userId);
+          await finalizeUserHistory(transaction, snapshot.userId, state, progressProjection);
+        });
+        summary.finalizationCommitted = true;
+        assignCreatedHistoryCounts(summary, await countUserHistory(database, snapshot.userId));
+        return summary;
+      } catch (error) {
+        try {
+          assignCreatedHistoryCounts(summary, await countUserHistory(database, snapshot.userId));
+        } catch {
+          // Preserve the original rebuild error if diagnostic counting also fails.
+        }
+        throw new BatchedUserHistoryRebuildError(summary, error);
+      }
     },
   };
 }

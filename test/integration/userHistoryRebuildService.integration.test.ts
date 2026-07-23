@@ -12,7 +12,10 @@ import {
   userAchievementProgress,
   users,
 } from '../../src/db/schema.js';
-import { createUserHistoryRebuildService } from '../../src/services/userHistoryRebuildService.js';
+import {
+  BatchedUserHistoryRebuildError,
+  createUserHistoryRebuildService,
+} from '../../src/services/userHistoryRebuildService.js';
 import { resetAndMigrateTestDatabase } from './database.js';
 
 type ProjectedCoordinate = readonly [x: number, y: number];
@@ -34,7 +37,7 @@ afterAll(async () => {
 async function createUser(label: string) {
   const [user] = await database.db.insert(users).values({
     email: `history-${label}-${crypto.randomUUID()}@example.com`,
-  }).returning({ id: users.id });
+  }).returning({ id: users.id, email: users.email });
   if (!user) throw new Error('User insert returned no row.');
   return user;
 }
@@ -238,10 +241,22 @@ describe('userHistoryRebuildService', () => {
 
   it('returns controlled statuses without changing history when flights are absent or missing startedAt', async () => {
     const noFlights = await createUser('no-flights');
-    await expect(createUserHistoryRebuildService(database.db, { cellSize: 1_000 }).rebuild(noFlights.id))
+    const service = createUserHistoryRebuildService(database.db, { cellSize: 1_000 });
+    await expect(service.rebuild(noFlights.id))
       .resolves.toEqual({ status: 'no_completed_flights' });
-    await expect(createUserHistoryRebuildService(database.db, { cellSize: 1_000 }).rebuild(crypto.randomUUID()))
+    await expect(service.inspectByEmail(` ${noFlights.email.toUpperCase()} `)).resolves.toEqual({
+      status: 'no_completed_flights',
+      userId: noFlights.id,
+      email: noFlights.email,
+      completedFlightCount: 0,
+      invalidFlightIds: [],
+    });
+    await expect(service.rebuild(crypto.randomUUID()))
       .resolves.toEqual({ status: 'not_found' });
+    await expect(service.inspectByEmail('missing@example.com')).resolves.toEqual({
+      status: 'not_found',
+      email: 'missing@example.com',
+    });
 
     const pilot = await createUser('invalid');
     const reactor = await createUser('reactor');
@@ -255,12 +270,147 @@ describe('userHistoryRebuildService', () => {
     });
     await seedDerivedHistory(pilot.id, flightId, reactor.id);
 
-    await expect(createUserHistoryRebuildService(database.db, { cellSize: 1_000 }).rebuild(pilot.id))
+    await expect(service.rebuild(pilot.id))
       .resolves.toEqual({ status: 'invalid_flight_history' });
+    await expect(service.inspectByEmail(pilot.email)).resolves.toEqual({
+      status: 'invalid_flight_history',
+      userId: pilot.id,
+      email: pilot.email,
+      completedFlightCount: 1,
+      invalidFlightIds: [flightId],
+    });
     expect(await database.db.select().from(achievements).where(eq(achievements.userId, pilot.id))).toHaveLength(1);
     expect(await database.db.select().from(flightProgress).where(eq(flightProgress.userId, pilot.id))).toHaveLength(1);
     expect(await database.db.select().from(activities).where(eq(activities.actorUserId, pilot.id))).toHaveLength(1);
     expect(await database.db.select().from(activityReactions)).toHaveLength(1);
+  });
+
+  it('snapshots startup flights and rebuilds them in fixed batches of five', async () => {
+    const pilot = await createUser('batched');
+    const reactor = await createUser('batched-reactor');
+    const startupFlightIds: string[] = [];
+    for (let index = 0; index < 7; index += 1) {
+      const startedAt = new Date(Date.UTC(2026, 5, index + 1));
+      startupFlightIds.push(await createLineFlight({
+        userId: pilot.id,
+        startX: (index * 5_000) + 100,
+        endX: (index * 5_000) + 4_100,
+        startedAt,
+        createdAt: new Date(startedAt.getTime() + 60_000),
+        processedAt: new Date(startedAt.getTime() + 120_000),
+      }));
+    }
+    await seedDerivedHistory(pilot.id, startupFlightIds[0]!, reactor.id);
+
+    const service = createUserHistoryRebuildService(database.db, { cellSize: 1_000 });
+    const inspection = await service.inspectByEmail(pilot.email);
+    expect(inspection).toMatchObject({
+      status: 'ready',
+      userId: pilot.id,
+      completedFlightCount: 7,
+    });
+    if (inspection.status !== 'ready') throw new Error('Expected a ready rebuild snapshot.');
+
+    const laterStartedAt = new Date('2026-07-01T00:00:00Z');
+    const laterFlightId = await createLineFlight({
+      userId: pilot.id,
+      startX: 40_100,
+      endX: 44_100,
+      startedAt: laterStartedAt,
+      createdAt: new Date(laterStartedAt.getTime() + 60_000),
+      processedAt: new Date(laterStartedAt.getTime() + 120_000),
+    });
+    const committedBatchSizes: number[] = [];
+    const summary = await service.rebuildSnapshot(inspection.snapshot, {
+      onBatchCommitted: ({ flightCount }) => committedBatchSizes.push(flightCount),
+    });
+
+    expect(committedBatchSizes).toEqual([5, 2]);
+    expect(summary).toMatchObject({
+      completedFlights: 7,
+      totalBatches: 2,
+      committedBatches: 2,
+      committedFlights: 7,
+      resetCommitted: true,
+      finalizationCommitted: true,
+      activitiesCreated: 7,
+      flightProgressCreated: 7,
+    });
+    expect(await database.db.select().from(flightProgress)
+      .where(eq(flightProgress.userId, pilot.id))).toHaveLength(7);
+    expect(await database.db.select().from(activities)
+      .where(eq(activities.actorUserId, pilot.id))).toHaveLength(7);
+    expect(await database.db.select().from(activities)
+      .where(eq(activities.sourceFlightId, laterFlightId))).toEqual([]);
+    expect(await database.db.select().from(activityReactions)).toEqual([]);
+    expect(await database.db.select().from(flights)
+      .where(eq(flights.userId, pilot.id))).toHaveLength(8);
+    expect(await database.db.select().from(userAchievementProgress)
+      .where(eq(userAchievementProgress.userId, pilot.id))).toHaveLength(1);
+  });
+
+  it('reports committed batches after failure and can rebuild cleanly on rerun', async () => {
+    const pilot = await createUser('partial');
+    const flightIds: string[] = [];
+    for (let index = 0; index < 7; index += 1) {
+      const startedAt = new Date(Date.UTC(2026, 4, index + 1));
+      flightIds.push(await createLineFlight({
+        userId: pilot.id,
+        startX: (index * 3_000) + 100,
+        endX: (index * 3_000) + 2_100,
+        startedAt,
+        createdAt: startedAt,
+        processedAt: new Date(startedAt.getTime() + 60_000),
+      }));
+    }
+    await seedDerivedHistory(pilot.id, flightIds[0]!);
+
+    const failingService = createUserHistoryRebuildService(database.db, {
+      cellSize: 1_000,
+      afterBatch: async (_transaction, batchNumber) => {
+        if (batchNumber === 2) throw new Error('intentional second batch failure');
+      },
+    });
+    const inspection = await failingService.inspectByEmail(pilot.email);
+    if (inspection.status !== 'ready') throw new Error('Expected a ready rebuild snapshot.');
+
+    let failure: BatchedUserHistoryRebuildError | undefined;
+    try {
+      await failingService.rebuildSnapshot(inspection.snapshot);
+    } catch (error) {
+      if (!(error instanceof BatchedUserHistoryRebuildError)) throw error;
+      failure = error;
+    }
+    expect(failure?.summary).toMatchObject({
+      totalBatches: 2,
+      committedBatches: 1,
+      committedFlights: 5,
+      resetCommitted: true,
+      finalizationCommitted: false,
+      activitiesCreated: 5,
+      flightProgressCreated: 5,
+    });
+    expect(await database.db.select().from(flightProgress)
+      .where(eq(flightProgress.userId, pilot.id))).toHaveLength(5);
+    expect(await database.db.select().from(activities)
+      .where(eq(activities.actorUserId, pilot.id))).toHaveLength(5);
+    expect(await database.db.select().from(userAchievementProgress)
+      .where(eq(userAchievementProgress.userId, pilot.id))).toEqual([]);
+
+    const retryService = createUserHistoryRebuildService(database.db, { cellSize: 1_000 });
+    const retryInspection = await retryService.inspectByEmail(pilot.email);
+    if (retryInspection.status !== 'ready') throw new Error('Expected a ready retry snapshot.');
+    await expect(retryService.rebuildSnapshot(retryInspection.snapshot)).resolves.toMatchObject({
+      committedBatches: 2,
+      committedFlights: 7,
+      finalizationCommitted: true,
+    });
+    expect(await database.db.select().from(flightProgress)
+      .where(eq(flightProgress.userId, pilot.id))).toHaveLength(7);
+    expect(await database.db.select().from(activities)
+      .where(eq(activities.actorUserId, pilot.id))).toHaveLength(7);
+    expect(await database.db.select().from(userAchievementProgress)
+      .where(eq(userAchievementProgress.userId, pilot.id))).toHaveLength(1);
   });
 
   it('rolls back the reset when replay fails', async () => {

@@ -811,6 +811,19 @@ deployment order is pause and drain workers, run migrations, run the apply
 backfill after reviewing its dry-run, run `verify:release-backfills`, and resume
 workers only after verification.
 
+`npm run rebuild:user-history -- --email <address>` exposes the admin user's
+Achievement and Activity history rebuild as an operational command. Email lookup
+is trimmed and case-normalized. The default is a read-only preflight that reports
+the matched user, completed-flight count, and any completed flight missing
+`started_at`; applying requires `--apply`. Apply snapshots the completed flights
+present at startup, resets only that user's derived history, and replays the
+snapshot in flown order using fixed five-flight transactions. Each committed
+batch remains applied if a later batch fails, and rerunning safely resets the
+partial result before replaying from the beginning. Leadership achievements and
+the final `user_achievement_progress` projection are committed only after every
+flight batch succeeds. Pause and drain workers before apply so live flight
+completion cannot interleave with the multi-transaction replay.
+
 ## 12. Shared type declarations
 
 Location: `src/types/`
