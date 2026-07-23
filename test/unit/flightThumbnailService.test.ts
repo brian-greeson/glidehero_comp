@@ -18,7 +18,7 @@ describe('flight thumbnail service', () => {
     expect(signMapTilerUrl(
       'https://api.maptiler.com/maps/outdoor-v4/static/1,2,3,4/800x450.png?padding=0',
       'testkey_00112233445566778899aabbccddeeff',
-    )).toBe('https://api.maptiler.com/maps/outdoor-v4/static/1,2,3,4/800x450.png?padding=0&key=testkey&signature=FX-OkE3qhpIruThaiJ9JF6HE5XhMvBwI3LMEmUZpRf4%3D');
+    )).toBe('https://api.maptiler.com/maps/outdoor-v4/static/1,2,3,4/800x450.png?padding=0&key=testkey&signature=FX-OkE3qhpIruThaiJ9JF6HE5XhMvBwI3LMEmUZpRf4');
   });
 
   it('builds deterministic object keys and a padded outdoor-v4 static map URL', () => {
@@ -31,7 +31,7 @@ describe('flight thumbnail service', () => {
     expect(extent.projected.maxX - extent.projected.minX).toBe(1_500);
     expect(extent.projected.maxY - extent.projected.minY).toBe(1_500);
     expect(buildFlightThumbnailStaticMapUrl({ extent, width: 800, height: 450, mapTilerCredentials: 'testkey_00112233445566778899aabbccddeeff' }))
-      .toMatch(/^https:\/\/api\.maptiler\.com\/maps\/outdoor-v4\/static\/-?[\d.]+,-?[\d.]+,-?[\d.]+,-?[\d.]+\/800x450\.png\?padding=0&key=testkey&signature=[\w-]+%3D$/);
+      .toMatch(/^https:\/\/api\.maptiler\.com\/maps\/outdoor-v4\/static\/-?[\d.]+,-?[\d.]+,-?[\d.]+,-?[\d.]+\/800x450\.png\?padding=0&key=testkey&signature=[\w-]+$/);
   });
 
   it('matches the canonical WGS84 EPSG:6933 projection and round-trips coordinates', () => {

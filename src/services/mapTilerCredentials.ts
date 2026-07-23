@@ -13,6 +13,7 @@ export function signMapTilerUrl(inputUrl: string, credentials: string): string {
     .update(keyedUrl, 'utf8')
     .digest('base64')
     .replaceAll('+', '-')
-    .replaceAll('/', '_');
+    .replaceAll('/', '_')
+    .replace(/=+$/, '');
   return `${keyedUrl}&signature=${encodeURIComponent(signature)}`;
 }

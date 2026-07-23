@@ -36,8 +36,8 @@ describe('flight thumbnail view delivery', () => {
   it('keeps adapter flight-only behavior and exposes signed URLs', () => {
     const base: ActivityFeedItem = {
       id: 'activity-1', actorUserId: 'user-1', actorDisplayName: 'Pilot', activityType: 'challenge', sourceFlightId: null,
-      publishedAt: new Date(), publishedAtIso: '', publishedAtLabel: '', accomplishments: [], thermalCount: 0,
-      viewerHasReacted: false, isOwn: false,
+      publishedAt: new Date(), publishedAtIso: '', publishedAtLabel: '', accomplishments: [], likeCount: 0,
+      viewerHasLiked: false, isOwn: false,
     };
     expect(activityFeedItemToView(base).flight).toBeUndefined();
     const flight = activityFeedItemToView({
