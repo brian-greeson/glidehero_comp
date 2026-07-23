@@ -121,6 +121,7 @@ describe('GridClaimService', () => {
 
     await expect(service.getViewportStats({
       userId,
+      period: { period: 'all-time' },
       west: -1,
       south: -1,
       east: 1,

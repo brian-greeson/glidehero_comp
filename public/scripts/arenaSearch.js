@@ -1,4 +1,4 @@
-import { competitionMonthFromSearch, competitionPageUrl } from './competitionPeriod.js';
+import { competitionPageUrl, mapPeriodFromSearch } from './competitionPeriod.js';
 
 function arenaResultLabel(arena) {
   const region = [arena.city, arena.state, arena.country].filter(Boolean).join(', ');
@@ -17,6 +17,7 @@ export function initializeArenaSearch({
   fetchImpl = window.fetch.bind(window),
   navigate = (path) => window.location.assign(path),
   locationRef = typeof window === 'undefined' ? { search: '' } : window.location,
+  periodSelection,
   pathPrefix = '',
   debounceMs = 200,
 } = {}) {
@@ -32,7 +33,8 @@ export function initializeArenaSearch({
   let activeIndex = -1;
 
   function navigateToArena(path) {
-    navigate(competitionPageUrl(`${pathPrefix}${path}`, competitionMonthFromSearch(locationRef.search)));
+    const selection = periodSelection ?? mapPeriodFromSearch(locationRef.search);
+    navigate(competitionPageUrl(`${pathPrefix}${path}`, selection.month, locationRef.search));
   }
 
   function cancelPendingSearch() {

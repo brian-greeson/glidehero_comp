@@ -10,7 +10,13 @@ export type TerritoryTileResult = {
 };
 
 export interface TerritoryTileService {
-  getPersonalTile(input: { z: number; x: number; y: number; userId: string }): Promise<TerritoryTileResult>;
+  getPersonalTile(input: {
+    z: number;
+    x: number;
+    y: number;
+    userId: string;
+    period: MonthlyCoveragePeriod;
+  }): Promise<TerritoryTileResult>;
   getGlobalCompetitionTile(input: {
     z: number;
     x: number;
@@ -174,15 +180,23 @@ export function createTerritoryTileService(
 
   return {
     async getPersonalTile(input) {
+      const competitionMonth = normalizePeriod(input.period);
       const result = await database.execute<StoredTile>(sql`
         WITH ${tileBoundsCtes({ ...input, cellSize, extent, buffer })},
         claimed_cells AS (
           SELECT DISTINCT claim.x, claim.y
           FROM user_grid_claims claim
+          INNER JOIN flights flight ON flight.flight_id = claim.claim_flight
           CROSS JOIN cell_ranges range
           WHERE claim.claim_user = ${input.userId}
             AND claim.x BETWEEN range.min_x AND range.max_x
             AND claim.y BETWEEN range.min_y AND range.max_y
+            ${competitionMonth
+              ? sql`AND date_trunc(
+                  'month',
+                  claim.claim_timestamp AT TIME ZONE flight.launch_timezone
+                )::date = ${competitionMonth}::date`
+              : sql``}
         ),
         cell_geometries AS (
           SELECT ST_MakeEnvelope(

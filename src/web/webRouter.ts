@@ -57,6 +57,7 @@ const competitionMonthValue = z.string().refine((value) => {
   }
 });
 const competitionMonthSchema = z.object({ month: competitionMonthValue.optional() }).strict();
+const personalPeriodSchema = z.object({ month: competitionMonthValue.optional() }).strict();
 const pilotUserIdSchema = z.string().uuid();
 const activityQuerySchema = z.object({
   q: z.string().max(100).optional(),
@@ -113,6 +114,34 @@ function territoryTileCoordinates(
 
 function coveragePeriod(month?: string): MonthlyCoveragePeriod {
   return month ? { competitionMonth: month } : { period: 'all-time' };
+}
+
+function mapPagePeriod(query: Request['query']): {
+  period: 'all-time' | 'current-month';
+  month?: string;
+  suffix: string;
+} {
+  const rawMonth = query.month;
+  const rawPeriod = query.period;
+  if (
+    (rawMonth !== undefined && typeof rawMonth !== 'string')
+    || (rawPeriod !== undefined && rawPeriod !== 'all-time')
+    || (rawMonth !== undefined && rawPeriod !== undefined)
+  ) {
+    throw new AppError(400, 'invalid_request', 'Map period is invalid.');
+  }
+  if (typeof rawMonth === 'string') {
+    normalizeCompetitionLeaderboardMonth(rawMonth);
+    return {
+      period: 'current-month',
+      month: rawMonth,
+      suffix: `?month=${encodeURIComponent(rawMonth)}`,
+    };
+  }
+  if (rawPeriod === 'all-time') {
+    return { period: 'all-time', suffix: '?period=all-time' };
+  }
+  return { period: 'current-month', suffix: '' };
 }
 
 const uploadIntentSchema = z.object({
@@ -184,9 +213,22 @@ export function createWebRouter(dependencies: {
         || /^\/arena\/[a-z]{2}\/[a-z0-9-]+-\d+$/.test(url.pathname);
       if (!validPath) return '/global';
       const month = url.searchParams.get('month');
-      if (!month) return url.pathname;
-      normalizeCompetitionLeaderboardMonth(month);
-      return `${url.pathname}?month=${encodeURIComponent(month)}`;
+      const period = url.searchParams.get('period');
+      if (month && period) return '/global';
+      const params = new URLSearchParams();
+      if (month) {
+        normalizeCompetitionLeaderboardMonth(month);
+        params.set('month', month);
+      } else if (period === 'all-time') {
+        params.set('period', period);
+      } else if (period) {
+        return '/global';
+      }
+      for (const name of ['lat', 'lng', 'zoom']) {
+        const value = url.searchParams.get(name);
+        if (value) params.set(name, value);
+      }
+      return params.size > 0 ? `${url.pathname}?${params}` : url.pathname;
     } catch {
       return '/global';
     }
@@ -354,7 +396,8 @@ export function createWebRouter(dependencies: {
       return;
     }
     const coordinates = territoryTileCoordinates(territoryTileSettings.get().personal, req.params);
-    if (!coordinates || Object.keys(req.query).length > 0) {
+    const period = personalPeriodSchema.safeParse(req.query);
+    if (!coordinates || !period.success) {
       res.status(400).json({ error: { code: 'invalid_request', message: 'Personal territory tile coordinates are invalid.' } });
       return;
     }
@@ -362,6 +405,7 @@ export function createWebRouter(dependencies: {
       const tile = await dependencies.territoryTiles.getPersonalTile({
         ...coordinates,
         userId: currentUser.userId,
+        period: coveragePeriod(period.data.month),
       });
       res.vary('Cookie');
       sendTerritoryTile(res, tile);
@@ -377,7 +421,11 @@ export function createWebRouter(dependencies: {
       return;
     }
 
-    const viewport = viewportBoundsSchema.safeParse(req.query);
+    const viewport = z.object({
+      month: competitionMonthValue.optional(),
+      ...viewportBoundsShape,
+    }).strict().refine((bounds) => bounds.south < bounds.north && bounds.west !== bounds.east)
+      .safeParse(req.query);
     if (!viewport.success) {
       res.status(400).json({
         error: { code: 'invalid_request', message: 'Personal stats require valid viewport bounds.' },
@@ -388,7 +436,11 @@ export function createWebRouter(dependencies: {
     try {
       const stats = await dependencies.gridClaim.getViewportStats({
         userId: currentUser.userId,
-        ...viewport.data,
+        west: viewport.data.west,
+        south: viewport.data.south,
+        east: viewport.data.east,
+        north: viewport.data.north,
+        period: coveragePeriod(viewport.data.month),
       });
       res.status(200).json(stats);
     } catch (error) {
@@ -640,11 +692,10 @@ export function createWebRouter(dependencies: {
       return;
     }
     try {
-      const month = typeof req.query.month === 'string' ? req.query.month : undefined;
-      if (month) normalizeCompetitionLeaderboardMonth(month);
-      const mapHref = month ? `/global?month=${encodeURIComponent(month)}` : '/global';
+      const selection = mapPagePeriod(req.query);
+      const mapHref = `/global${selection.suffix}`;
       await renderAuthenticated(res, dependencies.renderAuthenticatedPage, 200, productionMap(currentUser, {
-        mode: 'competitive', period: month ? 'current-month' : 'all-time', location: 'Global Map', mapHref,
+        mode: 'competitive', period: selection.period, location: 'Global Map', mapHref,
       }));
     } catch (error) {
       next(error);
@@ -658,11 +709,10 @@ export function createWebRouter(dependencies: {
       return;
     }
     try {
-      const month = typeof req.query.month === 'string' ? req.query.month : undefined;
-      if (month) normalizeCompetitionLeaderboardMonth(month);
-      const mapHref = month ? `/personal?month=${encodeURIComponent(month)}` : '/personal';
+      const selection = mapPagePeriod(req.query);
+      const mapHref = `/personal${selection.suffix}`;
       await renderAuthenticated(res, dependencies.renderAuthenticatedPage, 200, productionMap(currentUser, {
-        mode: 'personal', period: month ? 'current-month' : 'all-time', location: 'Personal Map', mapHref,
+        mode: 'personal', period: selection.period, location: 'Personal Map', mapHref,
       }));
     } catch (error) {
       next(error);
@@ -916,11 +966,10 @@ export function createWebRouter(dependencies: {
         next();
         return;
       }
-      const month = typeof req.query.month === 'string' ? req.query.month : undefined;
-      if (month) normalizeCompetitionLeaderboardMonth(month);
-      const mapHref = month ? `${arena.path}?month=${encodeURIComponent(month)}` : arena.path;
+      const selection = mapPagePeriod(req.query);
+      const mapHref = `${arena.path}${selection.suffix}`;
       await renderAuthenticated(res, dependencies.renderAuthenticatedPage, 200, productionMap(currentUser, {
-        mode: 'competitive', period: month ? 'current-month' : 'all-time', location: arena.name, mapHref,
+        mode: 'competitive', period: selection.period, location: arena.name, mapHref,
         ...(arena.arenaType === 'launch'
           ? { focusArenaSourceId: arena.sourceId }
           : { arenaSourceId: arena.sourceId }),

@@ -14,6 +14,8 @@ import { createUserArenaProgressService, type UserArenaProgressService } from '.
 import { findEligibleArenaIdsForCompetitionFlight } from './arenaClaimImpact.js';
 import { viewportCtes, type ViewportBounds } from './viewportGrid.js';
 import { lockArenaCatalogShared } from './arenaCatalogLock.js';
+import type { MonthlyCoveragePeriod } from './monthlyCoverageService.js';
+import { normalizeCompetitionLeaderboardMonth } from '../domain/competition/competitionLeaderboardMonth.js';
 
 export type GridClaimProcessResult = {
   flightId: string;
@@ -37,7 +39,10 @@ export interface GridClaimService {
     | { status: 'not_found' }
     | { status: 'not_completed' }
   >;
-  getViewportStats(input: ViewportBounds & { userId: string }): Promise<ViewportStats>;
+  getViewportStats(input: ViewportBounds & {
+    userId: string;
+    period: MonthlyCoveragePeriod;
+  }): Promise<ViewportStats>;
 }
 
 export interface TransactionalGridClaimService extends GridClaimService {
@@ -151,12 +156,16 @@ export function createGridClaimService(
   }
 
   return {
-    async getViewportStats({ userId, west, south, east, north }) {
+    async getViewportStats({ userId, west, south, east, north, period }) {
+      const competitionMonth = 'competitionMonth' in period
+        ? normalizeCompetitionLeaderboardMonth(period.competitionMonth)
+        : undefined;
       const result = await database.execute<StoredViewportStats>(sql`
         WITH ${viewportCtes({ west, south, east, north })},
         visible_claims AS (
           SELECT DISTINCT claims.x, claims.y, claims.claim_flight
           FROM user_grid_claims claims
+          INNER JOIN flights flight ON flight.flight_id = claims.claim_flight
           INNER JOIN viewport_parts viewport ON ST_Intersects(
             ST_MakeEnvelope(
               claims.x * ${options.cellSize},
@@ -168,6 +177,12 @@ export function createGridClaimService(
             viewport.geometry
           )
           WHERE claims.claim_user = ${userId}
+            ${competitionMonth
+              ? sql`AND date_trunc(
+                  'month',
+                  claims.claim_timestamp AT TIME ZONE flight.launch_timezone
+                )::date = ${competitionMonth}::date`
+              : sql``}
         ),
         claimed_cells AS (
           SELECT DISTINCT x, y FROM visible_claims

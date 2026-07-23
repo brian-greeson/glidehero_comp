@@ -23,7 +23,12 @@ function rounded(value, digits) {
   return String(Number(value.toFixed(digits)));
 }
 
-export function updateMapModeLinks({ documentRef = document, locationRef = globalThis.location, map }) {
+export function updateMapModeLinks({
+  documentRef = document,
+  locationRef = globalThis.location,
+  map,
+  periodSelection,
+}) {
   const center = map?.getCenter?.();
   const zoom = map?.getZoom?.();
   if (!center || !Number.isFinite(center.lat) || !Number.isFinite(center.lng) || !Number.isFinite(zoom)) return;
@@ -32,9 +37,12 @@ export function updateMapModeLinks({ documentRef = document, locationRef = globa
   const currentQuery = new URLSearchParams(locationRef?.search ?? '');
   for (const link of documentRef.querySelectorAll?.('[data-map-mode-link]') ?? []) {
     const url = new URL(link.getAttribute('href') || '/', origin);
-    const month = currentQuery.get('month');
+    const month = periodSelection ? periodSelection.month : currentQuery.get('month');
     if (month) url.searchParams.set('month', month);
     else url.searchParams.delete('month');
+    const period = periodSelection ? periodSelection.period : currentQuery.get('period');
+    if (period === 'all-time' && !month) url.searchParams.set('period', period);
+    else url.searchParams.delete('period');
     url.searchParams.set('lat', rounded(center.lat, 5));
     url.searchParams.set('lng', rounded(center.lng, 5));
     url.searchParams.set('zoom', rounded(zoom, 2));

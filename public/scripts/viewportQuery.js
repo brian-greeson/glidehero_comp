@@ -69,6 +69,6 @@ export function viewportSearchParams(bounds, values = {}) {
   });
 }
 
-export function personalStatsUrl(bounds) {
-  return `/v1/personal-stats?${viewportSearchParams(bounds)}`;
+export function personalStatsUrl(bounds, month = null) {
+  return `/v1/personal-stats?${viewportSearchParams(bounds, month ? { month } : {})}`;
 }

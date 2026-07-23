@@ -169,7 +169,7 @@ describe('Arena autocomplete', () => {
 
     const enter = context.input.dispatch('keydown', { key: 'Enter' });
     expect(enter.preventDefault).toHaveBeenCalledOnce();
-    expect(context.navigate).toHaveBeenCalledWith('/arena/us/alpha-1');
+    expect(context.navigate).toHaveBeenCalledWith('/arena/us/alpha-1?month=2026-07');
   });
 
   it('carries the URL month into Arena navigation', async () => {

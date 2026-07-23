@@ -5,15 +5,16 @@ export const PERSONAL_TERRITORY_FILL_LAYER_ID = 'personal-territory-fill';
 export const PERSONAL_TERRITORY_OUTLINE_LAYER_ID = 'personal-territory-outline';
 export const PERSONAL_TERRITORY_SOURCE_LAYER = 'personal-territory';
 
-export function personalTerritoryTileUrl(origin = globalThis.location?.origin ?? '') {
-  return `${origin}/v1/personal-territory/tiles/{z}/{x}/{y}.mvt`;
+export function personalTerritoryTileUrl(month = null, origin = globalThis.location?.origin ?? '') {
+  const query = month ? `?month=${encodeURIComponent(month)}` : '';
+  return `${origin}/v1/personal-territory/tiles/{z}/{x}/{y}.mvt${query}`;
 }
 
-export function installPersonalTerritorySource(map, territoryColor, tileZoom) {
+export function installPersonalTerritorySource(map, territoryColor, tileZoom, month = null) {
   if (map.getSource?.(PERSONAL_TERRITORY_SOURCE_ID)) return;
   map.addSource(PERSONAL_TERRITORY_SOURCE_ID, {
     type: 'vector',
-    tiles: [personalTerritoryTileUrl()],
+    tiles: [personalTerritoryTileUrl(month)],
     minzoom: tileZoom.minimumZoom,
     maxzoom: tileZoom.maximumZoom,
   });

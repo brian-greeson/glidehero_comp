@@ -35,4 +35,20 @@ describe('map viewport URL state', () => {
     expect(personal.href).toBe('/personal?month=2026-07&lat=39.73923&lng=-104.99031&zoom=10.68');
     expect(competitive.href).toBe('/global?month=2026-07&lat=39.73923&lng=-104.99031&zoom=10.68');
   });
+
+  it('preserves the explicit all-time marker on map mode links', () => {
+    const personal = link('/personal');
+    const competitive = link('/global');
+    updateMapModeLinks({
+      documentRef: { querySelectorAll: () => [personal, competitive] },
+      locationRef: { origin: 'https://glidehero.test', search: '?period=all-time' },
+      map: {
+        getCenter: () => ({ lat: 39.739234, lng: -104.990312 }),
+        getZoom: () => 10.678,
+      },
+    });
+
+    expect(personal.href).toContain('/personal?period=all-time');
+    expect(competitive.href).toContain('/global?period=all-time');
+  });
 });

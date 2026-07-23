@@ -116,13 +116,14 @@ async function persistClaimCells(
   claim: { flightId: string; userId: string },
   cells: ReadonlyArray<{ x: number; y: number }>,
   cellSize = 1_000,
+  claimTimestamp = new Date(Date.UTC(2026, 0, 1)),
 ) {
   await database.db.insert(userGridClaims).values(cells.map(({ x, y }) => ({
     x,
     y,
     claimFlight: claim.flightId,
     claimUser: claim.userId,
-    claimTimestamp: new Date(Date.UTC(2026, 0, 1)),
+    claimTimestamp,
   })));
 }
 
@@ -302,6 +303,7 @@ describe('GridClaimService with PostGIS', () => {
 
     const stats = await createGridClaimService(database.db, { cellSize: 1_000 }).getViewportStats({
       userId: first.userId,
+      period: { period: 'all-time' },
       west: southwest.longitude,
       south: southwest.latitude,
       east: northeast.longitude,
@@ -312,6 +314,49 @@ describe('GridClaimService with PostGIS', () => {
       claimedCellCount: 2,
       claimedAreaSquareMeters: 2_000_000,
       flightCount: 2,
+    });
+  });
+
+  it('filters Personal viewport stats by the claim month in the flight launch timezone', async () => {
+    const flight = await persistFlight(
+      [[100, 100], [1_100, 100]],
+      new Date('2026-07-01T05:30:00Z'),
+      'America/Denver',
+    );
+    await persistClaimCells(
+      flight,
+      [{ x: 0, y: 0 }, { x: 1, y: 0 }],
+      1_000,
+      new Date('2026-07-01T05:30:00Z'),
+    );
+    const service = createGridClaimService(database.db, { cellSize: 1_000 });
+
+    await expect(service.getViewportStats({
+      ...viewport,
+      userId: flight.userId,
+      period: { competitionMonth: '2026-06' },
+    })).resolves.toEqual({
+      claimedCellCount: 2,
+      claimedAreaSquareMeters: 2_000_000,
+      flightCount: 1,
+    });
+    await expect(service.getViewportStats({
+      ...viewport,
+      userId: flight.userId,
+      period: { competitionMonth: '2026-07' },
+    })).resolves.toEqual({
+      claimedCellCount: 0,
+      claimedAreaSquareMeters: 0,
+      flightCount: 0,
+    });
+    await expect(service.getViewportStats({
+      ...viewport,
+      userId: flight.userId,
+      period: { period: 'all-time' },
+    })).resolves.toEqual({
+      claimedCellCount: 2,
+      claimedAreaSquareMeters: 2_000_000,
+      flightCount: 1,
     });
   });
 

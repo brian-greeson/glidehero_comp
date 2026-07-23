@@ -63,6 +63,13 @@ export function initializeCompetitionCoverage({
   let cellPopupRequestId = 0;
   let hoveredCellId = null;
 
+  function syncModeLinks(periodSelection = {
+    period: periodControl.period,
+    month: periodControl.month,
+  }) {
+    if (map) updateMapModeLinks({ documentRef, locationRef, map, periodSelection });
+  }
+
   function hideCellPopup() {
     cellPopupRequestId += 1;
     if (cellPopup) cellPopup.hidden = true;
@@ -171,7 +178,8 @@ export function initializeCompetitionCoverage({
     locationRef,
     historyRef,
     now,
-    onChange: async () => {
+    onChange: async (selection) => {
+      syncModeLinks(selection);
       if (mapReady) await refreshPeriod();
     },
   });
@@ -193,7 +201,6 @@ export function initializeCompetitionCoverage({
       center: initialViewport?.center ?? [-106.2, 39.2],
       zoom: initialViewport?.zoom ?? 7,
     });
-    const syncModeLinks = () => updateMapModeLinks({ documentRef, locationRef, map });
     syncModeLinks();
     map.addControl(new maplibre.NavigationControl(), 'top-right');
     map.once('error', () => setStatus('Map unavailable. Check your connection and try again.'));

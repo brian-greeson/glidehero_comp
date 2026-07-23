@@ -99,6 +99,8 @@ function mapHarness() {
       getEast: () => viewport.east,
       getNorth: () => 41,
     }),
+    getCenter: () => ({ lat: 39.2, lng: -106.2 }),
+    getZoom: () => 7,
     once: vi.fn((event: string, handler: () => Promise<void>) => {
       if (event === 'load') loadHandler = handler;
       if (event === 'error') errorHandler = handler;
@@ -173,6 +175,8 @@ function globalDashboardHarness(fetchImpl: any, search = '', dataset: Record<str
   allTime.dataset.competitionPeriodOption = 'all-time';
   const currentMonth = element();
   currentMonth.dataset.competitionPeriodOption = 'current-month';
+  const personalModeLink = element();
+  personalModeLink.setAttribute('href', '/personal');
   const elements = new Map<string, any>([
     ['[data-competition-coverage]', element()],
     ['[data-territory-map]', mapElement],
@@ -188,8 +192,11 @@ function globalDashboardHarness(fetchImpl: any, search = '', dataset: Record<str
   const documentRef = {
     createElement: () => element(),
     querySelector: (selector: string) => elements.get(selector) ?? null,
-    querySelectorAll: (selector: string) =>
-      selector === '[data-competition-period-option]' ? [allTime, currentMonth] : [],
+    querySelectorAll: (selector: string) => {
+      if (selector === '[data-competition-period-option]') return [allTime, currentMonth];
+      if (selector === '[data-map-mode-link]') return [personalModeLink];
+      return [];
+    },
   };
   const historyRef = { replaceState: vi.fn() };
   initializeGlobalDashboard({
@@ -206,6 +213,7 @@ function globalDashboardHarness(fetchImpl: any, search = '', dataset: Record<str
     allTime,
     currentMonth,
     historyRef,
+    personalModeLink,
   };
 }
 
@@ -301,11 +309,11 @@ describe('Personal dashboard controller', () => {
     expect(fetchImpl).not.toHaveBeenCalled();
     await harness.load();
     expect(fetchImpl.mock.calls.map(([url]) => url)).toEqual([
-      '/v1/personal-stats?west=-106&south=39&east=-104&north=41',
+      '/v1/personal-stats?month=2026-07&west=-106&south=39&east=-104&north=41',
     ]);
     expect(harness.map.addSource).toHaveBeenCalledWith('personal-territory', {
       type: 'vector',
-      tiles: ['/v1/personal-territory/tiles/{z}/{x}/{y}.mvt'],
+      tiles: ['/v1/personal-territory/tiles/{z}/{x}/{y}.mvt?month=2026-07'],
       minzoom: 4,
       maxzoom: 14,
     });
@@ -313,7 +321,7 @@ describe('Personal dashboard controller', () => {
 
     harness.move({ west: -105, east: -103 });
     await vi.waitFor(() => expect(fetchImpl).toHaveBeenCalledTimes(2));
-    expect(fetchImpl.mock.calls[1]?.[0]).toContain('/v1/personal-stats?west=-105');
+    expect(fetchImpl.mock.calls[1]?.[0]).toContain('west=-105');
   });
 });
 
@@ -389,11 +397,11 @@ describe('Global dashboard controller', () => {
     });
     await harness.load();
     expect(fetchImpl.mock.calls.map(([url]) => url)).toEqual([
-      expect.stringContaining('/v1/competition-leaderboard?west=-107'),
+      expect.stringContaining('/v1/competition-leaderboard?month=2026-07&west=-107'),
     ]);
     expect(harness.map.addSource).toHaveBeenCalledWith('competition-coverage', {
       type: 'vector',
-      tiles: ['/v1/competition-territory/tiles/{z}/{x}/{y}.mvt'],
+      tiles: ['/v1/competition-territory/tiles/{z}/{x}/{y}.mvt?month=2026-07'],
       minzoom: 4,
       maxzoom: 14,
     });
@@ -403,7 +411,7 @@ describe('Global dashboard controller', () => {
 
     harness.move({ west: -106, east: -104 });
     await vi.waitFor(() => expect(fetchImpl).toHaveBeenCalledTimes(2));
-    expect(fetchImpl.mock.calls[1]?.[0]).toContain('/v1/competition-leaderboard?west=-106');
+    expect(fetchImpl.mock.calls[1]?.[0]).toContain('west=-106');
   });
 
   it('selects a pilot and returns to the overview', async () => {
@@ -413,13 +421,14 @@ describe('Global dashboard controller', () => {
     const harness = globalDashboardHarness(fetchImpl);
     await harness.load();
 
+    expect(harness.personalModeLink.href).toContain('/personal?month=2026-07');
     const list = harness.elements.get('[data-territory-list]');
     const overview = harness.elements.get('[data-territory-allpilots]');
     const source = harness.map.getSource('competition-coverage');
     source.setTiles.mockClear();
     await list.children[0].click();
     expect(source.setTiles).toHaveBeenCalledWith([
-      '/v1/competition-territory/tiles/{z}/{x}/{y}.mvt?pilot=pilot-one',
+      '/v1/competition-territory/tiles/{z}/{x}/{y}.mvt?month=2026-07&pilot=pilot-one',
     ]);
     expect(list.children[0].getAttribute('aria-pressed')).toBe('true');
     expect(overview.getAttribute('aria-pressed')).toBe('false');
@@ -431,7 +440,7 @@ describe('Global dashboard controller', () => {
 
     await overview.click();
     expect(source.setTiles).toHaveBeenLastCalledWith([
-      '/v1/competition-territory/tiles/{z}/{x}/{y}.mvt',
+      '/v1/competition-territory/tiles/{z}/{x}/{y}.mvt?month=2026-07',
     ]);
     expect(list.children[0].getAttribute('aria-pressed')).toBe('false');
     expect(overview.getAttribute('aria-pressed')).toBe('true');
@@ -445,7 +454,7 @@ describe('Global dashboard controller', () => {
       requestedUrls.push(url);
       return jsonResponse({ leaders: [pilot('pilot-one')], currentPilot: null });
     });
-    const harness = globalDashboardHarness(fetchImpl);
+    const harness = globalDashboardHarness(fetchImpl, '?period=all-time');
     await harness.load();
     const source = harness.map.getSource('competition-coverage');
     source.setTiles.mockClear();
@@ -459,6 +468,8 @@ describe('Global dashboard controller', () => {
     await harness.currentMonth.click();
 
     expect(harness.historyRef.replaceState).toHaveBeenCalledWith(null, '', '/global?month=2026-07');
+    expect(harness.personalModeLink.href).toContain('/personal?month=2026-07');
+    expect(harness.personalModeLink.href).not.toContain('period=all-time');
     expect(overview.getAttribute('aria-pressed')).toBe('true');
     expect(source.setTiles).toHaveBeenLastCalledWith([
       '/v1/competition-territory/tiles/{z}/{x}/{y}.mvt?month=2026-07',
@@ -480,14 +491,14 @@ describe('Global dashboard controller', () => {
     source.setTiles.mockClear();
     await harness.elements.get('[data-territory-list]').children[0].click();
     expect(source.setTiles).toHaveBeenLastCalledWith([
-      '/v1/competition-territory/tiles/{z}/{x}/{y}.mvt?pilot=pilot-one',
+      '/v1/competition-territory/tiles/{z}/{x}/{y}.mvt?month=2026-07&pilot=pilot-one',
     ]);
 
     leaderboard = { leaders: [], currentPilot: null };
     harness.move({ west: -106, east: -104 });
 
     await vi.waitFor(() => expect(source.setTiles).toHaveBeenLastCalledWith([
-      '/v1/competition-territory/tiles/{z}/{x}/{y}.mvt',
+      '/v1/competition-territory/tiles/{z}/{x}/{y}.mvt?month=2026-07',
     ]));
     expect(harness.elements.get('[data-territory-allpilots]').getAttribute('aria-pressed')).toBe(
       'true',
@@ -529,7 +540,7 @@ describe('Global dashboard controller', () => {
     } }]);
     await harness.click({ x: 50, y: 80 });
     expect(fetchImpl).toHaveBeenCalledWith(
-      '/v1/competition-cells/12/-3/claimants',
+      '/v1/competition-cells/12/-3/claimants?month=2026-07',
       expect.objectContaining({ credentials: 'same-origin' }),
     );
     expect(popup.hidden).toBe(false);

@@ -635,6 +635,39 @@ describe('webRouter', () => {
     });
   });
 
+  it('renders map pages as current-month by default and keeps all time explicit', async () => {
+    const { app, renderAuthenticatedPage } = dependencies();
+    await withServer(app, async (baseUrl) => {
+      const headers = { cookie: 'glidehero_session=valid-token' };
+
+      expect((await fetch(`${baseUrl}/personal`, { headers })).status).toBe(200);
+      expect(renderAuthenticatedPage).toHaveBeenLastCalledWith(expect.objectContaining({
+        mode: 'personal',
+        period: 'current-month',
+        navigation: expect.arrayContaining([
+          expect.objectContaining({ page: 'map', href: '/personal' }),
+        ]),
+      }));
+
+      expect((await fetch(`${baseUrl}/global?period=all-time`, { headers })).status).toBe(200);
+      expect(renderAuthenticatedPage).toHaveBeenLastCalledWith(expect.objectContaining({
+        mode: 'competitive',
+        period: 'all-time',
+      }));
+
+      expect((await fetch(`${baseUrl}/personal?month=2026-07`, { headers })).status).toBe(200);
+      expect(renderAuthenticatedPage).toHaveBeenLastCalledWith(expect.objectContaining({
+        mode: 'personal',
+        period: 'current-month',
+        navigation: expect.arrayContaining([
+          expect.objectContaining({ page: 'map', href: '/personal?month=2026-07' }),
+        ]),
+      }));
+
+      expect((await fetch(`${baseUrl}/global?month=2026-07&period=all-time`, { headers })).status).toBe(400);
+    });
+  });
+
   it('focuses Launch Arenas without scoping the map data to the launch area', async () => {
     const { app, arenas, renderAuthenticatedPage } = dependencies();
     vi.mocked(arenas.getByRoute).mockResolvedValueOnce({ ...arena, arenaType: 'launch' });
@@ -1211,7 +1244,7 @@ describe('webRouter', () => {
     const { app, gridClaim } = dependencies();
     await withServer(app, async (baseUrl) => {
       const response = await fetch(
-        `${baseUrl}/v1/personal-stats?west=-107&south=39&east=-105&north=41`,
+        `${baseUrl}/v1/personal-stats?month=2026-07&west=-107&south=39&east=-105&north=41`,
         { headers: { cookie: 'glidehero_session=valid-token' } },
       );
 
@@ -1219,6 +1252,7 @@ describe('webRouter', () => {
       expect(await response.json()).toEqual(viewportStats);
       expect(gridClaim.getViewportStats).toHaveBeenCalledWith({
         userId: user.userId,
+        period: { competitionMonth: '2026-07' },
         west: -107,
         south: 39,
         east: -105,
@@ -1273,7 +1307,7 @@ describe('webRouter', () => {
     });
     await withServer(app, async (baseUrl) => {
       const headers = { cookie: 'glidehero_session=valid-token' };
-      const personal = await fetch(`${baseUrl}/v1/personal-territory/tiles/4/8/7.mvt`, { headers });
+      const personal = await fetch(`${baseUrl}/v1/personal-territory/tiles/4/8/7.mvt?month=2026-07`, { headers });
       expect(personal.status).toBe(200);
       expect(personal.headers.get('content-type')).toContain('application/vnd.mapbox-vector-tile');
       expect(personal.headers.get('cache-control')).toBe('private, max-age=60');
@@ -1281,6 +1315,7 @@ describe('webRouter', () => {
       expect(Buffer.from(await personal.arrayBuffer())).toEqual(Buffer.from([1, 2, 3]));
       expect(territoryTiles.getPersonalTile).toHaveBeenCalledWith({
         z: 4, x: 8, y: 7, userId: user.userId,
+        period: { competitionMonth: '2026-07' },
       });
 
       const global = await fetch(

@@ -30,14 +30,34 @@ describe('refreshed map UI controls', () => {
       },
     };
 
+    const historyRef = { replaceState: vi.fn() };
     initializeMapUrlControls({
       documentRef,
       locationRef: { origin: 'https://glidehero.test', pathname: '/global', search: '?month=2026-06' },
+      historyRef,
       now: () => new Date('2026-07-22T12:00:00Z'),
     });
 
-    expect(allTime.href).toBe('/global');
+    expect(allTime.href).toBe('/global?period=all-time');
     expect(currentMonth.href).toBe('/global?month=2026-07');
+    expect(historyRef.replaceState).not.toHaveBeenCalled();
+  });
+
+  it('canonicalizes a bare map URL to the browser current month', () => {
+    const historyRef = { replaceState: vi.fn() };
+    const selection = initializeMapUrlControls({
+      documentRef: { querySelectorAll: () => [] },
+      locationRef: { origin: 'https://glidehero.test', pathname: '/personal', search: '?lat=39' },
+      historyRef,
+      now: () => new Date('2026-07-22T12:00:00Z'),
+    });
+
+    expect(selection).toEqual({ period: 'current-month', month: '2026-07' });
+    expect(historyRef.replaceState).toHaveBeenCalledWith(
+      null,
+      '',
+      '/personal?lat=39&month=2026-07',
+    );
   });
 
   it('focuses the always-visible Arena search from the location trigger', () => {

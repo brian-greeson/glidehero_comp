@@ -51,13 +51,18 @@ function setup(search = '') {
 }
 
 describe('competition period control', () => {
-  it('defaults to all time when the URL has no month', () => {
+  it('defaults to the browser current month and canonicalizes a bare URL', () => {
     const context = setup();
 
-    expect(context.control.period).toBe(ALL_TIME_COMPETITION_PERIOD);
-    expect(context.control.month).toBeNull();
-    expect(context.allTime.isActive()).toBe(true);
-    expect(context.label.textContent).toBe('Current Month');
+    expect(context.control.period).toBe(CURRENT_MONTH_COMPETITION_PERIOD);
+    expect(context.control.month).toBe('2026-07');
+    expect(context.currentMonth.isActive()).toBe(true);
+    expect(context.label.textContent).toBe('July 2026');
+    expect(context.historyRef.replaceState).toHaveBeenCalledWith(
+      null,
+      '',
+      '/arena/us/boulder-745?month=2026-07',
+    );
   });
 
   it('uses the URL month and carries it into Global navigation and form returns', () => {
@@ -70,8 +75,8 @@ describe('competition period control', () => {
     expect(context.returnTo.value).toBe('/arena/us/boulder-745?month=2026-07');
   });
 
-  it('writes the current browser month into the URL and removes it for all time', async () => {
-    const context = setup();
+  it('writes explicit current-month and all-time states into the URL', async () => {
+    const context = setup('?period=all-time');
 
     await context.currentMonth.click();
     expect(context.control.month).toBe('2026-07');
@@ -84,12 +89,16 @@ describe('competition period control', () => {
 
     await context.allTime.click();
     expect(context.control.month).toBeNull();
-    expect(context.historyRef.replaceState).toHaveBeenLastCalledWith(null, '', '/arena/us/boulder-745');
+    expect(context.historyRef.replaceState).toHaveBeenLastCalledWith(
+      null,
+      '',
+      '/arena/us/boulder-745?period=all-time',
+    );
   });
 
-  it('treats an invalid or missing month as all time', () => {
+  it('treats an invalid or missing month as the current month and marks all time explicitly', () => {
     expect(competitionMonthFromSearch('?month=2026-13')).toBeNull();
     expect(competitionMonthFromSearch('')).toBeNull();
-    expect(competitionPageUrl('/global', null)).toBe('/global');
+    expect(competitionPageUrl('/global', null)).toBe('/global?period=all-time');
   });
 });

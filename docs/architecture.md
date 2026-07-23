@@ -718,6 +718,10 @@ Scripts may compose existing services and domain functions, but reusable behavio
 
 Add a corresponding `package.json` command when a script is intended to be run by developers or deployment tooling.
 
+Scripts should perform large data migrations in batches
+
+Scripts should output to the console progress messages
+
 Scripts should validate required inputs and make destructive or one-off behavior explicit.
 
 Released achievement definitions are exhaustive in

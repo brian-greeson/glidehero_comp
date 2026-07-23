@@ -1,5 +1,6 @@
 import { VectorTile } from '@mapbox/vector-tile';
 import { PbfReader } from 'pbf';
+import { sql } from 'drizzle-orm';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import {
   competitionGridClaims,
@@ -18,7 +19,7 @@ beforeAll(async () => { database = await resetAndMigrateTestDatabase(); });
 beforeEach(async () => { await database.pool.query('TRUNCATE TABLE users, arenas CASCADE'); });
 afterAll(async () => { if (database) await database.pool.end(); });
 
-async function createPilot() {
+async function createPilot(launchTimezone = 'UTC') {
   const [user] = await database.db.insert(users).values({
     email: `${crypto.randomUUID()}@example.com`,
   }).returning({ id: users.id });
@@ -36,7 +37,7 @@ async function createPilot() {
     igcFileId: file.id,
     contentHash: crypto.randomUUID().replaceAll('-', '').padEnd(64, '0'),
     processingStatus: 'completed',
-    launchTimezone: 'UTC',
+    launchTimezone,
   }).returning({ id: flights.id });
   if (!flight) throw new Error('Expected a flight.');
   return { userId: user.id, flightId: flight.id };
@@ -44,7 +45,7 @@ async function createPilot() {
 
 async function addPersonalClaims(
   pilot: Awaited<ReturnType<typeof createPilot>>,
-  cells: Array<{ x: number; y: number; cellSize?: number }>,
+  cells: Array<{ x: number; y: number; cellSize?: number; claimTimestamp?: Date }>,
 ) {
   await database.db.insert(personalGridClaims).values(cells.map((cell) => ({
     cellSize: cell.cellSize ?? 1_000,
@@ -52,7 +53,7 @@ async function addPersonalClaims(
     y: cell.y,
     claimFlight: pilot.flightId,
     claimUser: pilot.userId,
-    claimTimestamp: new Date('2026-07-01T00:00:00Z'),
+    claimTimestamp: cell.claimTimestamp ?? new Date('2026-07-01T00:00:00Z'),
   })));
 }
 
@@ -83,6 +84,7 @@ describe('TerritoryTileService with PostGIS MVT', () => {
     await expect(createTerritoryTileService(database.db, { cellSize: 1_000 }).getPersonalTile({
       ...tile,
       userId: pilot.userId,
+      period: { period: 'all-time' },
     })).resolves.toEqual({ data: Buffer.alloc(0), featureCount: 0 });
   });
 
@@ -97,6 +99,7 @@ describe('TerritoryTileService with PostGIS MVT', () => {
     const result = await createTerritoryTileService(database.db, { cellSize: 1_000 }).getPersonalTile({
       ...tile,
       userId: pilot.userId,
+      period: { period: 'all-time' },
     });
     const features = decode(result.data, 'personal-territory');
     expect(result.featureCount).toBe(2);
@@ -106,6 +109,36 @@ describe('TerritoryTileService with PostGIS MVT', () => {
       const rings = feature.loadGeometry().flat();
       expect(rings.every(({ x, y }) => x >= -64 && x <= 4160 && y >= -64 && y <= 4160)).toBe(true);
     }
+  });
+
+  it('filters Personal cells by the claim month in the flight launch timezone without Competition rows', async () => {
+    const pilot = await createPilot('America/Denver');
+    await addPersonalClaims(pilot, [{
+      x: 0,
+      y: 0,
+      claimTimestamp: new Date('2026-07-01T05:30:00Z'),
+    }]);
+    const service = createTerritoryTileService(database.db, { cellSize: 1_000 });
+
+    await expect(service.getPersonalTile({
+      ...tile,
+      userId: pilot.userId,
+      period: { competitionMonth: '2026-06' },
+    })).resolves.toMatchObject({ featureCount: 1 });
+    await expect(service.getPersonalTile({
+      ...tile,
+      userId: pilot.userId,
+      period: { competitionMonth: '2026-07' },
+    })).resolves.toEqual({ data: Buffer.alloc(0), featureCount: 0 });
+    await expect(service.getPersonalTile({
+      ...tile,
+      userId: pilot.userId,
+      period: { period: 'all-time' },
+    })).resolves.toMatchObject({ featureCount: 1 });
+
+    const competitionCount = await database.db.select({ count: sql<number>`count(*)::integer` })
+      .from(competitionGridClaims);
+    expect(competitionCount).toEqual([{ count: 0 }]);
   });
 
   it('encodes exact Competition cells with monthly, shared, selected-pilot, and all-time properties', async () => {
@@ -186,6 +219,7 @@ describe('TerritoryTileService with PostGIS MVT', () => {
       x: 63,
       y: 64,
       userId: pilot.userId,
+      period: { period: 'all-time' },
     });
     expect(result.featureCount).toBe(1);
     expect(decode(result.data, 'personal-territory')).toHaveLength(1);

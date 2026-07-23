@@ -4,6 +4,7 @@ import { renderPersonalStats } from './personalStatsView.js';
 import { personalStatsUrl } from './viewportQuery.js';
 import { initializeMapFlightAids } from './mapFlightAids.js';
 import { mapViewportFromSearch, updateMapModeLinks } from './mapViewportUrl.js';
+import { mapPeriodFromSearch } from './competitionPeriod.js';
 
 export function initializePersonalDashboard({
   documentRef = document,
@@ -12,10 +13,13 @@ export function initializePersonalDashboard({
   navigatorRef = globalThis.navigator,
   locationRef = globalThis.location,
   storage,
+  periodSelection,
+  now = () => new Date(),
 } = {}) {
   const mapElement = documentRef.querySelector('[data-dashboard-map]');
   const emptyState = documentRef.querySelector('[data-map-empty-state]');
   const statsCard = documentRef.querySelector('[data-personal-stats]');
+  const period = periodSelection ?? mapPeriodFromSearch(locationRef?.search ?? '', now());
 
   function showStatus(message) {
     if (!emptyState) return;
@@ -33,7 +37,7 @@ export function initializePersonalDashboard({
   const statsRequest = createLatestRequest(async ({ signal, isCurrent }, bounds) => {
     statsCard?.setAttribute('aria-busy', 'true');
     try {
-      const response = await fetchImpl(personalStatsUrl(bounds), {
+      const response = await fetchImpl(personalStatsUrl(bounds, period.month), {
         credentials: 'same-origin',
         headers: { accept: 'application/json' },
         signal,
@@ -59,10 +63,15 @@ export function initializePersonalDashboard({
     map.addControl(new maplibre.NavigationControl(), 'top-right');
     map.once('error', () => showStatus('Map unavailable. Check your connection and try again.'));
     map.once('load', async () => {
-      installPersonalTerritorySource(map, mapElement.dataset.territoryColor, {
-        minimumZoom: Number(mapElement.dataset.territoryTileMinimumZoom),
-        maximumZoom: Number(mapElement.dataset.territoryTileMaximumZoom),
-      });
+      installPersonalTerritorySource(
+        map,
+        mapElement.dataset.territoryColor,
+        {
+          minimumZoom: Number(mapElement.dataset.territoryTileMinimumZoom),
+          maximumZoom: Number(mapElement.dataset.territoryTileMaximumZoom),
+        },
+        period.month,
+      );
       initializeMapFlightAids({
         map, mapElement, documentRef, fetchImpl, navigatorRef, storage,
       });
