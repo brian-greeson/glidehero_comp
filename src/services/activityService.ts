@@ -41,13 +41,30 @@ export type ActivityFeedItem = {
 
 export type ActivityAccomplishment = FlightAccomplishment;
 
-export type ActivityFeedScope = 'all' | 'following' | 'yours';
+export type ActivityFeedScope = 'following' | 'yours';
 
 export type ActivityCursor = { publishedAt: Date; id: string };
 
 export type ActivityFeedPage = {
   items: ActivityFeedItem[];
   nextCursor: string | null;
+};
+
+export type ActivityStatisticWinner = {
+  flightId: string;
+  value: number;
+};
+
+export type ActivityPeriodStatistics = {
+  flightCount: number;
+  mostAccomplishments: ActivityStatisticWinner | null;
+  mostCells: ActivityStatisticWinner | null;
+  greatestFivePointDistance: ActivityStatisticWinner | null;
+};
+
+export type ActivityStatistics = {
+  daily: ActivityPeriodStatistics;
+  monthly: ActivityPeriodStatistics;
 };
 
 export class ActivityCursorError extends Error {
@@ -136,6 +153,13 @@ export type ActivityService = {
   ): Promise<{ id: string }>;
   regenerateFlightActivity(input: { flightId: string }): Promise<'completed' | 'not_found' | 'not_completed'>;
   listFeed(input: { viewerUserId: string; limit?: number; before?: string; q?: string; scope?: ActivityFeedScope }): Promise<ActivityFeedPage>;
+  getStatistics(input: {
+    viewerUserId: string;
+    q?: string;
+    scope?: ActivityFeedScope;
+    /** Overrides the current instant for deterministic callers such as tests. */
+    now?: Date;
+  }): Promise<ActivityStatistics>;
   toggleLike(input: { viewerUserId: string; activityId: string }): Promise<{ reacted: boolean; totalCount: number }>;
 };
 
@@ -186,10 +210,10 @@ export function createActivityService(database?: Database): ActivityService {
       return 'completed';
     },
 
-    async listFeed({ viewerUserId, limit = 20, before, scope = 'all' }) {
+    async listFeed({ viewerUserId, limit = 20, before, q = '', scope = 'following' }) {
       if (!database) throw new Error('Activity reads require a database.');
       if (!Number.isInteger(limit) || limit < 1 || limit > 20) throw new Error('Activity limit is invalid.');
-      if (scope !== 'all' && scope !== 'following' && scope !== 'yours') throw new Error('Activity scope is invalid.');
+      if (scope !== 'following' && scope !== 'yours') throw new Error('Activity scope is invalid.');
       const cursor = decodeActivityCursor(before);
       const following = exists(database.select({ one: sql`1` }).from(pilotFollows).where(and(
         eq(pilotFollows.followerUserId, viewerUserId),
@@ -197,12 +221,11 @@ export function createActivityService(database?: Database): ActivityService {
       )));
       const visibility = scope === 'yours'
         ? eq(activities.actorUserId, viewerUserId)
-        : scope === 'following'
-          ? following
-          : or(eq(activities.actorUserId, viewerUserId), following);
+        : or(eq(activities.actorUserId, viewerUserId), following);
+      const search = sql`position(lower(${q}) in lower(${profiles.displayName})) > 0`;
       const where = cursor
-        ? and(visibility, sql`(${activities.publishedAt} < ${cursor.publishedAt} OR (${activities.publishedAt} = ${cursor.publishedAt} AND ${activities.id} < ${cursor.id}))`)
-        : visibility;
+        ? and(visibility, search, sql`(${activities.publishedAt} < ${cursor.publishedAt} OR (${activities.publishedAt} = ${cursor.publishedAt} AND ${activities.id} < ${cursor.id}))`)
+        : and(visibility, search);
       const rows = await database.select({
         id: activities.id,
         actorUserId: activities.actorUserId,
@@ -320,6 +343,165 @@ export function createActivityService(database?: Database): ActivityService {
       });
       const last = visibleRows.at(-1);
       return { items, nextCursor: hasMore && last ? encodeActivityCursor({ publishedAt: last.publishedAt, id: last.id }) : null };
+    },
+
+    async getStatistics({ viewerUserId, q = '', scope = 'following', now = new Date() }) {
+      if (!database) throw new Error('Activity reads require a database.');
+      if (scope !== 'following' && scope !== 'yours') throw new Error('Activity statistics scope is invalid.');
+      if (!Number.isFinite(now.getTime())) throw new Error('Activity statistics current time is invalid.');
+
+      type WinnerJson = { flightId?: unknown; value?: unknown } | null;
+      type StatisticsRow = {
+        period: 'daily' | 'monthly';
+        flightCount: number | string;
+        mostAccomplishments: WinnerJson;
+        mostCells: WinnerJson;
+        greatestFivePointDistance: WinnerJson;
+      };
+      const rows = await database.execute<StatisticsRow>(sql`
+        WITH visible_actors AS MATERIALIZED (
+          SELECT ${viewerUserId}::uuid AS actor_user_id
+          ${scope === 'following' ? sql`
+            UNION
+            SELECT followed.followed_user_id
+            FROM pilot_follows followed
+            WHERE followed.follower_user_id = ${viewerUserId}
+          ` : sql``}
+        ),
+        scoped_flights AS MATERIALIZED (
+          SELECT
+            flight.flight_id,
+            flight.started_at,
+            coalesce(flight_progress.direct_cell_count, 0) + coalesce(flight_progress.enclosed_cell_count, 0) AS total_cells,
+            flight_scores.five_point_distance_meters,
+            timezone(flight.launch_timezone, flight.started_at) AS local_started_at,
+            timezone(flight.launch_timezone, ${now}) AS local_now
+          FROM visible_actors visible_actor
+          INNER JOIN activities activity ON activity.actor_user_id = visible_actor.actor_user_id
+          INNER JOIN profiles actor ON actor.user_id = activity.actor_user_id
+          INNER JOIN flights flight ON flight.flight_id = activity.source_flight_id
+          LEFT JOIN flight_progress ON flight_progress.flight_id = flight.flight_id
+          LEFT JOIN flight_scores ON flight_scores.flight_id = flight.flight_id
+          WHERE activity.activity_type = 'flight'
+            AND position(lower(${q}) in lower(actor.display_name)) > 0
+            -- Across all IANA zones, local time ranges from UTC-12 through UTC+14.
+            -- This coarse UTC envelope is deliberately wider than the exact
+            -- launch-local month below so started_at can use its btree index.
+            AND flight.started_at >= (
+              date_trunc('month', timezone('UTC', ${now}::timestamptz - interval '12 hours'))
+              - interval '14 hours'
+            ) AT TIME ZONE 'UTC'
+            AND flight.started_at < (
+              date_trunc('month', timezone('UTC', ${now}::timestamptz + interval '14 hours'))
+              + interval '1 month 12 hours'
+            ) AT TIME ZONE 'UTC'
+            AND timezone(flight.launch_timezone, flight.started_at)
+                >= date_trunc('month', timezone(flight.launch_timezone, ${now}))
+            AND timezone(flight.launch_timezone, flight.started_at)
+                < date_trunc('month', timezone(flight.launch_timezone, ${now})) + interval '1 month'
+        ),
+        achievement_counts AS (
+          SELECT earned.source_flight_id AS flight_id, count(*)::int AS count
+          FROM achievements earned
+          INNER JOIN scoped_flights scoped ON scoped.flight_id = earned.source_flight_id
+          GROUP BY earned.source_flight_id
+        ),
+        record_counts AS (
+          SELECT event.source_flight_id AS flight_id, count(*)::int AS count
+          FROM achievement_record_events event
+          INNER JOIN scoped_flights scoped ON scoped.flight_id = event.source_flight_id
+          GROUP BY event.source_flight_id
+        ),
+        leadership_counts AS (
+          SELECT event.source_flight_id AS flight_id, count(*)::int AS count
+          FROM arena_leadership_events event
+          INNER JOIN scoped_flights scoped ON scoped.flight_id = event.source_flight_id
+          WHERE event.event_type IN ('took', 'reclaimed')
+          GROUP BY event.source_flight_id
+        ),
+        duplicated_leadership_achievements AS (
+          SELECT earned.source_flight_id AS flight_id, count(DISTINCT earned.id)::int AS count
+          FROM achievements earned
+          INNER JOIN scoped_flights scoped ON scoped.flight_id = earned.source_flight_id
+          INNER JOIN arena_leadership_events event
+            ON event.source_flight_id = earned.source_flight_id
+           AND event.arena_id::text = earned.details->>'arenaId'
+           AND (
+             (earned.achievement_key = 'took_lead_in_arena' AND event.event_type = 'took')
+             OR (earned.achievement_key = 'reclaimed_lead_in_arena' AND event.event_type = 'reclaimed')
+           )
+          GROUP BY earned.source_flight_id
+        ),
+        enriched_flights AS MATERIALIZED (
+          SELECT
+            scoped.*,
+            (
+              coalesce(achievement_counts.count, 0)
+              + coalesce(record_counts.count, 0)
+              + coalesce(leadership_counts.count, 0)
+              - coalesce(duplicated_leadership_achievements.count, 0)
+            )::int AS accomplishment_count
+          FROM scoped_flights scoped
+          LEFT JOIN achievement_counts ON achievement_counts.flight_id = scoped.flight_id
+          LEFT JOIN record_counts ON record_counts.flight_id = scoped.flight_id
+          LEFT JOIN leadership_counts ON leadership_counts.flight_id = scoped.flight_id
+          LEFT JOIN duplicated_leadership_achievements
+            ON duplicated_leadership_achievements.flight_id = scoped.flight_id
+        ),
+        period_flights AS (
+          SELECT 'monthly'::text AS period, enriched.*
+          FROM enriched_flights enriched
+          UNION ALL
+          SELECT 'daily'::text AS period, enriched.*
+          FROM enriched_flights enriched
+          WHERE enriched.local_started_at >= date_trunc('day', enriched.local_now)
+            AND enriched.local_started_at < date_trunc('day', enriched.local_now) + interval '1 day'
+        )
+        SELECT
+          period,
+          count(*)::int AS "flightCount",
+          (
+            array_agg(
+              jsonb_build_object('flightId', flight_id, 'value', accomplishment_count)
+              ORDER BY accomplishment_count DESC, started_at DESC, flight_id ASC
+            )
+          )[1] AS "mostAccomplishments",
+          (
+            array_agg(
+              jsonb_build_object('flightId', flight_id, 'value', total_cells)
+              ORDER BY total_cells DESC, started_at DESC, flight_id ASC
+            )
+          )[1] AS "mostCells",
+          (
+            array_agg(
+              jsonb_build_object('flightId', flight_id, 'value', five_point_distance_meters)
+              ORDER BY five_point_distance_meters DESC, started_at DESC, flight_id ASC
+            ) FILTER (WHERE five_point_distance_meters IS NOT NULL)
+          )[1] AS "greatestFivePointDistance"
+        FROM period_flights
+        GROUP BY period
+      `);
+
+      const emptyPeriod = (): ActivityPeriodStatistics => ({
+        flightCount: 0,
+        mostAccomplishments: null,
+        mostCells: null,
+        greatestFivePointDistance: null,
+      });
+      const statistics: ActivityStatistics = { daily: emptyPeriod(), monthly: emptyPeriod() };
+      const winner = (value: WinnerJson): ActivityStatisticWinner | null => {
+        if (!value || typeof value.flightId !== 'string' || !Number.isFinite(Number(value.value))) return null;
+        return { flightId: value.flightId, value: Number(value.value) };
+      };
+      for (const row of rows.rows) {
+        statistics[row.period] = {
+          flightCount: Number(row.flightCount),
+          mostAccomplishments: winner(row.mostAccomplishments),
+          mostCells: winner(row.mostCells),
+          greatestFivePointDistance: winner(row.greatestFivePointDistance),
+        };
+      }
+      return statistics;
     },
 
     async toggleLike({ viewerUserId, activityId }) {

@@ -137,6 +137,20 @@ function dependencies() {
   };
   const activity: ActivityService = {
     listFeed: vi.fn(async () => ({ items: [], nextCursor: null })),
+    getStatistics: vi.fn(async () => ({
+      daily: {
+        flightCount: 0,
+        mostAccomplishments: null,
+        mostCells: null,
+        greatestFivePointDistance: null,
+      },
+      monthly: {
+        flightCount: 0,
+        mostAccomplishments: null,
+        mostCells: null,
+        greatestFivePointDistance: null,
+      },
+    })),
     publishFlightInTransaction: vi.fn(async () => ({ id: '00000000-0000-4000-8000-000000000010' })),
     regenerateFlightActivity: vi.fn(async () => 'completed' as const),
     toggleLike: vi.fn(async () => ({ reacted: true, totalCount: 1 })),
@@ -1166,7 +1180,33 @@ describe('webRouter', () => {
       });
       expect(empty.status).toBe(200);
       expect(base.follow.searchPilots).not.toHaveBeenCalled();
+      expect(base.activity.listFeed).toHaveBeenLastCalledWith({
+        viewerUserId: user.userId,
+        limit: 20,
+        before: undefined,
+        q: '',
+        scope: 'following',
+      });
+      expect(base.activity.getStatistics).toHaveBeenLastCalledWith({
+        viewerUserId: user.userId,
+        q: '',
+        scope: 'following',
+      });
 
+      vi.mocked(base.activity.getStatistics).mockResolvedValueOnce({
+        daily: {
+          flightCount: 0,
+          mostAccomplishments: null,
+          mostCells: null,
+          greatestFivePointDistance: null,
+        },
+        monthly: {
+          flightCount: 3,
+          mostAccomplishments: { flightId: pilotProfile.userId, value: 2 },
+          mostCells: { flightId: pilotProfile.userId, value: 42 },
+          greatestFivePointDistance: { flightId: pilotProfile.userId, value: 12_345 },
+        },
+      });
       const search = await fetch(`${baseUrl}/activity?q=%20cloud%20`, {
         headers: { cookie: 'glidehero_session=valid-token' },
       });
@@ -1175,15 +1215,84 @@ describe('webRouter', () => {
         viewerUserId: user.userId,
         query: 'cloud',
       });
+      expect(base.activity.listFeed).toHaveBeenLastCalledWith({
+        viewerUserId: user.userId,
+        limit: 20,
+        before: undefined,
+        q: 'cloud',
+        scope: 'following',
+      });
+      expect(base.activity.getStatistics).toHaveBeenLastCalledWith({
+        viewerUserId: user.userId,
+        q: 'cloud',
+        scope: 'following',
+      });
       expect(base.renderAuthenticatedPage).toHaveBeenLastCalledWith(expect.objectContaining({
         page: 'activity',
         activitySearch: 'cloud',
+        activityReturnTo: '/activity?q=cloud&scope=following',
+        activityScope: 'following',
+        activityScopeLinks: {
+          following: '/activity?q=cloud&scope=following',
+          yours: '/activity?q=cloud&scope=yours',
+        },
+        activityStats: expect.objectContaining({
+          monthly: {
+            flightCount: '3',
+            mostAccomplishments: { href: `/flights/${pilotProfile.userId}`, value: '2 accomplishments' },
+            mostCells: { href: `/flights/${pilotProfile.userId}`, value: '42 cells' },
+            greatestFivePointDistance: { href: `/flights/${pilotProfile.userId}`, value: '12.3 km' },
+          },
+        }),
         activityPilotResults: [expect.objectContaining({
           userId: pilotProfile.userId,
           displayName: 'Cloud Dancer',
           isFollowing: true,
         })],
       }));
+    });
+  });
+
+  it('uses the explicit yours Activity scope and does not fetch statistics for feed fragments', async () => {
+    const base = dependencies();
+    vi.mocked(base.activity.listFeed).mockResolvedValueOnce({ items: [], nextCursor: 'next-cursor' });
+    await withServer(base.app, async (baseUrl) => {
+      const yours = await fetch(`${baseUrl}/activity?q=cloud&scope=yours`, {
+        headers: { cookie: 'glidehero_session=valid-token' },
+      });
+      expect(yours.status).toBe(200);
+      expect(base.activity.listFeed).toHaveBeenLastCalledWith({
+        viewerUserId: user.userId,
+        limit: 20,
+        before: undefined,
+        q: 'cloud',
+        scope: 'yours',
+      });
+      expect(base.activity.getStatistics).toHaveBeenLastCalledWith({
+        viewerUserId: user.userId,
+        q: 'cloud',
+        scope: 'yours',
+      });
+      expect(base.renderAuthenticatedPage).toHaveBeenLastCalledWith(expect.objectContaining({
+        activityReturnTo: '/activity?q=cloud&scope=yours',
+        activityScope: 'yours',
+        activityLoadMoreHref: '/activity?before=next-cursor&q=cloud&scope=yours',
+        activityLoadMoreEndpoint: '/activity/feed?before=next-cursor&q=cloud&scope=yours',
+      }));
+
+      vi.mocked(base.activity.getStatistics).mockClear();
+      const fragment = await fetch(`${baseUrl}/activity/feed?q=cloud&scope=yours`, {
+        headers: { cookie: 'glidehero_session=valid-token' },
+      });
+      expect(fragment.status).toBe(200);
+      expect(base.activity.listFeed).toHaveBeenLastCalledWith({
+        viewerUserId: user.userId,
+        limit: 20,
+        before: undefined,
+        q: 'cloud',
+        scope: 'yours',
+      });
+      expect(base.activity.getStatistics).not.toHaveBeenCalled();
     });
   });
 

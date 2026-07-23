@@ -32,7 +32,7 @@ describe('refreshed Activity interactions', () => {
       addEventListener(name: string, listener: (event: any) => void) { listeners.set(name, listener); },
     };
     const fetchImpl = vi.fn(async () => ({ ok: true, json: async () => ({ reacted: true, totalCount: 3 }) }));
-    initializeActivityUi({ querySelector: () => feed } as any, fetchImpl as any);
+    initializeActivityUi({ querySelector: (selector: string) => selector === '[data-activity-feed]' ? feed : null } as any, fetchImpl as any);
 
     const submit = listeners.get('submit');
     expect(submit).toBeDefined();
@@ -42,5 +42,37 @@ describe('refreshed Activity interactions', () => {
     expect(label.textContent).toBe('Like sent');
     expect(count.textContent).toBe('3');
     expect(status.textContent).toBe('Like sent.');
+  });
+
+  it('switches the server-rendered statistics panels without changing the URL', () => {
+    const listeners = new Map<string, (event: any) => void>();
+    const monthlyButton: any = {
+      dataset: { activityStatsButton: 'monthly' },
+      setAttribute: vi.fn(),
+    };
+    const dailyButton: any = {
+      dataset: { activityStatsButton: 'daily' },
+      setAttribute: vi.fn(),
+    };
+    const monthlyPanel: any = { dataset: { activityStatsPanel: 'monthly' }, hidden: false };
+    const dailyPanel: any = { dataset: { activityStatsPanel: 'daily' }, hidden: true };
+    const statistics: any = {
+      addEventListener(name: string, listener: (event: any) => void) { listeners.set(name, listener); },
+      querySelectorAll(selector: string) {
+        if (selector === '[data-activity-stats-button]') return [monthlyButton, dailyButton];
+        if (selector === '[data-activity-stats-panel]') return [monthlyPanel, dailyPanel];
+        return [];
+      },
+    };
+    initializeActivityUi({
+      querySelector: (selector: string) => selector === '[data-activity-stats]' ? statistics : null,
+    } as any, vi.fn() as any);
+
+    listeners.get('click')!({ target: { closest: () => dailyButton } });
+
+    expect(monthlyButton.setAttribute).toHaveBeenCalledWith('aria-pressed', 'false');
+    expect(dailyButton.setAttribute).toHaveBeenCalledWith('aria-pressed', 'true');
+    expect(monthlyPanel.hidden).toBe(true);
+    expect(dailyPanel.hidden).toBe(false);
   });
 });

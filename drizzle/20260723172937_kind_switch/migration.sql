@@ -1,0 +1,2 @@
+CREATE INDEX "achievement_record_events_source_flight_id_idx" ON "achievement_record_events" ("source_flight_id");--> statement-breakpoint
+CREATE INDEX "achievements_source_flight_id_idx" ON "achievements" ("source_flight_id");

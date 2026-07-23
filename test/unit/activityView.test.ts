@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { activityFeedItemToView } from '../../src/views/authenticated/adapters/activityView.js';
+import { activityFeedItemToView, activityStatsToView } from '../../src/views/authenticated/adapters/activityView.js';
 
 describe('activityFeedItemToView', () => {
   it('keeps real pilot and flight links while exposing badge metadata', () => {
@@ -16,5 +16,35 @@ describe('activityFeedItemToView', () => {
     expect(view.activityId).toBe('activity-id');
     expect(view.likeCount).toBe(2);
     expect(view.viewerHasLiked).toBe(true);
+  });
+
+  it('formats both statistics periods and preserves missing winners', () => {
+    const view = activityStatsToView({
+      monthly: {
+        flightCount: 12,
+        mostAccomplishments: { flightId: 'monthly-accomplishments', value: 3 },
+        mostCells: { flightId: 'monthly-cells', value: 1 },
+        greatestFivePointDistance: { flightId: 'monthly-distance', value: 12_345 },
+      },
+      daily: {
+        flightCount: 0,
+        mostAccomplishments: null,
+        mostCells: null,
+        greatestFivePointDistance: null,
+      },
+    });
+
+    expect(view.monthly).toEqual({
+      flightCount: '12',
+      mostAccomplishments: { href: '/flights/monthly-accomplishments', value: '3 accomplishments' },
+      mostCells: { href: '/flights/monthly-cells', value: '1 cell' },
+      greatestFivePointDistance: { href: '/flights/monthly-distance', value: '12.3 km' },
+    });
+    expect(view.daily).toEqual({
+      flightCount: '0',
+      mostAccomplishments: null,
+      mostCells: null,
+      greatestFivePointDistance: null,
+    });
   });
 });

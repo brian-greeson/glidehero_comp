@@ -1,0 +1,1 @@
+CREATE INDEX "flights_started_at_idx" ON "flights" ("started_at");

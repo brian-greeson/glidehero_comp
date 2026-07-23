@@ -18,7 +18,7 @@ import type {
 } from '../views/admin/renderer.js';
 import type { AuthenticatedActivityFeedRenderer, AuthenticatedPageRenderer } from '../views/authenticated/renderer.js';
 import { createAuthenticatedShellModel } from '../views/authenticated/adapters/shellModel.js';
-import { activityFeedToViews, activityPilotResultToView } from '../views/authenticated/adapters/activityView.js';
+import { activityFeedToViews, activityPilotResultToView, activityStatsToView } from '../views/authenticated/adapters/activityView.js';
 import { createAchievementsPageModel } from '../views/authenticated/adapters/achievementView.js';
 import { pilotProfileToView } from '../views/authenticated/adapters/profileView.js';
 import { createMapPageModel } from '../views/authenticated/adapters/mapView.js';
@@ -34,7 +34,7 @@ import {
 } from '../services/territoryTileSettingsService.js';
 import type { SessionCookie } from './sessionCookie.js';
 import { PilotNotFoundError, type FollowService } from '../services/followService.js';
-import type { ActivityService } from '../services/activityService.js';
+import type { ActivityService, ActivityStatistics } from '../services/activityService.js';
 import { ActivityCursorError, ActivityNotFoundError, SelfLikeError } from '../services/activityService.js';
 import type { FlightThumbnailDeliveryService } from '../services/flightThumbnailDeliveryService.js';
 import { WORKER_STATUS_TTL_SECONDS, type WorkerControlService } from '../services/workerControlService.js';
@@ -64,8 +64,22 @@ const pilotUserIdSchema = z.string().uuid();
 const activityQuerySchema = z.object({
   q: z.string().max(100).optional(),
   before: z.string().min(1).optional(),
-  scope: z.enum(['all', 'following', 'yours']).optional(),
+  scope: z.enum(['following', 'yours']).optional(),
 }).strict();
+const emptyActivityStatistics: ActivityStatistics = {
+  daily: {
+    flightCount: 0,
+    mostAccomplishments: null,
+    mostCells: null,
+    greatestFivePointDistance: null,
+  },
+  monthly: {
+    flightCount: 0,
+    mostAccomplishments: null,
+    mostCells: null,
+    greatestFivePointDistance: null,
+  },
+};
 const finiteCoordinate = z.string().refine(
   (value) => value.length > 0 && value.trim() === value && Number.isFinite(Number(value)),
 ).transform(Number);
@@ -874,22 +888,26 @@ export function createWebRouter(dependencies: {
       return;
     }
     const query = parsed.data.q?.trim() ?? '';
-    const scope = parsed.data.scope ?? 'all';
+    const scope = parsed.data.scope ?? 'following';
     try {
-      const activityFeed = dependencies.activity
-        ? await dependencies.activity.listFeed({ viewerUserId: currentUser.userId, limit: 20, before: parsed.data.before, q: query, scope })
-        : { items: [], nextCursor: null };
+      const [activityFeed, activityStatistics] = await Promise.all([
+        dependencies.activity
+          ? dependencies.activity.listFeed({ viewerUserId: currentUser.userId, limit: 20, before: parsed.data.before, q: query, scope })
+          : Promise.resolve({ items: [], nextCursor: null }),
+        !fragment && dependencies.activity
+          ? dependencies.activity.getStatistics({ viewerUserId: currentUser.userId, q: query, scope })
+          : Promise.resolve(null),
+      ]);
       const activityParams = new URLSearchParams();
       if (query) activityParams.set('q', query);
-      if (scope !== 'all') activityParams.set('scope', scope);
+      activityParams.set('scope', scope);
       const activityQuery = activityParams.toString();
       const activityReturnTo = activityQuery ? `/activity?${activityQuery}` : '/activity';
       const activityScopeLinks = {
-        all: query ? `/activity?q=${encodeURIComponent(query)}` : '/activity',
         following: `/activity?${new URLSearchParams({ ...(query ? { q: query } : {}), scope: 'following' })}`,
         yours: `/activity?${new URLSearchParams({ ...(query ? { q: query } : {}), scope: 'yours' })}`,
       };
-      const activityPilotResults = query && dependencies.follow
+      const activityPilotResults = !fragment && query && dependencies.follow
         ? (await dependencies.follow.searchPilots({ viewerUserId: currentUser.userId, query })).map(activityPilotResultToView)
         : [];
       const activityLoadMoreHref = activityFeed.nextCursor
@@ -914,6 +932,7 @@ export function createWebRouter(dependencies: {
         ...shell,
         page: 'activity',
         events: activityFeedToViews(activityFeed.items, { thumbnailUrls }),
+        activityStats: activityStatsToView(activityStatistics ?? emptyActivityStatistics),
         activitySearch: query,
         activityPilotResults,
         activityReturnTo,

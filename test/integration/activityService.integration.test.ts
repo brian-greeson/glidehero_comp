@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { eq } from 'drizzle-orm';
-import { achievementRecordEvents, achievementRecords, achievements, activities, activityReactions, arenaLeadershipEvents, arenaLeadershipStates, arenas, flightProgress, flights, igcFiles, profiles } from '../../src/db/schema.js';
+import { eq, sql } from 'drizzle-orm';
+import { achievementRecordEvents, achievementRecords, achievements, activities, activityReactions, arenaLeadershipEvents, arenaLeadershipStates, arenas, flightProgress, flightScores, flights, igcFiles, profiles } from '../../src/db/schema.js';
 import { createAuthService } from '../../src/services/authService.js';
 import { createFollowService } from '../../src/services/followService.js';
 import { ActivityCursorError, createActivityService } from '../../src/services/activityService.js';
@@ -14,6 +14,7 @@ afterAll(async () => { await database?.pool.end(); });
 
 describe('activityService.listFeed', () => {
   async function createFlight(userId: string, input: {
+    id?: string;
     startedAt: Date;
     launchTimezone: string;
     launchLatitude: number;
@@ -191,6 +192,9 @@ describe('activityService.listFeed', () => {
     const followedPage = await activityService.listFeed({ viewerUserId: viewer.user.userId });
     expect(followedPage.items.map((item) => item.actorUserId)).toEqual([viewer.user.userId, followed.user.userId]);
     expect(followedPage.items.find((item) => item.id === prior?.id)?.actorDisplayName).toBe('Followed Pilot');
+    expect((await activityService.listFeed({ viewerUserId: viewer.user.userId, q: 'FOLLOWED' })).items
+      .map((item) => item.actorUserId)).toEqual([followed.user.userId]);
+    expect((await activityService.listFeed({ viewerUserId: viewer.user.userId, q: 'Unrelated' })).items).toEqual([]);
     await followService.unfollow({ followerUserId: viewer.user.userId, followedUserId: followed.user.userId });
     expect((await activityService.listFeed({ viewerUserId: viewer.user.userId })).items.map((item) => item.actorUserId)).toEqual([viewer.user.userId]);
   });
@@ -227,6 +231,218 @@ describe('activityService.listFeed', () => {
     await database.db.insert(activities).values({ actorUserId: pilot.user.userId, activityType: 'competition', publishedAt: new Date('2026-07-20T00:00:00.000Z') });
     await database.db.update(profiles).set({ displayName: 'Current Name' }).where(eq(profiles.userId, pilot.user.userId));
     expect((await activityService.listFeed({ viewerUserId: pilot.user.userId })).items[0]?.actorDisplayName).toBe('Current Name');
+  });
+
+  it('aggregates both local periods across every visible matching flight and mirrors displayed accomplishment counts', async () => {
+    if (!database) throw new Error('Test database was not initialized.');
+    const auth = createAuthService(database.db, { sessionTtlSeconds: 604800 });
+    const viewer = await auth.signup({ email: 'stats-viewer@example.com', password: 'correct horse battery staple', displayName: 'Viewer Pilot' });
+    const followed = await auth.signup({ email: 'stats-followed@example.com', password: 'correct horse battery staple', displayName: 'Alpine Pilot' });
+    const unrelated = await auth.signup({ email: 'stats-unrelated@example.com', password: 'correct horse battery staple', displayName: 'Alpine Hidden' });
+    await createFollowService(database.db).follow({
+      followerUserId: viewer.user.userId,
+      followedUserId: followed.user.userId,
+    });
+
+    // This is July 22 in Denver, so it belongs to the month but not the local current day.
+    const viewerFlightId = await createFlight(viewer.user.userId, {
+      startedAt: new Date('2026-07-23T05:30:00Z'), launchTimezone: 'America/Denver',
+      launchLatitude: 0, launchLongitude: 0, durationSeconds: 60, distanceMeters: 100,
+      directCellCount: 1, enclosedCellCount: 1,
+    });
+    const followedFlightId = await createFlight(followed.user.userId, {
+      startedAt: new Date('2026-07-23T10:00:00Z'), launchTimezone: 'UTC',
+      launchLatitude: 0, launchLongitude: 0, durationSeconds: 60, distanceMeters: 100,
+      directCellCount: 5, enclosedCellCount: 3,
+    });
+    const hiddenFlightId = await createFlight(unrelated.user.userId, {
+      startedAt: new Date('2026-07-23T11:00:00Z'), launchTimezone: 'UTC',
+      launchLatitude: 0, launchLongitude: 0, durationSeconds: 60, distanceMeters: 100,
+      directCellCount: 99, enclosedCellCount: 99,
+    });
+    await database.db.insert(activities).values([
+      { actorUserId: viewer.user.userId, activityType: 'flight', sourceFlightId: viewerFlightId, publishedAt: new Date('2026-07-23T06:00:00Z') },
+      { actorUserId: followed.user.userId, activityType: 'flight', sourceFlightId: followedFlightId, publishedAt: new Date('2026-07-23T10:30:00Z') },
+      { actorUserId: unrelated.user.userId, activityType: 'flight', sourceFlightId: hiddenFlightId, publishedAt: new Date('2026-07-23T11:30:00Z') },
+    ]);
+    await database.db.insert(flightScores).values([
+      { flightId: followedFlightId, totalDistanceMeters: 100, totalDistanceMetadata: {}, fivePointDistanceMeters: 10_000, fivePointDistanceCalcVersion: 1, fivePointDistanceMetadata: { points: [] } },
+      { flightId: hiddenFlightId, totalDistanceMeters: 100, totalDistanceMetadata: {}, fivePointDistanceMeters: 99_000, fivePointDistanceCalcVersion: 1, fivePointDistanceMetadata: { points: [] } },
+    ]);
+
+    const [arena] = await database.db.insert(arenas).values({
+      sourceId: 8_001,
+      name: 'Stats Arena',
+      country: 'United States',
+      countryCode: 'US',
+      area: sql`ST_Multi(ST_GeomFromText('POLYGON((0 0,1000 0,1000 1000,0 1000,0 0))', 6933))`,
+      arenaType: 'general',
+    }).returning({ id: arenas.id });
+    if (!arena) throw new Error('Arena insert returned no row.');
+    await database.db.insert(arenaLeadershipStates).values({ arenaId: arena.id, arenaType: 'general' });
+    await database.db.insert(achievements).values([
+      {
+        userId: followed.user.userId, achievementType: 'unique_cells_milestone',
+        achievementKey: `stats-milestone:${followedFlightId}`, sourceFlightId: followedFlightId,
+        earnedAt: new Date('2026-07-23T10:01:00Z'), details: { milestone: 10 },
+      },
+      {
+        userId: followed.user.userId, achievementType: 'special',
+        achievementKey: 'took_lead_in_arena', sourceFlightId: followedFlightId,
+        earnedAt: new Date('2026-07-23T10:02:00Z'), details: { arenaId: arena.id },
+      },
+    ]);
+    const [record] = await database.db.insert(achievementRecords).values({
+      userId: followed.user.userId, recordKey: 'most_launches_tagged_one_flight', bestValue: 2,
+      sourceFlightId: followedFlightId, earnedAt: new Date('2026-07-23T10:03:00Z'), details: {},
+    }).returning({ id: achievementRecords.id });
+    if (!record) throw new Error('Record insert returned no row.');
+    await database.db.insert(achievementRecordEvents).values({
+      recordId: record.id, userId: followed.user.userId, sourceFlightId: followedFlightId,
+      value: 2, earnedAt: new Date('2026-07-23T10:03:00Z'), details: {},
+    });
+    await database.db.insert(arenaLeadershipEvents).values({
+      eventKey: `stats-took:${followedFlightId}`, arenaId: arena.id, userId: followed.user.userId,
+      eventType: 'took', claimTimestamp: new Date('2026-07-23T10:04:00Z'),
+      sourceFlightId: followedFlightId, cellX: 1, cellY: 1,
+    });
+
+    const service = createActivityService(database.db);
+    const stats = await service.getStatistics({
+      viewerUserId: viewer.user.userId,
+      now: new Date('2026-07-23T12:00:00Z'),
+    });
+    expect(stats).toEqual({
+      daily: {
+        flightCount: 1,
+        mostAccomplishments: { flightId: followedFlightId, value: 3 },
+        mostCells: { flightId: followedFlightId, value: 8 },
+        greatestFivePointDistance: { flightId: followedFlightId, value: 10_000 },
+      },
+      monthly: {
+        flightCount: 2,
+        mostAccomplishments: { flightId: followedFlightId, value: 3 },
+        mostCells: { flightId: followedFlightId, value: 8 },
+        greatestFivePointDistance: { flightId: followedFlightId, value: 10_000 },
+      },
+    });
+    await expect(service.getStatistics({
+      viewerUserId: viewer.user.userId,
+      scope: 'yours',
+      now: new Date('2026-07-23T12:00:00Z'),
+    })).resolves.toEqual({
+      daily: { flightCount: 0, mostAccomplishments: null, mostCells: null, greatestFivePointDistance: null },
+      monthly: {
+        flightCount: 1,
+        mostAccomplishments: { flightId: viewerFlightId, value: 0 },
+        mostCells: { flightId: viewerFlightId, value: 2 },
+        greatestFivePointDistance: null,
+      },
+    });
+    expect((await service.getStatistics({
+      viewerUserId: viewer.user.userId,
+      q: 'VIEWER',
+      now: new Date('2026-07-23T12:00:00Z'),
+    })).monthly.flightCount).toBe(1);
+    expect((await service.getStatistics({
+      viewerUserId: viewer.user.userId,
+      q: 'Hidden',
+      now: new Date('2026-07-23T12:00:00Z'),
+    })).monthly.flightCount).toBe(0);
+  });
+
+  it('breaks statistic ties by the most recent flight and then ascending flight id, excluding missing five-point scores', async () => {
+    if (!database) throw new Error('Test database was not initialized.');
+    const auth = createAuthService(database.db, { sessionTtlSeconds: 604800 });
+    const viewer = await auth.signup({ email: 'stats-ties@example.com', password: 'correct horse battery staple', displayName: 'Tie Pilot' });
+    const olderId = '00000000-0000-4000-8000-000000000011';
+    const tiedLowerId = '00000000-0000-4000-8000-000000000012';
+    const tiedHigherId = '00000000-0000-4000-8000-000000000013';
+    const missingScoreId = '00000000-0000-4000-8000-000000000014';
+    for (const [id, startedAt, cells] of [
+      [olderId, new Date('2026-07-23T09:00:00Z'), 4],
+      [tiedLowerId, new Date('2026-07-23T10:00:00Z'), 4],
+      [tiedHigherId, new Date('2026-07-23T10:00:00Z'), 4],
+      [missingScoreId, new Date('2026-07-23T11:00:00Z'), 1],
+    ] as const) {
+      const flightId = await createFlight(viewer.user.userId, {
+        id, startedAt, launchTimezone: 'UTC', launchLatitude: 0, launchLongitude: 0,
+        durationSeconds: 60, distanceMeters: 100, directCellCount: cells, enclosedCellCount: 0,
+      });
+      await database.db.insert(activities).values({
+        actorUserId: viewer.user.userId, activityType: 'flight', sourceFlightId: flightId, publishedAt: startedAt,
+      });
+    }
+    await database.db.insert(flightScores).values([olderId, tiedLowerId, tiedHigherId].map((flightId) => ({
+      flightId,
+      totalDistanceMeters: 100,
+      totalDistanceMetadata: {},
+      fivePointDistanceMeters: 5_000,
+      fivePointDistanceCalcVersion: 1,
+      fivePointDistanceMetadata: { points: [] },
+    })));
+
+    const daily = (await createActivityService(database.db).getStatistics({
+      viewerUserId: viewer.user.userId,
+      now: new Date('2026-07-23T12:00:00Z'),
+    })).daily;
+    expect(daily.flightCount).toBe(4);
+    expect(daily.mostAccomplishments).toEqual({ flightId: missingScoreId, value: 0 });
+    expect(daily.mostCells).toEqual({ flightId: tiedLowerId, value: 4 });
+    expect(daily.greatestFivePointDistance).toEqual({ flightId: tiedLowerId, value: 5_000 });
+  });
+
+  it('keeps launch-local months correct at UTC boundaries for the extreme IANA offsets', async () => {
+    if (!database) throw new Error('Test database was not initialized.');
+    const auth = createAuthService(database.db, { sessionTtlSeconds: 604800 });
+    const viewer = await auth.signup({
+      email: 'stats-boundaries@example.com',
+      password: 'correct horse battery staple',
+      displayName: 'Boundary Pilot',
+    });
+    const now = new Date('2026-07-01T00:30:00Z');
+    const flightInputs = [
+      // UTC+14 has already reached July, including instants that are still June in UTC.
+      { startedAt: new Date('2026-06-30T10:15:00Z'), launchTimezone: 'Pacific/Kiritimati' },
+      // UTC-12 is still in June, including instants that have reached July in UTC.
+      { startedAt: new Date('2026-07-01T11:45:00Z'), launchTimezone: 'Etc/GMT+12' },
+      // Exercise both distant ends of the safe UTC candidate envelope.
+      { startedAt: new Date('2026-07-31T09:30:00Z'), launchTimezone: 'Pacific/Kiritimati' },
+      { startedAt: new Date('2026-06-01T12:30:00Z'), launchTimezone: 'Etc/GMT+12' },
+      // Adjacent launch-local months must still be rejected by the exact predicate.
+      { startedAt: new Date('2026-06-30T09:59:59Z'), launchTimezone: 'Pacific/Kiritimati' },
+      { startedAt: new Date('2026-07-01T12:00:00Z'), launchTimezone: 'Etc/GMT+12' },
+    ] as const;
+    const flightIds: string[] = [];
+    for (const input of flightInputs) {
+      const flightId = await createFlight(viewer.user.userId, {
+        ...input,
+        launchLatitude: 0,
+        launchLongitude: 0,
+        durationSeconds: 60,
+        distanceMeters: 100,
+        directCellCount: 1,
+        enclosedCellCount: 0,
+      });
+      flightIds.push(flightId);
+      await database.db.insert(activities).values({
+        actorUserId: viewer.user.userId,
+        activityType: 'flight',
+        sourceFlightId: flightId,
+        publishedAt: input.startedAt,
+      });
+    }
+
+    const statistics = await createActivityService(database.db).getStatistics({
+      viewerUserId: viewer.user.userId,
+      now,
+    });
+    expect(statistics.monthly.flightCount).toBe(4);
+    expect(statistics.daily.flightCount).toBe(2);
+    expect([
+      flightIds[0],
+      flightIds[1],
+    ]).toContain(statistics.daily.mostCells?.flightId);
   });
 });
 

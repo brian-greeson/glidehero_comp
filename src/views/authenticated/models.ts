@@ -121,14 +121,32 @@ export type ActivityEventView = {
   achievements: AchievementView[];
 };
 
+export type ActivityStatisticWinnerView = {
+  href: string;
+  value: string;
+};
+
+export type ActivityPeriodStatisticsView = {
+  flightCount: string;
+  mostAccomplishments: ActivityStatisticWinnerView | null;
+  mostCells: ActivityStatisticWinnerView | null;
+  greatestFivePointDistance: ActivityStatisticWinnerView | null;
+};
+
+export type ActivityStatisticsView = {
+  monthly: ActivityPeriodStatisticsView;
+  daily: ActivityPeriodStatisticsView;
+};
+
 export type ActivityPageModel = AuthenticatedShellModel & {
   page: 'activity';
   events: ActivityEventView[];
+  activityStats: ActivityStatisticsView;
   activitySearch?: string;
   activityPilotResults?: ActivityPilotResultView[];
   activityReturnTo?: string;
-  activityScopeLinks?: { all: string; following: string; yours: string };
-  activityScope?: 'all' | 'following' | 'yours';
+  activityScopeLinks?: { following: string; yours: string };
+  activityScope?: 'following' | 'yours';
   activityLoadMoreHref?: string;
   activityLoadMoreEndpoint?: string;
 };

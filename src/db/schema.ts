@@ -111,6 +111,7 @@ export const flights = pgTable(
     index('flights_user_id_idx').on(table.userId),
     index('flights_user_id_processed_at_flight_id_idx').on(table.userId, table.processedAt, table.id),
     index('flights_igc_file_id_idx').on(table.igcFileId),
+    index('flights_started_at_idx').on(table.startedAt),
   ],
 );
 
@@ -520,6 +521,7 @@ export const achievements = pgTable(
   (table) => [
     unique('achievements_user_id_achievement_key_unique').on(table.userId, table.achievementKey),
     index('achievements_user_id_earned_at_idx').on(table.userId, table.earnedAt),
+    index('achievements_source_flight_id_idx').on(table.sourceFlightId),
   ],
 );
 
@@ -589,6 +591,7 @@ export const achievementRecordEvents = pgTable(
   (table) => [
     index('achievement_record_events_record_id_earned_at_idx').on(table.recordId, table.earnedAt),
     index('achievement_record_events_user_id_earned_at_idx').on(table.userId, table.earnedAt),
+    index('achievement_record_events_source_flight_id_idx').on(table.sourceFlightId),
     check('achievement_record_events_value_nonnegative', sql`${table.value} > 0`),
   ],
 );

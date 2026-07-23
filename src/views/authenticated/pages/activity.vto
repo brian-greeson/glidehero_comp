@@ -5,11 +5,10 @@
       <section class="activity-feed-panel">
         {{ include "authenticated/components/activityPilotSearch.vto" { activitySearch, activityPilotResults, activityReturnTo, activityScope } }}
         <nav class="pill-filters" role="group" aria-label="Activity filter">
-          <a href="{{ if typeof activityScopeLinks !== 'undefined' }}{{ activityScopeLinks.all }}{{ else }}/activity{{ /if }}" aria-current="{{ if activityScope === 'all' || typeof activityScope === 'undefined' }}page{{ else }}false{{ /if }}">All</a>
           <a href="{{ if typeof activityScopeLinks !== 'undefined' }}{{ activityScopeLinks.following }}{{ else }}/activity?scope=following{{ /if }}" aria-current="{{ if activityScope === 'following' }}page{{ else }}false{{ /if }}">Following</a>
           <a href="{{ if typeof activityScopeLinks !== 'undefined' }}{{ activityScopeLinks.yours }}{{ else }}/activity?scope=yours{{ /if }}" aria-current="{{ if activityScope === 'yours' }}page{{ else }}false{{ /if }}">Yours</a>
         </nav>
-        {{ include "authenticated/components/sectionHeading.vto" { title: "Recent Activity", action: "View All", actionId: "all-activity" } }}
+        {{ include "authenticated/components/sectionHeading.vto" { title: "Recent Activity" } }}
         <div class="activity-feed" data-activity-feed>
           {{ for event of events }}{{ include "authenticated/components/activityCard.vto" { event } }}{{ /for }}
           {{ if typeof activityLoadMoreHref !== 'undefined' && activityLoadMoreHref }}
@@ -19,6 +18,33 @@
           {{ if events.length === 0 }}<p class="activity-empty-feed" data-activity-empty>Nothing to show yet.</p>{{ /if }}
         </div>
       </section>
+      <aside class="activity-rail" aria-label="Activity statistics">
+        <section class="rail-card activity-stats-card" data-activity-stats>
+          <header class="activity-stats-card__header">
+            <h2>Statistics</h2>
+            <div class="activity-stats-card__periods" role="group" aria-label="Statistics period">
+              <button type="button" id="activity-stats-monthly-button" data-activity-stats-button="monthly" aria-controls="activity-stats-monthly" aria-pressed="true">Monthly</button>
+              <button type="button" id="activity-stats-daily-button" data-activity-stats-button="daily" aria-controls="activity-stats-daily" aria-pressed="false">Daily</button>
+            </div>
+          </header>
+          <div id="activity-stats-monthly" class="activity-stats-card__period" data-activity-stats-panel="monthly" aria-labelledby="activity-stats-monthly-button">
+            <dl>
+              <div><dt>Number of flights</dt><dd>{{ activityStats.monthly.flightCount }}</dd></div>
+              <div><dt>Most displayed accomplishments</dt><dd>{{ if activityStats.monthly.mostAccomplishments }}<a href="{{ activityStats.monthly.mostAccomplishments.href }}" aria-label="Flight with most displayed accomplishments: {{ activityStats.monthly.mostAccomplishments.value }}">{{ activityStats.monthly.mostAccomplishments.value }}</a>{{ else }}<span>No qualifying flight</span>{{ /if }}</dd></div>
+              <div><dt>Most direct + enclosed cells</dt><dd>{{ if activityStats.monthly.mostCells }}<a href="{{ activityStats.monthly.mostCells.href }}" aria-label="Flight with most direct plus enclosed cells: {{ activityStats.monthly.mostCells.value }}">{{ activityStats.monthly.mostCells.value }}</a>{{ else }}<span>No qualifying flight</span>{{ /if }}</dd></div>
+              <div><dt>Greatest five-point distance</dt><dd>{{ if activityStats.monthly.greatestFivePointDistance }}<a href="{{ activityStats.monthly.greatestFivePointDistance.href }}" aria-label="Flight with greatest five-point distance: {{ activityStats.monthly.greatestFivePointDistance.value }}">{{ activityStats.monthly.greatestFivePointDistance.value }}</a>{{ else }}<span>No qualifying flight</span>{{ /if }}</dd></div>
+            </dl>
+          </div>
+          <div id="activity-stats-daily" class="activity-stats-card__period" data-activity-stats-panel="daily" aria-labelledby="activity-stats-daily-button" hidden>
+            <dl>
+              <div><dt>Number of flights</dt><dd>{{ activityStats.daily.flightCount }}</dd></div>
+              <div><dt>Most displayed accomplishments</dt><dd>{{ if activityStats.daily.mostAccomplishments }}<a href="{{ activityStats.daily.mostAccomplishments.href }}" aria-label="Flight with most displayed accomplishments: {{ activityStats.daily.mostAccomplishments.value }}">{{ activityStats.daily.mostAccomplishments.value }}</a>{{ else }}<span>No qualifying flight</span>{{ /if }}</dd></div>
+              <div><dt>Most direct + enclosed cells</dt><dd>{{ if activityStats.daily.mostCells }}<a href="{{ activityStats.daily.mostCells.href }}" aria-label="Flight with most direct plus enclosed cells: {{ activityStats.daily.mostCells.value }}">{{ activityStats.daily.mostCells.value }}</a>{{ else }}<span>No qualifying flight</span>{{ /if }}</dd></div>
+              <div><dt>Greatest five-point distance</dt><dd>{{ if activityStats.daily.greatestFivePointDistance }}<a href="{{ activityStats.daily.greatestFivePointDistance.href }}" aria-label="Flight with greatest five-point distance: {{ activityStats.daily.greatestFivePointDistance.value }}">{{ activityStats.daily.greatestFivePointDistance.value }}</a>{{ else }}<span>No qualifying flight</span>{{ /if }}</dd></div>
+            </dl>
+          </div>
+        </section>
+      </aside>
     </div>
   </section>
 {{ /layout }}

@@ -1,6 +1,11 @@
-import type { ActivityFeedItem } from '../../../services/activityService.js';
+import type { ActivityFeedItem, ActivityPeriodStatistics, ActivityStatistics } from '../../../services/activityService.js';
 import type { PilotSearchResult } from '../../../services/followService.js';
-import type { ActivityPilotResultView } from '../models.js';
+import type {
+  ActivityPeriodStatisticsView,
+  ActivityPilotResultView,
+  ActivityStatisticsView,
+  ActivityStatisticWinnerView,
+} from '../models.js';
 import { resolveAchievementArtworkKey } from '../achievementArtwork.js';
 import type { FlightThumbnailUrls } from '../../../services/flightThumbnailDeliveryService.js';
 
@@ -98,4 +103,48 @@ export function activityFeedItemToView(item: ActivityFeedItem, options: { thumbn
 
 export function activityFeedToViews(items: readonly ActivityFeedItem[], options: { thumbnailUrls?: ReadonlyMap<string, FlightThumbnailUrls> } = {}) {
   return items.map((item) => activityFeedItemToView(item, options));
+}
+
+function winnerToView(
+  winner: { flightId: string; value: number } | null,
+  formatValue: (value: number) => string,
+): ActivityStatisticWinnerView | null {
+  if (!winner) return null;
+  return {
+    href: `/flights/${winner.flightId}`,
+    value: formatValue(winner.value),
+  };
+}
+
+function countWithLabel(value: number, singular: string, plural = `${singular}s`): string {
+  const count = Number.isFinite(value) ? Math.max(0, Math.trunc(value)) : 0;
+  return `${count.toLocaleString('en-US')} ${count === 1 ? singular : plural}`;
+}
+
+function activityPeriodStatisticsToView(statistics: ActivityPeriodStatistics): ActivityPeriodStatisticsView {
+  return {
+    flightCount: Number.isFinite(statistics.flightCount)
+      ? Math.max(0, Math.trunc(statistics.flightCount)).toLocaleString('en-US')
+      : '0',
+    mostAccomplishments: winnerToView(
+      statistics.mostAccomplishments,
+      (value) => countWithLabel(value, 'accomplishment'),
+    ),
+    mostCells: winnerToView(
+      statistics.mostCells,
+      (value) => countWithLabel(value, 'cell'),
+    ),
+    greatestFivePointDistance: winnerToView(
+      statistics.greatestFivePointDistance,
+      (value) => `${new Intl.NumberFormat('en-US', { maximumFractionDigits: 1 }).format(value / 1_000)} km`,
+    ),
+  };
+}
+
+/** Convert the two server-computed periods into display-ready rail-card values. */
+export function activityStatsToView(statistics: ActivityStatistics): ActivityStatisticsView {
+  return {
+    monthly: activityPeriodStatisticsToView(statistics.monthly),
+    daily: activityPeriodStatisticsToView(statistics.daily),
+  };
 }

@@ -26,6 +26,7 @@
     "rebuild:arenas": "tsx --env-file-if-exists=.env src/scripts/rebuildArenas.ts",
     "backfill:flight-progress": "tsx --env-file-if-exists=.env src/scripts/backfillFlightProgress.ts",
     "backfill:flight-scores": "tsx --env-file-if-exists=.env src/scripts/backfillFlightScores.ts",
+    "backfill:flight-scores:production": "tsx --env-file-if-exists=.env.production src/scripts/backfillFlightScores.ts",
     "backfill:flight-thumbnails": "tsx --env-file-if-exists=.env src/scripts/backfillFlightThumbnails.ts",
     "backfill:arena-achievements": "tsx --env-file-if-exists=.env src/scripts/backfillArenaAchievements.ts",
     "backfill:arena-leadership": "tsx --env-file-if-exists=.env src/scripts/backfillArenaLeadership.ts",

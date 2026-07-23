@@ -122,8 +122,9 @@ Do not embed reusable business rules or substantial SQL in routers. If behavior 
 The authenticated Activity surface is also owned by `webRouter.ts`:
 
 - `GET /activity` renders the Activity page, including literal,
-  case-insensitive display-name search (excluding the viewer and limiting the
-  result to 10 pilots).
+  case-insensitive display-name search. The same query filters the visible
+  feed and its Daily/Monthly statistics while continuing to return up to 10
+  matching pilots (excluding the viewer) for Follow/Unfollow controls.
 - `GET /activity/feed` returns the next server-rendered feed fragment for the
   opaque publication-timestamp/ID cursor; the page also exposes a normal
   `GET /activity?before=...` link for the no-JavaScript path.
@@ -144,9 +145,11 @@ claim-cell, and score metadata for MapLibre; it does not trust browser input to
 select or expose a flight.
 
 Self-following has no persisted row or control. Feed visibility always includes
-the viewer's own activities and actors currently followed, so following reveals
-earlier Release 4 activity and unfollowing hides it on the next read. The
-surface intentionally exposes no follower/following counts or lists.
+the viewer's own activities and actors currently followed. `Following` is the
+default feed scope and includes both sets; `Yours` narrows the feed to the
+viewer. Following reveals earlier Release 4 activity and unfollowing hides it
+on the next read. The surface intentionally exposes no All scope and no
+follower/following counts or lists.
 
 ### HTTP middleware and cookies
 
@@ -194,7 +197,11 @@ If several services genuinely need a shared query, extract it into a focused ser
 `followService.ts` owns idempotent follow/unfollow state and bounded pilot
 search. `activityService.ts` owns flight publication, current-follow feed
 visibility, stable keyset pagination, joined flight summaries, grouped
-accomplishments, and Like toggling. Feed reads batch-load accomplishment
+accomplishments, launch-local Daily/Monthly statistics, and Like toggling.
+Statistics apply the same scope and display-name query as the feed across every
+matching Activity rather than only the current cursor page. They select the
+most-accomplished, highest-cell, and greatest five-point-distance flights with
+recent-flight tie-breaking. Feed reads batch-load accomplishment
 sources for the visible page and calculate Like counts/viewer state in the
 same query rather than issuing one query per card.
 
@@ -579,12 +586,14 @@ Extract reusable browser behavior into a focused module instead of continually g
 
 Feature-specific browser assets may use a subdirectory, as the admin area editor does.
 
-`public/scripts/activity.js` progressively enhances the server-rendered Activity
+`public/scripts/app-ui/activity.js` progressively enhances the server-rendered Activity
 page: it appends the reusable feed fragment for Load more and updates Like
-pressed state/counts after a successful toggle. Forms and the ordinary cursor
-link remain functional without JavaScript. `activity.css` owns the responsive
-feed, search, accomplishment, and Like presentation; the Like icon is a
-thumbs-up inline, repository-native SVG using `currentColor`.
+pressed state/counts after a successful toggle. It also switches the statistics
+card between its server-rendered Monthly default and Daily panel without
+changing the URL. Forms, Monthly statistics, and the ordinary cursor link
+remain functional without JavaScript. `public/styles/app-ui/activity.css` owns
+the responsive feed, search, statistics, accomplishment, and Like presentation;
+the Like icon is a thumbs-up inline, repository-native SVG using `currentColor`.
 
 The shared `flightMapPreview.vto` component renders the responsive wide/mobile
 thumbnail pair used by Activity flight cards and Profile recent-flight rows.

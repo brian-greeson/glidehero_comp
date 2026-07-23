@@ -1,5 +1,20 @@
 /** Progressive enhancement for the refreshed Activity page. */
 export function initializeActivityUi(documentRef = document, fetchImpl = fetch) {
+  const statistics = documentRef.querySelector('[data-activity-stats]');
+  if (statistics) {
+    statistics.addEventListener('click', (event) => {
+      const button = event.target?.closest?.('[data-activity-stats-button]');
+      const period = button?.dataset.activityStatsButton;
+      if (!button || (period !== 'monthly' && period !== 'daily')) return;
+      for (const candidate of statistics.querySelectorAll('[data-activity-stats-button]')) {
+        candidate.setAttribute('aria-pressed', candidate === button ? 'true' : 'false');
+      }
+      for (const panel of statistics.querySelectorAll('[data-activity-stats-panel]')) {
+        panel.hidden = panel.dataset.activityStatsPanel !== period;
+      }
+    });
+  }
+
   const feed = documentRef.querySelector('[data-activity-feed]');
   if (!feed) return;
 
