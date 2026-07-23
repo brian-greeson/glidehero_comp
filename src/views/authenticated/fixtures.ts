@@ -121,6 +121,7 @@ const achievementsPage = {
     { label: 'In Progress', value: '7', detail: 'On your way!', icon: 'progress', tone: 'blue' as const },
   ],
   earned,
+  earnedHasExtras: false,
   inProgress,
   recentlyEarned: earned.slice(0, 3),
 };

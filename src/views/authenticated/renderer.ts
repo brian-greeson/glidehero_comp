@@ -32,6 +32,8 @@ export function createAuthenticatedPageRenderer(): AuthenticatedPageRenderer {
           ? '/scripts/app-ui/activity.js'
           : model.page === 'profile'
             ? '/scripts/app-ui/profile.js'
+            : model.page === 'achievements'
+              ? '/scripts/app-ui/achievements.js'
             : undefined,
       ...model,
     })

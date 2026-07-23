@@ -155,6 +155,8 @@ describe('production Profile and Achievements rendering', () => {
     expect(html).not.toContain('Reward:');
     expect(html).not.toContain(' pts');
     expect(html).toContain('Personal best');
+    expect(html.indexOf('In Progress Achievements')).toBeLessThan(html.indexOf('Earned Achievements'));
+    expect(html).toContain('/scripts/app-ui/achievements.js');
     expect(html.match(/Production Achievement 3/g)).toHaveLength(2);
     expect(html).not.toContain('Trending Achievements');
     expect(html).not.toContain('Settings');

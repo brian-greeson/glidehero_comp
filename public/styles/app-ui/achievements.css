@@ -2,6 +2,9 @@
 .achievements-page > .metric-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .achievements-layout { display: grid; grid-template-columns: minmax(0, 1fr) 300px; align-items: start; gap: 1rem; margin-top: 1rem; }.achievements-main { display: grid; gap: 1rem; }.achievement-section { padding: 1rem; }
 .earned-achievement-grid, .progress-achievement-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .75rem; margin-top: .5rem; }
+.earned-achievement-grid > div { min-width: 0; }
+.achievement-list-toggle { padding: 0; border: 0; color: var(--app-blue); background: transparent; font: inherit; font-size: .78rem; font-weight: 750; cursor: pointer; }
+.achievement-list-toggle[hidden] { display: none; }
 .earned-achievement-card { display: grid; justify-items: center; align-content: start; gap: .55rem; min-width: 0; padding: 1rem .7rem .9rem; border: 1px solid var(--app-border); border-radius: .8rem; text-align: center; }.earned-achievement-card > .achievement-badge { width: 96px; height: 104px; }.earned-achievement-card h3 { margin: 0 0 .35rem; font-size: .8rem; }.earned-achievement-card p { margin: 0; color: var(--app-muted); font-size: .68rem; line-height: 1.45; }.earned-achievement-card small { display: flex; align-items: center; justify-content: center; gap: .25rem; margin-top: .7rem; color: var(--app-muted); font-size: .58rem; }.earned-achievement-card small .app-icon { color: var(--app-green); }
 .achievement-card__type { display: block; margin-bottom: .2rem; color: var(--app-muted); font-size: .55rem; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; }
 .achievement-empty-state { margin: .75rem 0 .25rem; padding: 1.1rem; border: 1px dashed var(--app-border); border-radius: .65rem; color: var(--app-muted); font-size: .75rem; text-align: center; }

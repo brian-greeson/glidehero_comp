@@ -67,10 +67,10 @@ function profile(): PilotAchievementsSummary {
 }
 
 describe('achievements page adapter', () => {
-  it('maps service semantics to the four badge families and keeps the newest three', () => {
+  it('maps service semantics, keeps the latest achievement in each category visible, and keeps the newest three recent', () => {
     const fixture = authenticatedPageFixture('achievements');
     if (fixture.page !== 'achievements') throw new Error('Expected achievements fixture.');
-    const { page: _page, metrics: _metrics, earned: _earned, inProgress: _progress, recentlyEarned: _recent, ...shell } = fixture;
+    const { page: _page, metrics: _metrics, earned: _earned, earnedHasExtras: _extras, inProgress: _progress, recentlyEarned: _recent, ...shell } = fixture;
     const model = createAchievementsPageModel(profile(), shell);
 
     expect(model.metrics.map((metric) => metric.value)).toEqual(['4', '2']);
@@ -78,9 +78,28 @@ describe('achievements page adapter', () => {
     expect(model.earned.map((achievement) => achievement.artworkKey)).toEqual(['cell-explorer', 'distance-record', 'mapper', 'top-cell-holder']);
     expect(model.inProgress.map((achievement) => achievement.tone)).toEqual(['green', 'orange']);
     expect(model.inProgress.map((achievement) => achievement.artworkKey)).toEqual(['cell-explorer', 'mapper']);
+    expect(model.earned.map((achievement) => achievement.isInitiallyVisible)).toEqual([true, true, true, true]);
+    expect(model.earnedHasExtras).toBe(false);
     expect(model.recentlyEarned).toHaveLength(3);
     expect(model.inProgress[0]).toMatchObject({ current: '0', target: '10', percent: 0 });
     expect(model.inProgress[0]).not.toHaveProperty('reward');
     expect(model.earned[0]).not.toHaveProperty('points');
+  });
+
+  it('marks all but the newest achievement in a category as disclosure extras', () => {
+    const fixture = authenticatedPageFixture('achievements');
+    if (fixture.page !== 'achievements') throw new Error('Expected achievements fixture.');
+    const { page: _page, metrics: _metrics, earned: _earned, earnedHasExtras: _extras, inProgress: _progress, recentlyEarned: _recent, ...shell } = fixture;
+    const summary = profile();
+    summary.achievements.splice(1, 0, {
+      ...summary.achievements[1]!,
+      id: 'older-launch',
+      title: 'Older Launch Achievement',
+    });
+
+    const model = createAchievementsPageModel(summary, shell);
+
+    expect(model.earned.map((achievement) => achievement.isInitiallyVisible)).toEqual([true, true, false, true, true]);
+    expect(model.earnedHasExtras).toBe(true);
   });
 });

@@ -49,6 +49,7 @@ export type AchievementView = {
   current?: string;
   target?: string;
   percent?: number;
+  isInitiallyVisible?: boolean;
 };
 
 export type FlightView = {
@@ -147,6 +148,7 @@ export type AchievementsPageModel = AuthenticatedShellModel & {
   page: 'achievements';
   metrics: MetricView[];
   earned: AchievementView[];
+  earnedHasExtras: boolean;
   inProgress: AchievementView[];
   recentlyEarned: AchievementView[];
 };

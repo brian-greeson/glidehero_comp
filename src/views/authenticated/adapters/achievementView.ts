@@ -87,15 +87,22 @@ function formatCount(value: number): string {
 
 export function createAchievementsPageModel(
   profile: PilotAchievementsSummary,
-  shell: Omit<AchievementsPageModel, 'page' | 'metrics' | 'earned' | 'inProgress' | 'recentlyEarned'>,
+  shell: Omit<AchievementsPageModel, 'page' | 'metrics' | 'earned' | 'earnedHasExtras' | 'inProgress' | 'recentlyEarned'>,
 ): AchievementsPageModel {
-  const earned = profile.achievements.map(earnedView);
+  const visibleCategories = new Set<string>();
+  const earned = profile.achievements.map((achievement) => {
+    const category = achievement.achievementCategory ?? achievement.achievementType;
+    const isInitiallyVisible = !visibleCategories.has(category);
+    visibleCategories.add(category);
+    return { ...earnedView(achievement), isInitiallyVisible };
+  });
   const inProgress = profile.achievementProgress.map(progressView);
   return {
     ...shell,
     page: 'achievements',
     metrics: summaryMetrics(profile),
     earned,
+    earnedHasExtras: earned.some((achievement) => !achievement.isInitiallyVisible),
     inProgress,
     recentlyEarned: earned.slice(0, 3),
   };
