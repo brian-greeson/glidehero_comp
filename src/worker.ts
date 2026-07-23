@@ -11,6 +11,7 @@ import { runFlightWorkerRuntime } from './services/flightWorkerRuntime.js';
 import { createFlightThumbnailService } from './services/flightThumbnailService.js';
 import { createFlightThumbnailLifecycleService } from './services/flightThumbnailLifecycleService.js';
 import { createUserAchievementProgressService } from './services/userAchievementProgressService.js';
+import { createWorkerControlService } from './services/workerControlService.js';
 
 // Blocking stream reads legitimately take several seconds. Keep GLIDE's native
 // slow-response diagnostics from reporting those successful reads as warnings;
@@ -35,6 +36,7 @@ const thumbnailLifecycle = createFlightThumbnailLifecycleService(db, thumbnails,
 });
 const valkey = await createValkeyClient(config.valkeyUrl);
 const streamReader = await createValkeyClient(config.valkeyUrl, { requestTimeout: 10_000 });
+const workerControl = createWorkerControlService(valkey);
 const queue = createFlightUploadQueueService(valkey, {
   s3Client,
   bucketName: config.bucket.bucketName,
@@ -53,6 +55,7 @@ const worker = createFlightWorkerService(db, valkey, queue, processor, {
   consumerName: `${hostname()}-${process.pid}`,
   streamReader,
   thumbnailLifecycle,
+  workerControl,
 });
 console.log('GlideHero flight worker started.');
 const outcome = await runFlightWorkerRuntime({ worker, valkey, streamReader, pool });

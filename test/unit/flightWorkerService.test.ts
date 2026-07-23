@@ -34,6 +34,9 @@ describe('FlightWorkerService', () => {
     const processor = {
       process: vi.fn(async () => ({ status: 'completed' as const, flightId: '00000000-0000-4000-8000-000000000030' })),
     };
+    const workerControl = {
+      publishStatus: vi.fn(async () => undefined),
+    };
     const generateForFlight = vi.fn(async () => { events.push('thumbnail'); });
     const send = vi.fn(async () => ({ Body: { transformToByteArray: vi.fn(async () => Uint8Array.from([1, 2, 3])) } }));
     const worker = createFlightWorkerService(database as never, valkey as never, queue as never, processor, {
@@ -41,6 +44,7 @@ describe('FlightWorkerService', () => {
       bucketName: 'flights',
       consumerName: 'worker-1',
       thumbnailLifecycle: { generateForFlight },
+      workerControl: workerControl as never,
     });
 
     await worker.processJob('1-0', job.id);
@@ -58,6 +62,37 @@ describe('FlightWorkerService', () => {
     expect(events).toEqual(['reconcile', 'thumbnail']);
     expect(xack).toHaveBeenCalledWith('glidehero:flight-jobs', 'flight-workers', ['1-0']);
     expect(xdel).toHaveBeenCalledWith('glidehero:flight-jobs', ['1-0']);
+    expect(workerControl.publishStatus).toHaveBeenLastCalledWith(expect.objectContaining({
+      state: 'idle', processedCount: 1, failedCount: 0,
+    }));
+  });
+
+  it('publishes a failed count and the current processing error', async () => {
+    const limit = vi.fn(async () => []);
+    const database = {
+      select: vi.fn(() => ({ from: vi.fn(() => ({ leftJoin: vi.fn(() => ({ where: vi.fn(() => ({ limit })) })) })) })),
+    };
+    const workerControl = {
+      publishStatus: vi.fn(async () => undefined),
+    };
+    const queue = {
+      claimJob: vi.fn(async () => ({ ...job, status: 'processing' as const, processingToken: 'token-1' })),
+      saveClaimedJob: vi.fn(async () => true),
+    };
+    const worker = createFlightWorkerService(database as never, {
+      xack: vi.fn(async () => 1), xdel: vi.fn(async () => 1),
+    } as never, queue as never, { process: vi.fn() }, {
+      s3Client: { send: vi.fn(async () => { throw new Error('object storage unavailable'); }) } as never,
+      bucketName: 'flights',
+      consumerName: 'worker-1',
+      workerControl: workerControl as never,
+    });
+
+    await worker.processJob('1-0', job.id);
+
+    expect(workerControl.publishStatus).toHaveBeenLastCalledWith(expect.objectContaining({
+      state: 'idle', processedCount: 0, failedCount: 1, lastError: 'object storage unavailable',
+    }));
   });
 
   it('keeps a completed queue item when best-effort thumbnail generation fails', async () => {
@@ -810,6 +845,81 @@ describe('FlightWorkerService', () => {
     await expect(worker.run(controller.signal)).resolves.toBeUndefined();
     expect(streamReader.xreadgroup).toHaveBeenCalledOnce();
     expect(valkey.xreadgroup).not.toHaveBeenCalled();
+  });
+
+  it('waits for a running global control state before reading new jobs', async () => {
+    const controller = new AbortController();
+    let state: 'running' | 'paused' = 'paused';
+    const workerControl = {
+      initialize: vi.fn(async () => undefined),
+      getState: vi.fn(async () => state),
+      publishStatus: vi.fn(async () => undefined),
+    };
+    const valkey = {
+      xgroupCreate: vi.fn(async () => 'OK'),
+      xreadgroup: vi.fn(async () => { controller.abort(); return null; }),
+    };
+    const worker = createFlightWorkerService({} as never, valkey as never, {} as never, { process: vi.fn() }, {
+      s3Client: { send: vi.fn() } as never,
+      bucketName: 'flights',
+      consumerName: 'worker-1',
+      workerControl: workerControl as never,
+      readRetryDelayMs: 0,
+    });
+    worker.recoverStale = vi.fn(async () => undefined);
+    worker.cleanupAbandoned = vi.fn(async () => undefined);
+
+    const running = worker.run(controller.signal);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(valkey.xreadgroup).not.toHaveBeenCalled();
+    expect(workerControl.publishStatus).toHaveBeenCalledWith(expect.objectContaining({ state: 'paused' }));
+    state = 'running';
+    await new Promise((resolve) => setTimeout(resolve, 1_100));
+    await expect(running).resolves.toBeUndefined();
+    expect(valkey.xreadgroup).toHaveBeenCalledOnce();
+  });
+
+  it('allows an active job to finish when the global state becomes paused', async () => {
+    const controller = new AbortController();
+    const active = Promise.withResolvers<void>();
+    let controlReads = 0;
+    const workerControl = {
+      initialize: vi.fn(async () => undefined),
+      getState: vi.fn(async () => {
+        controlReads += 1;
+        if (controlReads >= 3) {
+          controller.abort();
+          return 'paused' as const;
+        }
+        return 'running' as const;
+      }),
+      publishStatus: vi.fn(async () => undefined),
+    };
+    const valkey = {
+      xgroupCreate: vi.fn(async () => 'OK'),
+      xreadgroup: vi.fn(async () => [{ key: 'glidehero:flight-jobs', value: { '1-0': [['jobId', job.id]] } }]),
+    };
+    const worker = createFlightWorkerService({} as never, valkey as never, {} as never, { process: vi.fn() }, {
+      s3Client: { send: vi.fn() } as never,
+      bucketName: 'flights',
+      consumerName: 'worker-1',
+      workerControl: workerControl as never,
+    });
+    worker.recoverStale = vi.fn(async () => undefined);
+    worker.cleanupAbandoned = vi.fn(async () => undefined);
+    const events: string[] = [];
+    worker.processJob = vi.fn(async () => {
+      events.push('started');
+      await active.promise;
+      events.push('finished');
+    });
+
+    const running = worker.run(controller.signal);
+    await vi.waitFor(() => expect(worker.processJob).toHaveBeenCalledOnce());
+    active.resolve();
+    await expect(running).resolves.toBeUndefined();
+    expect(events).toEqual(['started', 'finished']);
+    expect(valkey.xreadgroup).toHaveBeenCalledOnce();
   });
 
   it('does not accept a job returned after shutdown interrupts a blocked stream read', async () => {

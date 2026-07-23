@@ -4,11 +4,28 @@ import type { TerritoryTileConfig } from '../../config/territoryTiles.js';
 import type { AdminFlight, AdminUserFlight } from '../../services/adminFlightService.js';
 import type { AuthenticatedUser } from '../../services/authService.js';
 import type { AdminUserDetail, AdminUserSummary } from '../../services/adminUserService.js';
+import type { WorkerControlState, WorkerLiveState } from '../../services/workerControlService.js';
+
+export type AdminWorkerStatus = {
+  workerId: string;
+  state: WorkerLiveState;
+  currentJobId?: string;
+  heartbeatAt: number;
+  processedCount: number;
+  failedCount: number;
+  lastError?: string;
+  heartbeat: string;
+  online: boolean;
+};
 
 export type AdminPageRenderer = (model: {
   currentUser: AuthenticatedUser;
   flights: AdminFlight[];
   queueSummary?: { queued: number; processing: number; failed: number; oldestQueuedAgeSeconds: number | null };
+  workerControlState?: WorkerControlState;
+  workers?: AdminWorkerStatus[];
+  workerControlSuccess?: boolean;
+  workerControlError?: boolean;
   reprocessSuccess?: boolean;
   reprocessError?: boolean;
 }) => Promise<string>;
@@ -58,6 +75,10 @@ export function createAdminPageRenderer(): AdminPageRenderer {
       pageStylesheet: undefined,
       pageScript: undefined,
       queueSummary: undefined,
+      workerControlState: undefined,
+      workers: [],
+      workerControlSuccess: false,
+      workerControlError: false,
       ...model,
     })
   ).content;

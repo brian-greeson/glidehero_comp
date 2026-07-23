@@ -35,6 +35,7 @@ import { createFlightThumbnailService } from './services/flightThumbnailService.
 import { createFlightThumbnailLifecycleService } from './services/flightThumbnailLifecycleService.js';
 import { createFlightThumbnailDeliveryService } from './services/flightThumbnailDeliveryService.js';
 import { createUserAchievementProgressService } from './services/userAchievementProgressService.js';
+import { createWorkerControlService } from './services/workerControlService.js';
 
 const config = parseConfig(process.env);
 const { db } = createDatabase(config.databaseUrl);
@@ -59,6 +60,7 @@ const thumbnailDelivery = createFlightThumbnailDeliveryService({
   bucketFolder: config.bucket.bucketFolder,
 });
 const valkey = await createValkeyClient(config.valkeyUrl);
+const workerControl = createWorkerControlService(valkey);
 const arenaLeadership = createArenaLeadershipReconciliationService(db, { cellSize: config.gridClaimCellSize });
 const userAchievementProgress = createUserAchievementProgressService(db, { cellSize: config.gridClaimCellSize });
 const auth = createAuthService(db, { sessionTtlSeconds: config.sessionTtlSeconds }, userAchievementProgress);
@@ -142,6 +144,7 @@ const webMiddleware = [
     mapTilerStyleUrl: `https://api.maptiler.com/maps/outdoor-v2/style.json?key=${config.mapTilerApiKey}`,
     adminEmails: config.adminEmails,
     adminFlights,
+    workerControl,
     renderAdminPage: createAdminPageRenderer(),
     territoryTileSettings,
     renderAdminMapSettingsPage: createAdminMapSettingsPageRenderer(),

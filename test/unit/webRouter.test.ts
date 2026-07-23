@@ -10,6 +10,7 @@ import type { ArenaService } from '../../src/services/arenaService.js';
 import type { ArenaProgressService } from '../../src/services/arenaProgressService.js';
 import type { MapGridService } from '../../src/services/mapGridService.js';
 import type { FlightUploadQueueService } from '../../src/services/flightUploadQueueService.js';
+import type { WorkerControlService } from '../../src/services/workerControlService.js';
 import type { FailedFlightCleanupService } from '../../src/services/failedFlightCleanupService.js';
 import { PilotNotFoundError, type FollowService } from '../../src/services/followService.js';
 import { ActivityNotFoundError, SelfThermalError, type ActivityService } from '../../src/services/activityService.js';
@@ -347,6 +348,18 @@ describe('webRouter', () => {
       deleteAllUserFlights: vi.fn(async () => ({ deleted: 0, skipped: 0, failed: 0 })),
       createDownloadUrl: vi.fn(async () => null),
     };
+    const workerControl: WorkerControlService = {
+      getState: vi.fn(async (): Promise<'paused'> => 'paused'),
+      setState: vi.fn(async () => undefined),
+      initialize: vi.fn(async () => undefined),
+      publishStatus: vi.fn(async () => undefined),
+      getStatus: vi.fn(async () => null),
+      listStatuses: vi.fn(async () => [{
+        workerId: 'worker-1', state: 'processing' as const, currentJobId: 'job-1', heartbeatAt: Date.now(),
+        processedCount: 3, failedCount: 1, lastError: 'temporary read failure',
+      }]),
+      clearStatus: vi.fn(async () => undefined),
+    };
     const renderAdminPage = vi.fn(async () => '<html><body>Admin flights</body></html>');
     const router = createWebRouter({
       auth,
@@ -363,6 +376,7 @@ describe('webRouter', () => {
       renderAuthenticatedActivityFeed: vi.fn(async () => '<div>App feed</div>'),
       adminEmails: ['PILOT@example.com'],
       adminFlights,
+      workerControl,
       renderAdminPage,
     });
     const app = createApp({ webMiddleware: [createCurrentUserMiddleware(auth, cookie), router] });
@@ -375,6 +389,19 @@ describe('webRouter', () => {
       expect(admin.status).toBe(200);
       expect(await admin.text()).toContain('Admin flights');
       expect(adminFlights.listRecentFlights).toHaveBeenCalledOnce();
+      expect(workerControl.getState).toHaveBeenCalledOnce();
+      expect(workerControl.listStatuses).toHaveBeenCalledOnce();
+      expect(renderAdminPage).toHaveBeenCalledWith(expect.objectContaining({
+        workerControlState: 'paused',
+        workers: [expect.objectContaining({ workerId: 'worker-1', online: true })],
+      }));
+
+      const anonymousControl = await fetch(`${baseUrl}/admin/worker-control`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({ state: 'running' }),
+      });
+      expect(anonymousControl.status).toBe(403);
 
       const reprocess = await fetch(`${baseUrl}/admin/flights/00000000-0000-4000-8000-000000000020/reprocess`, {
         method: 'POST',
@@ -384,6 +411,25 @@ describe('webRouter', () => {
       expect(reprocess.status).toBe(303);
       expect(reprocess.headers.get('location')).toBe('/admin?reprocess=success');
       expect(adminFlights.reprocessFlight).toHaveBeenCalledWith({ flightId: '00000000-0000-4000-8000-000000000020' });
+
+      const resume = await fetch(`${baseUrl}/admin/worker-control`, {
+        method: 'POST',
+        redirect: 'manual',
+        headers: { cookie: 'glidehero_session=valid-token', 'content-type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({ state: 'running' }),
+      });
+      expect(resume.status).toBe(303);
+      expect(resume.headers.get('location')).toBe('/admin?worker=running');
+      expect(workerControl.setState).toHaveBeenCalledWith('running');
+
+      const invalidControl = await fetch(`${baseUrl}/admin/worker-control`, {
+        method: 'POST',
+        redirect: 'manual',
+        headers: { cookie: 'glidehero_session=valid-token', 'content-type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({ state: 'stop' }),
+      });
+      expect(invalidControl.status).toBe(303);
+      expect(invalidControl.headers.get('location')).toBe('/admin?worker=error');
     });
   });
 

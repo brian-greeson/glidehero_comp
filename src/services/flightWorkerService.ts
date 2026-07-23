@@ -13,6 +13,7 @@ import {
   type FlightUploadQueueService,
   type UploadJob,
 } from './flightUploadQueueService.js';
+import type { WorkerControlService, WorkerControlState, WorkerLiveState } from './workerControlService.js';
 
 const STALE_JOB_MS = 60_000;
 const HEARTBEAT_MS = 10_000;
@@ -26,6 +27,7 @@ const MAINTENANCE_LEASE_MS = 15_000;
 const MAINTENANCE_LEASE_RENEW_MS = 5_000;
 const STALE_RECOVERY_CADENCE_MS = 5_000;
 const CLEANUP_CADENCE_MS = 10_000;
+const CONTROL_CHECK_CADENCE_MS = 1_000;
 const renewLeaseScript = new Script(`
 if redis.call('GET', KEYS[1]) ~= ARGV[1] then return 0 end
 return redis.call('PEXPIRE', KEYS[1], tonumber(ARGV[2]))
@@ -37,6 +39,10 @@ return redis.call('DEL', KEYS[1])
 
 function text(value: GlideString): string {
   return Buffer.isBuffer(value) ? value.toString() : String(value);
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }
 
 function streamJobs(
@@ -76,9 +82,64 @@ export function createFlightWorkerService(
     readRetryDelayMs?: number;
     streamReader?: Pick<GlideClient, 'xreadgroup'>;
     thumbnailLifecycle?: Pick<FlightThumbnailLifecycleService, 'generateForFlight'>;
+    workerControl?: WorkerControlService;
   },
 ): FlightWorkerService {
   const streamReader = options.streamReader ?? valkey;
+  let liveState: WorkerLiveState = 'starting';
+  let currentJobId: string | undefined;
+  let processedCount = 0;
+  let failedCount = 0;
+  let lastError: string | undefined;
+
+  async function publishLiveStatus(state = liveState, jobId = currentJobId): Promise<void> {
+    if (!options.workerControl) return;
+    try {
+      await options.workerControl.publishStatus({
+        workerId: options.consumerName,
+        state,
+        ...(jobId ? { currentJobId: jobId } : {}),
+        heartbeatAt: Date.now(),
+        processedCount,
+        failedCount,
+        ...(lastError !== undefined ? { lastError } : {}),
+      });
+    } catch (error) {
+      console.error('Unable to publish flight worker status', error);
+    }
+  }
+
+  async function recordWorkerError(error: unknown): Promise<void> {
+    lastError = errorMessage(error);
+    await publishLiveStatus();
+  }
+
+  async function recordProcessedOutcome(): Promise<void> {
+    processedCount += 1;
+    await publishLiveStatus();
+  }
+
+  async function recordFailedOutcome(): Promise<void> {
+    failedCount += 1;
+    await publishLiveStatus();
+  }
+
+  async function setLiveStatus(state: WorkerLiveState, jobId?: string): Promise<void> {
+    liveState = state;
+    currentJobId = jobId;
+    await publishLiveStatus();
+  }
+
+  async function getControlState(): Promise<WorkerControlState> {
+    if (!options.workerControl) return 'running';
+    try {
+      return await options.workerControl.getState();
+    } catch (error) {
+      console.error('Unable to read flight worker control state', error);
+      await recordWorkerError(error);
+      return 'paused';
+    }
+  }
   async function acknowledge(streamId: string) {
     try {
       if (typeof valkey.exec === 'function') {
@@ -95,6 +156,7 @@ export function createFlightWorkerService(
       }
     } catch (error) {
       console.error('Unable to acknowledge flight job', error);
+      await recordWorkerError(error);
       return;
     }
     try {
@@ -102,6 +164,7 @@ export function createFlightWorkerService(
       if (typeof valkey.zrem === 'function') await valkey.zrem(acknowledgedDeletionKey, [streamId]);
     } catch (error) {
       console.error('Unable to remove acknowledged flight job', error);
+      await recordWorkerError(error);
     }
   }
 
@@ -205,8 +268,9 @@ export function createFlightWorkerService(
       } catch (error) {
         console.error('Unable to generate flight thumbnail', {
           flightId: outcome.flightId,
-          error: error instanceof Error ? error.message : 'unknown error',
+          error: errorMessage(error),
         });
+        await recordWorkerError(error);
       }
     }
 
@@ -297,6 +361,7 @@ export function createFlightWorkerService(
         } catch (error) {
           ownsLease = false;
           console.error('Unable to renew flight upload maintenance lease', error);
+          await recordWorkerError(error);
           break;
         }
       }
@@ -312,6 +377,7 @@ export function createFlightWorkerService(
         await valkey.invokeScript(releaseLeaseScript, { keys: [key], args: [token] });
       } catch (error) {
         console.error('Unable to release flight upload maintenance lease', error);
+        await recordWorkerError(error);
       }
     }
     return true;
@@ -320,7 +386,15 @@ export function createFlightWorkerService(
   async function releaseUnreadJobs(
     messages: Array<{ streamId: string; jobId: string }>,
   ): Promise<void> {
-    if (messages.length === 0 || typeof valkey.exec !== 'function') return;
+    if (messages.length === 0) return;
+    if (typeof valkey.exec !== 'function') {
+      for (const message of messages) {
+        await valkey.xadd(FLIGHT_JOB_STREAM, [['jobId', message.jobId]]);
+        await valkey.xack(FLIGHT_JOB_STREAM, FLIGHT_JOB_GROUP, [message.streamId]);
+        await valkey.xdel(FLIGHT_JOB_STREAM, [message.streamId]);
+      }
+      return;
+    }
     const transaction = new Batch(true);
     for (const message of messages) {
       // XREADGROUP has already put the message in this consumer's pending
@@ -396,7 +470,10 @@ export function createFlightWorkerService(
         return;
       }
 
+      await setLiveStatus('processing', job.id);
+
       let current = job;
+      let outcomeRecorded = false;
       let heartbeatWrite: Promise<void> = Promise.resolve();
       const heartbeat = setInterval(() => {
         current = { ...current, heartbeatAt: Date.now(), updatedAt: Date.now() };
@@ -405,7 +482,10 @@ export function createFlightWorkerService(
           .then((saved) => {
             if (!saved) clearInterval(heartbeat);
           })
-          .catch((error) => console.error('Unable to heartbeat flight job', error));
+          .catch((error) => {
+            console.error('Unable to heartbeat flight job', error);
+            return recordWorkerError(error);
+          });
       }, HEARTBEAT_MS);
 
       try {
@@ -458,6 +538,8 @@ export function createFlightWorkerService(
           console.log(`Flight: ${job.flightId} processed. Outcome: ${outcome.status}`);
 
         if (outcome.status === 'duplicate') {
+          await recordProcessedOutcome();
+          outcomeRecorded = true;
           await database.delete(igcFiles).where(eq(igcFiles.id, igcFileId));
           await options.s3Client.send(
             new DeleteObjectCommand({ Bucket: options.bucketName, Key: job.bucketKey }),
@@ -470,15 +552,21 @@ export function createFlightWorkerService(
           if (!saved && !(await queue.getJob(job.id)))
             await database.delete(igcFiles).where(eq(igcFiles.id, igcFileId));
         } else {
+          if (outcome.status === 'completed') await recordProcessedOutcome();
+          else await recordFailedOutcome();
+          outcomeRecorded = true;
           await settleProcessedFlight(current, igcFileId, outcome);
         }
       } catch (error) {
         console.error('Unable to process queued flight', error);
+        await recordWorkerError(error);
+        if (!outcomeRecorded) await recordFailedOutcome();
         clearInterval(heartbeat);
         await heartbeatWrite;
         await fail(current);
       } finally {
         clearInterval(heartbeat);
+        await setLiveStatus('idle');
       }
       await acknowledge(streamId);
     },
@@ -541,10 +629,14 @@ export function createFlightWorkerService(
               Date.now() - STALE_JOB_MS,
             );
             if (!shouldContinue()) break;
-            if (settled) await acknowledge(streamId);
+            if (settled) {
+              await recordFailedOutcome();
+              await acknowledge(streamId);
+            }
           }
         } catch (error) {
           console.error('Unable to recover stale flight job', error);
+          await recordWorkerError(error);
         }
       }
     },
@@ -559,10 +651,12 @@ export function createFlightWorkerService(
           await valkey.zrem(acknowledgedDeletionKey, [streamId]);
         } catch (error) {
           console.error('Unable to retry acknowledged flight job removal', error);
+          await recordWorkerError(error);
           try {
             await valkey.zadd(acknowledgedDeletionKey, { [streamId]: Date.now() + 60_000 });
           } catch (rotationError) {
             console.error('Unable to rotate acknowledged flight job removal', rotationError);
+            await recordWorkerError(rotationError);
           }
         }
       }
@@ -574,6 +668,7 @@ export function createFlightWorkerService(
         failedCleanups = await queue.pendingFailedCleanups();
       } catch (error) {
         console.error('Unable to discover failed flight cleanups', error);
+        await recordWorkerError(error);
       }
       for (const failed of failedCleanups) {
         if (!shouldContinue()) break;
@@ -590,6 +685,7 @@ export function createFlightWorkerService(
           databaseCleared = true;
         } catch (error) {
           console.error('Unable to retry failed flight database cleanup', error);
+          await recordWorkerError(error);
         }
         try {
           await options.s3Client.send(
@@ -598,12 +694,14 @@ export function createFlightWorkerService(
           objectCleared = true;
         } catch (error) {
           console.error('Unable to retry failed flight object cleanup', error);
+          await recordWorkerError(error);
         }
         if (databaseCleared && objectCleared) {
           try {
             await queue.finalizeFailedCleanup(failed.id);
           } catch (error) {
             console.error('Unable to finalize failed flight cleanup', error);
+            await recordWorkerError(error);
           }
         }
       }
@@ -614,6 +712,7 @@ export function createFlightWorkerService(
           typeof queue.retainedClearedJobs === 'function' ? await queue.retainedClearedJobs() : [];
       } catch (error) {
         console.error('Unable to discover retained cleared flights', error);
+        await recordWorkerError(error);
       }
       for (const cleared of retainedClearedJobs) {
         if (!shouldContinue()) break;
@@ -623,6 +722,7 @@ export function createFlightWorkerService(
           await removeLateDatabaseWork(cleared);
         } catch (error) {
           console.error('Unable to reconcile late database work for a cleared flight', error);
+          await recordWorkerError(error);
         }
       }
       if (!shouldContinue()) return;
@@ -631,6 +731,7 @@ export function createFlightWorkerService(
         pendingRemovals = await queue.pendingRemovals();
       } catch (error) {
         console.error('Unable to discover pending upload removals', error);
+        await recordWorkerError(error);
       }
       for (const removal of pendingRemovals) {
         if (!shouldContinue()) break;
@@ -641,6 +742,7 @@ export function createFlightWorkerService(
           await queue.finalizeRemoval(removal.id);
         } catch (error) {
           console.error('Unable to retry upload object removal', error);
+          await recordWorkerError(error);
         }
       }
       if (!shouldContinue()) return;
@@ -649,6 +751,7 @@ export function createFlightWorkerService(
         expiredIntentIds = await queue.expiredIntentIds();
       } catch (error) {
         console.error('Unable to discover abandoned flight uploads', error);
+        await recordWorkerError(error);
       }
       for (const id of expiredIntentIds) {
         if (!shouldContinue()) break;
@@ -666,9 +769,11 @@ export function createFlightWorkerService(
             await queue.finalizeRemoval(job.id);
           } catch (error) {
             console.error('Unable to remove abandoned upload object', error);
+            await recordWorkerError(error);
           }
         } catch (error) {
           console.error('Unable to clean abandoned flight upload', error);
+          await recordWorkerError(error);
         }
       }
     },
@@ -688,12 +793,14 @@ export function createFlightWorkerService(
           await service.retryAcknowledgedDeletions(shouldContinue);
         } catch (error) {
           console.error('Unable to retry acknowledged flight job removals', error);
+          await recordWorkerError(error);
         }
         if (!shouldContinue()) return;
         try {
           await service.cleanupAbandoned(shouldContinue);
         } catch (error) {
           console.error('Unable to clean abandoned flight uploads', error);
+          await recordWorkerError(error);
         }
       });
     },
@@ -704,6 +811,7 @@ export function createFlightWorkerService(
           await service.runStaleRecovery(signal);
         } catch (error) {
           console.error('Unable to run stale flight recovery', error);
+          await recordWorkerError(error);
         }
         await waitForCadence(STALE_RECOVERY_CADENCE_MS, signal);
       }
@@ -715,17 +823,31 @@ export function createFlightWorkerService(
           await service.runCleanupMaintenance(signal);
         } catch (error) {
           console.error('Unable to run flight upload cleanup', error);
+          await recordWorkerError(error);
         }
         await waitForCadence(CLEANUP_CADENCE_MS, signal);
       }
     },
 
     async run(signal) {
+      if (options.workerControl) {
+        await options.workerControl.initialize();
+        await setLiveStatus('starting');
+      }
       await service.ensureGroup();
       const recoveryLoop = service.runRecoveryLoop(signal);
       const cleanupLoop = service.runCleanupLoop(signal);
+      const liveHeartbeat = options.workerControl
+        ? setInterval(() => { void publishLiveStatus(); }, HEARTBEAT_MS)
+        : undefined;
       try {
         while (!signal?.aborted) {
+          if ((await getControlState()) === 'paused') {
+            await setLiveStatus('paused');
+            await waitForCadence(CONTROL_CHECK_CADENCE_MS, signal);
+            continue;
+          }
+          await setLiveStatus('idle');
           let result: Awaited<ReturnType<GlideClient['xreadgroup']>>;
           try {
             result = await streamReader.xreadgroup(
@@ -736,6 +858,7 @@ export function createFlightWorkerService(
             );
           } catch (error) {
             console.error('Unable to read flight job stream', error);
+            await recordWorkerError(error);
             await waitAfterReadFailure(signal);
             continue;
           }
@@ -748,21 +871,35 @@ export function createFlightWorkerService(
               await releaseUnreadJobs(messages);
             } catch (error) {
               console.error('Unable to return unread flight jobs during shutdown', error);
+              await recordWorkerError(error);
             }
             break;
+          }
+          if ((await getControlState()) === 'paused') {
+            await setLiveStatus('paused');
+            try {
+              await releaseUnreadJobs(messages);
+            } catch (error) {
+              console.error('Unable to return flight jobs after worker pause', error);
+              await recordWorkerError(error);
+            }
+            continue;
           }
           for (const message of messages) {
             try {
               await service.processJob(message.streamId, message.jobId);
             } catch (error) {
               console.error('Unable to handle flight job message', error);
+              await recordWorkerError(error);
             }
           }
           // Finish the active job; the abort-aware maintenance loops stop independently.
           if (signal?.aborted) break;
         }
       } finally {
+        if (liveHeartbeat) clearInterval(liveHeartbeat);
         await Promise.all([recoveryLoop, cleanupLoop]);
+        await setLiveStatus('stopping');
       }
     },
   };
