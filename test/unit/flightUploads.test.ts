@@ -1,4 +1,5 @@
 // @ts-nocheck Browser behavior is exercised with a deliberately minimal DOM test double.
+import { readFileSync } from 'node:fs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { initializeFlightUploads } from '../../public/scripts/flightUploads.js';
 import { createZipFile } from '../helpers/createZipFile.js';
@@ -485,6 +486,29 @@ describe('flight upload active-file capacity', () => {
 
 describe('flight ZIP uploads', () => {
   afterEach(() => vi.unstubAllGlobals());
+
+  it('leaves mobile file selection unfiltered so standalone IGC files remain selectable', () => {
+    const template = readFileSync(
+      new URL('../../src/views/authenticated/components/flightUploadDialog.vto', import.meta.url),
+      'utf8',
+    );
+
+    expect(template).toContain('data-upload-more-input type="file" multiple');
+    expect(template).not.toContain('accept=');
+  });
+
+  it('rejects unsupported files after selection', async () => {
+    const harness = uploadHarness(0);
+
+    harness.select(harness.uploadInput, [
+      { name: 'notes.txt', size: 1_024, type: 'text/plain' },
+    ]);
+
+    await vi.waitFor(() => expect(harness.windowRef.alert).toHaveBeenCalledWith(
+      'Only non-empty .igc files of 10 MB or less and .zip archives can be uploaded.',
+    ));
+    expect(harness.xhr.instances).toHaveLength(0);
+  });
 
   it('expands ZIP entries and uploads each IGC through the existing intent flow', async () => {
     const harness = uploadHarness(0);
