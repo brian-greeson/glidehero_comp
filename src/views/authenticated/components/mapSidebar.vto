@@ -1,15 +1,16 @@
 <aside class="map-sidebar" aria-label="Map controls">
   <section class="map-control-group">
     <h2>Map Mode</h2>
-    <div class="segmented-control" data-segmented-control role="group" aria-label="Map mode">
-      <a href="/personal" data-map-mode-link="personal" class="{{ if mode === 'personal' }}is-active{{ /if }}" aria-current="{{ if mode === 'personal' }}page{{ else }}false{{ /if }}">{{ include "authenticated/components/icon.vto" { name: "profile" } }}Personal</a>
-      <a href="{{ if mode === 'competitive' }}{{ navigation[0].href }}{{ else }}/global{{ /if }}" data-map-mode-link="competitive" class="{{ if mode === 'competitive' }}is-active{{ /if }}" aria-current="{{ if mode === 'competitive' }}page{{ else }}false{{ /if }}">{{ include "authenticated/components/icon.vto" { name: "trophy" } }}Competitive</a>
+    <div class="segmented-control map-mode-control" data-segmented-control role="group" aria-label="Map mode">
+      <a href="{{ if typeof mapModeHrefs !== 'undefined' }}{{ mapModeHrefs.personal }}{{ else }}/personal{{ /if }}" data-map-mode-link="personal" class="{{ if mode === 'personal' }}is-active{{ /if }}" aria-current="{{ if mode === 'personal' }}page{{ else }}false{{ /if }}">{{ include "authenticated/components/icon.vto" { name: "profile" } }}Personal</a>
+      <a href="{{ if typeof mapModeHrefs !== 'undefined' }}{{ mapModeHrefs.following }}{{ else }}/following{{ /if }}" data-map-mode-link="following" class="{{ if mode === 'following' }}is-active{{ /if }}" aria-current="{{ if mode === 'following' }}page{{ else }}false{{ /if }}">{{ include "authenticated/components/icon.vto" { name: "people" } }}Following</a>
+      <a href="{{ if typeof mapModeHrefs !== 'undefined' }}{{ mapModeHrefs.competitive }}{{ else }}/global{{ /if }}" data-map-mode-link="competitive" class="{{ if mode !== 'personal' && mode !== 'following' }}is-active{{ /if }}" aria-current="{{ if mode !== 'personal' && mode !== 'following' }}page{{ else }}false{{ /if }}">{{ include "authenticated/components/icon.vto" { name: "globe" } }}All Pilots</a>
     </div>
   </section>
   <section class="map-control-group">
     <h2>Time Range</h2>
     <div class="segmented-control" data-segmented-control role="group" aria-label="Time range">
-      {{ if mode === 'competitive' }}
+      {{ if mode !== 'personal' }}
         <button type="button" data-competition-period-option="all-time" aria-pressed="{{ if period === 'all-time' }}true{{ else }}false{{ /if }}">All Time</button>
         <button type="button" data-competition-period-option="current-month" aria-pressed="{{ if period === 'current-month' }}true{{ else }}false{{ /if }}"><span data-current-month-option>Current Month</span></button>
       {{ else }}
@@ -41,7 +42,7 @@
       {{ /if }}
     </div>
   </section>
-  {{ if mode === 'competitive' }}
+  {{ if mode !== 'personal' }}
     {{ include "authenticated/components/mapLeaderboard.vto" { compact: false } }}
   {{ /if }}
 </aside>

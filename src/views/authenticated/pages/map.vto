@@ -7,15 +7,15 @@
         data-map-style-url="{{ if typeof mapStyleUrl !== 'undefined' }}{{ mapStyleUrl }}{{ /if }}"
         data-current-user-id="{{ if typeof currentUserId !== 'undefined' }}{{ currentUserId }}{{ /if }}"
         data-territory-color="{{ if typeof territoryColor !== 'undefined' }}{{ territoryColor }}{{ /if }}"
+        {{ if mode === 'following' }}data-coverage-scope="following"{{ /if }}
         data-territory-tile-minimum-zoom="{{ if typeof territoryTileMinimumZoom !== 'undefined' }}{{ if territoryTileMinimumZoom === 0 }}0{{ else }}{{ territoryTileMinimumZoom }}{{ /if }}{{ else }}0{{ /if }}"
         data-territory-tile-maximum-zoom="{{ if typeof territoryTileMaximumZoom !== 'undefined' }}{{ if territoryTileMaximumZoom === 0 }}0{{ else }}{{ territoryTileMaximumZoom }}{{ /if }}{{ else }}22{{ /if }}"
         {{ if typeof arenaSourceId !== 'undefined' && arenaSourceId }}data-arena-source-id="{{ arenaSourceId }}"{{ /if }}
         {{ if typeof focusArenaSourceId !== 'undefined' && focusArenaSourceId }}data-focus-arena-source-id="{{ focusArenaSourceId }}"{{ /if }}></div>
-      <span class="map-scale">500 m</span>
       {{ if typeof mapEmptyState !== 'undefined' }}<p class="map-empty-state" data-map-empty-state hidden>{{ mapEmptyState }}</p>{{ else }}<p class="map-empty-state" data-map-empty-state hidden>Map unavailable. Check your connection and try again.</p>{{ /if }}
       {{ include "authenticated/components/mapFlightAidStatus.vto" }}
       <div class="map-arena-search" data-map-arena-search>{{ include "authenticated/components/arenaSearch.vto" }}</div>
-      {{ if mode === 'competitive' }}
+      {{ if mode !== 'personal' }}
         {{ include "authenticated/components/mapLeaderboard.vto" { compact: true } }}
       {{ /if }}
       {{ include "authenticated/components/mapMobileControls.vto" { mode, period } }}

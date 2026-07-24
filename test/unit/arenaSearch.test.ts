@@ -64,7 +64,11 @@ class ElementStub {
   scrollIntoView() {}
 }
 
-function harness(fetchImpl = vi.fn(), search = '') {
+function harness(
+  fetchImpl = vi.fn(),
+  search = '',
+  options: { pathname?: string; scope?: string | null } = {},
+) {
   const root = new ElementStub();
   const input = new ElementStub();
   const results = new ElementStub();
@@ -82,7 +86,14 @@ function harness(fetchImpl = vi.fn(), search = '') {
     },
   };
   const navigate = vi.fn();
-  initializeArenaSearch({ documentRef, fetchImpl, navigate, locationRef: { search }, debounceMs: 200 });
+  initializeArenaSearch({
+    documentRef,
+    fetchImpl,
+    navigate,
+    locationRef: { pathname: options.pathname ?? '', search },
+    scope: options.scope ?? null,
+    debounceMs: 200,
+  });
   return { root, input, results, fetchImpl, navigate };
 }
 
@@ -174,6 +185,21 @@ describe('Arena autocomplete', () => {
 
   it('carries the URL month into Arena navigation', async () => {
     const context = harness(vi.fn(async () => response(arenas)), '?month=2026-07');
+    context.input.value = 'a';
+    context.input.dispatch('input');
+    await vi.advanceTimersByTimeAsync(200);
+
+    context.results.children[0]?.dispatch('click');
+
+    expect(context.navigate).toHaveBeenCalledWith('/arena/us/alpha-1?month=2026-07');
+  });
+
+  it('does not carry a stray Following view from a Global URL into an Arena', async () => {
+    const context = harness(
+      vi.fn(async () => response(arenas)),
+      '?month=2026-07&view=following',
+      { pathname: '/global' },
+    );
     context.input.value = 'a';
     context.input.dispatch('input');
     await vi.advanceTimersByTimeAsync(200);

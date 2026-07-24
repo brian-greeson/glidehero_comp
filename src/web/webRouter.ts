@@ -60,7 +60,7 @@ const competitionMonthValue = z.string().refine((value) => {
     return false;
   }
 });
-const competitionMonthSchema = z.object({ month: competitionMonthValue.optional() }).strict();
+const competitionMonthSchema = z.object({ month: competitionMonthValue.optional(), scope: z.literal('following').optional() }).strict();
 const personalPeriodSchema = z.object({ month: competitionMonthValue.optional() }).strict();
 const pilotUserIdSchema = z.string().uuid();
 const activityQuerySchema = z.object({
@@ -96,6 +96,7 @@ const viewportBoundsSchema = z.object(viewportBoundsShape)
   .refine((bounds) => bounds.south < bounds.north && bounds.west !== bounds.east);
 const competitionLeaderboardSchema = z.object({
   month: competitionMonthValue.optional(),
+  scope: z.literal('following').optional(),
   ...viewportBoundsShape,
 }).strict().refine((bounds) => bounds.south < bounds.north && bounds.west !== bounds.east);
 const arenaSearchSchema = z.object({ q: z.string().trim().min(1).max(100) }).strict();
@@ -104,6 +105,7 @@ const cellCoordinateSchema = z.coerce.number().int().safe();
 const tileQuerySchema = z.object({
   month: competitionMonthValue.optional(),
   pilot: z.string().uuid().optional(),
+  scope: z.literal('following').optional(),
 }).strict();
 const territoryTileZoomSchema = z.string().trim().regex(/^\d+$/).transform(Number)
   .pipe(z.number().int().min(MINIMUM_TERRITORY_TILE_ZOOM).max(MAXIMUM_TERRITORY_TILE_ZOOM));
@@ -297,10 +299,28 @@ export function createWebRouter(dependencies: {
 
   function productionMap(currentUser: AuthenticatedUser, input: Omit<Parameters<typeof createMapPageModel>[1], 'currentUserId' | 'territoryColor' | 'mapStyleUrl' | 'territoryTileMinimumZoom' | 'territoryTileMaximumZoom'>, options: { mapHref?: string; showFooter?: boolean } = {}) {
     const settings = territoryTileSettings.get();
+    const isArenaMap = input.arenaSourceId !== undefined || input.focusArenaSourceId !== undefined;
+    const currentMapUrl = new URL(input.mapHref, 'http://glidehero.local');
+    const personalMapUrl = new URL('/personal', currentMapUrl);
+    const followingMapUrl = new URL(isArenaMap ? input.mapHref : '/following', currentMapUrl);
+    const competitiveMapUrl = new URL(isArenaMap ? input.mapHref : '/global', currentMapUrl);
+    if (!isArenaMap) {
+      personalMapUrl.search = currentMapUrl.search;
+      followingMapUrl.search = currentMapUrl.search;
+      competitiveMapUrl.search = currentMapUrl.search;
+    }
+    if (isArenaMap) followingMapUrl.searchParams.set('view', 'following');
+    else followingMapUrl.searchParams.delete('view');
+    competitiveMapUrl.searchParams.delete('view');
     return createMapPageModel(
       authenticatedShell('map', currentUser, { mapHref: options.mapHref ?? input.mapHref, showFooter: options.showFooter ?? false }),
       {
         ...input,
+        mapModeHrefs: {
+          personal: `${personalMapUrl.pathname}${personalMapUrl.search}`,
+          following: `${followingMapUrl.pathname}${followingMapUrl.search}`,
+          competitive: `${competitiveMapUrl.pathname}${competitiveMapUrl.search}`,
+        },
         currentUserId: currentUser.userId,
         territoryColor: normalizeTerritoryColor(currentUser.territoryColor) ?? '#1769AA',
         mapStyleUrl: dependencies.mapTilerStyleUrl,
@@ -498,7 +518,7 @@ export function createWebRouter(dependencies: {
   router.get('/v1/map-replay', async (req, res, next) => {
     const currentUser = res.locals.currentUser;
     if (!currentUser) return next(new AppError(401, 'unauthorized', 'Sign in before viewing map replay.'));
-    const parsed = z.object({ month: competitionMonthValue, mode: z.enum(['personal','competitive']), west: z.coerce.number().finite(), south: z.coerce.number().finite(), east: z.coerce.number().finite(), north: z.coerce.number().finite() }).safeParse(req.query);
+    const parsed = z.object({ month: competitionMonthValue, mode: z.enum(['personal','competitive','following']), west: z.coerce.number().finite(), south: z.coerce.number().finite(), east: z.coerce.number().finite(), north: z.coerce.number().finite() }).safeParse(req.query);
     if (!parsed.success || parsed.data.south < -90 || parsed.data.north > 90 || parsed.data.south >= parsed.data.north || parsed.data.west < -180 || parsed.data.west > 180 || parsed.data.east < -180 || parsed.data.east > 180 || parsed.data.west === parsed.data.east) return res.status(400).json({ error: { code: 'invalid_request', message: 'Invalid map replay parameters.' } });
     if (!dependencies.mapReplay) throw new Error('Map replay service is not configured.');
     try { res.json(await dependencies.mapReplay.getReplay({ ...parsed.data, userId: currentUser.userId })); } catch (error) { next(error); }
@@ -516,9 +536,12 @@ export function createWebRouter(dependencies: {
       return;
     }
     try {
+      if (query.data.scope === 'following') res.vary('Cookie');
       sendTerritoryTile(res, await dependencies.territoryTiles.getGlobalCompetitionTile({
         ...coordinates,
         period: coveragePeriod(query.data.month),
+        ...(query.data.scope ? { currentUserId: res.locals.currentUser.userId } : {}),
+        ...(query.data.scope ? { scope: query.data.scope } : {}),
         ...(query.data.pilot ? { pilotUserId: query.data.pilot } : {}),
       }));
     } catch (error) {
@@ -549,6 +572,7 @@ export function createWebRouter(dependencies: {
         east: viewport.data.east,
         north: viewport.data.north,
         currentUserId: currentUser.userId,
+        ...(viewport.data.scope ? { scope: viewport.data.scope } : {}),
       });
       res.status(200).json(leaderboard);
     } catch (error) {
@@ -624,7 +648,8 @@ export function createWebRouter(dependencies: {
   });
 
   router.get('/v1/arenas/:sourceId/competition-territory/tiles/:z/:x/:y.mvt', async (req, res, next) => {
-    if (!res.locals.currentUser) {
+    const currentUser = res.locals.currentUser;
+    if (!currentUser) {
       next(new AppError(401, 'unauthorized', 'Sign in to view Arena territory.'));
       return;
     }
@@ -641,10 +666,13 @@ export function createWebRouter(dependencies: {
         res.status(404).json({ error: { code: 'not_found', message: 'Arena not found.' } });
         return;
       }
+      if (query.data.scope === 'following') res.vary('Cookie');
       sendTerritoryTile(res, await dependencies.territoryTiles.getArenaCompetitionTile({
         ...coordinates,
         arenaId: arena.id,
         period: coveragePeriod(query.data.month),
+        ...(query.data.scope ? { currentUserId: currentUser.userId } : {}),
+        ...(query.data.scope ? { scope: query.data.scope } : {}),
         ...(query.data.pilot ? { pilotUserId: query.data.pilot } : {}),
       }));
     } catch (error) {
@@ -674,6 +702,7 @@ export function createWebRouter(dependencies: {
         ...coveragePeriod(period.data.month),
         arenaId: arena.id,
         currentUserId: currentUser.userId,
+        ...(period.data.scope ? { scope: period.data.scope } : {}),
       }));
     } catch (error) {
       next(error);
@@ -708,7 +737,8 @@ export function createWebRouter(dependencies: {
   });
 
   router.get('/v1/competition-cells/:x/:y/tracks', async (req, res, next) => {
-    if (!res.locals.currentUser) {
+    const currentUser = res.locals.currentUser;
+    if (!currentUser) {
       next(new AppError(401, 'unauthorized', 'Sign in to view cell flight tracks.'));
       return;
     }
@@ -726,6 +756,8 @@ export function createWebRouter(dependencies: {
         y: y.data,
         period: coveragePeriod(query.data.month),
         ...(query.data.pilot ? { pilotUserId: query.data.pilot } : {}),
+        currentUserId: currentUser.userId,
+        ...(query.data.scope ? { scope: query.data.scope } : {}),
       });
       res.status(200).type('application/geo+json').send(tracks);
     } catch (error) {
@@ -755,6 +787,23 @@ export function createWebRouter(dependencies: {
       const mapHref = `/global${selection.suffix}`;
       await renderAuthenticated(res, dependencies.renderAuthenticatedPage, 200, productionMap(currentUser, {
         mode: 'competitive', period: selection.period, location: 'Global Map', mapHref,
+      }));
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.get('/following', async (req, res, next) => {
+    const currentUser = res.locals.currentUser;
+    if (!currentUser) {
+      res.redirect(302, '/');
+      return;
+    }
+    try {
+      const selection = mapPagePeriod(req.query);
+      const mapHref = `/following${selection.suffix}`;
+      await renderAuthenticated(res, dependencies.renderAuthenticatedPage, 200, productionMap(currentUser, {
+        mode: 'following', period: selection.period, location: 'Following', mapHref,
       }));
     } catch (error) {
       next(error);
@@ -1087,9 +1136,15 @@ export function createWebRouter(dependencies: {
         return;
       }
       const selection = mapPagePeriod(req.query);
-      const mapHref = `${arena.path}${selection.suffix}`;
+      if (req.query.view !== undefined && req.query.view !== 'following') {
+        throw new AppError(400, 'invalid_request', 'Arena view is invalid.');
+      }
+      const viewSuffix = req.query.view === 'following'
+        ? `${selection.suffix ? `${selection.suffix}&` : '?'}view=following`
+        : selection.suffix;
+      const mapHref = `${arena.path}${viewSuffix}`;
       await renderAuthenticated(res, dependencies.renderAuthenticatedPage, 200, productionMap(currentUser, {
-        mode: 'competitive', period: selection.period, location: arena.name, mapHref,
+        mode: req.query.view === 'following' ? 'following' : 'competitive', period: selection.period, location: arena.name, mapHref,
         ...(arena.arenaType === 'launch'
           ? { focusArenaSourceId: arena.sourceId }
           : { arenaSourceId: arena.sourceId }),

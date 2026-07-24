@@ -7,6 +7,8 @@ import { createAuthenticatedPageRenderer } from '../../src/views/authenticated/r
 import { initializeMapUrlControls } from '../../public/scripts/app-ui/map.js';
 // @ts-expect-error Browser asset remains JavaScript.
 import { initializeCompetitionPeriodControl } from '../../public/scripts/competitionPeriod.js';
+// @ts-expect-error Browser asset remains JavaScript.
+import { initializeMapMobileControls } from '../../public/scripts/app-ui/mapMobileControls.js';
 
 function node() {
   const listeners = new Map<string, (event?: any) => void>();
@@ -65,17 +67,17 @@ describe('refreshed map UI controls', () => {
 
     const mobileRules = css.slice(css.indexOf('@media (max-width: 900px)'));
     expect(mobileRules).toContain('.map-leaderboard--compact { position: absolute;');
-    expect(mobileRules).toContain('.map-mobile-controls { position: fixed;');
-    expect(mobileRules).toContain('grid-template-columns: repeat(4, minmax(0, 1fr));');
+    expect(mobileRules).toContain('.map-mobile-controls { position: absolute;');
+    expect(mobileRules).toContain('.map-mobile-view__menu { position: absolute;');
     expect(mobileRules).toContain('overflow: visible;');
     expect(mobileRules).toContain('.map-mobile-replay { display: block; }');
     expect(mobileRules).toContain('.map-leaderboard--compact { position: absolute; z-index: 8; bottom: calc(4rem + env(safe-area-inset-bottom, 0px));');
     expect(mobileRules).toContain('.map-arena-search { top: .75rem; width: 50%; }');
     expect(mobileRules).not.toContain('.mobile-map-sheet { position: fixed;');
-    expect(css.slice(css.indexOf('@media (max-width: 390px)'))).toContain('.map-mobile-controls a { flex-direction: column;');
+    expect(css.slice(css.indexOf('@media (max-width: 390px)'))).toContain('.map-mobile-period-controls { right: .75rem; left: .75rem; }');
   });
 
-  it('renders the four mobile map controls without the map sheet or mobile stats', async () => {
+  it('renders the mobile map-view dropdown and period controls without the map sheet', async () => {
     const render = createAuthenticatedPageRenderer();
     const html = await render({
       ...createAuthenticatedShellModel({ page: 'map' as const, user: { displayName: 'Pilot' }, mapHref: '/personal' }),
@@ -87,11 +89,33 @@ describe('refreshed map UI controls', () => {
       leaderboard: [],
     });
     expect(html).toContain('class="map-mobile-controls"');
-    expect(html).toContain('>Personal</span>');
-    expect(html).toContain('>Competitive</span>');
-    expect(html).toContain('>All Time</a>');
-    expect(html).toContain('<span data-current-month-option>Current Month</span></a>');
+    expect(html).toContain('data-map-mobile-view-trigger');
+    expect(html).toContain('>My Flights</span>');
+    expect(html).toContain('>Following</span>');
+    expect(html).toContain('>All Pilots</span>');
+    expect(html).toContain('data-competition-period-option="all-time" aria-pressed="false"');
+    expect(html).toContain('data-competition-period-option="current-month" aria-pressed="true"');
+    expect(html).toContain('data-competition-month-nav="previous" aria-label="Previous month">‹</button>');
+    expect(html).toContain('data-competition-month-nav="next" aria-label="Next month">›</button>');
     expect(html).not.toContain('data-map-sheet');
+    expect(html).not.toContain('map-scale');
+  });
+
+  it('opens, dismisses, and restores focus for the mobile map-view dropdown', () => {
+    const listeners = new Map<string, (event?: any) => void>();
+    const trigger = { setAttribute: vi.fn(), focus: vi.fn(), addEventListener: vi.fn((name, fn) => listeners.set(`trigger:${name}`, fn)) };
+    const activeLink = { focus: vi.fn(), addEventListener: vi.fn() };
+    const menu = { hidden: true, querySelector: vi.fn(() => activeLink), addEventListener: vi.fn() };
+    const root = { contains: vi.fn(() => false), querySelector: vi.fn((selector) => selector.includes('trigger') ? trigger : menu), querySelectorAll: vi.fn(() => []), addEventListener: vi.fn() };
+    const documentRef = { querySelector: vi.fn(() => root), addEventListener: vi.fn((name, fn) => listeners.set(`document:${name}`, fn)) };
+    initializeMapMobileControls(documentRef);
+    listeners.get('trigger:click')?.();
+    expect(menu.hidden).toBe(false);
+    expect(trigger.setAttribute).toHaveBeenCalledWith('aria-expanded', 'true');
+    expect(activeLink.focus).toHaveBeenCalledOnce();
+    listeners.get('document:keydown')?.({ key: 'Escape' });
+    expect(menu.hidden).toBe(true);
+    expect(trigger.focus).toHaveBeenCalledOnce();
   });
 
   it('turns period controls into links that preserve map URL state', () => {

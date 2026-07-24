@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { competitionGridClaims, flights, igcFiles, profiles, users } from '../../src/db/schema.js';
+import { competitionGridClaims, flights, igcFiles, pilotFollows, profiles, users } from '../../src/db/schema.js';
 import { createMonthlyCoverageService } from '../../src/services/monthlyCoverageService.js';
 import { resetAndMigrateTestDatabase } from './database.js';
 
@@ -184,6 +184,26 @@ describe('MonthlyCoverageService with PostGIS', () => {
 
     expect(result.leaders).toMatchObject([{ userId: pilot.userId, claimedCellCount: 1 }]);
     expect(result.currentPilot).toBeNull();
+  });
+
+  it('ranks only viewer and followed pilots while retaining global shared-cell classification', async () => {
+    const viewer = await createPilot('Viewer');
+    const followed = await createPilot('Followed');
+    const outsider = await createPilot('Outsider');
+    await database.db.insert(pilotFollows).values({ followerUserId: viewer.userId, followedUserId: followed.userId });
+    await addClaim(viewer, { month: '2026-07-01', x: 0, y: 0, at: '2026-07-01T10:00:00Z' });
+    await addClaim(followed, { month: '2026-07-01', x: 0, y: 0, at: '2026-07-01T11:00:00Z' });
+    await addClaim(outsider, { month: '2026-07-01', x: 1, y: 0, at: '2026-07-01T12:00:00Z' });
+    const result = await createMonthlyCoverageService(database.db, { cellSize: 1_000 }).getGlobalLeaderboard({
+      competitionMonth: '2026-07', ...world, currentUserId: viewer.userId, scope: 'following',
+    });
+    expect(result.leaders.map((pilot) => pilot.userId)).toEqual(expect.arrayContaining([viewer.userId, followed.userId]));
+    expect(result.currentPilot).toBeNull();
+    expect(result.leaders).toEqual(expect.arrayContaining([
+      expect.objectContaining({ userId: viewer.userId, sharedCellCount: 1, exclusiveCellCount: 0 }),
+      expect.objectContaining({ userId: followed.userId, sharedCellCount: 1, exclusiveCellCount: 0 }),
+    ]));
+    expect(result.leaders.some((pilot) => pilot.userId === outsider.userId)).toBe(false);
   });
 
 });

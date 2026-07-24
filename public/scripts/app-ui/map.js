@@ -5,6 +5,7 @@ import {
   mapPeriodFromSearch,
 } from '../competitionPeriod.js';
 import { initializePersonalDashboard } from '../personalDashboard.js';
+import { initializeMapMobileControls } from './mapMobileControls.js';
 import { initializeMapSheet } from './mapSheet.js';
 
 export { initializeMapSheet } from './mapSheet.js';
@@ -50,13 +51,16 @@ export function initializeMapUrlControls({
 
 export function initializeMapPage({ documentRef = document, maplibre = globalThis.window?.maplibregl, fetchImpl = globalThis.fetch?.bind(globalThis), locationRef = globalThis.location, historyRef = globalThis.history, now = () => new Date(), navigatorRef = globalThis.navigator, storage } = {}) {
   const period = initializeMapUrlControls({ documentRef, locationRef, historyRef, now });
+  initializeMapMobileControls(documentRef);
+  const root = documentRef.querySelector('[data-map-page]');
+  const mapElement = documentRef.querySelector('[data-territory-map]');
   initializeArenaSearch({
     documentRef,
     fetchImpl: fetchImpl ?? globalThis.fetch?.bind(globalThis),
     locationRef,
     periodSelection: period,
+    scope: mapElement?.dataset.coverageScope ?? null,
   });
-  const root = documentRef.querySelector('[data-map-page]');
   if (!root) return;
   if (!maplibre || !fetchImpl) return;
   if (root.dataset.dashboardMode === 'personal') {

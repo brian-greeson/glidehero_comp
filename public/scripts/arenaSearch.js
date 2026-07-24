@@ -18,6 +18,7 @@ export function initializeArenaSearch({
   navigate = (path) => window.location.assign(path),
   locationRef = typeof window === 'undefined' ? { search: '' } : window.location,
   periodSelection,
+  scope = null,
   pathPrefix = '',
   debounceMs = 200,
 } = {}) {
@@ -34,7 +35,18 @@ export function initializeArenaSearch({
 
   function navigateToArena(path) {
     const selection = periodSelection ?? mapPeriodFromSearch(locationRef.search);
-    navigate(competitionPageUrl(`${pathPrefix}${path}`, selection.month, locationRef.search));
+    const destination = competitionPageUrl(`${pathPrefix}${path}`, selection.month, locationRef.search);
+    const query = new URLSearchParams(new URL(destination, 'http://glidehero.local').search);
+    const arenaFollowing = locationRef?.pathname?.startsWith('/arena/')
+      && new URLSearchParams(locationRef?.search ?? '').get('view') === 'following';
+    const following = scope === 'following'
+      || locationRef?.pathname === '/following'
+      || arenaFollowing;
+    if (following) query.set('view', 'following');
+    else query.delete('view');
+    const url = new URL(destination, 'http://glidehero.local');
+    url.search = query.toString();
+    navigate(`${url.pathname}${url.search}`);
   }
 
   function cancelPendingSearch() {

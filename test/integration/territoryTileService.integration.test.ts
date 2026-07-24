@@ -7,6 +7,7 @@ import {
   flights,
   igcFiles,
   personalGridClaims,
+  pilotFollows,
   users,
 } from '../../src/db/schema.js';
 import { createTerritoryTileService } from '../../src/services/territoryTileService.js';
@@ -229,5 +230,21 @@ describe('TerritoryTileService with PostGIS MVT', () => {
     });
     expect(result.featureCount).toBe(1);
     expect(decode(result.data, 'personal-territory')).toHaveLength(1);
+  });
+
+  it('filters Following tiles to viewer and followed pilots while retaining global shared counts', async () => {
+    const viewer = await createPilot();
+    const followed = await createPilot();
+    const outsider = await createPilot();
+    await database.db.insert(pilotFollows).values({ followerUserId: viewer.userId, followedUserId: followed.userId });
+    await addCompetitionClaim(viewer, { x: 0, y: 0 });
+    await addCompetitionClaim(followed, { x: 0, y: 0 });
+    await addCompetitionClaim(outsider, { x: 1, y: 0 });
+    const result = await createTerritoryTileService(database.db, { cellSize: 1_000 }).getGlobalCompetitionTile({
+      ...tile, period: { competitionMonth: '2026-07' }, currentUserId: viewer.userId, scope: 'following',
+    });
+    const features = decode(result.data, 'competition-coverage').map((feature) => feature.properties);
+    expect(features).toEqual([expect.objectContaining({ cellId: '1000:0:0', claimantCount: 2, isShared: true })]);
+    expect(features.some((feature) => feature.cellId === '1000:1:0')).toBe(false);
   });
 });

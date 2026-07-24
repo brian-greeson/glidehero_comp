@@ -40,6 +40,14 @@ function matchingElements(documentRef, selector) {
   return match ? [match] : [];
 }
 
+export function competitionCoverageScope(mapElement, locationRef) {
+  const pathname = locationRef?.pathname ?? '';
+  const arenaFollowing = pathname.startsWith('/arena/')
+    && new URLSearchParams(locationRef?.search ?? '').get('view') === 'following';
+  return mapElement.dataset.coverageScope || mapElement.dataset.scope
+    || (pathname === '/following' || arenaFollowing ? 'following' : null);
+}
+
 export function initializeCompetitionCoverage({
   documentRef = document,
   maplibre = window.maplibregl,
@@ -60,6 +68,7 @@ export function initializeCompetitionCoverage({
 
   const arenaSourceId = mapElement.dataset.arenaSourceId || null;
   const focusArenaSourceId = mapElement.dataset.focusArenaSourceId || null;
+  const scope = competitionCoverageScope(mapElement, locationRef);
   const currentUserId = mapElement.dataset.currentUserId;
   const colorRegistry = createCompetitionColorRegistry(
     currentUserId,
@@ -109,6 +118,7 @@ export function initializeCompetitionCoverage({
       arenaSourceId,
       month: periodControl.month,
       pilotUserId: selectedPilotId,
+      scope,
     });
   }
 
@@ -117,7 +127,7 @@ export function initializeCompetitionCoverage({
   }
 
   function activeCellTrackScope() {
-    return { month: periodControl.month, pilotUserId: selectedPilotId };
+    return { month: periodControl.month, pilotUserId: selectedPilotId, scope };
   }
 
   async function refreshCellTracks() {
@@ -145,8 +155,8 @@ export function initializeCompetitionCoverage({
     if (!map?.getBounds) return;
     setLeaderboardBusy(true);
     const url = arenaSourceId
-      ? arenaCoverageLeaderboardUrl(arenaSourceId, periodControl.month)
-      : globalCoverageLeaderboardUrl(map.getBounds(), periodControl.month);
+      ? arenaCoverageLeaderboardUrl(arenaSourceId, periodControl.month, { scope })
+      : globalCoverageLeaderboardUrl(map.getBounds(), periodControl.month, { scope });
     try {
       const next = await jsonRequest(url, fetchImpl, signal);
       if (!isCurrent()) return;
@@ -271,7 +281,7 @@ export function initializeCompetitionCoverage({
           map,
           fetchImpl,
           month: periodControl.month,
-          mode: 'competitive',
+          mode: scope === 'following' ? 'following' : 'competitive',
           colorForPilot: colorRegistry.colorFor,
         });
         await refreshPeriod();

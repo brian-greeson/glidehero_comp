@@ -7,12 +7,13 @@ import type {
 import { normalizeCompetitionLeaderboardMonth } from '../domain/competition/competitionLeaderboardMonth.js';
 import { viewportCtes, type ViewportBounds } from './viewportGrid.js';
 import { arenaCellOwnershipPredicateSql, claimCellCenterSql } from './arenaGeometrySql.js';
+import type { CompetitionScope } from './territoryTileService.js';
 
 export type MonthlyCoveragePeriod = { competitionMonth: string } | { period: 'all-time' };
 
 export interface MonthlyCoverageService {
-  getGlobalLeaderboard(input: MonthlyCoveragePeriod & ViewportBounds & { currentUserId: string }): Promise<MonthlyCoverageLeaderboard>;
-  getArenaLeaderboard(input: MonthlyCoveragePeriod & { arenaId: string; currentUserId: string }): Promise<MonthlyCoverageLeaderboard>;
+  getGlobalLeaderboard(input: MonthlyCoveragePeriod & ViewportBounds & { currentUserId: string; scope?: CompetitionScope }): Promise<MonthlyCoverageLeaderboard>;
+  getArenaLeaderboard(input: MonthlyCoveragePeriod & { arenaId: string; currentUserId: string; scope?: CompetitionScope }): Promise<MonthlyCoverageLeaderboard>;
 }
 
 type StoredPilot = MonthlyCoveragePilot & { isCurrentPilotOnly: boolean; displayPosition: number };
@@ -64,6 +65,7 @@ function leaderboardFromRows(rows: StoredPilot[]): MonthlyCoverageLeaderboard {
 function leaderboardQuery(input: {
   scopedClaims: ReturnType<typeof sql>;
   currentUserId: string;
+  scope?: CompetitionScope;
   cellSize: number;
 }) {
   return sql`
@@ -167,6 +169,13 @@ export function createMonthlyCoverageService(
                 (pilot.x + 1) * ${cellSize}, (pilot.y + 1) * ${cellSize}, 6933
               ), viewport.geometry
             )
+            WHERE ${input.scope === 'following'
+              ? sql`pilot.claim_user = ${input.currentUserId} OR EXISTS (
+                  SELECT 1 FROM pilot_follows follow
+                  WHERE follow.follower_user_id = ${input.currentUserId}
+                    AND follow.followed_user_id = pilot.claim_user
+                )`
+              : sql`TRUE`}
           `,
         })}
       `);
@@ -186,6 +195,13 @@ export function createMonthlyCoverageService(
             INNER JOIN cell_claimants claimant USING (x, y)
             INNER JOIN arenas arena ON arena.id = ${input.arenaId}
               AND ${arenaCellOwnershipPredicateSql({ arenaId: sql`arena.id`, arenaType: sql`arena.arena_type`, externalId: sql`arena.external_id`, area: sql`arena.area`, cellCenter: claimCellCenterSql({ x: sql`pilot.x`, y: sql`pilot.y`, cellSize: sql`${cellSize}` }) })}
+            WHERE ${input.scope === 'following'
+              ? sql`pilot.claim_user = ${input.currentUserId} OR EXISTS (
+                  SELECT 1 FROM pilot_follows follow
+                  WHERE follow.follower_user_id = ${input.currentUserId}
+                    AND follow.followed_user_id = pilot.claim_user
+                )`
+              : sql`TRUE`}
           `,
         })}
       `);

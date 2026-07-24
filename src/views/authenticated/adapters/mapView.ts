@@ -8,6 +8,7 @@ export type ProductionMapInput = {
   currentUserId: string;
   territoryColor: string;
   mapStyleUrl?: string;
+  mapModeHrefs?: MapPageModel['mapModeHrefs'];
   territoryTileMinimumZoom?: number;
   territoryTileMaximumZoom?: number;
   arenaSourceId?: number;
@@ -29,6 +30,7 @@ export function createMapPageModel(
     leaderboard: [],
     currentUserId: input.currentUserId,
     territoryColor: input.territoryColor,
+    ...(input.mapModeHrefs ? { mapModeHrefs: input.mapModeHrefs } : {}),
     ...(input.mapStyleUrl ? { mapStyleUrl: input.mapStyleUrl } : {}),
     ...(input.territoryTileMinimumZoom === undefined ? {} : { territoryTileMinimumZoom: input.territoryTileMinimumZoom }),
     ...(input.territoryTileMaximumZoom === undefined ? {} : { territoryTileMaximumZoom: input.territoryTileMaximumZoom }),

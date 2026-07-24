@@ -94,11 +94,16 @@ export type AuthenticatedShellInput = {
 
 export type MapPageModel = AuthenticatedShellModel & {
   page: 'map';
-  mode: 'personal' | 'competitive';
+  mode: 'personal' | 'following' | 'competitive';
   period: 'all-time' | 'current-month';
   location: string;
   metrics: MetricView[];
   leaderboard: Array<{ rank: number; pilot: PilotView; cells: string; isCurrent: boolean }>;
+  mapModeHrefs?: {
+    personal: string;
+    following: string;
+    competitive: string;
+  };
   mapStyleUrl?: string;
   currentUserId?: string;
   territoryColor?: string;

@@ -771,6 +771,24 @@ describe('webRouter', () => {
     });
   });
 
+  it('keeps the Following scope when rendering an Arena', async () => {
+    const { app, arenas, renderAuthenticatedPage } = dependencies();
+    vi.mocked(arenas.getByRoute).mockResolvedValueOnce(arena);
+    await withServer(app, async (baseUrl) => {
+      const response = await fetch(`${baseUrl}/arena/us/boulder-745?month=2026-07&view=following`, {
+        headers: { cookie: 'glidehero_session=valid-token' },
+      });
+      expect(response.status).toBe(200);
+      expect(renderAuthenticatedPage).toHaveBeenLastCalledWith(expect.objectContaining({
+        mode: 'following',
+        mapModeHrefs: expect.objectContaining({
+          following: '/arena/us/boulder-745?month=2026-07&view=following',
+          competitive: '/arena/us/boulder-745?month=2026-07',
+        }),
+      }));
+    });
+  });
+
   it('renders map pages as current-month by default and keeps all time explicit', async () => {
     const { app, renderAuthenticatedPage } = dependencies();
     await withServer(app, async (baseUrl) => {
@@ -789,6 +807,21 @@ describe('webRouter', () => {
       expect(renderAuthenticatedPage).toHaveBeenLastCalledWith(expect.objectContaining({
         mode: 'competitive',
         period: 'all-time',
+        mapModeHrefs: expect.objectContaining({
+          following: '/following?period=all-time',
+        }),
+      }));
+
+      expect((await fetch(`${baseUrl}/following?month=2026-07`, { headers })).status).toBe(200);
+      expect(renderAuthenticatedPage).toHaveBeenLastCalledWith(expect.objectContaining({
+        mode: 'following',
+        period: 'current-month',
+        navigation: expect.arrayContaining([
+          expect.objectContaining({ page: 'map', href: '/following?month=2026-07' }),
+        ]),
+        mapModeHrefs: expect.objectContaining({
+          following: '/following?month=2026-07',
+        }),
       }));
 
       expect((await fetch(`${baseUrl}/personal?month=2026-07`, { headers })).status).toBe(200);
@@ -1580,6 +1613,19 @@ describe('webRouter', () => {
         pilotUserId: user.userId,
       });
 
+      const following = await fetch(
+        `${baseUrl}/v1/competition-territory/tiles/4/8/7.mvt?month=2026-07&scope=following`,
+        { headers },
+      );
+      expect(following.status).toBe(200);
+      expect(following.headers.get('vary')).toBe('Cookie');
+      expect(territoryTiles.getGlobalCompetitionTile).toHaveBeenLastCalledWith({
+        z: 4, x: 8, y: 7,
+        period: { competitionMonth: '2026-07' },
+        currentUserId: user.userId,
+        scope: 'following',
+      });
+
       const arenaResponse = await fetch(`${baseUrl}/v1/arenas/745/competition-territory/tiles/14/8192/8191.mvt`, { headers });
       expect(arenaResponse.status).toBe(200);
       expect(arenaResponse.headers.get('vary')).toBeNull();
@@ -1773,6 +1819,7 @@ describe('webRouter', () => {
         y: 2,
         period: { period: 'all-time' },
         pilotUserId: user.userId,
+        currentUserId: user.userId,
       });
     });
   });
@@ -1803,6 +1850,8 @@ describe('webRouter', () => {
       expect((await fetch(`${baseUrl}/v1/map-replay?month=2026-07&mode=personal&west=-105&south=39&east=-104&north=40`, { headers: { cookie: 'glidehero_session=valid-token' } })).status).toBe(200);
       expect(base.mapReplay.getReplay).toHaveBeenCalledWith({ month: '2026-07', mode: 'personal', west: -105, south: 39, east: -104, north: 40, userId: user.userId });
       expect((await fetch(`${baseUrl}/v1/map-replay?month=2026-07&mode=competitive&west=170&south=-10&east=-170&north=10`, { headers: { cookie: 'glidehero_session=valid-token' } })).status).toBe(200);
+      expect((await fetch(`${baseUrl}/v1/map-replay?month=2026-07&mode=following&west=-105&south=39&east=-104&north=40`, { headers: { cookie: 'glidehero_session=valid-token' } })).status).toBe(200);
+      expect(base.mapReplay.getReplay).toHaveBeenLastCalledWith({ month: '2026-07', mode: 'following', west: -105, south: 39, east: -104, north: 40, userId: user.userId });
     });
   });
 

@@ -2,7 +2,7 @@ import { asc, inArray, sql } from 'drizzle-orm';
 import type { Database } from '../db/client.js';
 import { flights, trackPoints } from '../db/schema.js';
 
-export type MapReplayInput = { month: string; mode: 'personal' | 'competitive'; west: number; south: number; east: number; north: number; userId: string };
+export type MapReplayInput = { month: string; mode: 'personal' | 'competitive' | 'following'; west: number; south: number; east: number; north: number; userId: string };
 export type MapReplayFlight = { flightId: string; pilotUserId: string; durationMs: number; points: Array<[number, number, number]> };
 export interface MapReplayService { getReplay(input: MapReplayInput): Promise<{ flights: MapReplayFlight[] }> }
 
@@ -29,7 +29,7 @@ export function createMapReplayService(db: Database): MapReplayService {
         WHERE f.processing_status='completed' AND f.started_at >= ${broadStart} AND f.started_at < ${broadEnd}
           AND (f.started_at AT TIME ZONE COALESCE(f.launch_timezone,'UTC')) >= ${input.month+'-01'}::timestamp
           AND (f.started_at AT TIME ZONE COALESCE(f.launch_timezone,'UTC')) < ${input.month+'-01'}::timestamp + interval '1 month'
-          ${input.mode === 'personal' ? sql`AND f.user_id = ${input.userId}` : sql``}
+          ${input.mode === 'personal' ? sql`AND f.user_id = ${input.userId}` : input.mode === 'following' ? sql`AND (f.user_id = ${input.userId} OR EXISTS (SELECT 1 FROM pilot_follows follow WHERE follow.follower_user_id = ${input.userId} AND follow.followed_user_id = f.user_id))` : sql``}
       ), raw_points AS (
         SELECT tp.flight_id, tp.sequence_number, tp.longitude, tp.latitude,
           LAG(tp.longitude) OVER (PARTITION BY tp.flight_id ORDER BY tp.sequence_number) AS previous_longitude

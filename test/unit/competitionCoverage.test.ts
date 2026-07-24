@@ -5,6 +5,8 @@ import { arenaCoverageLeaderboardUrl, competitionCellTracksUrl, coverageTerritor
 // @ts-expect-error Browser assets remain JavaScript.
 import { createCompetitionColorRegistry } from '../../public/scripts/competitionColors.js';
 // @ts-expect-error Browser assets remain JavaScript.
+import { competitionCoverageScope } from '../../public/scripts/competitionCoverageController.js';
+// @ts-expect-error Browser assets remain JavaScript.
 import { assignLoadedCoverageColors, coverageCellFeatureAtPoint, installCoverageSource, updateCoverageTiles } from '../../public/scripts/competitionCoverageMap.js';
 // @ts-expect-error Browser assets remain JavaScript.
 import { renderCoverageLeaderboard } from '../../public/scripts/competitionCoverageLeaderboard.js';
@@ -39,6 +41,39 @@ describe('competition coverage browser contracts', () => {
     expect(coverageTerritoryTileUrl({}, 'https://glidehero.test')).toBe(
       'https://glidehero.test/v1/competition-territory/tiles/{z}/{x}/{y}.mvt',
     );
+  });
+
+  it('propagates the Following scope to competition requests', () => {
+    const bounds = {
+      getWest: () => -107,
+      getSouth: () => 39,
+      getEast: () => -105,
+      getNorth: () => 41,
+    };
+    expect(globalCoverageLeaderboardUrl(bounds, '2026-07', { scope: 'following' }))
+      .toContain('scope=following');
+    expect(arenaCoverageLeaderboardUrl('745', '2026-07', { scope: 'following' }))
+      .toContain('scope=following');
+    expect(coverageTerritoryTileUrl({ month: '2026-07', scope: 'following' }))
+      .toContain('scope=following');
+    expect(competitionCellTracksUrl(1, 2, { scope: 'following' }))
+      .toContain('scope=following');
+  });
+
+  it('only accepts the Following view query on Arena routes', () => {
+    const mapElement = { dataset: {} };
+    expect(competitionCoverageScope(mapElement, {
+      pathname: '/global',
+      search: '?view=following',
+    })).toBeNull();
+    expect(competitionCoverageScope(mapElement, {
+      pathname: '/arena/us/boulder-745',
+      search: '?view=following',
+    })).toBe('following');
+    expect(competitionCoverageScope({ dataset: { coverageScope: 'following' } }, {
+      pathname: '/global',
+      search: '',
+    })).toBe('following');
   });
 
   it('assigns stable colors shared by map and leaderboard consumers', () => {

@@ -4,6 +4,7 @@ import {
   flights,
   igcFiles,
   personalGridClaims,
+  pilotFollows,
   trackPoints,
   users,
 } from '../../src/db/schema.js';
@@ -152,5 +153,25 @@ describe('CellFlightTrackService', () => {
       pilotUserId: alpha,
     });
     expect(selected.tracks.features.map((feature) => feature.properties.flightId)).toEqual([alphaLatest]);
+  });
+
+  it('filters Following competition tracks to viewer and followed pilots', async () => {
+    const viewer = await createPilot();
+    const followed = await createPilot();
+    const outsider = await createPilot();
+    await database.db.insert(pilotFollows).values({ followerUserId: viewer, followedUserId: followed });
+    const viewerFlight = await createFlight(viewer);
+    const followedFlight = await createFlight(followed);
+    const outsiderFlight = await createFlight(outsider);
+    await database.db.insert(competitionGridClaims).values([
+      { competitionMonth: '2026-07-01', x: -1, y: 2, claimFlight: viewerFlight, claimUser: viewer, claimTimestamp: new Date('2026-07-01T00:00:00Z') },
+      { competitionMonth: '2026-07-01', x: -1, y: 2, claimFlight: followedFlight, claimUser: followed, claimTimestamp: new Date('2026-07-02T00:00:00Z') },
+      { competitionMonth: '2026-07-01', x: -1, y: 2, claimFlight: outsiderFlight, claimUser: outsider, claimTimestamp: new Date('2026-07-03T00:00:00Z') },
+    ]);
+    const result = await createCellFlightTrackService(database.db, { cellSize: 1_000 }).getCompetition({
+      x: -1, y: 2, period: { competitionMonth: '2026-07' }, currentUserId: viewer, scope: 'following',
+    });
+    expect(result.tracks.features.map((feature) => feature.properties.pilotUserId)).toEqual([followed, viewer]);
+    expect(result.tracks.features.some((feature) => feature.properties.pilotUserId === outsider)).toBe(false);
   });
 });

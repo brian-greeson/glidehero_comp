@@ -2,6 +2,7 @@ import { sql } from 'drizzle-orm';
 import type { Database } from '../db/client.js';
 import { normalizeCompetitionLeaderboardMonth } from '../domain/competition/competitionLeaderboardMonth.js';
 import type { MonthlyCoveragePeriod } from './monthlyCoverageService.js';
+import type { CompetitionScope } from './territoryTileService.js';
 
 type PolygonGeometry = {
   type: 'Polygon';
@@ -41,6 +42,8 @@ export interface CellFlightTrackService {
     y: number;
     period: MonthlyCoveragePeriod;
     pilotUserId?: string;
+    currentUserId?: string;
+    scope?: CompetitionScope;
   }): Promise<CellFlightTrackResult>;
 }
 
@@ -177,6 +180,9 @@ export function createCellFlightTrackService(
               : sql``}
             ${input.pilotUserId
               ? sql`AND claim.claim_user = ${input.pilotUserId}`
+              : sql``}
+            ${input.scope === 'following' && input.currentUserId
+              ? sql`AND (claim.claim_user = ${input.currentUserId} OR EXISTS (SELECT 1 FROM pilot_follows follow WHERE follow.follower_user_id = ${input.currentUserId} AND follow.followed_user_id = claim.claim_user))`
               : sql``}
         ),
         track_geometries AS (

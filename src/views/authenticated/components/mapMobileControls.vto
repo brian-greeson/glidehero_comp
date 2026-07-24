@@ -1,12 +1,24 @@
-<nav class="map-mobile-controls" aria-label="Map controls">
-  <a href="/personal" data-map-mode-link="personal" class="{{ if mode === 'personal' }}is-active{{ /if }}" aria-current="{{ if mode === 'personal' }}page{{ else }}false{{ /if }}">{{ include "authenticated/components/icon.vto" { name: "profile" } }}<span>Personal</span></a>
-  <a href="{{ if mode === 'competitive' }}{{ navigation[0].href }}{{ else }}/global{{ /if }}" data-map-mode-link="competitive" class="{{ if mode === 'competitive' }}is-active{{ /if }}" aria-current="{{ if mode === 'competitive' }}page{{ else }}false{{ /if }}">{{ include "authenticated/components/icon.vto" { name: "trophy" } }}<span>Competitive</span></a>
-  {{ if mode === 'competitive' }}
-    <button type="button" data-competition-period-option="all-time" aria-pressed="{{ if period === 'all-time' }}true{{ else }}false{{ /if }}">All Time</button>
-    <button type="button" data-competition-period-option="current-month" aria-pressed="{{ if period === 'current-month' }}true{{ else }}false{{ /if }}"><span data-current-month-option>Current Month</span></button>
-  {{ else }}
-    <a href="{{ if typeof mapPath !== 'undefined' }}{{ mapPath }}{{ else }}{{ navigation[0].href }}{{ /if }}" data-map-period-link="all-time" class="{{ if period === 'all-time' }}is-active{{ /if }}" aria-current="{{ if period === 'all-time' }}page{{ else }}false{{ /if }}">All Time</a>
-    <a href="{{ if typeof mapPath !== 'undefined' }}{{ mapPath }}{{ else }}{{ navigation[0].href }}{{ /if }}" data-map-period-link="current-month" class="{{ if period === 'current-month' }}is-active{{ /if }}" aria-current="{{ if period === 'current-month' }}page{{ else }}false{{ /if }}"><span data-current-month-option>Current Month</span></a>
-  {{ /if }}
-  <div class="map-mobile-month-navigation" role="group" aria-label="Month navigation"><button type="button" data-competition-month-nav="previous" aria-label="Previous month">Previous</button><button type="button" data-competition-month-nav="next" aria-label="Next month">Next</button></div>
+<nav class="map-mobile-controls" aria-label="Map controls" data-map-mobile-controls>
+  <div class="map-mobile-view">
+    <button type="button" class="map-mobile-view__trigger" data-map-mobile-view-trigger aria-controls="map-mobile-view-menu" aria-expanded="false">
+      {{ if mode === 'personal' }}{{ include "authenticated/components/icon.vto" { name: "profile" } }}{{ else if mode === 'following' }}{{ include "authenticated/components/icon.vto" { name: "people" } }}{{ else }}{{ include "authenticated/components/icon.vto" { name: "globe" } }}{{ /if }}
+      <span data-map-mobile-view-label>{{ if mode === 'personal' }}My Flights{{ else if mode === 'following' }}Following{{ else }}All Pilots{{ /if }}</span>
+      {{ include "authenticated/components/icon.vto" { name: "chevron-down" } }}
+    </button>
+    <div id="map-mobile-view-menu" class="map-mobile-view__menu" data-map-mobile-view-menu hidden role="menu" aria-label="Map view">
+      <a href="{{ if typeof mapModeHrefs !== 'undefined' }}{{ mapModeHrefs.personal }}{{ else }}/personal{{ /if }}" data-map-mode-link="personal" role="menuitem" class="{{ if mode === 'personal' }}is-active{{ /if }}" aria-current="{{ if mode === 'personal' }}page{{ else }}false{{ /if }}">{{ include "authenticated/components/icon.vto" { name: "profile" } }}<span>My Flights</span></a>
+      <a href="{{ if typeof mapModeHrefs !== 'undefined' }}{{ mapModeHrefs.following }}{{ else }}/following{{ /if }}" data-map-mode-link="following" role="menuitem" class="{{ if mode === 'following' }}is-active{{ /if }}" aria-current="{{ if mode === 'following' }}page{{ else }}false{{ /if }}">{{ include "authenticated/components/icon.vto" { name: "people" } }}<span>Following</span></a>
+      <a href="{{ if typeof mapModeHrefs !== 'undefined' }}{{ mapModeHrefs.competitive }}{{ else }}/global{{ /if }}" data-map-mode-link="competitive" role="menuitem" class="{{ if mode !== 'personal' && mode !== 'following' }}is-active{{ /if }}" aria-current="{{ if mode !== 'personal' && mode !== 'following' }}page{{ else }}false{{ /if }}">{{ include "authenticated/components/icon.vto" { name: "globe" } }}<span>All Pilots</span></a>
+    </div>
+  </div>
+  <div class="map-mobile-period-controls">
+    <button type="button" data-competition-period-option="all-time" aria-pressed="{{ if period === 'all-time' }}true{{ else }}false{{ /if }}">{{ include "authenticated/components/icon.vto" { name: "calendar" } }}<span>All Time</span></button>
+    <div class="map-mobile-month-control">
+      <button type="button" data-competition-period-option="current-month" aria-pressed="{{ if period === 'current-month' }}true{{ else }}false{{ /if }}"><span data-current-month-option>Current Month</span></button>
+      <div class="map-mobile-month-navigation" role="group" aria-label="Month navigation">
+        <button type="button" data-competition-month-nav="previous" aria-label="Previous month">‹</button>
+        <button type="button" data-competition-month-nav="next" aria-label="Next month">›</button>
+      </div>
+    </div>
+  </div>
 </nav>

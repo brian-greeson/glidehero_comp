@@ -8,6 +8,7 @@ export type TerritoryTileResult = {
   data: Buffer;
   featureCount: number;
 };
+export type CompetitionScope = 'following';
 
 export interface TerritoryTileService {
   getPersonalTile(input: {
@@ -23,6 +24,8 @@ export interface TerritoryTileService {
     y: number;
     period: MonthlyCoveragePeriod;
     pilotUserId?: string;
+    currentUserId?: string;
+    scope?: CompetitionScope;
   }): Promise<TerritoryTileResult>;
   getArenaCompetitionTile(input: {
     z: number;
@@ -31,6 +34,8 @@ export interface TerritoryTileService {
     arenaId: string;
     period: MonthlyCoveragePeriod;
     pilotUserId?: string;
+    currentUserId?: string;
+    scope?: CompetitionScope;
   }): Promise<TerritoryTileResult>;
 }
 
@@ -96,6 +101,8 @@ export function createTerritoryTileService(
     period: MonthlyCoveragePeriod;
     arenaId?: string;
     pilotUserId?: string;
+    currentUserId?: string;
+    scope?: CompetitionScope;
   }): Promise<TerritoryTileResult> {
     const competitionMonth = normalizePeriod(input.period);
     const result = await database.execute<StoredTile>(sql`
@@ -109,6 +116,17 @@ export function createTerritoryTileService(
           ${competitionMonth
             ? sql`AND claim.competition_month = ${competitionMonth}::date`
             : sql``}
+      ),
+      scoped_pilot_cells AS (
+        SELECT pilot.*
+        FROM pilot_cells pilot
+        WHERE ${input.scope === 'following' && input.currentUserId
+          ? sql`pilot.claim_user = ${input.currentUserId} OR EXISTS (
+              SELECT 1 FROM pilot_follows follow
+              WHERE follow.follower_user_id = ${input.currentUserId}
+                AND follow.followed_user_id = pilot.claim_user
+            )`
+          : sql`TRUE`}
       ),
       cell_claimants AS (
         SELECT
@@ -129,9 +147,12 @@ export function createTerritoryTileService(
             : sql`claimant.pilot_user_id`} AS pilot_user_id
         FROM cell_claimants claimant
         ${input.pilotUserId
-          ? sql`INNER JOIN pilot_cells pilot USING (x, y)`
+          ? sql`INNER JOIN scoped_pilot_cells pilot USING (x, y)`
           : sql``}
         WHERE true
+          ${!input.pilotUserId && input.scope === 'following' && input.currentUserId
+            ? sql`AND EXISTS (SELECT 1 FROM scoped_pilot_cells pilot WHERE pilot.x = claimant.x AND pilot.y = claimant.y)`
+            : sql``}
           ${input.pilotUserId ? sql`AND pilot.claim_user = ${input.pilotUserId}` : sql``}
       ),
       scoped_cells AS (

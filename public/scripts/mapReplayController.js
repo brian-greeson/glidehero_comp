@@ -4,7 +4,7 @@ import { viewportSearchParams } from './viewportQuery.js';
 
 export function initializeMapReplayController({ documentRef = document, map, fetchImpl = globalThis.fetch?.bind(globalThis), month, mode = 'personal', color = '#1769AA', colorForPilot, createTimeline = createMapReplayTimeline, installLayer = installMapReplayLayer } = {}) {
   const root = documentRef.querySelector('[data-map-replay]');
-  if (!root || !['personal', 'competitive'].includes(mode) || !map || !fetchImpl) return null;
+  if (!root || !['personal', 'competitive', 'following'].includes(mode) || !map || !fetchImpl) return null;
   const all = (selector) => [...(documentRef.querySelectorAll?.(selector) ?? root.querySelectorAll?.(selector) ?? [root.querySelector?.(selector)].filter(Boolean))];
   const entries = all('[data-map-replay-open]'), panels = all('[data-map-replay-panel]'), statuses = all('[data-map-replay-status]'), plays = all('[data-map-replay-play]'), playLabels = all('[data-map-replay-play-label]'), playIcons = all('[data-map-replay-play-icon]'), skips = all('[data-map-replay-skip]'), closes = all('[data-map-replay-close]'), sliders = all('[data-map-replay-slider]'), elapsedNodes = all('[data-map-replay-elapsed]'), speeds = all('[data-map-replay-speed]');
   let timeline; let layer; let opened = false; let selectedMonth = month ?? null; let requestToken = 0;
