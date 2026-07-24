@@ -135,6 +135,54 @@ describe('production Profile and Achievements rendering', () => {
     expect(html).toContain('action="/pilots/00000000-0000-4000-8000-000000000099/unfollow"');
     expect(html).toContain('No current Arena titles yet.');
     expect(html).toContain('No completed flights yet.');
+    expect(html).not.toContain('Glider Information');
+  });
+
+  it('renders the owner glider editor and the public saved glider without owner controls', async () => {
+    const profile = productionProfile({
+      glider: {
+        manufacturer: 'Ozone',
+        model: 'Ultralite 5',
+        size: '17',
+        year: 2025,
+        competitionId: 'USA 42',
+        enRating: 'C',
+        hours: 12.3,
+      },
+    });
+    const shell = createAuthenticatedShellModel({ page: 'profile', user: { displayName: 'Viewer' }, showFooter: true });
+    const ownerHtml = await render({
+      ...shell,
+      page: 'profile',
+      ...pilotProfileToView(profile, { isCurrent: true }),
+    });
+    const publicHtml = await render({
+      ...shell,
+      page: 'profile',
+      ...pilotProfileToView(profile, { isCurrent: false }),
+    });
+
+    expect(ownerHtml).toContain('Glider Information');
+    expect(ownerHtml).toContain('Ozone Ultralite 5');
+    expect(ownerHtml).toContain('data-glider-form');
+    expect(ownerHtml).toContain('max="2026"');
+    expect(publicHtml).toContain('Ozone Ultralite 5');
+    expect(publicHtml).not.toContain('data-glider-edit');
+    expect(publicHtml).not.toContain('data-glider-form');
+  });
+
+  it('renders a clean owner add state with its inline editor initially hidden', async () => {
+    const profile = productionProfile({ glider: null });
+    const shell = createAuthenticatedShellModel({ page: 'profile', user: { displayName: 'Viewer' }, showFooter: true });
+    const html = await render({
+      ...shell,
+      page: 'profile',
+      ...pilotProfileToView(profile, { isCurrent: true }),
+    });
+
+    expect(html).toContain('Add your glider');
+    expect(html).toContain('Add your glider to track its flight hours.');
+    expect(html).toMatch(/<form[^>]*data-glider-form[^>]* hidden>/);
   });
 
   it('renders earned dates, categories, recent first three, and empty states without point concepts', async () => {

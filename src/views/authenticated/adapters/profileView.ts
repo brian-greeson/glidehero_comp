@@ -76,6 +76,16 @@ export function pilotProfileToView(summary: PilotProfileSummary, options: Profil
     isInitiallyVisible: index < 3,
   }));
 
+  const glider = summary.glider ? {
+    manufacturer: summary.glider.manufacturer,
+    model: summary.glider.model,
+    size: summary.glider.size,
+    year: String(summary.glider.year),
+    competitionId: summary.glider.competitionId ?? '',
+    enRating: summary.glider.enRating,
+    hours: summary.glider.hours.toFixed(1),
+  } : null;
+
   return {
     profile,
     metrics,
@@ -85,5 +95,18 @@ export function pilotProfileToView(summary: PilotProfileSummary, options: Profil
     profileIsFollowed: options.isFollowed ?? false,
     currentPath: options.currentPath ?? `/pilots/${summary.userId}`,
     avatarColor: profile.territoryColor || colorFor(summary.userId),
+    glider,
+    gliderIsCurrent: options.isCurrent ?? false,
+    gliderCurrentYear: new Date().getUTCFullYear(),
+    gliderEditor: {
+      manufacturer: glider?.manufacturer ?? '',
+      model: glider?.model ?? '',
+      size: glider?.size ?? '',
+      year: glider?.year ?? '',
+      competitionId: glider?.competitionId ?? '',
+      hours: glider?.hours ?? '0',
+      error: '',
+      isOpen: false,
+    },
   };
 }

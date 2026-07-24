@@ -257,6 +257,22 @@ function dependencies() {
 }
 
 describe('webRouter', () => {
+  it('returns typo-tolerant combined make/model glider search results only to authenticated pilots', async () => {
+    const base = dependencies();
+    await withServer(base.app, async (baseUrl) => {
+      const anonymous = await fetch(`${baseUrl}/profile/glider/search?q=Ozon%20Buz`);
+      expect(anonymous.status).toBe(401);
+
+      const response = await fetch(`${baseUrl}/profile/glider/search?q=Ozon%20Buz`, {
+        headers: { cookie: 'glidehero_session=valid-token' },
+      });
+      expect(response.status).toBe(200);
+      expect(await response.json()).toEqual(expect.arrayContaining([
+        expect.objectContaining({ manufacturer: 'Ozone', model: 'Buzz Z7' }),
+      ]));
+    });
+  });
+
   it('serves completed flight detail HTML and map JSON to any authenticated pilot', async () => {
     const base = dependencies();
     const flightId = '00000000-0000-4000-8000-000000000020';

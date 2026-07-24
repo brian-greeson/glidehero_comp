@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { achievementRecordEvents, achievementRecords, achievements, flights, flightProgress, igcFiles, personalGridClaims, pilotFollows } from '../../src/db/schema.js';
+import { achievementRecordEvents, achievementRecords, achievements, flights, flightProgress, igcFiles, personalGridClaims, pilotFollows, profiles as profileRows } from '../../src/db/schema.js';
 import { createAuthService } from '../../src/services/authService.js';
 import { createProfileService, normalizeTerritoryColor } from '../../src/services/profileService.js';
 import { createUserAchievementProgressService } from '../../src/services/userAchievementProgressService.js';
@@ -70,6 +70,55 @@ describe('profileService', () => {
     ]));
     expect(stored.rows.find((profile) => profile.user_id === firstPilot.user.userId)?.updated_at.getTime())
       .toBeGreaterThan(oldUpdatedAt.getTime());
+  });
+
+  it('validates catalog gliders, requires a reset choice for changed details, and allows hours-only edits', async () => {
+    const auth = createAuthService(database.db, { sessionTtlSeconds: 604800 });
+    const pilot = await auth.signup({
+      email: 'glider-profile@example.com',
+      password: 'correct horse battery staple',
+    });
+    const service = createProfileService(database.db, { cellSize: 1_000 });
+    const details = {
+      userId: pilot.user.userId,
+      manufacturer: 'Ozone',
+      model: 'Ultralite 5',
+      size: '17',
+      year: 2025,
+      competitionId: ' USA 42 ',
+      hours: 12.3,
+    };
+
+    await expect(service.saveGliderDetails?.({ ...details, resetHours: null }))
+      .rejects.toThrow('Choose whether to keep or reset');
+    await expect(service.saveGliderDetails?.({ ...details, resetHours: false })).resolves.toBeUndefined();
+    await expect(service.getPilotProfile(pilot.user.userId)).resolves.toMatchObject({
+      glider: {
+        manufacturer: 'Ozone',
+        model: 'Ultralite 5',
+        size: '17',
+        competitionId: 'USA 42',
+        enRating: 'C',
+        hours: 12.3,
+      },
+    });
+
+    await expect(service.saveGliderDetails?.({ ...details, competitionId: 'USA 42', hours: 14.6, resetHours: null }))
+      .resolves.toBeUndefined();
+    const [afterHours] = await database.db.select({
+      seconds: profileRows.gliderHoursSeconds,
+      generation: profileRows.gliderHoursGeneration,
+    }).from(profileRows);
+    expect(afterHours).toEqual({ seconds: 52_560, generation: 0 });
+
+    await expect(service.saveGliderDetails?.({ ...details, model: 'Photon', size: 'S', resetHours: true }))
+      .resolves.toBeUndefined();
+    const [afterReset] = await database.db.select({
+      seconds: profileRows.gliderHoursSeconds,
+      generation: profileRows.gliderHoursGeneration,
+      rating: profileRows.gliderEnRating,
+    }).from(profileRows);
+    expect(afterReset).toEqual({ seconds: 0, generation: 1, rating: 'C' });
   });
 
   it('returns follower and following counts for current and public profiles', async () => {
@@ -185,6 +234,7 @@ describe('profileService', () => {
       achievementCount: 3,
       followerCount: 0,
       followingCount: 0,
+      glider: null,
       recentFlights: [
         expect.objectContaining({
           flightId: secondFlight,
@@ -236,6 +286,7 @@ describe('profileService', () => {
       achievementCount: 0,
       followerCount: 0,
       followingCount: 0,
+      glider: null,
       recentFlights: [],
       currentArenaLeaderships: [],
     });

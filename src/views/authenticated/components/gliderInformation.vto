@@ -1,0 +1,34 @@
+{{ if glider || gliderIsCurrent }}
+<section class="profile-card glider-card{{ if gliderEditor.isOpen }} glider-card--editing{{ /if }}" data-glider-card>
+  <header class="section-heading"><div><h2>Glider Information</h2></div>{{ if gliderIsCurrent }}<button type="button" class="profile-list-toggle" data-glider-edit>{{ if glider }}Edit{{ else }}Add your glider{{ /if }}</button>{{ /if }}</header>
+  {{ if glider }}
+    <div class="glider-card__display" data-glider-display>
+      <img src="/images/profile/glider-default.png" alt="" class="glider-card__image">
+      <dl class="glider-card__details"><div><dt>Make / Model</dt><dd>{{ glider.manufacturer }} {{ glider.model }}</dd></div><div><dt>Size</dt><dd>{{ glider.size }}</dd></div><div><dt>Year</dt><dd>{{ glider.year }}</dd></div><div><dt>EN rating</dt><dd>{{ glider.enRating }}</dd></div><div><dt>Competition ID</dt><dd>{{ if glider.competitionId }}{{ glider.competitionId }}{{ else }}—{{ /if }}</dd></div><div><dt>Total hours</dt><dd>{{ glider.hours }} h</dd></div></dl>
+    </div>
+  {{ else }}
+    {{ if gliderIsCurrent }}<p class="profile-empty">Add your glider to track its flight hours.</p>{{ /if }}
+  {{ /if }}
+  {{ if gliderIsCurrent }}
+  <form method="post" action="/profile/glider" class="glider-card__form" data-glider-form data-initial-manufacturer="{{ if glider }}{{ glider.manufacturer }}{{ /if }}" data-initial-model="{{ if glider }}{{ glider.model }}{{ /if }}" data-initial-size="{{ if glider }}{{ glider.size }}{{ /if }}" data-initial-year="{{ if glider }}{{ glider.year }}{{ /if }}" data-initial-competition-id="{{ if glider }}{{ glider.competitionId }}{{ /if }}"{{ if !gliderEditor.isOpen }} hidden{{ /if }}>
+    {{ if gliderEditor.error }}<p class="glider-card__error" role="alert">{{ gliderEditor.error }}</p>{{ /if }}
+    <label for="glider-model-search">Make / model</label>
+    <input id="glider-model-search" name="modelSearch" value="{{ if gliderEditor.manufacturer }}{{ gliderEditor.manufacturer }} {{ gliderEditor.model }}{{ /if }}" autocomplete="off" role="combobox" aria-autocomplete="list" aria-controls="glider-model-results" aria-expanded="false" data-glider-model required>
+    <input type="hidden" name="manufacturer" data-glider-manufacturer value="{{ gliderEditor.manufacturer }}"><input type="hidden" name="model" data-glider-model-value value="{{ gliderEditor.model }}">
+    <div id="glider-model-results" data-glider-results class="glider-card__results" role="listbox" hidden></div>
+    <p class="glider-card__search-status" data-glider-search-status aria-live="polite"></p>
+    <label for="glider-size">Size</label>
+    <select id="glider-size" name="size" data-glider-size required{{ if !gliderEditor.model }} disabled{{ /if }}><option value="">Select size</option>{{ if gliderEditor.size }}<option selected value="{{ gliderEditor.size }}">{{ gliderEditor.size }}</option>{{ /if }}</select>
+    <label for="glider-year">Year</label>
+    <input id="glider-year" type="number" name="year" min="1980" max="{{ gliderCurrentYear }}" inputmode="numeric" value="{{ gliderEditor.year }}" required>
+    <label for="glider-competition-id">Competition ID (optional)</label>
+    <input id="glider-competition-id" name="competitionId" maxlength="255" value="{{ gliderEditor.competitionId }}">
+    <label for="glider-hours">Total flight hours</label>
+    <input id="glider-hours" type="number" name="hours" min="0" step="0.1" inputmode="decimal" value="{{ gliderEditor.hours }}" required>
+    <p class="glider-card__rating">EN rating: <strong data-glider-rating>{{ if glider }}{{ glider.enRating }}{{ else }}Select a size{{ /if }}</strong></p>
+    <fieldset data-glider-reset-confirmation><legend>These details changed. What should happen to the current hours?</legend><label><input type="radio" name="resetHours" value="false"> Keep hours</label><label><input type="radio" name="resetHours" value="true"> Reset hours to 0.0</label></fieldset>
+    <div class="glider-card__actions"><button type="submit">Save glider</button><button type="button" data-glider-cancel>Cancel</button></div>
+  </form>
+  {{ /if }}
+</section>
+{{ /if }}

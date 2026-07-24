@@ -24,7 +24,12 @@ describe('admin flight thumbnail lifecycle', () => {
     });
     const thumbnailLifecycle = { generateForFlight, deleteForFlight: vi.fn(async () => undefined) };
     const reprocess = vi.fn(async () => ({ status: 'completed' as const, result: {} as never }));
-    const service = createAdminFlightService({} as never, { reprocess }, storage(thumbnailLifecycle));
+    const database = {
+      transaction: async (callback: (transaction: unknown) => Promise<void>) => callback({
+        execute: async () => ({ rows: [] }),
+      }),
+    };
+    const service = createAdminFlightService(database as never, { reprocess }, storage(thumbnailLifecycle));
 
     await expect(service.reprocessFlight({ flightId })).resolves.toMatchObject({ status: 'completed' });
     expect(generateForFlight).toHaveBeenCalledWith(flightId);

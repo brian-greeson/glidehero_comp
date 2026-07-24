@@ -15,6 +15,7 @@ import {
 import { arenaPath } from '../domain/arena/arenaRoute.js';
 import { arenaCellOwnershipPredicateSql, claimCellCenterSql } from './arenaGeometrySql.js';
 import { createUserAchievementProgressService, type UserAchievementProgressService } from './userAchievementProgressService.js';
+import { findGlider } from '../domain/glider/catalog.js';
 
 const territoryColorPattern = /^#[0-9a-f]{6}$/i;
 
@@ -41,7 +42,24 @@ export type PilotProfileSummary = {
   followingCount?: number;
   recentFlights: PilotRecentFlight[];
   currentArenaLeaderships: PilotArenaLeadership[];
+  glider?: GliderProfile | null;
 };
+
+export type GliderProfile = {
+  manufacturer: string;
+  model: string;
+  size: string;
+  year: number;
+  competitionId: string | null;
+  enRating: string;
+  hours: number;
+};
+export type SaveGliderDetailsInput = Omit<GliderProfile, 'enRating'> & {
+  userId: string;
+  resetHours: boolean | null;
+};
+
+export class GliderValidationError extends Error {}
 
 /** Narrow read model used by the Achievements page. */
 export type PilotAchievementsSummary = {
@@ -120,6 +138,7 @@ export interface ProfileService {
   getDashboardAchievementProgress(userId: string): Promise<AchievementProgressCard[]>;
   getPilotProfile(userId: string): Promise<PilotProfileSummary | null>;
   getPilotAchievements(userId: string): Promise<PilotAchievementsSummary | null>;
+  saveGliderDetails?(input: SaveGliderDetailsInput): Promise<void>;
 }
 
 export function normalizeTerritoryColor(value: unknown): string | null {
@@ -141,6 +160,13 @@ type StoredPilotProfile = {
   achievementCount: number | string;
   followerCount: number | string;
   followingCount: number | string;
+  gliderManufacturer: string | null;
+  gliderModel: string | null;
+  gliderSize: string | null;
+  gliderYear: number | string | null;
+  gliderCompetitionId: string | null;
+  gliderEnRating: string | null;
+  gliderHoursSeconds: number | string;
 };
 
 type StoredAchievement = {
@@ -735,6 +761,13 @@ export function createProfileService(database: Database, options: { cellSize: nu
           )::integer AS "achievementCount",
           (SELECT COUNT(*)::integer FROM pilot_follows follows WHERE follows.followed_user_id = users.user_id) AS "followerCount",
           (SELECT COUNT(*)::integer FROM pilot_follows follows WHERE follows.follower_user_id = users.user_id) AS "followingCount"
+          ,profiles.glider_manufacturer AS "gliderManufacturer"
+          ,profiles.glider_model AS "gliderModel"
+          ,profiles.glider_size AS "gliderSize"
+          ,profiles.glider_year AS "gliderYear"
+          ,profiles.glider_competition_id AS "gliderCompetitionId"
+          ,profiles.glider_en_rating AS "gliderEnRating"
+          ,profiles.glider_hours_seconds AS "gliderHoursSeconds"
         FROM users
         INNER JOIN profiles ON profiles.user_id = users.user_id
         WHERE users.user_id = ${userId}
@@ -806,7 +839,63 @@ export function createProfileService(database: Database, options: { cellSize: nu
           leadMarginCells: Number(leadership.leadingCellCount) - Number(leadership.nextRankCellCount),
           leadingSince: displayDate(leadership.tookLeadAt),
         })),
+        glider: row.gliderManufacturer && row.gliderModel && row.gliderSize && row.gliderYear && row.gliderEnRating
+          ? { manufacturer: row.gliderManufacturer, model: row.gliderModel, size: row.gliderSize, year: Number(row.gliderYear), competitionId: row.gliderCompetitionId, enRating: row.gliderEnRating, hours: Number(row.gliderHoursSeconds ?? 0) / 3600 }
+          : null,
       };
+    },
+
+    async saveGliderDetails(input) {
+      const entry = findGlider(input.manufacturer, input.model, input.size);
+      const currentYear = new Date().getUTCFullYear();
+      if (!entry) throw new GliderValidationError('Select a make, model, and size from the catalog.');
+      if (!Number.isInteger(input.year) || input.year < 1980 || input.year > currentYear) {
+        throw new GliderValidationError(`Enter a four-digit year from 1980 through ${currentYear}.`);
+      }
+      if (!Number.isFinite(input.hours) || input.hours < 0 || Math.abs(input.hours * 10 - Math.round(input.hours * 10)) > Number.EPSILON) {
+        throw new GliderValidationError('Enter nonnegative flight hours with no more than one decimal place.');
+      }
+      if ((input.competitionId?.length ?? 0) > 255) {
+        throw new GliderValidationError('Competition ID must be 255 characters or fewer.');
+      }
+      const hoursSeconds = Math.round(input.hours * 3600);
+      await database.transaction(async (tx) => {
+        const [stored] = await tx
+          .select({
+            manufacturer: profiles.gliderManufacturer,
+            model: profiles.gliderModel,
+            size: profiles.gliderSize,
+            year: profiles.gliderYear,
+            competitionId: profiles.gliderCompetitionId,
+          })
+          .from(profiles)
+          .where(eq(profiles.userId, input.userId))
+          .limit(1)
+          .for('update');
+        if (!stored) throw new GliderValidationError('Pilot profile not found.');
+
+        const competitionId = input.competitionId?.trim() || null;
+        const detailsChanged = stored.manufacturer !== entry.manufacturer
+          || stored.model !== entry.model
+          || stored.size !== entry.size
+          || stored.year !== input.year
+          || stored.competitionId !== competitionId;
+        if (detailsChanged && input.resetHours === null) {
+          throw new GliderValidationError('Choose whether to keep or reset flight hours.');
+        }
+
+        await tx.update(profiles).set({
+          gliderManufacturer: entry.manufacturer,
+          gliderModel: entry.model,
+          gliderSize: entry.size,
+          gliderYear: input.year,
+          gliderCompetitionId: competitionId,
+          gliderEnRating: entry.enRating,
+          gliderHoursSeconds: detailsChanged && input.resetHours ? 0 : hoursSeconds,
+          gliderHoursGeneration: sql`${profiles.gliderHoursGeneration} + ${detailsChanged && input.resetHours ? 1 : 0}`,
+          updatedAt: new Date(),
+        }).where(eq(profiles.userId, input.userId));
+      });
     },
 
     async getPilotAchievements(userId) {

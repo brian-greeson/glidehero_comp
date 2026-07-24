@@ -188,6 +188,27 @@ export type ProfilePageModel = AuthenticatedShellModel & {
   metrics: MetricView[];
   titles: ProfileTitleView[];
   flights: FlightView[];
+  glider: {
+    manufacturer: string;
+    model: string;
+    size: string;
+    year: string;
+    competitionId: string;
+    enRating: string;
+    hours: string;
+  } | null;
+  gliderIsCurrent: boolean;
+  gliderCurrentYear: number;
+  gliderEditor: {
+    manufacturer: string;
+    model: string;
+    size: string;
+    year: string;
+    competitionId: string;
+    hours: string;
+    error: string;
+    isOpen: boolean;
+  };
 };
 
 export type FlightDistanceView = {

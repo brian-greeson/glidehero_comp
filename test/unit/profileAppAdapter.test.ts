@@ -54,5 +54,25 @@ describe('refreshed profile adapter', () => {
     expect(view.titles[0]).toMatchObject({ name: 'Colorado', detail: 'Top cell holder · 0 cells', isInitiallyVisible: true });
     expect(view.flights[0]).toMatchObject({ id: 'flight-1', href: '/flights/flight-1', cells: '0', isInitiallyVisible: true });
     expect(view.profileIsFollowed).toBe(true);
+    expect(view.glider).toBeNull();
+    expect(view.gliderEditor).toMatchObject({ hours: '0', error: '', isOpen: false });
+  });
+
+  it('formats persisted glider hours to one decimal place for display and editing', () => {
+    const view = pilotProfileToView({
+      ...summary,
+      glider: {
+        manufacturer: 'Ozone',
+        model: 'Ultralite 5',
+        size: '17',
+        year: 2025,
+        competitionId: 'USA 42',
+        enRating: 'C',
+        hours: 12.25,
+      },
+    }, { isCurrent: true });
+
+    expect(view.glider).toMatchObject({ model: 'Ultralite 5', hours: '12.3', enRating: 'C' });
+    expect(view.gliderEditor).toMatchObject({ manufacturer: 'Ozone', size: '17', hours: '12.3' });
   });
 });

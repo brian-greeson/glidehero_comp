@@ -1,0 +1,222 @@
+manufacturer,model,size,en_rating
+Ozone,Moxie,XXS,A
+Ozone,Moxie,XS,A
+Ozone,Moxie,S,A
+Ozone,Moxie,M,A
+Ozone,Moxie,L,A
+Ozone,Moxie,XL,A
+Ozone,Buzz Z7,XS,B
+Ozone,Buzz Z7,S,B
+Ozone,Buzz Z7,MS,B
+Ozone,Buzz Z7,ML,B
+Ozone,Buzz Z7,L,B
+Ozone,Buzz Z7,XL,B
+Ozone,Geo 7,XS,B
+Ozone,Geo 7,S,B
+Ozone,Geo 7,MS,B
+Ozone,Geo 7,ML,B
+Ozone,Geo 7,L,B
+Ozone,Vibe GT,XXS,B
+Ozone,Vibe GT,XS,B
+Ozone,Vibe GT,S,B
+Ozone,Vibe GT,MS,B
+Ozone,Vibe GT,ML,B
+Ozone,Vibe GT,L,B
+Ozone,Vibe GT,XL,B
+Ozone,Delta 5,XS,C
+Ozone,Delta 5,S,C
+Ozone,Delta 5,MS,C
+Ozone,Delta 5,ML,C
+Ozone,Delta 5,L,C
+Ozone,Delta 5,XL,C
+Ozone,Photon,XS,C
+Ozone,Photon,S,C
+Ozone,Photon,MS,C
+Ozone,Photon,ML,C
+Ozone,Photon,L,C
+Ozone,Photon,XL,C
+Ozone,Zeolite 2,XS,D
+Ozone,Zeolite 2,S,D
+Ozone,Zeolite 2,MS,D
+Ozone,Zeolite 2,ML,D
+Ozone,Zeno 2,XS,D
+Ozone,Zeno 2,S,D
+Ozone,Zeno 2,MS,D
+Ozone,Zeno 2,ML,D
+Ozone,Zeno 2,L,D
+Ozone,Ultralite 5,13,Uncertified
+Ozone,Ultralite 5,15,Uncertified
+Ozone,Ultralite 5,17,C
+Ozone,Ultralite 5,19,B
+Ozone,Ultralite 5,21,A
+Ozone,Ultralite 5,23,A
+Ozone,Ultralite 5,25,A
+Ozone,Magnum 4,38,B
+Ozone,Magnum 4,41,B
+Ozone,Magnum 4,44,B
+UP,RIMO 2,XS,A
+UP,RIMO 2,S,A
+UP,RIMO 2,SM,A
+UP,RIMO 2,M,A
+UP,RIMO 2,L,A
+UP,MANA 2,21,A/B
+UP,MANA 2,23,A
+UP,MANA 2,25,A
+UP,MANA 2,27,A
+UP,DENA,XS,A
+UP,DENA,S,A
+UP,DENA,S/M,A
+UP,DENA,M,A
+UP,DENA,L,A
+UP,MAKALU 5,S,B
+UP,MAKALU 5,SM,B
+UP,MAKALU 5,M,B
+UP,MAKALU 5,L,B
+UP,KIBO X,XS,B
+UP,KIBO X,S,B
+UP,KIBO X,S/M,B
+UP,KIBO X,M,B
+UP,KIBO X,L,B
+UP,LHOTSE X,XS,B
+UP,LHOTSE X,S,B
+UP,LHOTSE X,SM,B
+UP,LHOTSE X,M,B
+UP,TORRE,S,C
+UP,TORRE,SM,C
+UP,TORRE,M,C
+UP,TORRE,L,C
+UP,TORRE,XL,C
+UP,MERU 2,S,D
+UP,MERU 2,S/M,D
+UP,MERU 2,M,D
+UP,MERU 2,L,D
+Niviuk,Koyot 6 P,20,A
+Niviuk,Koyot 6 P,22,A
+Niviuk,Koyot 6 P,24,A
+Niviuk,Koyot 6 P,26,A
+Niviuk,Koyot 6 P,28,A
+Niviuk,Hook 6 P,20,B
+Niviuk,Hook 6 P,22,A+
+Niviuk,Hook 6 P,24,A+
+Niviuk,Hook 6 P,26,A+
+Niviuk,Hook 6 P,28,A+
+Niviuk,Kode 2 P,12,Uncertified
+Niviuk,Kode 2 P,14,D
+Niviuk,Kode 2 P,16,C
+Niviuk,Kode 2 P,18,A/C
+Niviuk,Kode 2 P,20,A/B
+Niviuk,Kode 2 P,22,A
+Niviuk,Kode 2 P,24,A
+Niviuk,Kode 2 P,26,A
+Niviuk,Artik 7 P,20,C
+Niviuk,Artik 7 P,22,C
+Niviuk,Artik 7 P,23,C
+Niviuk,Artik 7 P,24,C
+Niviuk,Artik 7 P,26,C
+Niviuk,Artik 7 P,28,C
+Niviuk,Artik R 2,20,C
+Niviuk,Artik R 2,21,C
+Niviuk,Artik R 2,23,C
+Niviuk,Artik R 2,24,C
+Niviuk,Artik R 2,25,C
+Niviuk,Artik R 2,27,C
+Gin,Yeti 6,21,A
+Gin,Yeti 6,23,A
+Gin,Yeti 6,25,A
+Gin,Yeti 6,27,A
+Gin,Calypso 2,XXS,B
+Gin,Calypso 2,XS,B
+Gin,Calypso 2,S,B
+Gin,Calypso 2,M,B
+Gin,Calypso 2,L,B
+Gin,Bonanza 3,XXS,C
+Gin,Bonanza 3,XS,C
+Gin,Bonanza 3,S,C
+Gin,Bonanza 3,M,C
+Gin,Bonanza 3,L,C
+Gin,Fuse 4,37,B
+Gin,Fuse 4,41,B
+Gin,Fuse 4,44,B
+Little Cloud,GT2,20,Uncertified
+Little Cloud,GT2,22,Uncertified
+Little Cloud,GT2,24,B
+Little Cloud,GT2,26,Uncertified
+Little Cloud,GT2,28,Uncertified
+Little Cloud,Gracchio Mk3,20,Uncertified
+Little Cloud,Gracchio Mk3,21,Uncertified
+Little Cloud,Gracchio Mk3,22,Uncertified
+Little Cloud,Gracchio Mk3,23,Uncertified
+Little Cloud,Gracchio Mk3,24,Uncertified
+Little Cloud,Gracchio Mk3,25,Uncertified
+Little Cloud,Gracchio Mk3,27,Uncertified
+Little Cloud,Urubu Mk2,20.5,Uncertified
+Little Cloud,Urubu Mk2,22,Uncertified
+Little Cloud,Urubu Mk2,23.5,Uncertified
+Little Cloud,Urubu Mk2,25,Uncertified
+Little Cloud,Urubu Mk2,26.5,Uncertified
+Little Cloud,Urubu King,S,Uncertified
+Little Cloud,Urubu King,M,Uncertified
+Little Cloud,Urubu King,L,Uncertified
+Little Cloud,Puffin V2,14,Uncertified
+Little Cloud,Puffin V2,16,Uncertified
+Little Cloud,Puffin V2,19,Uncertified
+Skywalk,MINT,75,C
+Skywalk,MINT,85,C
+Skywalk,MINT,95,C
+Skywalk,MINT,105,C
+Skywalk,MINT,115,C
+Skywalk,MINT,125,C
+Skywalk,TEQUILA6,75,B
+Skywalk,TEQUILA6,85,B
+Skywalk,TEQUILA6,95,B
+Skywalk,TEQUILA6,105,B
+Skywalk,TEQUILA6,115,B
+Skywalk,TEQUILA6,135,B
+Skywalk,ARAK AIR2,70+,B
+Skywalk,ARAK AIR2,80+,B
+Skywalk,ARAK AIR2,95+,B
+Skywalk,ARAK AIR2,105+,B
+Skywalk,ARAK AIR2,115+,B
+Skywalk,JOIN'T5,200,B
+Skywalk,JOIN'T5,220,B
+Skywalk,JOIN'T5,240,B
+Nova,NIVO,XXS,A
+Nova,NIVO,XS,A
+Nova,NIVO,S,A
+Nova,NIVO,M,A
+Nova,NIVO,L,A
+Nova,NIVO,XL,A
+Nova,ION 7 Light,XXXS,B
+Nova,ION 7 Light,XXS,B
+Nova,ION 7 Light,XS,B
+Nova,ION 7 Light,S,B
+Nova,ION 7 Light,M,B
+Nova,ION 7 Light,L,B
+Nova,CODEX,XXS,C
+Nova,CODEX,XS,C
+Nova,CODEX,S,C
+Nova,CODEX,M,C
+Nova,CODEX,L,C
+Nova,BION 3,L,B
+Nova,MENTOR 7,XS,B
+Nova,MENTOR 7,S,B
+Nova,MENTOR 7,M,B
+PHI,BEAT 2,18,B
+PHI,BEAT 2,20,B
+PHI,BEAT 2,22,B
+PHI,BEAT 2,23,B
+PHI,BEAT 2,24,B
+PHI,BEAT 2,26,B
+PHI,TENOR 2 light,17,B
+PHI,TENOR 2 light,19,B
+PHI,TENOR 2 light,21,B
+PHI,TENOR 2 light,22,B
+PHI,TENOR 2 light,23,B
+PHI,TENOR 2 light,25,B
+PHI,MAESTRO 2 light,17,B
+PHI,MAESTRO 2 light,18,B
+PHI,MAESTRO 2 light,19,B
+PHI,MAESTRO 2 light,21,B
+PHI,MAESTRO 2 light,22,B
+PHI,MAESTRO 2 light,23,B
+PHI,MAESTRO 2 light,25,B

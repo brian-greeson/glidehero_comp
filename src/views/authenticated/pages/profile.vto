@@ -22,6 +22,7 @@
     <div class="profile-grid">
       {{ include "authenticated/components/profileTitles.vto" { titles } }}
       {{ include "authenticated/components/profileFlights.vto" { flights } }}
+      {{ include "authenticated/components/gliderInformation.vto" { glider, gliderIsCurrent } }}
     </div>
   </section>
 {{ /layout }}
