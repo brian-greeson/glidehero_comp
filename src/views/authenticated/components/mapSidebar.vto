@@ -14,9 +14,14 @@
         <button type="button" data-competition-period-option="current-month" aria-pressed="{{ if period === 'current-month' }}true{{ else }}false{{ /if }}"><span data-current-month-option>Current Month</span></button>
       {{ else }}
         <a href="{{ if typeof mapPath !== 'undefined' }}{{ mapPath }}{{ else }}{{ navigation[0].href }}{{ /if }}" data-map-period-link="all-time" class="{{ if period === 'all-time' }}is-active{{ /if }}" aria-current="{{ if period === 'all-time' }}page{{ else }}false{{ /if }}">All Time</a>
-        <a href="{{ if typeof mapPath !== 'undefined' }}{{ mapPath }}{{ else }}{{ navigation[0].href }}{{ /if }}" data-map-period-link="current-month" class="{{ if period === 'current-month' }}is-active{{ /if }}" aria-current="{{ if period === 'current-month' }}page{{ else }}false{{ /if }}">Current Month</a>
+        <a href="{{ if typeof mapPath !== 'undefined' }}{{ mapPath }}{{ else }}{{ navigation[0].href }}{{ /if }}" data-map-period-link="current-month" class="{{ if period === 'current-month' }}is-active{{ /if }}" aria-current="{{ if period === 'current-month' }}page{{ else }}false{{ /if }}"><span data-current-month-option>Current Month</span></a>
       {{ /if }}
     </div>
+    <div class="map-month-navigation" role="group" aria-label="Month navigation">
+      <button type="button" data-competition-month-nav="previous" aria-label="Previous month">Previous</button>
+      <button type="button" data-competition-month-nav="next" aria-label="Next month">Next</button>
+    </div>
+    <div data-map-replay><button type="button" data-map-replay-open aria-controls="map-replay-panel-desktop" aria-expanded="false">Replay month</button>{{ include "authenticated/components/mapReplayControls.vto" { panelId: "map-replay-panel-desktop" } }}</div>
   </section>
   <section class="map-control-group map-location">
     <h2>Location</h2>

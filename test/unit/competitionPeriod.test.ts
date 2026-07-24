@@ -8,7 +8,9 @@ function button(period: string) {
   const classes = new Set<string>();
   const attributes = new Map<string, string>();
   return {
-    dataset: { competitionPeriodOption: period },
+    disabled: false,
+    hidden: false,
+    dataset: { competitionPeriodOption: period, competitionMonthNav: '' },
     classList: {
       toggle(name: string, enabled: boolean) {
         if (enabled) classes.add(name);
@@ -29,6 +31,10 @@ function setup(search = '') {
   const label = { textContent: '' };
   const globalLink = { dataset: { competitionPeriodLink: '/global' }, href: '' };
   const returnTo = { value: '' };
+  const previous = button('');
+  previous.dataset.competitionMonthNav = 'previous';
+  const next = button('');
+  next.dataset.competitionMonthNav = 'next';
   const historyRef = { replaceState: vi.fn() };
   const onChange = vi.fn();
   const documentRef = {
@@ -36,6 +42,7 @@ function setup(search = '') {
       if (selector === '[data-competition-period-option]') return [allTime, currentMonth];
       if (selector === '[data-competition-period-link]') return [globalLink];
       if (selector === '[data-competition-return-to]') return [returnTo];
+      if (selector === '[data-competition-month-nav]') return [previous, next];
       return [];
     },
     querySelector: () => label,
@@ -47,7 +54,7 @@ function setup(search = '') {
     now: () => new Date(2026, 6, 14, 12),
     onChange,
   });
-  return { allTime, control, currentMonth, globalLink, historyRef, label, onChange, returnTo };
+  return { allTime, control, currentMonth, globalLink, historyRef, label, next, onChange, previous, returnTo };
 }
 
 describe('competition period control', () => {
@@ -75,6 +82,28 @@ describe('competition period control', () => {
     expect(context.returnTo.value).toBe('/arena/us/boulder-745?month=2026-07');
   });
 
+  it('keeps Personal period links on the current map path', () => {
+    const allTime = { dataset: { mapPeriodLink: ALL_TIME_COMPETITION_PERIOD }, href: '' };
+    const current = { dataset: { mapPeriodLink: CURRENT_MONTH_COMPETITION_PERIOD }, href: '' };
+    const context = setup('?month=2026-06');
+    const documentRef = {
+      querySelectorAll(selector: string) {
+        if (selector === '[data-competition-period-option]') return [context.allTime, context.currentMonth];
+        if (selector === '[data-map-period-link]') return [allTime, current];
+        if (selector === '[data-competition-month-nav]') return [context.previous, context.next];
+        return [];
+      },
+      querySelector: () => context.label,
+    };
+    initializeCompetitionPeriodControl({
+      documentRef,
+      locationRef: { pathname: '/personal', search: '?month=2026-06' },
+      now: () => new Date(2026, 6, 14, 12),
+    });
+    expect(allTime.href).toBe('/personal?period=all-time');
+    expect(current.href).toBe('/personal?month=2026-06');
+  });
+
   it('writes explicit current-month and all-time states into the URL', async () => {
     const context = setup('?period=all-time');
 
@@ -100,5 +129,31 @@ describe('competition period control', () => {
     expect(competitionMonthFromSearch('?month=2026-13')).toBeNull();
     expect(competitionMonthFromSearch('')).toBeNull();
     expect(competitionPageUrl('/global', null)).toBe('/global?period=all-time');
+  });
+
+  it('navigates historical months while preventing future navigation', async () => {
+    const context = setup('?month=2026-06');
+    expect(context.control.month).toBe('2026-06');
+    expect(context.previous.disabled).toBe(false);
+    expect(context.next.disabled).toBe(false);
+    await context.previous.click();
+    expect(context.control.month).toBe('2026-05');
+    expect(context.historyRef.replaceState).toHaveBeenLastCalledWith(null, '', '/arena/us/boulder-745?month=2026-05');
+    expect(context.onChange).toHaveBeenLastCalledWith({ period: CURRENT_MONTH_COMPETITION_PERIOD, month: '2026-05' });
+    await context.next.click();
+    expect(context.control.month).toBe('2026-06');
+    await context.next.click();
+    await context.next.click();
+    await context.next.click();
+    await context.next.click();
+    await context.next.click();
+    await context.next.click();
+    await context.next.click();
+    expect(context.control.month).toBe('2026-07');
+    expect(context.next.disabled).toBe(true);
+    expect(context.next.attribute('aria-disabled')).toBe('true');
+    await context.allTime.click();
+    expect(context.previous.hidden).toBe(true);
+    expect(context.next.hidden).toBe(true);
   });
 });

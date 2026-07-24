@@ -1,4 +1,4 @@
-const competitionLeaderboardMonthPattern = /^(\d{4})-(\d{2})$/;
+const competitionLeaderboardMonthPattern = /^([1-9]\d{3})-(\d{2})$/;
 
 export function normalizeCompetitionLeaderboardMonth(input: string): string {
   const match = competitionLeaderboardMonthPattern.exec(input);

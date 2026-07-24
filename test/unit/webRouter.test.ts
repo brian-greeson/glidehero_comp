@@ -22,6 +22,7 @@ import { createWebRouter } from '../../src/web/webRouter.js';
 import { withServer } from '../support/http.js';
 import type { FlightDetailService, FlightDetailSummary } from '../../src/services/flightDetailService.js';
 import type { CellFlightTrackResult, CellFlightTrackService } from '../../src/services/cellFlightTrackService.js';
+import type { MapReplayService } from '../../src/services/mapReplayService.js';
 
 const viewportStats = {
   claimedCellCount: 2,
@@ -215,6 +216,7 @@ function dependencies() {
   const arenas = arenaService();
   const arenaProgress = arenaProgressService();
   const mapGrid = mapGridService();
+  const mapReplay: MapReplayService = { getReplay: vi.fn(async () => ({ flights: [] })) };
   const router = createWebRouter({
     auth,
     cookie,
@@ -223,6 +225,7 @@ function dependencies() {
     activity,
     gridClaim,
     mapGrid,
+    mapReplay,
     coverage,
     territoryTiles,
     cellFlightTracks,
@@ -239,6 +242,7 @@ function dependencies() {
     activity,
     gridClaim,
     mapGrid,
+    mapReplay,
     coverage,
     territoryTiles,
     cellFlightTracks,
@@ -1786,6 +1790,19 @@ describe('webRouter', () => {
       expect(anonymous.status).toBe(401);
       expect(cellFlightTracks.getPersonal).not.toHaveBeenCalled();
       expect(cellFlightTracks.getCompetition).not.toHaveBeenCalled();
+    });
+  });
+
+  it('validates map replay bounds/month and forwards the signed-in pilot', async () => {
+    const base = dependencies();
+    await withServer(base.app, async (baseUrl) => {
+      expect((await fetch(`${baseUrl}/v1/map-replay?month=2026-13&mode=personal&west=-105&south=39&east=-104&north=40`, { headers: { cookie: 'glidehero_session=valid-token' } })).status).toBe(400);
+      expect((await fetch(`${baseUrl}/v1/map-replay?month=0000-01&mode=personal&west=-105&south=39&east=-104&north=40`, { headers: { cookie: 'glidehero_session=valid-token' } })).status).toBe(400);
+      expect((await fetch(`${baseUrl}/v1/map-replay?month=2026-07&mode=bad&west=-105&south=39&east=-104&north=40`, { headers: { cookie: 'glidehero_session=valid-token' } })).status).toBe(400);
+      expect((await fetch(`${baseUrl}/v1/map-replay?month=2026-07&mode=personal&west=-105&south=39&east=-105&north=40`, { headers: { cookie: 'glidehero_session=valid-token' } })).status).toBe(400);
+      expect((await fetch(`${baseUrl}/v1/map-replay?month=2026-07&mode=personal&west=-105&south=39&east=-104&north=40`, { headers: { cookie: 'glidehero_session=valid-token' } })).status).toBe(200);
+      expect(base.mapReplay.getReplay).toHaveBeenCalledWith({ month: '2026-07', mode: 'personal', west: -105, south: 39, east: -104, north: 40, userId: user.userId });
+      expect((await fetch(`${baseUrl}/v1/map-replay?month=2026-07&mode=competitive&west=170&south=-10&east=-170&north=10`, { headers: { cookie: 'glidehero_session=valid-token' } })).status).toBe(200);
     });
   });
 

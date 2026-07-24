@@ -198,6 +198,15 @@ If several services genuinely need a shared query, extract it into a focused ser
 search. `activityService.ts` owns flight publication, current-follow feed
 visibility, stable keyset pagination, joined flight summaries, grouped
 accomplishments, launch-local Daily/Monthly statistics, and Like toggling.
+
+`mapReplayService.ts` owns the authenticated replay data contract. It selects
+completed flights whose full track intersects the captured viewport and whose
+launch-local start falls in the requested `YYYY-MM` month. Personal requests
+are restricted to the signed-in user; Competitive requests include all pilots.
+The `/v1/map-replay` route validates authentication, month, mode, and bounds,
+then delegates to this service. Replay animation, controls, and temporary map
+layer dimming remain browser concerns in `public/scripts/mapReplay*.js`; they
+do not persist state or issue viewport-change refetches after loading.
 Statistics apply the same scope and display-name query as the feed across every
 matching Activity rather than only the current cursor page. They select the
 most-accomplished, highest-cell, and greatest five-point-distance flights with

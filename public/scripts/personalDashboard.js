@@ -10,16 +10,14 @@ import { personalStatsUrl } from './viewportQuery.js';
 import { initializeMapFlightAids } from './mapFlightAids.js';
 import { mapViewportFromSearch, updateMapModeLinks } from './mapViewportUrl.js';
 import {
-  ALL_TIME_COMPETITION_PERIOD,
-  CURRENT_MONTH_COMPETITION_PERIOD,
-  competitionPageUrl,
-  formatBrowserLocalMonth,
   mapPeriodFromSearch,
+  initializeCompetitionPeriodControl,
 } from './competitionPeriod.js';
 import {
   createMapCellTrackSelection,
   installMapCellTrackLayers,
 } from './mapCellTracks.js';
+import { initializeMapReplayController } from './mapReplayController.js';
 
 export function initializePersonalDashboard({
   documentRef = document,
@@ -51,6 +49,7 @@ export function initializePersonalDashboard({
   let map;
   let mapReady = false;
   let cellTrackSelection;
+  let replayController;
   const statsRequest = createLatestRequest(async ({ signal, isCurrent }, bounds) => {
     statsCard?.setAttribute('aria-busy', 'true');
     try {
@@ -77,6 +76,23 @@ export function initializePersonalDashboard({
     });
     const syncModeLinks = () => updateMapModeLinks({
       documentRef, locationRef, map, periodSelection: period,
+    });
+    initializeCompetitionPeriodControl({
+      documentRef,
+      locationRef,
+      historyRef,
+      now,
+      onChange: async (selection) => {
+        period = selection;
+        replayController?.setMonth(period.month);
+        syncModeLinks();
+        if (!mapReady) return;
+        updatePersonalTerritoryTiles(map, period.month);
+        const refreshes = [];
+        if (map.getBounds) refreshes.push(statsRequest.run(map.getBounds()));
+        if (cellTrackSelection) refreshes.push(cellTrackSelection.refresh(period));
+        await Promise.all(refreshes);
+      },
     });
     syncModeLinks();
     map.addControl(new maplibre.NavigationControl(), 'top-right');
@@ -112,6 +128,7 @@ export function initializePersonalDashboard({
         map, mapElement, documentRef, fetchImpl, navigatorRef, storage,
       });
       mapReady = true;
+      replayController = initializeMapReplayController({ documentRef, map, fetchImpl, month: period.month, color: mapElement.dataset.territoryColor });
       if (map.getBounds) await statsRequest.run(map.getBounds());
     });
     map.on?.('moveend', () => {
@@ -120,44 +137,6 @@ export function initializePersonalDashboard({
         void statsRequest.run(map.getBounds());
       }
     });
-    for (const link of documentRef.querySelectorAll?.('[data-map-period-link]') ?? []) {
-      link.addEventListener('click', async (event) => {
-        event?.preventDefault?.();
-        const nextPeriodName = link.dataset.mapPeriodLink;
-        if (![
-          ALL_TIME_COMPETITION_PERIOD,
-          CURRENT_MONTH_COMPETITION_PERIOD,
-        ].includes(nextPeriodName)) return;
-        const month = nextPeriodName === CURRENT_MONTH_COMPETITION_PERIOD
-          ? formatBrowserLocalMonth(now())
-          : null;
-        period = {
-          period: nextPeriodName,
-          month,
-        };
-        historyRef?.replaceState?.(
-          null,
-          '',
-          competitionPageUrl(
-            locationRef?.pathname ?? '/personal',
-            month,
-            locationRef?.search ?? '',
-          ),
-        );
-        for (const periodLink of documentRef.querySelectorAll?.('[data-map-period-link]') ?? []) {
-          const selected = periodLink.dataset.mapPeriodLink === period.period;
-          periodLink.classList?.toggle?.('is-active', selected);
-          periodLink.setAttribute?.('aria-current', selected ? 'page' : 'false');
-        }
-        syncModeLinks();
-        if (!mapReady) return;
-        updatePersonalTerritoryTiles(map, period.month);
-        const refreshes = [];
-        if (map.getBounds) refreshes.push(statsRequest.run(map.getBounds()));
-        if (cellTrackSelection) refreshes.push(cellTrackSelection.refresh(period));
-        await Promise.all(refreshes);
-      });
-    }
   } catch {
     showStatus('Map unavailable. Check your connection and try again.');
   }

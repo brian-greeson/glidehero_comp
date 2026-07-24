@@ -5,12 +5,15 @@ import { createAuthenticatedPageRenderer } from '../../src/views/authenticated/r
 
 // @ts-expect-error Browser assets remain JavaScript.
 import { initializeMapUrlControls } from '../../public/scripts/app-ui/map.js';
+// @ts-expect-error Browser asset remains JavaScript.
+import { initializeCompetitionPeriodControl } from '../../public/scripts/competitionPeriod.js';
 
 function node() {
   const listeners = new Map<string, (event?: any) => void>();
   const attributes = new Map<string, string>();
   return {
     hidden: true,
+    disabled: false,
     href: '/global',
     dataset: {} as Record<string, string>,
     addEventListener(name: string, listener: (event?: any) => void) { listeners.set(name, listener); },
@@ -58,11 +61,14 @@ describe('refreshed map UI controls', () => {
     expect(css).toContain(`${opacityVariable}: .9`);
     expect(css).toContain(`rgb(255 255 255 / var(${opacityVariable}))`);
     expect(css).toContain('.map-leaderboard--compact { display: none; }');
+    expect(css).toContain('.map-mobile-replay { display: none; }');
 
     const mobileRules = css.slice(css.indexOf('@media (max-width: 900px)'));
     expect(mobileRules).toContain('.map-leaderboard--compact { position: absolute;');
     expect(mobileRules).toContain('.map-mobile-controls { position: fixed;');
     expect(mobileRules).toContain('grid-template-columns: repeat(4, minmax(0, 1fr));');
+    expect(mobileRules).toContain('overflow: visible;');
+    expect(mobileRules).toContain('.map-mobile-replay { display: block; }');
     expect(mobileRules).toContain('.map-leaderboard--compact { position: absolute; z-index: 8; bottom: calc(4rem + env(safe-area-inset-bottom, 0px));');
     expect(mobileRules).not.toContain('.mobile-map-sheet { position: fixed;');
     expect(css.slice(css.indexOf('@media (max-width: 390px)'))).toContain('.map-mobile-controls a { flex-direction: column;');
@@ -83,7 +89,7 @@ describe('refreshed map UI controls', () => {
     expect(html).toContain('>Personal</span>');
     expect(html).toContain('>Competitive</span>');
     expect(html).toContain('>All Time</a>');
-    expect(html).toContain('>Current Month</a>');
+    expect(html).toContain('<span data-current-month-option>Current Month</span></a>');
     expect(html).not.toContain('data-map-sheet');
   });
 
@@ -148,5 +154,21 @@ describe('refreshed map UI controls', () => {
 
     expect(search.hidden).toBe(false);
     expect(input.focus).toHaveBeenCalledOnce();
+  });
+
+  it('disables forward month navigation at the browser-local current month', () => {
+    const previous = node(); previous.dataset.competitionMonthNav = 'previous';
+    const next = node(); next.dataset.competitionMonthNav = 'next';
+    const documentRef = { querySelectorAll(selector: string) {
+      return selector === '[data-competition-month-nav]' ? [previous, next] : [];
+    } };
+    initializeCompetitionPeriodControl({
+      documentRef,
+      locationRef: { pathname: '/global', search: '?month=2026-07' },
+      now: () => new Date('2026-07-24T12:00:00Z'),
+    });
+    expect(previous.disabled).toBe(false);
+    expect(next.disabled).toBe(true);
+    expect(next.getAttribute('aria-disabled')).toBe('true');
   });
 });

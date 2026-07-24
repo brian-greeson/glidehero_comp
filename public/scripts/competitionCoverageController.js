@@ -21,6 +21,7 @@ import {
 } from './mapCellTracks.js';
 import { initializeMapFlightAids } from './mapFlightAids.js';
 import { mapViewportFromSearch, updateMapModeLinks } from './mapViewportUrl.js';
+import { initializeMapReplayController } from './mapReplayController.js';
 
 async function jsonRequest(url, fetchImpl, signal) {
   const response = await fetchImpl(url, {
@@ -69,6 +70,7 @@ export function initializeCompetitionCoverage({
   let selectedPilotId = null;
   let leaderboard = { leaders: [], currentPilot: null };
   let cellTrackSelection;
+  let replayController;
 
   function syncOverviewButtons() {
     for (const button of overviewButtons)
@@ -183,6 +185,7 @@ export function initializeCompetitionCoverage({
     now,
     onChange: async (selection) => {
       syncModeLinks(selection);
+      replayController?.setMonth(selection.month);
       if (mapReady) await refreshPeriod();
     },
   });
@@ -262,6 +265,14 @@ export function initializeCompetitionCoverage({
         map.on?.('click', (event) =>
           cellTrackSelection.handleClick(event, activeCellTrackScope()));
         mapReady = true;
+        replayController = initializeMapReplayController({
+          documentRef,
+          map,
+          fetchImpl,
+          month: periodControl.month,
+          mode: 'competitive',
+          colorForPilot: colorRegistry.colorFor,
+        });
         await refreshPeriod();
       } catch {
         setStatus('Unable to load competition coverage. Try again.');

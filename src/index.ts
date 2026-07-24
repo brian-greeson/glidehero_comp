@@ -46,6 +46,7 @@ import { createWorkerControlService } from './services/workerControlService.js';
 import { createFlightProcessingControlService } from './services/flightProcessingControlService.js';
 import { createUserHistoryRebuildService } from './services/userHistoryRebuildService.js';
 import { createFlightDetailService } from './services/flightDetailService.js';
+import { createMapReplayService } from './services/mapReplayService.js';
 import { createCellFlightTrackService } from './services/cellFlightTrackService.js';
 
 const config = parseConfig(process.env);
@@ -93,6 +94,7 @@ const profiles = createProfileService(db, {
 const follow = createFollowService(db);
 const activity = createActivityService(db);
 const flightDetail = createFlightDetailService(db, { cellSize: config.gridClaimCellSize });
+const mapReplay = createMapReplayService(db);
 const uploadQueue = createFlightUploadQueueService(valkey, {
   s3Client,
   bucketName: config.bucket.bucketName,
@@ -149,6 +151,7 @@ const webMiddleware = [
     follow,
     activity,
     flightDetail,
+    mapReplay,
     gridClaim,
     mapGrid,
     coverage: monthlyCoverage,

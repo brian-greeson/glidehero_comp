@@ -42,6 +42,7 @@ import type { FlightProcessingControlService } from '../services/flightProcessin
 import type { FlightDetailService } from '../services/flightDetailService.js';
 import { createFlightMapPayload, createFlightPageView } from '../views/authenticated/adapters/flightDetailView.js';
 import type { CellFlightTrackService } from '../services/cellFlightTrackService.js';
+import type { MapReplayService } from '../services/mapReplayService.js';
 
 const email = z.string().trim().toLowerCase().pipe(z.email());
 const password = z.string().min(3).max(128);
@@ -209,6 +210,7 @@ export function createWebRouter(dependencies: {
   thumbnailDelivery?: FlightThumbnailDeliveryService;
   flightDetail?: FlightDetailService;
   cellFlightTracks?: CellFlightTrackService;
+  mapReplay?: MapReplayService;
 }) {
   const router = Router();
   const territoryTileSettings = dependencies.territoryTileSettings ?? createTerritoryTileSettingsService();
@@ -491,6 +493,15 @@ export function createWebRouter(dependencies: {
     } catch (error) {
       next(error);
     }
+  });
+
+  router.get('/v1/map-replay', async (req, res, next) => {
+    const currentUser = res.locals.currentUser;
+    if (!currentUser) return next(new AppError(401, 'unauthorized', 'Sign in before viewing map replay.'));
+    const parsed = z.object({ month: competitionMonthValue, mode: z.enum(['personal','competitive']), west: z.coerce.number().finite(), south: z.coerce.number().finite(), east: z.coerce.number().finite(), north: z.coerce.number().finite() }).safeParse(req.query);
+    if (!parsed.success || parsed.data.south < -90 || parsed.data.north > 90 || parsed.data.south >= parsed.data.north || parsed.data.west < -180 || parsed.data.west > 180 || parsed.data.east < -180 || parsed.data.east > 180 || parsed.data.west === parsed.data.east) return res.status(400).json({ error: { code: 'invalid_request', message: 'Invalid map replay parameters.' } });
+    if (!dependencies.mapReplay) throw new Error('Map replay service is not configured.');
+    try { res.json(await dependencies.mapReplay.getReplay({ ...parsed.data, userId: currentUser.userId })); } catch (error) { next(error); }
   });
 
   router.get('/v1/competition-territory/tiles/:z/:x/:y.mvt', async (req, res, next) => {

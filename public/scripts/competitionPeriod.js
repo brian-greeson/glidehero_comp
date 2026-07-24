@@ -32,6 +32,11 @@ export function formatCompetitionMonthLabel(month, locale) {
     .format(new Date(year, monthNumber - 1, 1));
 }
 
+export function shiftCompetitionMonth(month, offset) {
+  const [year, monthNumber] = month.split('-').map(Number);
+  return formatBrowserLocalMonth(new Date(year, monthNumber - 1 + offset, 1));
+}
+
 export function competitionPageUrl(path, month, search = '') {
   const url = new URL(path, 'http://glidehero.local');
   const query = new URLSearchParams(search);
@@ -51,9 +56,17 @@ export function initializeCompetitionPeriodControl({
   onChange = () => undefined,
 } = {}) {
   const buttons = Array.from(documentRef.querySelectorAll?.('[data-competition-period-option]') ?? []);
-  const currentMonthOption = documentRef.querySelector?.('[data-current-month-option]');
-  const periodLinks = Array.from(documentRef.querySelectorAll?.('[data-competition-period-link]') ?? []);
+  const currentMonthOptions = Array.from(documentRef.querySelectorAll?.('[data-current-month-option]') ?? []);
+  if (!currentMonthOptions.length) {
+    const option = documentRef.querySelector?.('[data-current-month-option]');
+    if (option) currentMonthOptions.push(option);
+  }
+  const periodLinks = [
+    ...Array.from(documentRef.querySelectorAll?.('[data-competition-period-link]') ?? []),
+    ...Array.from(documentRef.querySelectorAll?.('[data-map-period-link]') ?? []),
+  ];
   const returnToInputs = Array.from(documentRef.querySelectorAll?.('[data-competition-return-to]') ?? []);
+  const monthNavigation = Array.from(documentRef.querySelectorAll?.('[data-competition-month-nav]') ?? []);
   const initial = mapPeriodFromSearch(locationRef.search, now());
   let month = initial.month;
   let period = initial.period;
@@ -74,11 +87,23 @@ export function initializeCompetitionPeriodControl({
       button.classList.toggle('is-active', selected);
       button.setAttribute('aria-pressed', String(selected));
     }
-    if (currentMonthOption) {
-      currentMonthOption.textContent = month ? formatCompetitionMonthLabel(month) : 'Current Month';
+    for (const option of currentMonthOptions)
+      option.textContent = month ? formatCompetitionMonthLabel(month) : 'Current Month';
+    const browserMonth = formatBrowserLocalMonth(now());
+    for (const button of monthNavigation) {
+      const enabled = period === CURRENT_MONTH_COMPETITION_PERIOD;
+      const isNext = button.dataset.competitionMonthNav === 'next';
+      button.disabled = !enabled || (isNext && month >= browserMonth);
+      button.hidden = period === ALL_TIME_COMPETITION_PERIOD;
+      button.setAttribute?.('aria-disabled', String(button.disabled));
     }
     for (const link of periodLinks) {
-      link.href = competitionPageUrl(link.dataset.competitionPeriodLink, month, locationRef.search);
+      const isMapPeriodLink = !link.dataset.competitionPeriodLink;
+      const linkPath = isMapPeriodLink ? locationRef.pathname : link.dataset.competitionPeriodLink;
+      const linkMonth = isMapPeriodLink && link.dataset.mapPeriodLink === ALL_TIME_COMPETITION_PERIOD
+        ? null
+        : (month ?? formatBrowserLocalMonth(now()));
+      link.href = competitionPageUrl(linkPath, linkMonth, locationRef.search);
     }
     for (const input of returnToInputs) input.value = pageUrl();
   }
@@ -94,6 +119,32 @@ export function initializeCompetitionPeriodControl({
         ALL_TIME_COMPETITION_PERIOD,
         CURRENT_MONTH_COMPETITION_PERIOD,
       ].includes(nextPeriod)) return;
+      period = nextPeriod;
+      month = period === CURRENT_MONTH_COMPETITION_PERIOD ? formatBrowserLocalMonth(now()) : null;
+      replaceUrl();
+      render();
+      await onChange({ period, month });
+    });
+  }
+
+  for (const button of monthNavigation) {
+    button.addEventListener('click', async () => {
+      if (button.disabled || period !== CURRENT_MONTH_COMPETITION_PERIOD || !month) return;
+      const offset = button.dataset.competitionMonthNav === 'previous' ? -1 : 1;
+      const nextMonth = shiftCompetitionMonth(month, offset);
+      if (nextMonth > formatBrowserLocalMonth(now())) return;
+      month = nextMonth;
+      replaceUrl();
+      render();
+      await onChange({ period, month });
+    });
+  }
+
+  for (const link of periodLinks) {
+    link.addEventListener?.('click', async (event) => {
+      event?.preventDefault?.();
+      const nextPeriod = link.dataset.competitionPeriodLink ?? link.dataset.mapPeriodLink;
+      if (![ALL_TIME_COMPETITION_PERIOD, CURRENT_MONTH_COMPETITION_PERIOD].includes(nextPeriod)) return;
       period = nextPeriod;
       month = period === CURRENT_MONTH_COMPETITION_PERIOD ? formatBrowserLocalMonth(now()) : null;
       replaceUrl();
