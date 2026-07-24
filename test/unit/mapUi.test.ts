@@ -70,6 +70,7 @@ describe('refreshed map UI controls', () => {
     expect(mobileRules).toContain('.map-mobile-controls { position: absolute;');
     expect(mobileRules).toContain('.map-mobile-view__menu { position: absolute;');
     expect(mobileRules).toContain('overflow: visible;');
+    expect(mobileRules).toContain('.map-mobile-period-controls { position: fixed;');
     expect(mobileRules).toContain('.map-mobile-replay { display: block; }');
     expect(mobileRules).toContain('.map-leaderboard--compact { position: absolute; z-index: 8; bottom: calc(4rem + env(safe-area-inset-bottom, 0px));');
     expect(mobileRules).toContain('.map-arena-search { top: .75rem; width: 50%; }');
@@ -93,8 +94,10 @@ describe('refreshed map UI controls', () => {
     expect(html).toContain('>My Flights</span>');
     expect(html).toContain('>Following</span>');
     expect(html).toContain('>All Pilots</span>');
+    expect(html).toContain('class="map-mobile-period-controls"');
     expect(html).toContain('data-competition-period-option="all-time" aria-pressed="false"');
     expect(html).toContain('data-competition-period-option="current-month" aria-pressed="true"');
+    expect(html).toContain('class="map-mobile-month-control"');
     expect(html).toContain('data-competition-month-nav="previous" aria-label="Previous month">‹</button>');
     expect(html).toContain('data-competition-month-nav="next" aria-label="Next month">›</button>');
     expect(html).not.toContain('data-map-sheet');
@@ -116,6 +119,27 @@ describe('refreshed map UI controls', () => {
     listeners.get('document:keydown')?.({ key: 'Escape' });
     expect(menu.hidden).toBe(true);
     expect(trigger.focus).toHaveBeenCalledOnce();
+  });
+
+  it('styles the desktop sidebar with the same view and period language as mobile', async () => {
+    const render = createAuthenticatedPageRenderer();
+    const html = await render({
+      ...createAuthenticatedShellModel({ page: 'map' as const, user: { displayName: 'Pilot' }, mapHref: '/global' }),
+      page: 'map' as const,
+      mode: 'competitive',
+      period: 'current-month' as const,
+      location: 'Global Map',
+      metrics: [],
+      leaderboard: [],
+    });
+    expect(html).toContain('<h2>View</h2>');
+    expect(html).toContain('>My Flights</span>');
+    expect(html).toContain('>All Pilots</span>');
+    expect(html).toContain('class="map-desktop-period-controls"');
+    expect(html).toContain('class="map-desktop-month-control"');
+    expect(html).toContain('data-competition-month-nav="previous" aria-label="Previous month">‹</button>');
+    expect(html).toContain('class="map-desktop-replay"');
+    expect(html).not.toContain('<h2>Your Stats</h2>');
   });
 
   it('turns period controls into links that preserve map URL state', () => {

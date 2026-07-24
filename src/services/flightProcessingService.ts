@@ -1,7 +1,7 @@
 import { GetObjectCommand, type S3 } from '@aws-sdk/client-s3';
 import { and, DrizzleQueryError, eq, sql } from 'drizzle-orm';
 import type { Database } from '../db/client.js';
-import { flightScores, flights, trackPoints } from '../db/schema.js';
+import { flightScores, flights, trackPoints, profiles } from '../db/schema.js';
 import { resolveLaunchTimeZone } from '../domain/competition/launchTimeZone.js';
 import {
   FIVE_POINT_DISTANCE_CALC_VERSION,
@@ -233,6 +233,38 @@ export function createFlightProcessingService(
           const completedFlight = completed[0];
           if (!completedFlight) throw new ProcessingFenceLostError();
           if (!completedFlight.processedAt) throw new Error('Completed flight has no processed timestamp.');
+          const lockedHours = await tx.execute<{
+            manufacturer: string | null;
+            generation: number;
+            creditedSeconds: number | null;
+            creditedGeneration: number | null;
+          }>(sql`
+            SELECT
+              profiles.glider_manufacturer AS "manufacturer",
+              profiles.glider_hours_generation AS "generation",
+              flights.glider_hours_credited_seconds AS "creditedSeconds",
+              flights.glider_hours_generation AS "creditedGeneration"
+            FROM profiles
+            INNER JOIN flights ON flights.flight_id = ${flight.id}
+            WHERE profiles.user_id = ${input.ownerUserId}
+            FOR UPDATE OF profiles, flights
+          `);
+          const pilot = lockedHours.rows[0];
+          if (pilot?.manufacturer) {
+            const existingSeconds = pilot.creditedSeconds ?? 0;
+            const isCurrentCredit = pilot.creditedGeneration === pilot.generation;
+            const isNewCredit = pilot.creditedGeneration === null;
+            if (isNewCredit || isCurrentCredit) {
+              const deltaSeconds = parsed.durationSeconds - (isCurrentCredit ? existingSeconds : 0);
+              await tx.update(flights).set({
+                gliderHoursCreditedSeconds: parsed.durationSeconds,
+                gliderHoursGeneration: pilot.generation,
+              }).where(eq(flights.id, flight.id));
+              await tx.update(profiles).set({
+                gliderHoursSeconds: sql`GREATEST(0, ${profiles.gliderHoursSeconds} + ${deltaSeconds})`,
+              }).where(eq(profiles.userId, input.ownerUserId));
+            }
+          }
           await activity.publishFlightInTransaction(tx, {
             actorUserId: completedFlight.actorUserId,
             sourceFlightId: completedFlight.id,

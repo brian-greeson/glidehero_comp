@@ -5,6 +5,7 @@ import { igcFiles } from '../../src/db/schema.js';
 import type { NPointDistances } from '../../src/domain/igc/distance.js';
 import { createAuthService } from '../../src/services/authService.js';
 import { createFlightProcessingService } from '../../src/services/flightProcessingService.js';
+import { createProfileService } from '../../src/services/profileService.js';
 import { resetAndMigrateTestDatabase } from './database.js';
 
 const fixturePath = new URL('../inputs/2026-05-10-XNA-54F3F9B76F42505D1B592F21726CAF48-01.igc', import.meta.url);
@@ -115,6 +116,16 @@ describe('FlightProcessingService with a real IGC file', () => {
     if (!database) throw new Error('Test database was not initialized.');
     const auth = createAuthService(database.db, { sessionTtlSeconds: 60 });
     const pilot = await auth.signup({ email: 'pilot@example.com', password: 'correct horse battery staple' });
+    await createProfileService(database.db, { cellSize: 1_000 }).saveGliderDetails?.({
+      userId: pilot.user.userId,
+      manufacturer: 'Ozone',
+      model: 'Ultralite 5',
+      size: '17',
+      year: 2025,
+      competitionId: null,
+      hours: 0,
+      resetHours: false,
+    });
     const stored = await storeFile(pilot.user.userId, 'flights/known-good.igc', 'known-good.igc');
 
     const result = await processor({ useRealNPointCalculator: true }).process({
@@ -138,6 +149,9 @@ describe('FlightProcessingService with a real IGC file', () => {
       first_fix: Date;
       last_fix: Date;
       cumulative_distance_meters: number;
+      duration_seconds: number;
+      glider_hours_credited_seconds: number;
+      glider_hours_seconds: number;
       total_distance_meters: number;
       total_distance_calc_version: number;
       total_distance_metadata: Record<string, never>;
@@ -202,6 +216,9 @@ describe('FlightProcessingService with a real IGC file', () => {
               f.processed_at,
               f.launch_timezone,
               f.distance_meters AS cumulative_distance_meters,
+              f.duration_seconds,
+              f.glider_hours_credited_seconds,
+              (SELECT glider_hours_seconds FROM profiles WHERE user_id = f.user_id) AS glider_hours_seconds,
               fs.total_distance_meters,
               fs.total_distance_calc_version,
               fs.total_distance_metadata,
@@ -252,6 +269,8 @@ describe('FlightProcessingService with a real IGC file', () => {
         six_point_distance_calc_version: 1,
       }),
     ]);
+    expect(persisted.rows[0]?.glider_hours_credited_seconds).toBe(persisted.rows[0]?.duration_seconds);
+    expect(persisted.rows[0]?.glider_hours_seconds).toBe(persisted.rows[0]?.duration_seconds);
     expect(persisted.rows[0]?.total_distance_meters).toBe(persisted.rows[0]?.cumulative_distance_meters);
     expect(persisted.rows[0]?.three_point_distance_meters).toBeCloseTo(24_089.859916730784, 8);
     expect(persisted.rows[0]?.three_point_distance_metadata).toEqual({

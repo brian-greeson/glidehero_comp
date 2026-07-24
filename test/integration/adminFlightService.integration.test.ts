@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { eq } from 'drizzle-orm';
-import { achievements, arenaCurrentLeaders, arenaLeadershipEvents, competitionGridClaims, flights, igcFiles, personalGridClaims, trackPoints, users } from '../../src/db/schema.js';
+import { achievements, arenaCurrentLeaders, arenaLeadershipEvents, competitionGridClaims, flights, igcFiles, personalGridClaims, profiles, trackPoints, users } from '../../src/db/schema.js';
 import { createAdminFlightService } from '../../src/services/adminFlightService.js';
 import { createArenaLeadershipReconciliationService } from '../../src/services/arenaLeadershipReconciliationService.js';
 import { resetAndMigrateTestDatabase } from './database.js';
@@ -67,6 +67,36 @@ describe('adminFlightService management', () => {
     expect(reprocess).not.toHaveBeenCalled();
   });
 
+  it('applies a corrected duration delta once when reprocessing a current-generation flight', async () => {
+    const stored = await storedFlight();
+    await database.db.insert(profiles).values({
+      userId: stored.user.id,
+      displayName: 'Corrected Duration Pilot',
+      gliderManufacturer: 'Ozone',
+      gliderModel: 'Ultralite 5',
+      gliderSize: '17',
+      gliderYear: 2025,
+      gliderEnRating: 'C',
+      gliderHoursSeconds: 7_200,
+    });
+    await database.db.update(flights).set({
+      durationSeconds: 4_000,
+      gliderHoursCreditedSeconds: 3_600,
+      gliderHoursGeneration: 0,
+    }).where(eq(flights.id, stored.flight.id));
+    const { service } = serviceHarness();
+
+    await expect(service.reprocessFlight({ userId: stored.user.id, flightId: stored.flight.id }))
+      .resolves.toMatchObject({ status: 'completed' });
+    await expect(service.reprocessFlight({ userId: stored.user.id, flightId: stored.flight.id }))
+      .resolves.toMatchObject({ status: 'completed' });
+
+    const [profile] = await database.db.select({ hours: profiles.gliderHoursSeconds }).from(profiles);
+    const [flight] = await database.db.select({ credit: flights.gliderHoursCreditedSeconds }).from(flights);
+    expect(profile?.hours).toBe(7_600);
+    expect(flight?.credit).toBe(4_000);
+  });
+
   it('sorts selected-user flights by flight date or upload date in either direction', async () => {
     const first = await storedFlight();
     const second = await storedFlight('completed', first.user);
@@ -117,6 +147,31 @@ describe('adminFlightService management', () => {
     expect(await database.db.select().from(trackPoints)).toEqual([]);
     expect(await database.db.select().from(personalGridClaims)).toEqual([]);
     await expect(service.deleteFlight({ userId: stored.user.id, flightId: stored.flight.id })).resolves.toBe('already_deleted');
+  });
+
+  it('subtracts only a current-generation glider-hours credit when deleting a flight', async () => {
+    const stored = await storedFlight();
+    await database.db.insert(profiles).values({
+      userId: stored.user.id,
+      displayName: 'Glider Pilot',
+      gliderManufacturer: 'Ozone',
+      gliderModel: 'Ultralite 5',
+      gliderSize: '17',
+      gliderYear: 2025,
+      gliderEnRating: 'C',
+      gliderHoursSeconds: 7_200,
+      gliderHoursGeneration: 2,
+    });
+    await database.db.update(flights).set({
+      durationSeconds: 3_600,
+      gliderHoursCreditedSeconds: 3_600,
+      gliderHoursGeneration: 2,
+    }).where(eq(flights.id, stored.flight.id));
+
+    const { service } = serviceHarness();
+    await expect(service.deleteFlight({ userId: stored.user.id, flightId: stored.flight.id })).resolves.toBe('deleted');
+    const [profile] = await database.db.select({ hours: profiles.gliderHoursSeconds }).from(profiles);
+    expect(profile?.hours).toBe(3_600);
   });
 
   it('keeps processing flights read-only and creates short-lived downloads for terminal flights', async () => {

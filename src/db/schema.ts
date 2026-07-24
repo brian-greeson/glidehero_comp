@@ -49,9 +49,27 @@ export const profiles = pgTable(
     userId: uuid('user_id').notNull().unique().references(() => users.id, { onDelete: 'cascade' }),
     displayName: text('display_name').notNull(),
     territoryColor: text('territory_color').notNull().default('#1769AA'),
+    gliderManufacturer: text('glider_manufacturer'),
+    gliderModel: text('glider_model'),
+    gliderSize: text('glider_size'),
+    gliderYear: integer('glider_year'),
+    gliderCompetitionId: text('glider_competition_id'),
+    gliderEnRating: text('glider_en_rating'),
+    gliderHoursSeconds: integer('glider_hours_seconds').notNull().default(0),
+    gliderHoursGeneration: integer('glider_hours_generation').notNull().default(0),
     ...timestamps,
   },
-  (table) => [index('profiles_user_id_idx').on(table.userId)],
+  (table) => [
+    index('profiles_user_id_idx').on(table.userId),
+    check('profiles_glider_hours_seconds_nonnegative', sql`${table.gliderHoursSeconds} >= 0`),
+    check('profiles_glider_hours_generation_nonnegative', sql`${table.gliderHoursGeneration} >= 0`),
+    check('profiles_glider_year_supported', sql`${table.gliderYear} IS NULL OR ${table.gliderYear} >= 1980`),
+    check(
+      'profiles_glider_identity_complete',
+      sql`(${table.gliderManufacturer} IS NULL AND ${table.gliderModel} IS NULL AND ${table.gliderSize} IS NULL AND ${table.gliderYear} IS NULL AND ${table.gliderEnRating} IS NULL)
+        OR (${table.gliderManufacturer} IS NOT NULL AND ${table.gliderModel} IS NOT NULL AND ${table.gliderSize} IS NOT NULL AND ${table.gliderYear} IS NOT NULL AND ${table.gliderEnRating} IS NOT NULL)`,
+    ),
+  ],
 );
 
 export const appSessions = pgTable(
@@ -99,6 +117,8 @@ export const flights = pgTable(
     startedAt: timestamp('started_at', { withTimezone: true, mode: 'date' }),
     endedAt: timestamp('ended_at', { withTimezone: true, mode: 'date' }),
     durationSeconds: integer('duration_seconds'),
+    gliderHoursCreditedSeconds: integer('glider_hours_credited_seconds'),
+    gliderHoursGeneration: integer('glider_hours_generation'),
     distanceMeters: doublePrecision('distance_meters'),
     launchLatitude: doublePrecision('launch_latitude'),
     launchLongitude: doublePrecision('launch_longitude'),
@@ -106,6 +126,12 @@ export const flights = pgTable(
     ...timestamps,
   },
   (table) => [
+    check('flights_glider_hours_credited_seconds_nonnegative', sql`${table.gliderHoursCreditedSeconds} IS NULL OR ${table.gliderHoursCreditedSeconds} >= 0`),
+    check('flights_glider_hours_generation_nonnegative', sql`${table.gliderHoursGeneration} IS NULL OR ${table.gliderHoursGeneration} >= 0`),
+    check(
+      'flights_glider_hours_credit_complete',
+      sql`(${table.gliderHoursCreditedSeconds} IS NULL) = (${table.gliderHoursGeneration} IS NULL)`,
+    ),
     unique('flights_igc_file_id_unique').on(table.igcFileId),
     unique('flights_content_hash_unique').on(table.contentHash),
     index('flights_user_id_idx').on(table.userId),

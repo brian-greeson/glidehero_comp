@@ -5,7 +5,8 @@ import { AppError } from '../domain/errors.js';
 import { AuthFailure, type AuthenticatedUser, type AuthService } from '../services/authService.js';
 import type { MonthlyCoveragePeriod, MonthlyCoverageService } from '../services/monthlyCoverageService.js';
 import type { MapGridService } from '../services/mapGridService.js';
-import { normalizeTerritoryColor, type ProfileService } from '../services/profileService.js';
+import { GliderValidationError, normalizeTerritoryColor, type ProfileService } from '../services/profileService.js';
+import { searchGliderModels } from '../domain/glider/catalog.js';
 import type { GridClaimService } from '../services/gridClaimService.js';
 import type { AdminFlightService } from '../services/adminFlightService.js';
 import type { ArenaService } from '../services/arenaService.js';
@@ -218,6 +219,37 @@ export function createWebRouter(dependencies: {
   const territoryTileSettings = dependencies.territoryTileSettings ?? createTerritoryTileSettingsService();
   const adminEmails = new Set((dependencies.adminEmails ?? []).map((email) => email.trim().toLowerCase()));
   const isAdmin = (email: string) => adminEmails.has(email.trim().toLowerCase());
+
+  async function renderCurrentProfile(
+    res: Response,
+    currentUser: AuthenticatedUser,
+    status: number,
+    gliderEditor?: {
+      manufacturer: string;
+      model: string;
+      size: string;
+      year: string;
+      competitionId: string;
+      hours: string;
+      error: string;
+      isOpen: boolean;
+    },
+  ) {
+    const profile = await dependencies.profiles.getPilotProfile(currentUser.userId);
+    if (!profile) return false;
+    const thumbnailUrls = dependencies.thumbnailDelivery
+      ? await dependencies.thumbnailDelivery.signMany(profile.recentFlights.map((flight) => ({ userId: profile.userId, flightId: flight.flightId })))
+      : undefined;
+    const shell = authenticatedShell('profile', currentUser);
+    const view = pilotProfileToView(profile, { isCurrent: true, isFollowed: false, currentPath: '/profile', thumbnailUrls });
+    await renderAuthenticated(res, dependencies.renderAuthenticatedPage, status, {
+      ...shell,
+      page: 'profile',
+      ...view,
+      gliderEditor: gliderEditor ?? view.gliderEditor,
+    });
+    return true;
+  }
 
   function sendTerritoryTile(res: Response, tile: { data: Buffer }) {
     res.status(200)
@@ -893,20 +925,7 @@ export function createWebRouter(dependencies: {
       return;
     }
     try {
-      const profile = await dependencies.profiles.getPilotProfile(currentUser.userId);
-      if (!profile) {
-        next();
-        return;
-      }
-      const thumbnailUrls = dependencies.thumbnailDelivery
-        ? await dependencies.thumbnailDelivery.signMany(profile.recentFlights.map((flight) => ({ userId: profile.userId, flightId: flight.flightId })))
-        : undefined;
-      const shell = authenticatedShell('profile', currentUser);
-      await renderAuthenticated(res, dependencies.renderAuthenticatedPage, 200, {
-        ...shell,
-        page: 'profile',
-        ...pilotProfileToView(profile, { isCurrent: true, isFollowed: false, currentPath: '/profile', thumbnailUrls }),
-      });
+      if (!(await renderCurrentProfile(res, currentUser, 200))) next();
     } catch (error) {
       next(error);
     }
@@ -1437,6 +1456,64 @@ export function createWebRouter(dependencies: {
 
     await dependencies.profiles.updateTerritoryColor({ userId: currentUser.userId, territoryColor });
     res.redirect(303, dashboardSuccessRedirect(formBody(req.body).returnTo, 'territoryColor'));
+  });
+
+  router.get('/profile/glider/search', (req, res) => {
+    if (!res.locals.currentUser) {
+      res.status(401).json({ error: { code: 'unauthorized', message: 'Sign in to search the glider catalog.' } });
+      return;
+    }
+    const q = typeof req.query.q === 'string' ? req.query.q : '';
+    res.json(searchGliderModels(q));
+  });
+
+  router.post('/profile/glider', async (req, res, next) => {
+    const currentUser = res.locals.currentUser;
+    if (!currentUser) { res.redirect(303, '/login'); return; }
+    const body = formBody(req.body);
+    const draft = {
+      manufacturer: typeof body.manufacturer === 'string' ? body.manufacturer : '',
+      model: typeof body.model === 'string' ? body.model : '',
+      size: typeof body.size === 'string' ? body.size : '',
+      year: typeof body.year === 'string' ? body.year.trim() : '',
+      competitionId: typeof body.competitionId === 'string' ? body.competitionId : '',
+      hours: typeof body.hours === 'string' ? body.hours.trim() : '',
+    };
+    try {
+      if (!dependencies.profiles.saveGliderDetails) throw new Error('Glider profile is unavailable.');
+      if (!/^\d{4}$/.test(draft.year)) {
+        throw new GliderValidationError('Enter a four-digit glider year.');
+      }
+      if (!/^\d+(?:\.\d)?$/.test(draft.hours)) {
+        throw new GliderValidationError('Enter nonnegative flight hours with no more than one decimal place.');
+      }
+      await dependencies.profiles.saveGliderDetails({
+        userId: currentUser.userId,
+        manufacturer: draft.manufacturer,
+        model: draft.model,
+        size: draft.size,
+        year: Number(draft.year),
+        competitionId: draft.competitionId,
+        hours: Number(draft.hours),
+        resetHours: body.resetHours === 'true' ? true : body.resetHours === 'false' ? false : null,
+      });
+      res.redirect(303, '/profile');
+    } catch (error) {
+      if (!(error instanceof GliderValidationError)) {
+        next(error);
+        return;
+      }
+      try {
+        const rendered = await renderCurrentProfile(res, currentUser, 422, {
+          ...draft,
+          error: error.message,
+          isOpen: true,
+        });
+        if (!rendered) next();
+      } catch (renderError) {
+        next(renderError);
+      }
+    }
   });
 
   return router;

@@ -1,0 +1,8 @@
+ALTER TABLE "flights" ADD CONSTRAINT "flights_glider_hours_credited_seconds_nonnegative" CHECK ("glider_hours_credited_seconds" IS NULL OR "glider_hours_credited_seconds" >= 0);--> statement-breakpoint
+ALTER TABLE "flights" ADD CONSTRAINT "flights_glider_hours_generation_nonnegative" CHECK ("glider_hours_generation" IS NULL OR "glider_hours_generation" >= 0);--> statement-breakpoint
+ALTER TABLE "flights" ADD CONSTRAINT "flights_glider_hours_credit_complete" CHECK (("glider_hours_credited_seconds" IS NULL) = ("glider_hours_generation" IS NULL));--> statement-breakpoint
+ALTER TABLE "profiles" ADD CONSTRAINT "profiles_glider_hours_seconds_nonnegative" CHECK ("glider_hours_seconds" >= 0);--> statement-breakpoint
+ALTER TABLE "profiles" ADD CONSTRAINT "profiles_glider_hours_generation_nonnegative" CHECK ("glider_hours_generation" >= 0);--> statement-breakpoint
+ALTER TABLE "profiles" ADD CONSTRAINT "profiles_glider_year_supported" CHECK ("glider_year" IS NULL OR "glider_year" >= 1980);--> statement-breakpoint
+ALTER TABLE "profiles" ADD CONSTRAINT "profiles_glider_identity_complete" CHECK (("glider_manufacturer" IS NULL AND "glider_model" IS NULL AND "glider_size" IS NULL AND "glider_year" IS NULL AND "glider_en_rating" IS NULL)
+        OR ("glider_manufacturer" IS NOT NULL AND "glider_model" IS NOT NULL AND "glider_size" IS NOT NULL AND "glider_year" IS NOT NULL AND "glider_en_rating" IS NOT NULL));
