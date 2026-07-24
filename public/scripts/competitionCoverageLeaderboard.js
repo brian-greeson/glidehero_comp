@@ -54,6 +54,30 @@ function pilotRow(documentRef, pilot, { selectedPilotId, currentUserId, colorReg
   return row;
 }
 
+function leaderboardViews(documentRef) {
+  const containers = documentRef.querySelectorAll?.('[data-territory-leaderboard]');
+  if (containers?.length) {
+    return Array.from(containers, (container) => ({
+      variant:
+        container.dataset?.territoryLeaderboardVariant ||
+        container.getAttribute?.('data-territory-leaderboard-variant') ||
+        'full',
+      list: container.querySelector('[data-territory-list]'),
+      status: container.querySelector('[data-territory-status]'),
+      current: container.querySelector('[data-territory-current-pilot]'),
+    }));
+  }
+
+  return [
+    {
+      variant: 'full',
+      list: documentRef.querySelector('[data-territory-list]'),
+      status: documentRef.querySelector('[data-territory-status]'),
+      current: documentRef.querySelector('[data-territory-current-pilot]'),
+    },
+  ];
+}
+
 export function renderCoverageLeaderboard({
   documentRef,
   leaderboard,
@@ -62,45 +86,57 @@ export function renderCoverageLeaderboard({
   colorRegistry,
   onSelect,
 }) {
-  const list = documentRef.querySelector('[data-territory-list]');
-  const status = documentRef.querySelector('[data-territory-status]');
-  const current = documentRef.querySelector('[data-territory-current-pilot]');
-  if (!list || !status || !current) return;
-  list.replaceChildren(
-    ...leaderboard.leaders.map((pilot) =>
-      pilotRow(documentRef, pilot, {
-        selectedPilotId,
-        currentUserId,
-        colorRegistry,
-        onSelect,
-      }),
-    ),
-  );
-  current.replaceChildren();
-  current.hidden = !leaderboard.currentPilot;
-  if (leaderboard.currentPilot)
-    current.append(
-      pilotRow(documentRef, leaderboard.currentPilot, {
-        selectedPilotId,
-        currentUserId,
-        colorRegistry,
-        onSelect,
-      }),
-    );
-  const selectedPilot = [...leaderboard.leaders, ...(leaderboard.currentPilot ? [leaderboard.currentPilot] : [])]
+  const selectedPilot = [
+    ...leaderboard.leaders,
+    ...(leaderboard.currentPilot ? [leaderboard.currentPilot] : []),
+  ]
     .find((pilot) => pilot.userId === selectedPilotId);
-  status.replaceChildren();
-  if (!selectedPilot) {
-    status.textContent =
-      leaderboard.leaders.length === 0
-        ? 'No territory for this zoom level or area.'
-        : 'Select a pilot to view their coverage.';
-    return;
+
+  for (const view of leaderboardViews(documentRef)) {
+    if (!view.list || !view.status) continue;
+    const leaders = view.variant === 'compact'
+      ? leaderboard.leaders.slice(0, 3)
+      : leaderboard.leaders;
+    view.list.replaceChildren(
+      ...leaders.map((pilot) =>
+        pilotRow(documentRef, pilot, {
+          selectedPilotId,
+          currentUserId,
+          colorRegistry,
+          onSelect,
+        }),
+      ),
+    );
+
+    if (view.current) {
+      view.current.replaceChildren();
+      view.current.hidden = !leaderboard.currentPilot;
+      if (leaderboard.currentPilot)
+        view.current.append(
+          pilotRow(documentRef, leaderboard.currentPilot, {
+            selectedPilotId,
+            currentUserId,
+            colorRegistry,
+            onSelect,
+          }),
+        );
+    }
+
+    view.status.replaceChildren();
+    if (!selectedPilot) {
+      view.status.textContent =
+        leaderboard.leaders.length === 0
+          ? 'No territory for this zoom level or area.'
+          : 'Select a pilot to view their coverage.';
+      view.status.hidden = view.variant === 'compact' && leaderboard.leaders.length > 0;
+      continue;
+    }
+    view.status.hidden = false;
+    view.status.textContent = `Viewing ${selectedPilot.displayName}. `;
+    const profileLink = documentRef.createElement('a');
+    profileLink.className = 'leaderboard-profile-link';
+    profileLink.setAttribute('href', `/pilots/${encodeURIComponent(selectedPilot.userId)}`);
+    profileLink.textContent = `View ${selectedPilot.displayName}’s progress`;
+    view.status.append(profileLink);
   }
-  status.textContent = `Viewing ${selectedPilot.displayName}. `;
-  const profileLink = documentRef.createElement('a');
-  profileLink.className = 'leaderboard-profile-link';
-  profileLink.setAttribute('href', `/pilots/${encodeURIComponent(selectedPilot.userId)}`);
-  profileLink.textContent = `View ${selectedPilot.displayName}’s progress`;
-  status.append(profileLink);
 }

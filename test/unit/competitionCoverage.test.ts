@@ -111,6 +111,120 @@ describe('competition coverage browser contracts', () => {
     expect(onSelect).toHaveBeenCalledWith(null);
   });
 
+  it('renders the full result and a synchronized top-three compact result', () => {
+    const element = () => {
+      const attributes = new Map<string, string>();
+      const classes = new Set<string>();
+      const style = new Map<string, string>();
+      const listeners = new Map<string, (event?: any) => void>();
+      const node = {
+        hidden: false,
+        textContent: '',
+        className: '',
+        children: [] as any[],
+        dataset: {} as Record<string, string>,
+        classList: {
+          add(name: string) {
+            classes.add(name);
+          },
+          contains(name: string) {
+            return classes.has(name);
+          },
+        },
+        style: {
+          setProperty(name: string, value: string) {
+            style.set(name, value);
+          },
+          getPropertyValue(name: string) {
+            return style.get(name) ?? '';
+          },
+        },
+        setAttribute(name: string, value: string) {
+          attributes.set(name, value);
+        },
+        getAttribute(name: string) {
+          return attributes.get(name) ?? null;
+        },
+        addEventListener(name: string, listener: (event?: any) => void) {
+          listeners.set(name, listener);
+        },
+        click(event?: any) {
+          listeners.get('click')?.(event);
+        },
+        append(...children: any[]) {
+          node.children.push(...children);
+        },
+        replaceChildren(...children: any[]) {
+          node.children = children;
+        },
+      };
+      return node;
+    };
+    const view = (variant: 'full' | 'compact') => {
+      const list = element();
+      const status = element();
+      const current = variant === 'full' ? element() : null;
+      const container: any = element();
+      container.dataset.territoryLeaderboardVariant = variant;
+      container.querySelector = (selector: string) =>
+        new Map<string, any>([
+          ['[data-territory-list]', list],
+          ['[data-territory-status]', status],
+          ['[data-territory-current-pilot]', current],
+        ]).get(selector) ?? null;
+      return { container, list, status, current };
+    };
+    const full = view('full');
+    const compact = view('compact');
+    const leaders = Array.from({ length: 5 }, (_, index) => ({
+      userId: `pilot-${index + 1}`,
+      displayName: `Pilot ${index + 1}`,
+      rank: index + 1,
+      claimedCellCount: 5 - index,
+      claimedAreaSquareMeters: (5 - index) * 1_000_000,
+    }));
+    const currentPilot = {
+      userId: 'current-pilot',
+      displayName: 'Current Pilot',
+      rank: 12,
+      claimedCellCount: 1,
+      claimedAreaSquareMeters: 500_000,
+    };
+    const colors = new Map(leaders.map((leader, index) => [leader.userId, `color-${index}`]));
+    const onSelect = vi.fn();
+
+    renderCoverageLeaderboard({
+      documentRef: {
+        createElement: element,
+        querySelectorAll: () => [full.container, compact.container],
+      },
+      leaderboard: { leaders, currentPilot },
+      selectedPilotId: 'pilot-2',
+      currentUserId: 'current-pilot',
+      colorRegistry: { colorFor: (userId: string) => colors.get(userId) ?? 'current-color' },
+      onSelect,
+    });
+
+    expect(full.list.children).toHaveLength(5);
+    expect(full.current?.children).toHaveLength(1);
+    expect(compact.list.children).toHaveLength(3);
+    expect(compact.current).toBeNull();
+    for (const rendered of [full, compact]) {
+      const selectedRow = rendered.list.children[1];
+      expect(selectedRow.getAttribute('aria-pressed')).toBe('true');
+      expect(selectedRow.classList.contains('is-selected')).toBe(true);
+      expect(selectedRow.children[0].children[0].style.getPropertyValue('--pilot-color'))
+        .toBe('color-1');
+      expect(selectedRow.children[0].children[2].getAttribute('href')).toBe('/pilots/pilot-2');
+      expect(selectedRow.children[0].children[2].textContent).toBe('Pilot 2');
+    }
+    expect(compact.status.hidden).toBe(false);
+    expect(compact.status.children[0].getAttribute('href')).toBe('/pilots/pilot-2');
+
+    compact.list.children[1].click();
+    expect(onSelect).toHaveBeenCalledWith(null);
+  });
+
   it('positions claimant popups and distinguishes claimed-cell taps', () => {
     const popup = {
       offsetWidth: 120,

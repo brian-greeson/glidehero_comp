@@ -37,11 +37,6 @@
     </div>
   </section>
   {{ if mode === 'competitive' }}
-    <section class="map-control-group map-leaderboard map-leaderboard--coverage" data-territory-leaderboard aria-busy="true">
-      <header class="map-leaderboard__heading"><h2>Viewport Leaderboard</h2><button type="button" data-territory-allpilots aria-pressed="true">Show All</button></header>
-      <p class="leaderboard-status" data-territory-status aria-live="polite">Loading coverage…</p>
-      <div class="coverage-table" role="table" aria-label="Coverage leaders"><div data-territory-list role="rowgroup"></div></div>
-      <div class="current-pilot-result" data-territory-current-pilot hidden></div>
-    </section>
+    {{ include "authenticated/components/mapLeaderboard.vto" { compact: false } }}
   {{ /if }}
 </aside>

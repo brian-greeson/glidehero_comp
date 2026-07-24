@@ -177,15 +177,32 @@ function globalDashboardHarness(fetchImpl: any, search = '', dataset: Record<str
   currentMonth.dataset.competitionPeriodOption = 'current-month';
   const personalModeLink = element();
   personalModeLink.setAttribute('href', '/personal');
+  const leaderboardView = (variant: 'full' | 'compact') => {
+    const card = element();
+    const overview = element();
+    const status = element();
+    const list = element();
+    const current = variant === 'full' ? element() : null;
+    card.dataset.territoryLeaderboardVariant = variant;
+    card.querySelector = (selector: string) =>
+      new Map<string, any>([
+        ['[data-territory-status]', status],
+        ['[data-territory-list]', list],
+        ['[data-territory-current-pilot]', current],
+      ]).get(selector) ?? null;
+    return { card, overview, status, list, current };
+  };
+  const fullLeaderboard = leaderboardView('full');
+  const compactLeaderboard = leaderboardView('compact');
   const elements = new Map<string, any>([
     ['[data-competition-coverage]', element()],
     ['[data-territory-map]', mapElement],
     ['[data-map-empty-state]', element()],
-    ['[data-territory-leaderboard]', element()],
-    ['[data-territory-allpilots]', element()],
-    ['[data-territory-status]', element()],
-    ['[data-territory-list]', element()],
-    ['[data-territory-current-pilot]', element()],
+    ['[data-territory-leaderboard]', fullLeaderboard.card],
+    ['[data-territory-allpilots]', fullLeaderboard.overview],
+    ['[data-territory-status]', fullLeaderboard.status],
+    ['[data-territory-list]', fullLeaderboard.list],
+    ['[data-territory-current-pilot]', fullLeaderboard.current],
     ['[data-territory-cell-popup]', element()],
     ['[data-current-month-option]', currentMonth],
   ]);
@@ -195,6 +212,15 @@ function globalDashboardHarness(fetchImpl: any, search = '', dataset: Record<str
     querySelectorAll: (selector: string) => {
       if (selector === '[data-competition-period-option]') return [allTime, currentMonth];
       if (selector === '[data-map-mode-link]') return [personalModeLink];
+      if (selector === '[data-territory-leaderboard]') {
+        return [fullLeaderboard.card, compactLeaderboard.card];
+      }
+      if (selector === '[data-territory-allpilots]') {
+        return [fullLeaderboard.overview, compactLeaderboard.overview];
+      }
+      if (selector === '[data-territory-status]') {
+        return [fullLeaderboard.status, compactLeaderboard.status];
+      }
       return [];
     },
   };
@@ -214,6 +240,10 @@ function globalDashboardHarness(fetchImpl: any, search = '', dataset: Record<str
     currentMonth,
     historyRef,
     personalModeLink,
+    leaderboards: {
+      full: fullLeaderboard,
+      compact: compactLeaderboard,
+    },
   };
 }
 
@@ -446,6 +476,54 @@ describe('Global dashboard controller', () => {
     expect(overview.getAttribute('aria-pressed')).toBe('true');
     expect(status.children).toHaveLength(0);
     expect(status.textContent).toBe('Select a pilot to view their coverage.');
+  });
+
+  it('keeps both leaderboard selections synchronized when either Show All is used', async () => {
+    const fetchImpl = vi.fn(async () =>
+      jsonResponse({ leaders: [pilot('pilot-one', 'Pilot One')], currentPilot: null }),
+    );
+    const harness = globalDashboardHarness(fetchImpl);
+    await harness.load();
+    const full = harness.leaderboards.full;
+    const compact = harness.leaderboards.compact;
+    const source = harness.map.getSource('competition-coverage');
+
+    await full.list.children[0].click();
+    expect(full.list.children[0].getAttribute('aria-pressed')).toBe('true');
+    expect(compact.list.children[0].getAttribute('aria-pressed')).toBe('true');
+    expect(full.overview.getAttribute('aria-pressed')).toBe('false');
+    expect(compact.overview.getAttribute('aria-pressed')).toBe('false');
+
+    await compact.overview.click();
+    expect(full.list.children[0].getAttribute('aria-pressed')).toBe('false');
+    expect(compact.list.children[0].getAttribute('aria-pressed')).toBe('false');
+    expect(full.overview.getAttribute('aria-pressed')).toBe('true');
+    expect(compact.overview.getAttribute('aria-pressed')).toBe('true');
+
+    await compact.list.children[0].click();
+    await full.overview.click();
+    expect(full.overview.getAttribute('aria-pressed')).toBe('true');
+    expect(compact.overview.getAttribute('aria-pressed')).toBe('true');
+    expect(source.setTiles).toHaveBeenLastCalledWith([
+      '/v1/competition-territory/tiles/{z}/{x}/{y}.mvt?month=2026-07',
+    ]);
+  });
+
+  it('applies leaderboard busy state to both views', async () => {
+    const leaderboardResponse = deferred<Response>();
+    const fetchImpl = vi.fn(async () => leaderboardResponse.promise);
+    const harness = globalDashboardHarness(fetchImpl);
+
+    const loading = harness.load();
+    await vi.waitFor(() => {
+      expect(harness.leaderboards.full.card.getAttribute('aria-busy')).toBe('true');
+      expect(harness.leaderboards.compact.card.getAttribute('aria-busy')).toBe('true');
+    });
+    leaderboardResponse.resolve(jsonResponse({ leaders: [], currentPilot: null }));
+    await loading;
+
+    expect(harness.leaderboards.full.card.getAttribute('aria-busy')).toBeNull();
+    expect(harness.leaderboards.compact.card.getAttribute('aria-busy')).toBeNull();
   });
 
   it('resets pilot selection and refreshes territory and rankings when the period changes', async () => {
@@ -687,6 +765,11 @@ describe('Global dashboard controller', () => {
     expect(harness.elements.get('[data-territory-leaderboard]').getAttribute('aria-busy')).toBe(
       null,
     );
+    expect(harness.leaderboards.compact.status.textContent).toBe(
+      'Unable to update coverage rankings.',
+    );
+    expect(harness.leaderboards.compact.status.hidden).toBe(false);
+    expect(harness.leaderboards.compact.card.getAttribute('aria-busy')).toBeNull();
 
     harness.error();
     expect(harness.elements.get('[data-map-empty-state]').textContent).toBe(

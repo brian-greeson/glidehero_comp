@@ -1,4 +1,7 @@
+import { readFile } from 'node:fs/promises';
 import { describe, expect, it, vi } from 'vitest';
+import { createAuthenticatedShellModel } from '../../src/views/authenticated/adapters/shellModel.js';
+import { createAuthenticatedPageRenderer } from '../../src/views/authenticated/renderer.js';
 
 // @ts-expect-error Browser assets remain JavaScript.
 import { initializeMapUrlControls } from '../../public/scripts/app-ui/map.js';
@@ -19,6 +22,53 @@ function node() {
 }
 
 describe('refreshed map UI controls', () => {
+  it('renders full and compact leaderboards only on Competitive maps', async () => {
+    const render = createAuthenticatedPageRenderer();
+    const mapModel = (mode: 'personal' | 'competitive') => ({
+      ...createAuthenticatedShellModel({
+        page: 'map' as const,
+        user: { displayName: 'Pilot' },
+        mapHref: mode === 'personal' ? '/personal' : '/global',
+      }),
+      page: 'map' as const,
+      mode,
+      period: 'current-month' as const,
+      location: 'Global',
+      metrics: [],
+      leaderboard: [],
+    });
+
+    const competitive = await render(mapModel('competitive'));
+    expect(competitive.match(/data-territory-leaderboard(?:[ =])/g)).toHaveLength(2);
+    expect(competitive).toContain('data-territory-leaderboard-variant="full"');
+    expect(competitive).toContain('data-territory-leaderboard-variant="compact"');
+    expect(competitive).toContain('map-leaderboard--compact');
+
+    const personal = await render(mapModel('personal'));
+    expect(personal).not.toContain('data-territory-leaderboard');
+    expect(personal).not.toContain('map-leaderboard--compact');
+    expect(personal).not.toContain('Viewport Leaderboard');
+  });
+
+  it('keeps the compact leaderboard mobile-only and exposes one surface opacity control', async () => {
+    const css = await readFile('public/styles/app-ui/map.css', 'utf8');
+    const opacityVariable = '--mobile-leaderboard-surface-opacity';
+
+    expect(css.match(new RegExp(opacityVariable, 'g'))).toHaveLength(2);
+    expect(css).toContain(`${opacityVariable}: .9`);
+    expect(css).toContain(`rgb(255 255 255 / var(${opacityVariable}))`);
+    expect(css).toContain('.map-leaderboard--compact { display: none; }');
+
+    const mobileRules = css.slice(css.indexOf('@media (max-width: 900px)'));
+    expect(mobileRules).toContain('.map-leaderboard--compact { position: absolute;');
+    expect(mobileRules).toContain(
+      'bottom: calc(clamp(25px, 5svh, 260px) + .75rem)',
+    );
+    expect(mobileRules).toContain(
+      '.mobile-map-sheet.is-expanded + .map-stage .map-leaderboard--compact { display: none; }',
+    );
+  });
+
   it('turns period controls into links that preserve map URL state', () => {
     const allTime = node();
     allTime.dataset.mapPeriodLink = 'all-time';

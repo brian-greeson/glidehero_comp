@@ -31,6 +31,13 @@ async function jsonRequest(url, fetchImpl, signal) {
   return response.json();
 }
 
+function matchingElements(documentRef, selector) {
+  const matches = documentRef.querySelectorAll?.(selector);
+  if (matches?.length) return Array.from(matches);
+  const match = documentRef.querySelector(selector);
+  return match ? [match] : [];
+}
+
 export function initializeCompetitionCoverage({
   documentRef = document,
   maplibre = window.maplibregl,
@@ -43,8 +50,9 @@ export function initializeCompetitionCoverage({
 } = {}) {
   const root = documentRef.querySelector('[data-competition-coverage]');
   const mapElement = documentRef.querySelector('[data-territory-map]');
-  const card = documentRef.querySelector('[data-territory-leaderboard]');
-  const overviewButton = documentRef.querySelector('[data-territory-allpilots]');
+  const leaderboardCards = matchingElements(documentRef, '[data-territory-leaderboard]');
+  const overviewButtons = matchingElements(documentRef, '[data-territory-allpilots]');
+  const leaderboardStatuses = matchingElements(documentRef, '[data-territory-status]');
   const emptyState = documentRef.querySelector('[data-map-empty-state]');
   const cellPopup = documentRef.querySelector('[data-territory-cell-popup]');
   if (!root || !mapElement || !maplibre) return;
@@ -62,6 +70,25 @@ export function initializeCompetitionCoverage({
   let leaderboard = { leaders: [], currentPilot: null };
   let cellPopupRequestId = 0;
   let hoveredCellId = null;
+
+  function syncOverviewButtons() {
+    for (const button of overviewButtons)
+      button.setAttribute('aria-pressed', String(!selectedPilotId));
+  }
+
+  function setLeaderboardBusy(isBusy) {
+    for (const card of leaderboardCards) {
+      if (isBusy) card.setAttribute('aria-busy', 'true');
+      else card.removeAttribute('aria-busy');
+    }
+  }
+
+  function setLeaderboardError(message) {
+    for (const status of leaderboardStatuses) {
+      status.textContent = message;
+      status.hidden = false;
+    }
+  }
 
   function syncModeLinks(periodSelection = {
     period: periodControl.period,
@@ -128,7 +155,7 @@ export function initializeCompetitionCoverage({
       onSelect: (pilot) => {
         clearCellHover();
         selectedPilotId = pilot?.userId ?? null;
-        overviewButton?.setAttribute('aria-pressed', String(!selectedPilotId));
+        syncOverviewButtons();
         renderLeaderboard();
         refreshTerritoryTiles();
       },
@@ -137,7 +164,7 @@ export function initializeCompetitionCoverage({
 
   const leaderboardRequest = createLatestRequest(async ({ signal, isCurrent }) => {
     if (!map?.getBounds) return;
-    card?.setAttribute('aria-busy', 'true');
+    setLeaderboardBusy(true);
     const url = arenaSourceId
       ? arenaCoverageLeaderboardUrl(arenaSourceId, periodControl.month)
       : globalCoverageLeaderboardUrl(map.getBounds(), periodControl.month);
@@ -151,23 +178,22 @@ export function initializeCompetitionCoverage({
         !pilots.some((pilot) => pilot.userId === selectedPilotId && pilot.claimedCellCount > 0)
       ) {
         selectedPilotId = null;
-        overviewButton?.setAttribute('aria-pressed', 'true');
+        syncOverviewButtons();
         refreshTerritoryTiles();
       }
       renderLeaderboard();
     } catch (error) {
       if (error?.name !== 'AbortError' && isCurrent()) {
-        const status = documentRef.querySelector('[data-territory-status]');
-        if (status) status.textContent = 'Unable to update coverage rankings.';
+        setLeaderboardError('Unable to update coverage rankings.');
       }
     } finally {
-      if (isCurrent()) card?.removeAttribute('aria-busy');
+      if (isCurrent()) setLeaderboardBusy(false);
     }
   });
 
   async function refreshPeriod() {
     selectedPilotId = null;
-    overviewButton?.setAttribute('aria-pressed', 'true');
+    syncOverviewButtons();
     clearCellHover();
     refreshTerritoryTiles();
     await leaderboardRequest.run();
@@ -184,14 +210,17 @@ export function initializeCompetitionCoverage({
     },
   });
 
-  overviewButton?.addEventListener('click', () => {
-    if (!selectedPilotId) return;
-    clearCellHover();
-    selectedPilotId = null;
-    overviewButton.setAttribute('aria-pressed', 'true');
-    renderLeaderboard();
-    refreshTerritoryTiles();
-  });
+  syncOverviewButtons();
+  for (const overviewButton of overviewButtons) {
+    overviewButton.addEventListener('click', () => {
+      if (!selectedPilotId) return;
+      clearCellHover();
+      selectedPilotId = null;
+      syncOverviewButtons();
+      renderLeaderboard();
+      refreshTerritoryTiles();
+    });
+  }
 
   try {
     const initialViewport = mapViewportFromSearch(locationRef?.search);
@@ -237,7 +266,7 @@ export function initializeCompetitionCoverage({
         await refreshPeriod();
       } catch {
         setStatus('Unable to load competition coverage. Try again.');
-        card?.removeAttribute('aria-busy');
+        setLeaderboardBusy(false);
       } finally {
         initializeMapFlightAids({
           map,
