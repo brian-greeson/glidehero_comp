@@ -1,12 +1,15 @@
-<nav class="map-mobile-controls" aria-label="Map controls">
-  <a href="/personal" data-map-mode-link="personal" class="{{ if mode === 'personal' }}is-active{{ /if }}" aria-current="{{ if mode === 'personal' }}page{{ else }}false{{ /if }}">{{ include "authenticated/components/icon.vto" { name: "profile" } }}<span>Personal</span></a>
-  <a href="{{ if mode === 'competitive' }}{{ navigation[0].href }}{{ else }}/global{{ /if }}" data-map-mode-link="competitive" class="{{ if mode === 'competitive' }}is-active{{ /if }}" aria-current="{{ if mode === 'competitive' }}page{{ else }}false{{ /if }}">{{ include "authenticated/components/icon.vto" { name: "trophy" } }}<span>Competitive</span></a>
-  {{ if mode === 'competitive' }}
-    <button type="button" data-competition-period-option="all-time" aria-pressed="{{ if period === 'all-time' }}true{{ else }}false{{ /if }}">All Time</button>
+<nav class="map-mobile-controls map-mobile-view-controls" aria-label="Map view">
+  <span class="map-mobile-control-heading">View</span>
+  <a href="/personal" data-map-mode-link="personal" class="{{ if mode === 'personal' }}is-active{{ /if }}" aria-current="{{ if mode === 'personal' }}page{{ else }}false{{ /if }}">{{ include "authenticated/components/icon.vto" { name: "profile" } }}<span>My Flights</span></a>
+  <a href="{{ if mode === 'competitive' }}{{ navigation[0].href }}{{ else }}/global{{ /if }}" data-map-mode-link="competitive" class="{{ if mode === 'competitive' }}is-active{{ /if }}" aria-current="{{ if mode === 'competitive' }}page{{ else }}false{{ /if }}">{{ include "authenticated/components/icon.vto" { name: "globe" } }}<span>All Pilots</span></a>
+</nav>
+<nav class="map-mobile-period-controls" aria-label="Time period">
+  <button type="button" data-competition-period-option="all-time" aria-pressed="{{ if period === 'all-time' }}true{{ else }}false{{ /if }}">{{ include "authenticated/components/icon.vto" { name: "calendar" } }}<span>All Time</span></button>
+  <div class="map-mobile-month-control">
     <button type="button" data-competition-period-option="current-month" aria-pressed="{{ if period === 'current-month' }}true{{ else }}false{{ /if }}"><span data-current-month-option>Current Month</span></button>
-  {{ else }}
-    <a href="{{ if typeof mapPath !== 'undefined' }}{{ mapPath }}{{ else }}{{ navigation[0].href }}{{ /if }}" data-map-period-link="all-time" class="{{ if period === 'all-time' }}is-active{{ /if }}" aria-current="{{ if period === 'all-time' }}page{{ else }}false{{ /if }}">All Time</a>
-    <a href="{{ if typeof mapPath !== 'undefined' }}{{ mapPath }}{{ else }}{{ navigation[0].href }}{{ /if }}" data-map-period-link="current-month" class="{{ if period === 'current-month' }}is-active{{ /if }}" aria-current="{{ if period === 'current-month' }}page{{ else }}false{{ /if }}"><span data-current-month-option>Current Month</span></a>
-  {{ /if }}
-  <div class="map-mobile-month-navigation" role="group" aria-label="Month navigation"><button type="button" data-competition-month-nav="previous" aria-label="Previous month">Previous</button><button type="button" data-competition-month-nav="next" aria-label="Next month">Next</button></div>
+    <div class="map-mobile-month-navigation" role="group" aria-label="Month navigation">
+      <button type="button" data-competition-month-nav="previous" aria-label="Previous month">‹</button>
+      <button type="button" data-competition-month-nav="next" aria-label="Next month">›</button>
+    </div>
+  </div>
 </nav>

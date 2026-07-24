@@ -65,14 +65,13 @@ describe('refreshed map UI controls', () => {
 
     const mobileRules = css.slice(css.indexOf('@media (max-width: 900px)'));
     expect(mobileRules).toContain('.map-leaderboard--compact { position: absolute;');
-    expect(mobileRules).toContain('.map-mobile-controls { position: fixed;');
-    expect(mobileRules).toContain('grid-template-columns: repeat(4, minmax(0, 1fr));');
-    expect(mobileRules).toContain('overflow: visible;');
+    expect(mobileRules).toContain('.map-mobile-view-controls { position: absolute;');
+    expect(mobileRules).toContain('.map-mobile-period-controls { position: fixed;');
     expect(mobileRules).toContain('.map-mobile-replay { display: block; }');
-    expect(mobileRules).toContain('.map-leaderboard--compact { position: absolute; z-index: 8; bottom: calc(4rem + env(safe-area-inset-bottom, 0px));');
+    expect(mobileRules).toContain('.map-leaderboard--compact { position: absolute; z-index: 8; bottom: calc(7.75rem + env(safe-area-inset-bottom, 0px));');
     expect(mobileRules).toContain('.map-arena-search { top: .75rem; width: 50%; }');
     expect(mobileRules).not.toContain('.mobile-map-sheet { position: fixed;');
-    expect(css.slice(css.indexOf('@media (max-width: 390px)'))).toContain('.map-mobile-controls a { flex-direction: column;');
+    expect(css.slice(css.indexOf('@media (max-width: 390px)'))).toContain('.map-mobile-period-controls { right: .75rem; left: .75rem; }');
   });
 
   it('renders the four mobile map controls without the map sheet or mobile stats', async () => {
@@ -86,12 +85,37 @@ describe('refreshed map UI controls', () => {
       metrics: [],
       leaderboard: [],
     });
-    expect(html).toContain('class="map-mobile-controls"');
-    expect(html).toContain('>Personal</span>');
-    expect(html).toContain('>Competitive</span>');
-    expect(html).toContain('>All Time</a>');
-    expect(html).toContain('<span data-current-month-option>Current Month</span></a>');
+    expect(html).toContain('class="map-mobile-controls map-mobile-view-controls"');
+    expect(html).toContain('>My Flights</span>');
+    expect(html).toContain('>All Pilots</span>');
+    expect(html).toContain('class="map-mobile-period-controls"');
+    expect(html).toContain('data-competition-period-option="all-time" aria-pressed="false"');
+    expect(html).toContain('data-competition-period-option="current-month" aria-pressed="true"><span data-current-month-option>Current Month</span></button>');
+    expect(html).toContain('class="map-mobile-month-control"');
+    expect(html).toContain('data-competition-month-nav="previous" aria-label="Previous month">‹</button>');
+    expect(html).toContain('data-competition-month-nav="next" aria-label="Next month">›</button>');
     expect(html).not.toContain('data-map-sheet');
+  });
+
+  it('styles the desktop sidebar with the same view and period language as mobile', async () => {
+    const render = createAuthenticatedPageRenderer();
+    const html = await render({
+      ...createAuthenticatedShellModel({ page: 'map' as const, user: { displayName: 'Pilot' }, mapHref: '/global' }),
+      page: 'map' as const,
+      mode: 'competitive',
+      period: 'current-month' as const,
+      location: 'Global Map',
+      metrics: [],
+      leaderboard: [],
+    });
+    expect(html).toContain('<h2>View</h2>');
+    expect(html).toContain('>My Flights</span>');
+    expect(html).toContain('>All Pilots</span>');
+    expect(html).toContain('class="map-desktop-period-controls"');
+    expect(html).toContain('class="map-desktop-month-control"');
+    expect(html).toContain('data-competition-month-nav="previous" aria-label="Previous month">‹</button>');
+    expect(html).toContain('class="map-desktop-replay"');
+    expect(html).not.toContain('<h2>Your Stats</h2>');
   });
 
   it('turns period controls into links that preserve map URL state', () => {
