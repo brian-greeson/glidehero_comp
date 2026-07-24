@@ -44,6 +44,8 @@ export function initializeProfileLists(documentRef = document) {
   const resetConfirmation = card.querySelector('[data-glider-reset-confirmation]');
   if (!(edit instanceof HTMLElement) || !(form instanceof HTMLElement) || !(modelInput instanceof HTMLInputElement)) return;
   const resetRadios = [...form.querySelectorAll('input[name="resetHours"]')];
+  let timer;
+  let searchSequence = 0;
   if (resetConfirmation instanceof HTMLElement) resetConfirmation.hidden = true;
 
   function showEditor() {
@@ -59,6 +61,11 @@ export function initializeProfileLists(documentRef = document) {
     }
     modelInput.setAttribute('aria-expanded', 'false');
     modelInput.removeAttribute('aria-activedescendant');
+  }
+
+  function invalidateSearch() {
+    clearTimeout(timer);
+    searchSequence += 1;
   }
 
   function populateSizes(sizes, selectedValue = '') {
@@ -96,9 +103,11 @@ export function initializeProfileLists(documentRef = document) {
     void hydrateCurrentSizes();
   });
   cancel?.addEventListener('click', () => {
+    invalidateSearch();
     form.hidden = true;
     form.reset();
     closeResults();
+    if (status) status.textContent = '';
     if (resetConfirmation instanceof HTMLElement) resetConfirmation.hidden = true;
     if (display instanceof HTMLElement) display.hidden = false;
     edit.focus();
@@ -108,8 +117,6 @@ export function initializeProfileLists(documentRef = document) {
     void hydrateCurrentSizes();
   }
 
-  let timer;
-  let searchSequence = 0;
   modelInput.addEventListener('input', () => {
     if (manufacturer instanceof HTMLInputElement) manufacturer.value = '';
     if (modelValue instanceof HTMLInputElement) modelValue.value = '';
@@ -118,14 +125,14 @@ export function initializeProfileLists(documentRef = document) {
       size.disabled = true;
     }
     if (rating) rating.textContent = 'Select a size';
-    clearTimeout(timer);
+    invalidateSearch();
     const query = modelInput.value.trim();
     if (!query) {
       closeResults();
       if (status) status.textContent = '';
       return;
     }
-    const sequence = ++searchSequence;
+    const sequence = searchSequence;
     timer = window.setTimeout(async () => {
       try {
         const items = await fetchMatches(query);
@@ -151,6 +158,7 @@ export function initializeProfileLists(documentRef = document) {
         modelInput.setAttribute('aria-expanded', String(items.length > 0));
         if (status) status.textContent = items.length ? `${items.length} glider models found.` : 'No matching gliders found.';
       } catch {
+        if (sequence !== searchSequence) return;
         closeResults();
         if (status) status.textContent = 'Glider search is temporarily unavailable.';
       }
