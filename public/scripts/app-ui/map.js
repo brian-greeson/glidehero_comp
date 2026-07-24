@@ -49,7 +49,6 @@ export function initializeMapUrlControls({
 }
 
 export function initializeMapPage({ documentRef = document, maplibre = globalThis.window?.maplibregl, fetchImpl = globalThis.fetch?.bind(globalThis), locationRef = globalThis.location, historyRef = globalThis.history, now = () => new Date(), navigatorRef = globalThis.navigator, storage } = {}) {
-  initializeMapSheet({ documentRef });
   const period = initializeMapUrlControls({ documentRef, locationRef, historyRef, now });
   initializeArenaSearch({
     documentRef,

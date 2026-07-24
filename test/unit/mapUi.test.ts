@@ -61,12 +61,30 @@ describe('refreshed map UI controls', () => {
 
     const mobileRules = css.slice(css.indexOf('@media (max-width: 900px)'));
     expect(mobileRules).toContain('.map-leaderboard--compact { position: absolute;');
-    expect(mobileRules).toContain(
-      'bottom: calc(clamp(25px, 5svh, 260px) + .75rem)',
-    );
-    expect(mobileRules).toContain(
-      '.mobile-map-sheet.is-expanded + .map-stage .map-leaderboard--compact { display: none; }',
-    );
+    expect(mobileRules).toContain('.map-mobile-controls { position: fixed;');
+    expect(mobileRules).toContain('grid-template-columns: repeat(4, minmax(0, 1fr));');
+    expect(mobileRules).toContain('.map-leaderboard--compact { position: absolute; z-index: 8; bottom: calc(4rem + env(safe-area-inset-bottom, 0px));');
+    expect(mobileRules).not.toContain('.mobile-map-sheet { position: fixed;');
+    expect(css.slice(css.indexOf('@media (max-width: 390px)'))).toContain('.map-mobile-controls a { flex-direction: column;');
+  });
+
+  it('renders the four mobile map controls without the map sheet or mobile stats', async () => {
+    const render = createAuthenticatedPageRenderer();
+    const html = await render({
+      ...createAuthenticatedShellModel({ page: 'map' as const, user: { displayName: 'Pilot' }, mapHref: '/personal' }),
+      page: 'map' as const,
+      mode: 'personal',
+      period: 'current-month' as const,
+      location: 'Global',
+      metrics: [],
+      leaderboard: [],
+    });
+    expect(html).toContain('class="map-mobile-controls"');
+    expect(html).toContain('>Personal</span>');
+    expect(html).toContain('>Competitive</span>');
+    expect(html).toContain('>All Time</a>');
+    expect(html).toContain('>Current Month</a>');
+    expect(html).not.toContain('data-map-sheet');
   });
 
   it('turns period controls into links that preserve map URL state', () => {

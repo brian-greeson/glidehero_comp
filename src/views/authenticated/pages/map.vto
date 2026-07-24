@@ -1,12 +1,7 @@
 {{ layout "authenticated/layouts/appLayout.vto" }}
   <section class="map-page" data-map-page
     {{ if mode === 'personal' }}data-dashboard data-dashboard-mode="personal"{{ else }}data-competition-coverage="{{ if typeof arenaSourceId !== 'undefined' && arenaSourceId }}arena{{ else }}global{{ /if }}"{{ /if }}>
-    <aside class="mobile-map-sheet" data-map-sheet>
-      <button class="mobile-map-sheet__handle" type="button" data-map-sheet-handle aria-expanded="false" aria-controls="mobile-map-sheet-content"><span></span><span class="sr-only" data-map-sheet-label>Expand map controls</span></button>
-      <div class="mobile-map-sheet__content" id="mobile-map-sheet-content">
-        {{ include "authenticated/components/mapSidebar.vto" { mode, period, location, metrics, leaderboard } }}
-      </div>
-    </aside>
+    {{ include "authenticated/components/mapSidebar.vto" { mode, period, location, metrics, leaderboard } }}
     <section class="map-stage" aria-label="Territory map">
       <div class="map-canvas" data-map-canvas {{ if mode === 'personal' }}data-dashboard-map{{ else }}data-territory-map{{ /if }}
         data-map-style-url="{{ if typeof mapStyleUrl !== 'undefined' }}{{ mapStyleUrl }}{{ /if }}"
@@ -23,6 +18,7 @@
       {{ if mode === 'competitive' }}
         {{ include "authenticated/components/mapLeaderboard.vto" { compact: true } }}
       {{ /if }}
+      {{ include "authenticated/components/mapMobileControls.vto" { mode, period } }}
     </section>
   </section>
 {{ /layout }}
