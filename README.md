@@ -8,7 +8,7 @@ selected month and are scoped to the signed-in pilot on Personal; Competitive
 includes all pilots. Tracks are fetched once when the panel opens and are not
 refetched while the viewport moves. Animation is browser-only: independent
 flight durations are interpolated on one timeline, with pause/play, rewind,
-restart, 1x/2x/5x/20x/60x speeds, and previous/next month navigation (next is
+restart, 1x/5x/50x/100x/200x speeds, and previous/next month navigation (next is
 disabled for the current local month). Closing restores prior layer opacity and
 paint settings. Controls are present in desktop and mobile layouts.
 

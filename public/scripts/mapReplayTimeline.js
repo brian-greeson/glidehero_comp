@@ -30,7 +30,7 @@ function renderFlight(flight, elapsedMs) {
 export function createMapReplayTimeline({ flights = [], now = () => performance.now(), requestAnimationFrame = (callback) => globalThis.requestAnimationFrame(callback), cancelAnimationFrame = (id) => globalThis.cancelAnimationFrame(id) } = {}) {
   const sourceFlights = clone(flights);
   const duration = sourceFlights.reduce((max, flight) => Math.max(max, Number.isFinite(flight.durationMs) ? flight.durationMs : 0), 0);
-  let elapsedMs = 0; let rate = 1; let playing = false; let finished = false; let frameId = null; let lastNow = 0;
+  let elapsedMs = 0; let rate = 50; let playing = false; let finished = false; let frameId = null; let lastNow = 0;
   const listeners = new Set();
   const snapshot = () => ({ elapsedMs, duration, rate, playing, finished, flights: sourceFlights.map((flight) => renderFlight(flight, elapsedMs)) });
   const notify = () => { const state = snapshot(); listeners.forEach((listener) => listener(state)); };
