@@ -20,7 +20,6 @@
       {{ /if }}
       {{ include "authenticated/components/mapMobileControls.vto" { mode, period } }}
       <div data-map-replay class="map-mobile-replay"><button type="button" data-map-replay-open aria-controls="map-replay-panel-mobile" aria-expanded="false">Replay</button>{{ include "authenticated/components/mapReplayControls.vto" { panelId: "map-replay-panel-mobile" } }}</div>
-      <div class="map-replay-timeline" data-map-replay-timeline hidden><input type="range" data-map-replay-slider min="0" max="0" value="0" step="1" aria-label="Replay position"><span data-map-replay-elapsed>0:00 / 0:00</span></div>
     </section>
   </section>
 {{ /layout }}

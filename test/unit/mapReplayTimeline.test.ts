@@ -12,7 +12,7 @@ describe('map replay timeline', () => {
         { flightId: 'b', pilotUserId: 'q', durationMs: 500, points: [[5, 5, 0], [5, 10, 500]] },
       ], now: () => clock, requestAnimationFrame: (cb: (time: number) => void) => { const id = next++; callbacks.set(id, cb); return id; }, cancelAnimationFrame: (id: number) => callbacks.delete(id),
     });
-    expect(timeline.snapshot().rate).toBe(50);
+    expect(timeline.snapshot().rate).toBe(60);
     timeline.setRate(1);
     timeline.play(); clock = 250; callbacks.get(1)?.(clock); 
     expect(timeline.snapshot().flights[0].marker).toEqual([2.5, 0]);
