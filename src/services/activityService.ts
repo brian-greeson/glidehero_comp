@@ -1,6 +1,15 @@
 import { and, eq, exists, or, sql } from 'drizzle-orm';
 import type { Database } from '../db/client.js';
-import { activities, activityReactions, arenas, flightProgress, flights, pilotFollows, profiles } from '../db/schema.js';
+import {
+  activities,
+  activityReactions,
+  arenas,
+  flightProgress,
+  flightScores,
+  flights,
+  pilotFollows,
+  profiles,
+} from '../db/schema.js';
 import { arenaPath } from '../domain/arena/arenaRoute.js';
 import {
   loadFlightAccomplishments,
@@ -252,7 +261,7 @@ export function createActivityService(database?: Database): ActivityService {
         flightStartedAt: flights.startedAt,
         flightLaunchTimezone: flights.launchTimezone,
         durationSeconds: flights.durationSeconds,
-        distanceMeters: flights.distanceMeters,
+        fivePointDistanceMeters: flightScores.fivePointDistanceMeters,
         launchLatitude: flights.launchLatitude,
         launchLongitude: flights.launchLongitude,
         directCellCount: flightProgress.directCellCount,
@@ -301,6 +310,7 @@ export function createActivityService(database?: Database): ActivityService {
         .innerJoin(profiles, eq(profiles.userId, activities.actorUserId))
         .leftJoin(flights, eq(flights.id, activities.sourceFlightId))
         .leftJoin(flightProgress, eq(flightProgress.flightId, flights.id))
+        .leftJoin(flightScores, eq(flightScores.flightId, flights.id))
         .where(where)
         .orderBy(sql`${activities.publishedAt} DESC`, sql`${activities.id} DESC`)
         .limit(limit + 1);
@@ -330,7 +340,7 @@ export function createActivityService(database?: Database): ActivityService {
           isOwn: row.actorUserId === viewerUserId,
           flightDate: row.activityType === 'flight' ? displayFlightDate(row.flightStartedAt, row.flightLaunchTimezone) : undefined,
           duration: row.activityType === 'flight' ? displayDuration(row.durationSeconds) : undefined,
-          distance: row.activityType === 'flight' ? displayDistance(row.distanceMeters) : undefined,
+          distance: row.activityType === 'flight' ? displayDistance(row.fivePointDistanceMeters) : undefined,
           totalCellCount: row.activityType === 'flight'
             ? Number(row.directCellCount ?? 0) + Number(row.enclosedCellCount ?? 0)
             : undefined,

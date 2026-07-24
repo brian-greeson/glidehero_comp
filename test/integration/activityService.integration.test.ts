@@ -68,10 +68,18 @@ describe('activityService.listFeed', () => {
       launchLatitude: 39.7392, launchLongitude: -104.9903,
       durationSeconds: 3_661, distanceMeters: 1_500, directCellCount: 4, enclosedCellCount: 3,
     });
+    await database.db.insert(flightScores).values({
+      flightId,
+      totalDistanceMeters: 1_500,
+      totalDistanceMetadata: {},
+      fivePointDistanceMeters: 12_345,
+      fivePointDistanceCalcVersion: 1,
+      fivePointDistanceMetadata: { points: [] },
+    });
     await database.db.insert(activities).values({ actorUserId: pilot.user.userId, activityType: 'flight', sourceFlightId: flightId, publishedAt: new Date('2026-07-21T00:00:00Z') });
     const item = (await createActivityService(database.db).listFeed({ viewerUserId: pilot.user.userId })).items[0];
     expect(item).toMatchObject({
-      flightDate: 'Jul 19, 2026', duration: '1h 01m', distance: '1.5 km', totalCellCount: 7,
+      flightDate: 'Jul 19, 2026', duration: '1h 01m', distance: '12.3 km', totalCellCount: 7,
       location: 'Early Site', launchArenaName: 'Early Site', launchArenaPath: '/arena/us/early-site-1001',
     });
   });
