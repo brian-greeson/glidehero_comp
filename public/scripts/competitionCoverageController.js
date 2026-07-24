@@ -19,6 +19,7 @@ import {
   createMapCellTrackSelection,
   installMapCellTrackLayers,
 } from './mapCellTracks.js';
+import { createMapCellClaimantPopup } from './mapCellClaimants.js';
 import { initializeMapFlightAids } from './mapFlightAids.js';
 import { mapViewportFromSearch, updateMapModeLinks } from './mapViewportUrl.js';
 import { initializeMapReplayController } from './mapReplayController.js';
@@ -79,6 +80,7 @@ export function initializeCompetitionCoverage({
   let selectedPilotId = null;
   let leaderboard = { leaders: [], currentPilot: null };
   let cellTrackSelection;
+  let cellClaimantPopup;
   let replayController;
 
   function syncOverviewButtons() {
@@ -254,6 +256,13 @@ export function initializeCompetitionCoverage({
           maximumZoom: Number(mapElement.dataset.territoryTileMaximumZoom),
         });
         installMapCellTrackLayers(map);
+        cellClaimantPopup = createMapCellClaimantPopup({
+          map,
+          maplibre,
+          documentRef,
+          colorForPilot: colorRegistry.colorFor,
+          onClose: () => cellTrackSelection?.clear(),
+        });
         cellTrackSelection = createMapCellTrackSelection({
           map,
           cellFeatureAtPoint: coverageCellFeatureAtPoint,
@@ -272,6 +281,9 @@ export function initializeCompetitionCoverage({
             fetchImpl,
             signal,
           ),
+          onSelect: () => cellClaimantPopup.clear(),
+          onResult: (result) => cellClaimantPopup.render(result),
+          onClear: () => cellClaimantPopup.clear(),
         });
         map.on?.('click', (event) =>
           cellTrackSelection.handleClick(event, activeCellTrackScope()));

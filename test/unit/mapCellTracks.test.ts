@@ -147,10 +147,16 @@ describe('selected map cell tracks', () => {
     const loadCellTracks = vi.fn()
       .mockImplementationOnce(() => first.promise)
       .mockImplementationOnce(() => second.promise);
+    const onResult = vi.fn();
+    const onClear = vi.fn();
+    const onSelect = vi.fn();
     const selection = createMapCellTrackSelection({
       map,
       cellFeatureAtPoint: () => renderedCell,
       loadCellTracks,
+      onSelect,
+      onResult,
+      onClear,
     });
 
     const firstClick = selection.handleClick({ point: {} }, { month: '2026-06' });
@@ -164,6 +170,16 @@ describe('selected map cell tracks', () => {
       featureCollection([renderedCell]),
     );
     expect(sources.get('cell-tracks').setData).toHaveBeenLastCalledWith(featureCollection());
+    expect(onResult).toHaveBeenCalledTimes(1);
+    expect(onResult).toHaveBeenCalledWith({
+      cell: renderedCell,
+      tracks: featureCollection(),
+    });
+    expect(onSelect).toHaveBeenCalledTimes(2);
+
+    renderedCell = null;
+    await selection.handleClick({ point: {} }, { month: '2026-07' });
+    expect(onClear).toHaveBeenCalledOnce();
   });
 
   it('refetches the selected cell for a changed period', async () => {

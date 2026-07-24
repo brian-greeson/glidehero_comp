@@ -28,6 +28,10 @@ export type CellFlightTrackResult = {
       geometry: LineStringGeometry;
     }>;
   };
+  pilots?: Array<{
+    userId: string;
+    displayName: string;
+  }>;
 };
 
 export interface CellFlightTrackService {
@@ -53,6 +57,7 @@ type StoredTrack = {
   pilotUserId: string;
   geometry: LineStringGeometry;
 };
+type StoredPilot = { userId: string; displayName: string };
 
 function normalizePeriod(period: MonthlyCoveragePeriod): string | undefined {
   return 'competitionMonth' in period
@@ -93,9 +98,14 @@ export function createCellFlightTrackService(
     x: number,
     y: number,
     tracks: Promise<{ rows: StoredTrack[] }>,
+    pilots?: Promise<{ rows: StoredPilot[] }>,
   ): Promise<CellFlightTrackResult> {
-    const [cellFeature, storedTracks] = await Promise.all([cell(x, y), tracks]);
-    return {
+    const [cellFeature, storedTracks, storedPilots] = await Promise.all([
+      cell(x, y),
+      tracks,
+      pilots,
+    ]);
+    const response: CellFlightTrackResult = {
       cell: cellFeature,
       tracks: {
         type: 'FeatureCollection',
@@ -109,6 +119,8 @@ export function createCellFlightTrackService(
         })),
       },
     };
+    if (storedPilots) response.pilots = storedPilots.rows;
+    return response;
   }
 
   return {
@@ -161,15 +173,11 @@ export function createCellFlightTrackService(
     getCompetition(input) {
       const competitionMonth = normalizePeriod(input.period);
       const tracks = database.execute<StoredTrack>(sql`
-        WITH ranked_claims AS (
+        WITH candidate_claims AS (
           SELECT
             claim.claim_flight AS flight_id,
             claim.claim_user AS pilot_user_id,
-            claim.claim_timestamp,
-            ROW_NUMBER() OVER (
-              PARTITION BY claim.claim_user
-              ORDER BY claim.claim_timestamp DESC, claim.claim_flight DESC
-            ) AS claim_rank
+            claim.claim_timestamp
           FROM competition_grid_claims claim
           INNER JOIN flights flight ON flight.flight_id = claim.claim_flight
           WHERE claim.x = ${input.x}
@@ -194,10 +202,12 @@ export function createCellFlightTrackService(
               ST_SetSRID(ST_Point(point.longitude, point.latitude), 4326)
               ORDER BY point.sequence_number
             ))::jsonb AS geometry
-          FROM ranked_claims candidate
+          FROM candidate_claims candidate
           INNER JOIN track_points point ON point.flight_id = candidate.flight_id
-          WHERE candidate.claim_rank = 1
-          GROUP BY candidate.flight_id, candidate.pilot_user_id, candidate.claim_timestamp
+          GROUP BY
+            candidate.flight_id,
+            candidate.pilot_user_id,
+            candidate.claim_timestamp
           HAVING COUNT(*) >= 2
         )
         SELECT
@@ -207,7 +217,29 @@ export function createCellFlightTrackService(
         FROM track_geometries
         ORDER BY claim_timestamp DESC, flight_id
       `);
-      return result(input.x, input.y, tracks);
+      const pilots = database.execute<StoredPilot>(sql`
+        SELECT
+          claim.claim_user::text AS "userId",
+          profile.display_name AS "displayName"
+        FROM competition_grid_claims claim
+        INNER JOIN flights flight ON flight.flight_id = claim.claim_flight
+        INNER JOIN profiles profile ON profile.user_id = claim.claim_user
+        WHERE claim.x = ${input.x}
+          AND claim.y = ${input.y}
+          AND flight.processing_status = 'completed'
+          ${competitionMonth
+            ? sql`AND claim.competition_month = ${competitionMonth}::date`
+            : sql``}
+          ${input.pilotUserId
+            ? sql`AND claim.claim_user = ${input.pilotUserId}`
+            : sql``}
+          ${input.scope === 'following' && input.currentUserId
+            ? sql`AND (claim.claim_user = ${input.currentUserId} OR EXISTS (SELECT 1 FROM pilot_follows follow WHERE follow.follower_user_id = ${input.currentUserId} AND follow.followed_user_id = claim.claim_user))`
+            : sql``}
+        GROUP BY claim.claim_user, profile.display_name
+        ORDER BY lower(profile.display_name), profile.display_name, claim.claim_user
+      `);
+      return result(input.x, input.y, tracks, pilots);
     },
   };
 }
