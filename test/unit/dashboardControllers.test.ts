@@ -116,7 +116,7 @@ function mapHarness() {
   return {
     map,
     maplibre: {
-      Map: vi.fn(function Map() {
+      Map: vi.fn(function Map(_options: any) {
         return map;
       }),
       NavigationControl: vi.fn(function NavigationControl() {}),
@@ -334,6 +334,7 @@ describe('Personal dashboard controller', () => {
     });
 
     initializePersonalDashboard({ documentRef, maplibre: harness.maplibre, fetchImpl });
+    expect(harness.maplibre.Map).toHaveBeenCalledWith(expect.objectContaining({ maxPitch: 0 }));
     harness.move({ west: -106, east: -104 });
     expect(fetchImpl).not.toHaveBeenCalled();
     await harness.load();
@@ -566,6 +567,7 @@ describe('Global dashboard controller', () => {
       locationRef: { pathname: '/global', search: '' },
       historyRef: { replaceState: vi.fn() },
     });
+    expect(harness.maplibre.Map).toHaveBeenCalledWith(expect.objectContaining({ maxPitch: 0 }));
     await harness.load();
     expect(fetchImpl.mock.calls.map(([url]) => url)).toEqual([
       expect.stringContaining('/v1/competition-leaderboard?month=2026-07&west=-107'),

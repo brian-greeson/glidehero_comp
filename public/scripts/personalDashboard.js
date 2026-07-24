@@ -73,6 +73,7 @@ export function initializePersonalDashboard({
       style: mapElement.dataset.mapStyleUrl,
       center: initialViewport?.center ?? [-106.2, 39.2],
       zoom: initialViewport?.zoom ?? 7,
+      maxPitch: 0,
     });
     const syncModeLinks = () => updateMapModeLinks({
       documentRef, locationRef, map, periodSelection: period,

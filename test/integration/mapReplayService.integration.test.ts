@@ -30,6 +30,16 @@ describe('map replay service', () => {
     const personal = await service.getReplay({ ...input, mode: 'personal', userId: a.userId });
     expect(personal.flights).toHaveLength(1);
     expect(personal.flights[0]!.points).toEqual([[-106, 39.5, 0], [-104, 39.5, 10_000], [-103, 39.5, 20_000]]);
+    const fractionalViewport = await service.getReplay({
+      month: '2026-08',
+      mode: 'personal',
+      userId: a.userId,
+      west: -107.27116699218737,
+      south: 37.711731414937276,
+      east: -104.12883300781243,
+      north: 40.65739558460467,
+    });
+    expect(fractionalViewport.flights).toHaveLength(1);
     expect((await service.getReplay({ ...input, mode: 'competitive', userId: a.userId })).flights).toHaveLength(1);
     const dateline = await service.getReplay({ month: '2026-08', mode: 'personal', userId: a.userId, west: 179, south: 39, east: -179, north: 40 });
     expect(dateline.flights).toHaveLength(2);

@@ -20,9 +20,9 @@ export function createMapReplayService(db: Database): MapReplayService {
         WHERE ${input.west}::double precision > ${input.east}::double precision
         UNION ALL SELECT ST_MakeEnvelope(-180, ${input.south}, ${input.east}, ${input.north}, 4326)
         WHERE ${input.west}::double precision > ${input.east}::double precision
-        UNION ALL SELECT ST_MakeEnvelope(180, ${input.south}, ${input.east} + 360, ${input.north}, 4326)
+        UNION ALL SELECT ST_MakeEnvelope(180, ${input.south}, ${input.east}::double precision + 360, ${input.north}, 4326)
         WHERE ${input.west}::double precision > ${input.east}::double precision
-        UNION ALL SELECT ST_MakeEnvelope(${input.west} - 360, ${input.south}, -180, ${input.north}, 4326)
+        UNION ALL SELECT ST_MakeEnvelope(${input.west}::double precision - 360, ${input.south}, -180, ${input.north}, 4326)
         WHERE ${input.west}::double precision > ${input.east}::double precision
       ), candidate_flights AS (
         SELECT f.flight_id, f.user_id FROM flights f

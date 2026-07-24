@@ -70,6 +70,7 @@ describe('refreshed map UI controls', () => {
     expect(mobileRules).toContain('overflow: visible;');
     expect(mobileRules).toContain('.map-mobile-replay { display: block; }');
     expect(mobileRules).toContain('.map-leaderboard--compact { position: absolute; z-index: 8; bottom: calc(4rem + env(safe-area-inset-bottom, 0px));');
+    expect(mobileRules).toContain('.map-arena-search { top: .75rem; width: 50%; }');
     expect(mobileRules).not.toContain('.mobile-map-sheet { position: fixed;');
     expect(css.slice(css.indexOf('@media (max-width: 390px)'))).toContain('.map-mobile-controls a { flex-direction: column;');
   });

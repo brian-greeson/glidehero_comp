@@ -22,17 +22,18 @@ export function initializeMapReplayController({ documentRef = document, map, fet
     const token = requestToken;
     try {
       const response = await fetchImpl(`/v1/map-replay?${query}`, { credentials: 'same-origin', headers: { accept: 'application/json' } });
-      if (!response.ok) throw new Error('Replay request failed');
+      if (!response.ok) throw new Error(`Replay request failed (${response.status})`);
       const data = await response.json();
       if (token !== requestToken || !opened) return;
-      if (!Array.isArray(data.flights) || data.flights.length === 0) { setStatus('No flights in this view for this month.'); teardown(); return; }
+      if (!Array.isArray(data.flights) || data.flights.length === 0) { setStatus('No flights in this view for this month.'); return; }
       layer = installLayer(map, { colorForPilot: colorForPilot ?? (() => color) });
       timeline = createTimeline({ flights: data.flights });
       timeline.subscribe((state) => { layer?.update(state); sliders.forEach((s) => { s.max = String(state.duration); s.value = String(state.elapsedMs); }); elapsedNodes.forEach((e) => { e.textContent = `${format(state.elapsedMs)} / ${format(state.duration)}`; }); plays.forEach((p) => { p.textContent = state.playing ? 'Pause' : 'Play'; }); });
       plays.forEach((n) => { n.disabled = false; }); timelines.forEach((n) => { n.hidden = false; }); setStatus('Replay ready.');
-    } catch {
+    } catch (error) {
       if (token !== requestToken || !opened) return;
-      setStatus('Replay unavailable. Try again.'); teardown();
+      console.error('Unable to open map replay.', error);
+      setStatus('Replay unavailable. Close and try again.');
     }
   };
   const onPlay = () => { if (timeline?.snapshot().playing) timeline.pause(); else timeline?.play(); };
