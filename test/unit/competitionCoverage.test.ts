@@ -1,16 +1,16 @@
 import { describe, expect, it, vi } from 'vitest';
 
 // @ts-expect-error Browser assets remain JavaScript.
-import { arenaCoverageLeaderboardUrl, coverageCellClaimantsUrl, coverageTerritoryTileUrl, globalCoverageLeaderboardUrl } from '../../public/scripts/competitionCoverageApi.js';
+import { arenaCoverageLeaderboardUrl, competitionCellTracksUrl, coverageTerritoryTileUrl, globalCoverageLeaderboardUrl } from '../../public/scripts/competitionCoverageApi.js';
 // @ts-expect-error Browser assets remain JavaScript.
 import { createCompetitionColorRegistry } from '../../public/scripts/competitionColors.js';
 // @ts-expect-error Browser assets remain JavaScript.
-import { assignLoadedCoverageColors, coverageCellFeatureAtPoint, installCoverageSource, isExclusiveCoverageFeature, positionCoverageCellPopup, updateCoverageTiles } from '../../public/scripts/competitionCoverageMap.js';
+import { assignLoadedCoverageColors, coverageCellFeatureAtPoint, installCoverageSource, updateCoverageTiles } from '../../public/scripts/competitionCoverageMap.js';
 // @ts-expect-error Browser assets remain JavaScript.
 import { renderCoverageLeaderboard } from '../../public/scripts/competitionCoverageLeaderboard.js';
 
 describe('competition coverage browser contracts', () => {
-  it('builds canonical Global, Arena, territory, and claimant URLs', () => {
+  it('builds canonical Global, Arena, territory, and selected-cell track URLs', () => {
     const bounds = {
       getWest: () => -107,
       getSouth: () => 39,
@@ -24,8 +24,11 @@ describe('competition coverage browser contracts', () => {
     expect(arenaCoverageLeaderboardUrl('745', '2026-07')).toBe(
       '/v1/arenas/745/competition-leaderboard?month=2026-07',
     );
-    expect(coverageCellClaimantsUrl(1, 2, '2026-07')).toBe(
-      '/v1/competition-cells/1/2/claimants?month=2026-07',
+    expect(competitionCellTracksUrl(1, 2, {
+      month: '2026-07',
+      pilotUserId: 'pilot',
+    })).toBe(
+      '/v1/competition-cells/1/2/tracks?month=2026-07&pilot=pilot',
     );
     expect(coverageTerritoryTileUrl({ month: '2026-07', pilotUserId: 'pilot' })).toBe(
       '/v1/competition-territory/tiles/{z}/{x}/{y}.mvt?month=2026-07&pilot=pilot',
@@ -225,16 +228,7 @@ describe('competition coverage browser contracts', () => {
     expect(onSelect).toHaveBeenCalledWith(null);
   });
 
-  it('positions claimant popups and distinguishes claimed-cell taps', () => {
-    const popup = {
-      offsetWidth: 120,
-      offsetHeight: 80,
-      dataset: {} as Record<string, string>,
-      style: { left: '', top: '' },
-    };
-    positionCoverageCellPopup(popup, { x: 10, y: 40 }, 320);
-    expect(popup.style).toEqual({ left: '68px', top: '40px' });
-    expect(popup.dataset.placement).toBe('below');
+  it('returns the claimed competition cell at a click point', () => {
     const queryRenderedFeatures = vi.fn().mockReturnValue([]);
     const getLayer = vi.fn().mockReturnValue({ id: 'competition-territory-fill' });
     expect(coverageCellFeatureAtPoint({ getLayer, queryRenderedFeatures }, { x: 40, y: 50 })).toBeNull();
@@ -247,28 +241,6 @@ describe('competition coverage browser contracts', () => {
     queryRenderedFeatures.mockClear();
     expect(coverageCellFeatureAtPoint({ getLayer, queryRenderedFeatures }, { x: 40, y: 50 })).toBeNull();
     expect(queryRenderedFeatures).not.toHaveBeenCalled();
-  });
-
-  it('only treats exclusively claimed cells as hoverable', () => {
-    expect(
-      isExclusiveCoverageFeature({
-        properties: {
-          cellId: '500:12:-3',
-          claimantCount: 1,
-          isShared: false,
-          pilotUserId: 'pilot-one',
-        },
-      }),
-    ).toBe(true);
-    expect(
-      isExclusiveCoverageFeature({
-        properties: {
-          cellId: '500:12:-3',
-          claimantCount: 2,
-          isShared: true,
-        },
-      }),
-    ).toBe(false);
   });
 
   it('installs zoom 4-14 vector layers and changes tiles without changing paint', () => {

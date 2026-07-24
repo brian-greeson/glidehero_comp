@@ -203,7 +203,6 @@ function globalDashboardHarness(fetchImpl: any, search = '', dataset: Record<str
     ['[data-territory-status]', fullLeaderboard.status],
     ['[data-territory-list]', fullLeaderboard.list],
     ['[data-territory-current-pilot]', fullLeaderboard.current],
-    ['[data-territory-cell-popup]', element()],
     ['[data-current-month-option]', currentMonth],
   ]);
   const documentRef = {
@@ -353,6 +352,149 @@ describe('Personal dashboard controller', () => {
     await vi.waitFor(() => expect(fetchImpl).toHaveBeenCalledTimes(2));
     expect(fetchImpl.mock.calls[1]?.[0]).toContain('west=-105');
   });
+
+  it('selects a Personal cell and preserves it while changing the period in place', async () => {
+    const harness = mapHarness();
+    const mapElement = {
+      dataset: {
+        mapStyleUrl: 'map-style',
+        territoryColor: '#1769AA',
+        territoryTileMinimumZoom: '4',
+        territoryTileMaximumZoom: '14',
+      },
+    };
+    const allTime = element();
+    allTime.dataset.mapPeriodLink = 'all-time';
+    allTime.setAttribute('href', '/personal?period=all-time');
+    const currentMonth = element();
+    currentMonth.dataset.mapPeriodLink = 'current-month';
+    currentMonth.setAttribute('href', '/personal?month=2026-07');
+    const statsCard = element();
+    const elements = new Map<string, any>([
+      ['[data-dashboard-map]', mapElement],
+      ['[data-map-empty-state]', element()],
+      ['[data-personal-stats]', statsCard],
+    ]);
+    const documentRef = {
+      createElement: element,
+      querySelector: (selector: string) => elements.get(selector) ?? null,
+      querySelectorAll: (selector: string) =>
+        selector === '[data-map-period-link]' ? [allTime, currentMonth] : [],
+    };
+    const selectedCell = {
+      type: 'Feature',
+      properties: { cellId: '500:12:-3', x: 12, y: -3 },
+      geometry: { type: 'Polygon', coordinates: [] },
+    };
+    const fetchImpl = vi.fn(async (url: string) => {
+      if (url.startsWith('/v1/personal-cells/')) {
+        return jsonResponse({
+          cell: selectedCell,
+          tracks: {
+            type: 'FeatureCollection',
+            features: [{
+              type: 'Feature',
+              properties: { flightId: 'flight-one', pilotUserId: 'pilot-one' },
+              geometry: { type: 'LineString', coordinates: [[0, 0], [1, 1]] },
+            }],
+          },
+        });
+      }
+      return jsonResponse({
+        claimedCellCount: 1,
+        claimedAreaSquareMeters: 1_000_000,
+        flightCount: 1,
+      });
+    });
+    const historyRef = { replaceState: vi.fn() };
+
+    initializePersonalDashboard({
+      documentRef,
+      maplibre: harness.maplibre,
+      fetchImpl,
+      locationRef: { origin: 'https://glidehero.test', pathname: '/personal', search: '?month=2026-07' },
+      historyRef,
+      now: () => new Date(2026, 6, 17),
+    });
+    await harness.load();
+    harness.setRenderedFeatures([selectedCell]);
+    await harness.click();
+    expect(fetchImpl).toHaveBeenCalledWith(
+      '/v1/personal-cells/12/-3/tracks?month=2026-07',
+      expect.objectContaining({ credentials: 'same-origin' }),
+    );
+
+    await allTime.click();
+
+    expect(historyRef.replaceState).toHaveBeenCalledWith(null, '', '/personal?period=all-time');
+    expect(harness.map.getSource('personal-territory').setTiles).toHaveBeenCalledWith([
+      '/v1/personal-territory/tiles/{z}/{x}/{y}.mvt',
+    ]);
+    expect(fetchImpl).toHaveBeenCalledWith(
+      '/v1/personal-cells/12/-3/tracks',
+      expect.objectContaining({ credentials: 'same-origin' }),
+    );
+    expect(harness.map.getSource('selected-cell').setData).toHaveBeenLastCalledWith({
+      type: 'FeatureCollection',
+      features: [selectedCell],
+    });
+  });
+
+  it('switches Personal from All Time to the current browser month in place', async () => {
+    const harness = mapHarness();
+    const mapElement = {
+      dataset: {
+        mapStyleUrl: 'map-style',
+        territoryColor: '#1769AA',
+        territoryTileMinimumZoom: '4',
+        territoryTileMaximumZoom: '14',
+      },
+    };
+    const currentMonth = element();
+    currentMonth.dataset.mapPeriodLink = 'current-month';
+    currentMonth.setAttribute('href', '/personal?period=all-time');
+    const elements = new Map<string, any>([
+      ['[data-dashboard-map]', mapElement],
+      ['[data-map-empty-state]', element()],
+      ['[data-personal-stats]', element()],
+    ]);
+    const documentRef = {
+      createElement: element,
+      querySelector: (selector: string) => elements.get(selector) ?? null,
+      querySelectorAll: (selector: string) =>
+        selector === '[data-map-period-link]' ? [currentMonth] : [],
+    };
+    const historyRef = { replaceState: vi.fn() };
+
+    initializePersonalDashboard({
+      documentRef,
+      maplibre: harness.maplibre,
+      fetchImpl: vi.fn(async () => jsonResponse({
+        claimedCellCount: 0,
+        claimedAreaSquareMeters: 0,
+        flightCount: 0,
+      })),
+      locationRef: {
+        origin: 'https://glidehero.test',
+        pathname: '/personal',
+        search: '?period=all-time&lat=40&lng=-105&zoom=8',
+      },
+      historyRef,
+      now: () => new Date(2026, 6, 17),
+    });
+    await harness.load();
+
+    await currentMonth.click();
+
+    expect(historyRef.replaceState).toHaveBeenCalledWith(
+      null,
+      '',
+      '/personal?lat=40&lng=-105&zoom=8&month=2026-07',
+    );
+    expect(harness.map.getSource('personal-territory').setTiles).toHaveBeenCalledWith([
+      '/v1/personal-territory/tiles/{z}/{x}/{y}.mvt?month=2026-07',
+    ]);
+  });
 });
 
 describe('Launch Arena map focus', () => {
@@ -403,7 +545,6 @@ describe('Global dashboard controller', () => {
       ['[data-territory-status]', element()],
       ['[data-territory-list]', element()],
       ['[data-territory-current-pilot]', element()],
-      ['[data-territory-cell-popup]', element()],
     ]);
     const documentRef = {
       createElement: () => element(),
@@ -584,173 +725,111 @@ describe('Global dashboard controller', () => {
     expect(harness.elements.get('[data-territory-list]').children).toHaveLength(0);
   });
 
-  it('renders cell claimants and ignores a stale popup response after dismissal', async () => {
-    const firstClaimants = deferred<Response>();
-    let claimantRequestCount = 0;
+  it('selects shared cells, colors tracks by pilot, and toggles the selection', async () => {
+    const selectedCell = {
+      type: 'Feature',
+      properties: {
+        cellId: '500:12:-3',
+        x: 12,
+        y: -3,
+        claimantCount: 2,
+        isShared: true,
+      },
+      geometry: { type: 'Polygon', coordinates: [] },
+    };
     const fetchImpl = vi.fn(async (url: string) => {
       if (url.startsWith('/v1/competition-cells/')) {
-        claimantRequestCount += 1;
-        if (claimantRequestCount === 1) return firstClaimants.promise;
-        return jsonResponse({ claimants: [{ userId: 'pilot-one', displayName: 'Pilot One' }] });
+        return jsonResponse({
+          cell: selectedCell,
+          tracks: {
+            type: 'FeatureCollection',
+            features: [{
+              type: 'Feature',
+              properties: { flightId: 'flight-one', pilotUserId: 'current-user' },
+              geometry: { type: 'LineString', coordinates: [[0, 0], [1, 1]] },
+            }],
+          },
+        });
       }
       return jsonResponse({ leaders: [], currentPilot: null });
     });
     const harness = globalDashboardHarness(fetchImpl);
     await harness.load();
-    const popup = harness.elements.get('[data-territory-cell-popup]');
-    harness.setRenderedFeatures([{ properties: {
-      cellId: '500:12:-3', x: 12, y: -3, claimantCount: 1, isShared: false, pilotUserId: 'pilot-one',
-    } }]);
-    const staleClick = harness.click({ x: 50, y: 80 });
-    await vi.waitFor(() => expect(claimantRequestCount).toBe(1));
+    harness.setRenderedFeatures([selectedCell]);
 
-    harness.setRenderedFeatures([]);
-    await harness.click({ x: 70, y: 90 });
-    firstClaimants.resolve(
-      jsonResponse({ claimants: [{ userId: 'stale', displayName: 'Stale Pilot' }] }),
-    );
-    await staleClick;
-    expect(popup.hidden).toBe(true);
-    expect(popup.children).toHaveLength(0);
+    await harness.click();
 
-    harness.setRenderedFeatures([{ properties: {
-      cellId: '500:12:-3', x: 12, y: -3, claimantCount: 1, isShared: false, pilotUserId: 'pilot-one',
-    } }]);
-    await harness.click({ x: 50, y: 80 });
     expect(fetchImpl).toHaveBeenCalledWith(
-      '/v1/competition-cells/12/-3/claimants?month=2026-07',
+      '/v1/competition-cells/12/-3/tracks?month=2026-07',
       expect.objectContaining({ credentials: 'same-origin' }),
     );
-    expect(popup.hidden).toBe(false);
-    expect(popup.children[0].textContent).toBe('Claimed by');
-    expect(popup.children[1].children[0].textContent).toBe('Pilot One');
-    expect(popup.style.left).toBe('58px');
-    expect(popup.dataset.placement).toBe('above');
+    expect(harness.map.getSource('selected-cell').setData).toHaveBeenLastCalledWith({
+      type: 'FeatureCollection',
+      features: [selectedCell],
+    });
+    expect(harness.map.getSource('cell-tracks').setData).toHaveBeenLastCalledWith({
+      type: 'FeatureCollection',
+      features: [expect.objectContaining({
+        properties: expect.objectContaining({ trackColor: '#1769AA' }),
+      })],
+    });
+    expect(harness.map.on).not.toHaveBeenCalledWith('mousemove', expect.any(Function));
 
-    harness.setRenderedFeatures([]);
     await harness.click();
-    expect(popup.hidden).toBe(true);
+    expect(harness.map.getSource('selected-cell').setData).toHaveBeenLastCalledWith({
+      type: 'FeatureCollection',
+      features: [],
+    });
   });
 
-  it('shows exclusive-cell information on hover and clears it on leave', async () => {
-    let claimantRequestCount = 0;
+  it('keeps the selected cell while the map moves and refetches it for pilot and period changes', async () => {
+    const selectedCell = {
+      type: 'Feature',
+      properties: { cellId: '500:12:-3', x: 12, y: -3, claimantCount: 2, isShared: true },
+      geometry: { type: 'Polygon', coordinates: [] },
+    };
     const fetchImpl = vi.fn(async (url: string) => {
       if (url.startsWith('/v1/competition-cells/')) {
-        claimantRequestCount += 1;
-        return jsonResponse({ claimants: [{ userId: 'pilot-one', displayName: 'Pilot One' }] });
+        return jsonResponse({
+          cell: selectedCell,
+          tracks: { type: 'FeatureCollection', features: [] },
+        });
       }
-      return jsonResponse({ leaders: [], currentPilot: null });
+      return jsonResponse({ leaders: [pilot('pilot-one')], currentPilot: null });
     });
-    const harness = globalDashboardHarness(fetchImpl);
+    const harness = globalDashboardHarness(fetchImpl, '?period=all-time');
     await harness.load();
-    harness.setRenderedFeatures([
-      {
-        properties: {
-          cellId: '500:12:-3',
-          x: 12,
-          y: -3,
-          claimantCount: 1,
-          isShared: false,
-          pilotUserId: 'pilot-one',
-        },
-      },
-    ]);
+    harness.setRenderedFeatures([selectedCell]);
+    await harness.click();
+    const selectedCellSource = harness.map.getSource('selected-cell');
+    const selectionRenderCount = selectedCellSource.setData.mock.calls.length;
 
-    await harness.hover({ x: 50, y: 80 });
-    expect(harness.map.setFilter).toHaveBeenCalledWith(
-      'competition-territory-hover-outline',
-      ['==', ['get', 'cellId'], '500:12:-3'],
+    harness.move({ west: -106, east: -104 });
+    await vi.waitFor(() => expect(fetchImpl).toHaveBeenCalledWith(
+      '/v1/competition-leaderboard?west=-106&south=39&east=-104&north=41',
+      expect.any(Object),
+    ));
+    expect(selectedCellSource.setData).toHaveBeenCalledTimes(selectionRenderCount);
+
+    await harness.elements.get('[data-territory-list]').children[0].click();
+    expect(fetchImpl).toHaveBeenCalledWith(
+      '/v1/competition-cells/12/-3/tracks?pilot=pilot-one',
+      expect.any(Object),
     );
-    expect(harness.elements.get('[data-territory-cell-popup]').children[1].children[0].textContent)
-      .toBe('Pilot One');
-
-    await harness.hover({ x: 55, y: 85 });
-    expect(claimantRequestCount).toBe(1);
-    harness.leave();
-    expect(harness.elements.get('[data-territory-cell-popup]').hidden).toBe(true);
-    expect(harness.map.setFilter).toHaveBeenLastCalledWith(
-      'competition-territory-hover-outline',
-      ['==', ['get', 'cellId'], ''],
-    );
-  });
-
-  it('does not add hover interaction to shared cells', async () => {
-    const fetchImpl = vi.fn(async (url: string) => {
-      return jsonResponse({ leaders: [], currentPilot: null });
+    expect(selectedCellSource.setData).toHaveBeenLastCalledWith({
+      type: 'FeatureCollection',
+      features: [selectedCell],
     });
-    const harness = globalDashboardHarness(fetchImpl);
-    await harness.load();
-    harness.map.setFilter.mockClear();
-    harness.setRenderedFeatures([
-      {
-        properties: {
-          cellId: '500:12:-3',
-          x: 12,
-          y: -3,
-          claimantCount: 2,
-          isShared: true,
-        },
-      },
-    ]);
 
-    await harness.hover();
-
-    expect(fetchImpl.mock.calls.some(([url]) => url.startsWith('/v1/competition-cells/'))).toBe(
-      false,
+    await harness.currentMonth.click();
+    expect(fetchImpl).toHaveBeenCalledWith(
+      '/v1/competition-cells/12/-3/tracks?month=2026-07',
+      expect.any(Object),
     );
-    expect(harness.elements.get('[data-territory-cell-popup]').hidden).toBe(true);
-    expect(harness.map.setFilter).toHaveBeenLastCalledWith(
-      'competition-territory-hover-outline',
-      ['==', ['get', 'cellId'], ''],
-    );
-  });
-
-  it('ignores an exclusive-cell response after the pointer moves onto a shared cell', async () => {
-    const claimants = deferred<Response>();
-    const fetchImpl = vi.fn(async (url: string) => {
-      if (url.startsWith('/v1/competition-cells/')) return claimants.promise;
-      return jsonResponse({ leaders: [], currentPilot: null });
+    expect(selectedCellSource.setData).toHaveBeenLastCalledWith({
+      type: 'FeatureCollection',
+      features: [selectedCell],
     });
-    const harness = globalDashboardHarness(fetchImpl);
-    await harness.load();
-    harness.setRenderedFeatures([
-      {
-        properties: {
-          cellId: '500:12:-3',
-          x: 12,
-          y: -3,
-          claimantCount: 1,
-          isShared: false,
-          pilotUserId: 'pilot-one',
-        },
-      },
-    ]);
-    const exclusiveHover = harness.hover();
-    await vi.waitFor(() =>
-      expect(
-        fetchImpl.mock.calls.some(([url]) => url.startsWith('/v1/competition-cells/')),
-      ).toBe(true),
-    );
-
-    harness.setRenderedFeatures([
-      {
-        properties: {
-          cellId: '500:13:-3',
-          x: 13,
-          y: -3,
-          claimantCount: 2,
-          isShared: true,
-        },
-      },
-    ]);
-    await harness.hover();
-    claimants.resolve(
-      jsonResponse({ claimants: [{ userId: 'pilot-one', displayName: 'Pilot One' }] }),
-    );
-    await exclusiveHover;
-
-    expect(harness.elements.get('[data-territory-cell-popup]').hidden).toBe(true);
-    expect(harness.elements.get('[data-territory-cell-popup]').children).toHaveLength(0);
   });
 
   it('shows distinct ranking and map error states without fetching GeoJSON territory', async () => {

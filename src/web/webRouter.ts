@@ -41,6 +41,7 @@ import { WORKER_STATUS_TTL_SECONDS, type WorkerControlService } from '../service
 import type { FlightProcessingControlService } from '../services/flightProcessingControlService.js';
 import type { FlightDetailService } from '../services/flightDetailService.js';
 import { createFlightMapPayload, createFlightPageView } from '../views/authenticated/adapters/flightDetailView.js';
+import type { CellFlightTrackService } from '../services/cellFlightTrackService.js';
 
 const email = z.string().trim().toLowerCase().pipe(z.email());
 const password = z.string().min(3).max(128);
@@ -207,6 +208,7 @@ export function createWebRouter(dependencies: {
   renderAdminMapSettingsPage?: AdminMapSettingsPageRenderer;
   thumbnailDelivery?: FlightThumbnailDeliveryService;
   flightDetail?: FlightDetailService;
+  cellFlightTracks?: CellFlightTrackService;
 }) {
   const router = Router();
   const territoryTileSettings = dependencies.territoryTileSettings ?? createTerritoryTileSettingsService();
@@ -667,25 +669,54 @@ export function createWebRouter(dependencies: {
     }
   });
 
-  router.get('/v1/competition-cells/:x/:y/claimants', async (req, res, next) => {
-    if (!res.locals.currentUser) {
-      next(new AppError(401, 'unauthorized', 'Sign in to view competition cell claimants.'));
+  router.get('/v1/personal-cells/:x/:y/tracks', async (req, res, next) => {
+    const currentUser = res.locals.currentUser;
+    if (!currentUser) {
+      next(new AppError(401, 'unauthorized', 'Sign in to view cell flight tracks.'));
       return;
     }
     const x = cellCoordinateSchema.safeParse(req.params.x);
     const y = cellCoordinateSchema.safeParse(req.params.y);
-    const period = competitionMonthSchema.safeParse(req.query);
+    const period = personalPeriodSchema.safeParse(req.query);
     if (!x.success || !y.success || !period.success) {
-      res.status(400).json({ error: { code: 'invalid_request', message: 'Cell claimants require valid coordinates and a YYYY-MM month.' } });
+      res.status(400).json({ error: { code: 'invalid_request', message: 'Cell flight tracks require valid coordinates and an optional YYYY-MM month.' } });
       return;
     }
+    if (!dependencies.cellFlightTracks) throw new Error('Cell flight-track service is not configured.');
     try {
-      const claimants = await dependencies.coverage.getCellClaimants({
-        ...coveragePeriod(period.data.month),
+      const tracks = await dependencies.cellFlightTracks.getPersonal({
         x: x.data,
         y: y.data,
+        userId: currentUser.userId,
+        period: coveragePeriod(period.data.month),
       });
-      res.status(200).json({ claimants });
+      res.status(200).type('application/geo+json').send(tracks);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.get('/v1/competition-cells/:x/:y/tracks', async (req, res, next) => {
+    if (!res.locals.currentUser) {
+      next(new AppError(401, 'unauthorized', 'Sign in to view cell flight tracks.'));
+      return;
+    }
+    const x = cellCoordinateSchema.safeParse(req.params.x);
+    const y = cellCoordinateSchema.safeParse(req.params.y);
+    const query = tileQuerySchema.safeParse(req.query);
+    if (!x.success || !y.success || !query.success) {
+      res.status(400).json({ error: { code: 'invalid_request', message: 'Cell flight tracks require valid coordinates, an optional YYYY-MM month, and an optional pilot ID.' } });
+      return;
+    }
+    if (!dependencies.cellFlightTracks) throw new Error('Cell flight-track service is not configured.');
+    try {
+      const tracks = await dependencies.cellFlightTracks.getCompetition({
+        x: x.data,
+        y: y.data,
+        period: coveragePeriod(query.data.month),
+        ...(query.data.pilot ? { pilotUserId: query.data.pilot } : {}),
+      });
+      res.status(200).type('application/geo+json').send(tracks);
     } catch (error) {
       next(error);
     }

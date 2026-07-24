@@ -407,6 +407,14 @@ Personal cells are dissolved into connected regions within the tile query;
 competition tiles contain per-cell claimant metadata. Arena tiles apply the
 canonical Arena center-coverage rule in addition to the tile range.
 
+Selecting an exact Personal or competition cell requests its full flight
+tracks from `CellFlightTrackService` and renders them in shared static GeoJSON
+highlight and line layers. Personal selection returns every claiming flight
+for the signed-in pilot. Competition selection returns the latest claiming
+flight per claimant for the active period, or only the selected pilot's latest
+flight. Selection remains while the map moves and is refreshed when its period
+or competition pilot scope changes.
+
 Tile zoom ranges are centralized in `src/config/territoryTiles.ts` and supplied
 to both the HTTP coordinate validation and the rendered MapLibre source
 configuration. The admin map-settings page can change these ranges only in the
@@ -619,6 +627,12 @@ sources for Personal and competition territory. MapLibre requests the visible
 tiles from the authenticated `.mvt` endpoints as the map moves. Territory is
 hidden below the configured minimum zoom, and HTTP routes reject coordinates
 outside each configured zoom range.
+
+`mapCellTracks.js` installs the shared selected-cell and clipped-track GeoJSON
+layers and owns click selection, replacement, clearing, and stale-request
+protection. Personal tracks receive deterministic per-flight colors; competition
+tracks reuse the pilot color registry shared with territory and leaderboard
+rendering.
 
 Changing the competition period or selected pilot replaces the competition
 tile URL so MapLibre reloads the correct scope. Arena tile URLs include the

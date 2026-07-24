@@ -27,8 +27,9 @@ export function arenaCoverageLeaderboardUrl(arenaSourceId, month = null) {
   return `/v1/arenas/${encodeURIComponent(arenaSourceId)}/competition-leaderboard${query ? `?${query}` : ''}`;
 }
 
-export function coverageCellClaimantsUrl(x, y, month = null) {
+export function competitionCellTracksUrl(x, y, { month = null, pilotUserId = null } = {}) {
   const params = new URLSearchParams(periodValues(month));
+  if (pilotUserId) params.set('pilot', pilotUserId);
   const query = params.toString();
-  return `/v1/competition-cells/${encodeURIComponent(x)}/${encodeURIComponent(y)}/claimants${query ? `?${query}` : ''}`;
+  return `/v1/competition-cells/${encodeURIComponent(x)}/${encodeURIComponent(y)}/tracks${query ? `?${query}` : ''}`;
 }

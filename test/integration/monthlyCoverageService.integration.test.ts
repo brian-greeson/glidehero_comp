@@ -79,9 +79,6 @@ describe('MonthlyCoverageService with PostGIS', () => {
       expect.objectContaining({ userId: alpha.userId, claimedCellCount: 2, exclusiveCellCount: 0, sharedCellCount: 2 }),
       expect.objectContaining({ userId: bravo.userId, claimedCellCount: 2, exclusiveCellCount: 0, sharedCellCount: 2 }),
     ]);
-
-    await expect(service.getCellClaimants({ competitionMonth: '2026-07', x: 0, y: 0 }))
-      .resolves.toEqual([{ userId: alpha.userId, displayName: 'Alpha' }, { userId: bravo.userId, displayName: 'Bravo' }]);
   });
 
   it('restricts Arena territory and scoring using covered cell centers', async () => {

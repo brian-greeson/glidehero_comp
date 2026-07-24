@@ -231,11 +231,42 @@ export function createTerritoryTileService(
         ),
         mvt_features AS (
           SELECT * FROM clipped_features WHERE geom IS NOT NULL AND NOT ST_IsEmpty(geom)
+        ),
+        exact_cell_clipped_features AS (
+          SELECT
+            concat(${cellSize}::integer, ':', cell.x, ':', cell.y) AS "cellId",
+            cell.x::integer AS x,
+            cell.y::integer AS y,
+            ST_AsMVTGeom(
+              ST_Transform(ST_MakeEnvelope(
+                cell.x * ${cellSize},
+                cell.y * ${cellSize},
+                (cell.x + 1) * ${cellSize},
+                (cell.y + 1) * ${cellSize},
+                6933
+              ), 3857),
+              tile_bounds.geometry,
+              ${extent},
+              ${buffer},
+              true
+            ) AS geom
+          FROM claimed_cells cell
+          CROSS JOIN tile_bounds
+        ),
+        exact_cell_features AS (
+          SELECT *
+          FROM exact_cell_clipped_features
+          WHERE geom IS NOT NULL AND NOT ST_IsEmpty(geom)
         )
         SELECT
-          COALESCE(ST_AsMVT(mvt_features.*, 'personal-territory', ${extent}, 'geom'), ''::bytea) AS data,
-          COUNT(*)::integer AS "featureCount"
-        FROM mvt_features
+          COALESCE((
+            SELECT ST_AsMVT(mvt_features.*, 'personal-territory', ${extent}, 'geom')
+            FROM mvt_features
+          ), ''::bytea) || COALESCE((
+            SELECT ST_AsMVT(exact_cell_features.*, 'personal-territory-cells', ${extent}, 'geom')
+            FROM exact_cell_features
+          ), ''::bytea) AS data,
+          (SELECT COUNT(*)::integer FROM mvt_features) AS "featureCount"
       `);
       return tileResult(result.rows[0]);
     },

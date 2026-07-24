@@ -1,7 +1,6 @@
 import { sql } from 'drizzle-orm';
 import type { Database } from '../db/client.js';
 import type {
-  MonthlyCoverageCellClaimant,
   MonthlyCoverageLeaderboard,
   MonthlyCoveragePilot,
 } from '../domain/competition/monthlyCoverage.js';
@@ -14,7 +13,6 @@ export type MonthlyCoveragePeriod = { competitionMonth: string } | { period: 'al
 export interface MonthlyCoverageService {
   getGlobalLeaderboard(input: MonthlyCoveragePeriod & ViewportBounds & { currentUserId: string }): Promise<MonthlyCoverageLeaderboard>;
   getArenaLeaderboard(input: MonthlyCoveragePeriod & { arenaId: string; currentUserId: string }): Promise<MonthlyCoverageLeaderboard>;
-  getCellClaimants(input: MonthlyCoveragePeriod & { x: number; y: number }): Promise<MonthlyCoverageCellClaimant[]>;
 }
 
 type StoredPilot = MonthlyCoveragePilot & { isCurrentPilotOnly: boolean; displayPosition: number };
@@ -192,19 +190,6 @@ export function createMonthlyCoverageService(
         })}
       `);
       return leaderboardFromRows(result.rows);
-    },
-
-    async getCellClaimants(input) {
-      const competitionMonth = normalizePeriod(input);
-      const result = await database.execute<MonthlyCoverageCellClaimant>(sql`
-        WITH ${coverageClaimsCtes({ competitionMonth, cellSize })}
-        SELECT profile.user_id AS "userId", profile.display_name AS "displayName"
-        FROM pilot_cells pilot
-        INNER JOIN profiles profile ON profile.user_id = pilot.claim_user
-        WHERE pilot.x = ${input.x} AND pilot.y = ${input.y}
-        ORDER BY lower(profile.display_name), profile.display_name, profile.user_id
-      `);
-      return result.rows;
     },
   };
 }

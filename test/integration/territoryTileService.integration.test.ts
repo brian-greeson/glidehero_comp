@@ -102,8 +102,14 @@ describe('TerritoryTileService with PostGIS MVT', () => {
       period: { period: 'all-time' },
     });
     const features = decode(result.data, 'personal-territory');
+    const exactCells = decode(result.data, 'personal-territory-cells');
     expect(result.featureCount).toBe(2);
     expect(features).toHaveLength(2);
+    expect(exactCells.map((feature) => feature.properties)).toEqual(expect.arrayContaining([
+      expect.objectContaining({ cellId: '1000:0:0', x: 0, y: 0 }),
+      expect.objectContaining({ cellId: '1000:1:0', x: 1, y: 0 }),
+      expect.objectContaining({ cellId: '1000:3:0', x: 3, y: 0 }),
+    ]));
     for (const feature of features) {
       expect(feature.type).toBe(3);
       const rings = feature.loadGeometry().flat();

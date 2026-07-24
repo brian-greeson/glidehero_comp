@@ -21,6 +21,7 @@ import { createSessionCookie } from '../../src/web/sessionCookie.js';
 import { createWebRouter } from '../../src/web/webRouter.js';
 import { withServer } from '../support/http.js';
 import type { FlightDetailService, FlightDetailSummary } from '../../src/services/flightDetailService.js';
+import type { CellFlightTrackResult, CellFlightTrackService } from '../../src/services/cellFlightTrackService.js';
 
 const viewportStats = {
   claimedCellCount: 2,
@@ -186,12 +187,30 @@ function dependencies() {
     getArenaLeaderboard: vi.fn(async () => ({
       leaders: [], currentPilot: null,
     })),
-    getCellClaimants: vi.fn(async () => [{ userId: user.userId, displayName: user.displayName }]),
   };
   const territoryTiles: TerritoryTileService = {
     getPersonalTile: vi.fn(async () => ({ data: Buffer.alloc(0), featureCount: 0 })),
     getGlobalCompetitionTile: vi.fn(async () => ({ data: Buffer.alloc(0), featureCount: 0 })),
     getArenaCompetitionTile: vi.fn(async () => ({ data: Buffer.alloc(0), featureCount: 0 })),
+  };
+  const cellTrackResult: CellFlightTrackResult = {
+    cell: {
+      type: 'Feature',
+      properties: { cellId: '1000:1:2', x: 1, y: 2 },
+      geometry: { type: 'Polygon', coordinates: [] },
+    },
+    tracks: {
+      type: 'FeatureCollection',
+      features: [{
+        type: 'Feature',
+        properties: { flightId: '00000000-0000-4000-8000-000000000010', pilotUserId: user.userId },
+        geometry: { type: 'LineString', coordinates: [[-105, 40], [-104.9, 40.1]] },
+      }],
+    },
+  };
+  const cellFlightTracks: CellFlightTrackService = {
+    getPersonal: vi.fn(async () => cellTrackResult),
+    getCompetition: vi.fn(async () => cellTrackResult),
   };
   const arenas = arenaService();
   const arenaProgress = arenaProgressService();
@@ -206,6 +225,7 @@ function dependencies() {
     mapGrid,
     coverage,
     territoryTiles,
+    cellFlightTracks,
     arenas,
     arenaProgress,
     renderPage,
@@ -221,6 +241,7 @@ function dependencies() {
     mapGrid,
     coverage,
     territoryTiles,
+    cellFlightTracks,
     arenas,
     arenaProgress,
     renderPage,
@@ -813,7 +834,7 @@ describe('webRouter', () => {
     });
   });
 
-  it('searches Arenas and returns fixed-area leaderboard and claimant data', async () => {
+  it('searches Arenas and returns fixed-area leaderboard data', async () => {
     const { app, arenas, coverage } = dependencies();
     vi.mocked(arenas.search).mockResolvedValueOnce([arena]);
     vi.mocked(arenas.getBySourceId).mockResolvedValue(arena);
@@ -836,18 +857,6 @@ describe('webRouter', () => {
       expect(allTimeLeaderboard.status).toBe(200);
       expect(coverage.getArenaLeaderboard).toHaveBeenCalledWith({
         period: 'all-time', arenaId: arena.id, currentUserId: user.userId,
-      });
-
-      const claimants = await fetch(
-        `${baseUrl}/v1/competition-cells/1/2/claimants?month=2026-07`,
-        { headers },
-      );
-      expect(claimants.status).toBe(200);
-      expect(await claimants.json()).toEqual({
-        claimants: [{ userId: user.userId, displayName: user.displayName }],
-      });
-      expect(coverage.getCellClaimants).toHaveBeenCalledWith({
-        competitionMonth: '2026-07', x: 1, y: 2,
       });
     });
   });
@@ -1018,7 +1027,6 @@ describe('webRouter', () => {
       coverage: {
         getGlobalLeaderboard: vi.fn(async () => ({ leaders: [], currentPilot: null })),
         getArenaLeaderboard: vi.fn(async () => ({ leaders: [], currentPilot: null })),
-        getCellClaimants: vi.fn(async () => []),
       },
       territoryTiles: dependencies().territoryTiles,
       arenas: arenaService(),
@@ -1736,21 +1744,48 @@ describe('webRouter', () => {
     });
   });
 
-  it('rejects invalid and anonymous cell claimant requests without querying coverage', async () => {
-    const { app, coverage } = dependencies();
+  it('returns Personal and Competition tracks for a selected exact cell', async () => {
+    const { app, cellFlightTracks } = dependencies();
+    const headers = { cookie: 'glidehero_session=valid-token' };
+    await withServer(app, async (baseUrl) => {
+      const personal = await fetch(`${baseUrl}/v1/personal-cells/-1/2/tracks?month=2026-07`, { headers });
+      expect(personal.status).toBe(200);
+      expect(personal.headers.get('content-type')).toContain('application/geo+json');
+      expect((await personal.json() as CellFlightTrackResult).cell.properties.cellId).toBe('1000:1:2');
+      expect(cellFlightTracks.getPersonal).toHaveBeenCalledWith({
+        x: -1,
+        y: 2,
+        userId: user.userId,
+        period: { competitionMonth: '2026-07' },
+      });
+
+      const competition = await fetch(
+        `${baseUrl}/v1/competition-cells/1/2/tracks?pilot=${user.userId}`,
+        { headers },
+      );
+      expect(competition.status).toBe(200);
+      expect(cellFlightTracks.getCompetition).toHaveBeenCalledWith({
+        x: 1,
+        y: 2,
+        period: { period: 'all-time' },
+        pilotUserId: user.userId,
+      });
+    });
+  });
+
+  it('rejects invalid and anonymous selected-cell track requests without querying tracks', async () => {
+    const { app, cellFlightTracks } = dependencies();
     await withServer(app, async (baseUrl) => {
       const invalid = await fetch(
-        `${baseUrl}/v1/competition-cells/not-an-integer/2/claimants?month=2026-07`,
+        `${baseUrl}/v1/competition-cells/1/2/tracks?month=July`,
         { headers: { cookie: 'glidehero_session=valid-token' } },
       );
       expect(invalid.status).toBe(400);
-      expect(await invalid.json()).toEqual({
-        error: { code: 'invalid_request', message: 'Cell claimants require valid coordinates and a YYYY-MM month.' },
-      });
 
-      const anonymous = await fetch(`${baseUrl}/v1/competition-cells/1/2/claimants?month=2026-07`);
+      const anonymous = await fetch(`${baseUrl}/v1/personal-cells/1/2/tracks`);
       expect(anonymous.status).toBe(401);
-      expect(coverage.getCellClaimants).not.toHaveBeenCalled();
+      expect(cellFlightTracks.getPersonal).not.toHaveBeenCalled();
+      expect(cellFlightTracks.getCompetition).not.toHaveBeenCalled();
     });
   });
 

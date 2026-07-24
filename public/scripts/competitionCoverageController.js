@@ -3,7 +3,7 @@ import { initializeCompetitionPeriodControl } from './competitionPeriod.js';
 import { createLatestRequest } from './latestRequest.js';
 import {
   arenaCoverageLeaderboardUrl,
-  coverageCellClaimantsUrl,
+  competitionCellTracksUrl,
   coverageTerritoryTileUrl,
   globalCoverageLeaderboardUrl,
 } from './competitionCoverageApi.js';
@@ -12,12 +12,13 @@ import {
   assignLoadedCoverageColors,
   coverageCellFeatureAtPoint,
   installCoverageSource,
-  isExclusiveCoverageFeature,
-  positionCoverageCellPopup,
-  setCoverageHoveredCell,
   updateCoverageTiles,
   visibleCoverageFeatureCount,
 } from './competitionCoverageMap.js';
+import {
+  createMapCellTrackSelection,
+  installMapCellTrackLayers,
+} from './mapCellTracks.js';
 import { initializeMapFlightAids } from './mapFlightAids.js';
 import { mapViewportFromSearch, updateMapModeLinks } from './mapViewportUrl.js';
 
@@ -54,7 +55,6 @@ export function initializeCompetitionCoverage({
   const overviewButtons = matchingElements(documentRef, '[data-territory-allpilots]');
   const leaderboardStatuses = matchingElements(documentRef, '[data-territory-status]');
   const emptyState = documentRef.querySelector('[data-map-empty-state]');
-  const cellPopup = documentRef.querySelector('[data-territory-cell-popup]');
   if (!root || !mapElement || !maplibre) return;
 
   const arenaSourceId = mapElement.dataset.arenaSourceId || null;
@@ -68,8 +68,7 @@ export function initializeCompetitionCoverage({
   let mapReady = false;
   let selectedPilotId = null;
   let leaderboard = { leaders: [], currentPilot: null };
-  let cellPopupRequestId = 0;
-  let hoveredCellId = null;
+  let cellTrackSelection;
 
   function syncOverviewButtons() {
     for (const button of overviewButtons)
@@ -97,35 +96,6 @@ export function initializeCompetitionCoverage({
     if (map) updateMapModeLinks({ documentRef, locationRef, map, periodSelection });
   }
 
-  function hideCellPopup() {
-    cellPopupRequestId += 1;
-    if (cellPopup) cellPopup.hidden = true;
-  }
-
-  function clearCellHover() {
-    hoveredCellId = null;
-    if (mapReady) setCoverageHoveredCell(map);
-    const canvas = map?.getCanvas?.();
-    if (canvas) canvas.style.cursor = '';
-    hideCellPopup();
-  }
-
-  function renderCellPopup(claimants, point) {
-    if (!cellPopup || claimants.length === 0) return false;
-    const heading = documentRef.createElement('strong');
-    heading.textContent = 'Claimed by';
-    const list = documentRef.createElement('ul');
-    for (const claimant of claimants) {
-      const item = documentRef.createElement('li');
-      item.textContent = claimant.displayName;
-      list.append(item);
-    }
-    cellPopup.replaceChildren(heading, list);
-    cellPopup.hidden = false;
-    positionCoverageCellPopup(cellPopup, point, mapElement.clientWidth);
-    return true;
-  }
-
   function setStatus(message = '') {
     if (!emptyState) return;
     emptyState.textContent = message;
@@ -141,8 +111,15 @@ export function initializeCompetitionCoverage({
   }
 
   function refreshTerritoryTiles() {
-    clearCellHover();
     updateCoverageTiles(map, activeTileUrl());
+  }
+
+  function activeCellTrackScope() {
+    return { month: periodControl.month, pilotUserId: selectedPilotId };
+  }
+
+  async function refreshCellTracks() {
+    if (cellTrackSelection) await cellTrackSelection.refresh(activeCellTrackScope());
   }
 
   function renderLeaderboard() {
@@ -152,12 +129,12 @@ export function initializeCompetitionCoverage({
       selectedPilotId,
       currentUserId,
       colorRegistry,
-      onSelect: (pilot) => {
-        clearCellHover();
+      onSelect: async (pilot) => {
         selectedPilotId = pilot?.userId ?? null;
         syncOverviewButtons();
         renderLeaderboard();
         refreshTerritoryTiles();
+        await refreshCellTracks();
       },
     });
   }
@@ -180,6 +157,7 @@ export function initializeCompetitionCoverage({
         selectedPilotId = null;
         syncOverviewButtons();
         refreshTerritoryTiles();
+        void refreshCellTracks();
       }
       renderLeaderboard();
     } catch (error) {
@@ -194,9 +172,8 @@ export function initializeCompetitionCoverage({
   async function refreshPeriod() {
     selectedPilotId = null;
     syncOverviewButtons();
-    clearCellHover();
     refreshTerritoryTiles();
-    await leaderboardRequest.run();
+    await Promise.all([leaderboardRequest.run(), refreshCellTracks()]);
   }
 
   const periodControl = initializeCompetitionPeriodControl({
@@ -212,13 +189,13 @@ export function initializeCompetitionCoverage({
 
   syncOverviewButtons();
   for (const overviewButton of overviewButtons) {
-    overviewButton.addEventListener('click', () => {
+    overviewButton.addEventListener('click', async () => {
       if (!selectedPilotId) return;
-      clearCellHover();
       selectedPilotId = null;
       syncOverviewButtons();
       renderLeaderboard();
       refreshTerritoryTiles();
+      await refreshCellTracks();
     });
   }
 
@@ -262,6 +239,28 @@ export function initializeCompetitionCoverage({
           minimumZoom: Number(mapElement.dataset.territoryTileMinimumZoom),
           maximumZoom: Number(mapElement.dataset.territoryTileMaximumZoom),
         });
+        installMapCellTrackLayers(map);
+        cellTrackSelection = createMapCellTrackSelection({
+          map,
+          cellFeatureAtPoint: coverageCellFeatureAtPoint,
+          colorTracks: (tracks) => ({
+            type: 'FeatureCollection',
+            features: (tracks?.features ?? []).map((feature) => ({
+              ...feature,
+              properties: {
+                ...feature.properties,
+                trackColor: colorRegistry.colorFor(feature.properties?.pilotUserId),
+              },
+            })),
+          }),
+          loadCellTracks: async (cell, scope, signal) => jsonRequest(
+            competitionCellTracksUrl(cell.x, cell.y, scope),
+            fetchImpl,
+            signal,
+          ),
+        });
+        map.on?.('click', (event) =>
+          cellTrackSelection.handleClick(event, activeCellTrackScope()));
         mapReady = true;
         await refreshPeriod();
       } catch {
@@ -290,64 +289,6 @@ export function initializeCompetitionCoverage({
     map.on('idle', () => {
       if (!mapReady) return;
       setStatus(visibleCoverageFeatureCount(map) === 0 ? 'No territory for this zoom level or area.' : '');
-    });
-    map.on('mousemove', async (event) => {
-      if (!mapReady || !cellPopup) return;
-      const feature = coverageCellFeatureAtPoint(map, event.point);
-      if (!isExclusiveCoverageFeature(feature)) {
-        clearCellHover();
-        return;
-      }
-
-      const properties = feature.properties;
-      const canvas = map.getCanvas?.();
-      if (canvas) canvas.style.cursor = 'pointer';
-      if (properties.cellId === hoveredCellId) {
-        if (!cellPopup.hidden)
-          positionCoverageCellPopup(cellPopup, event.point, mapElement.clientWidth);
-        return;
-      }
-
-      hoveredCellId = properties.cellId;
-      setCoverageHoveredCell(map, hoveredCellId);
-      const requestId = ++cellPopupRequestId;
-      cellPopup.hidden = true;
-      try {
-        const payload = await jsonRequest(
-          coverageCellClaimantsUrl(properties.x, properties.y, periodControl.month),
-          fetchImpl,
-        );
-        if (requestId !== cellPopupRequestId || properties.cellId !== hoveredCellId) return;
-        if (!renderCellPopup(payload.claimants, event.point)) clearCellHover();
-      } catch {
-        if (requestId === cellPopupRequestId) clearCellHover();
-      }
-    });
-    map.on('mouseleave', clearCellHover);
-    map.on('click', async (event) => {
-      if (!cellPopup) return;
-      const feature = coverageCellFeatureAtPoint(map, event.point);
-      if (!isExclusiveCoverageFeature(feature)) {
-        hideCellPopup();
-        return;
-      }
-      const properties = feature?.properties;
-      if (!properties) {
-        hideCellPopup();
-        return;
-      }
-      const requestId = ++cellPopupRequestId;
-      cellPopup.hidden = true;
-      try {
-        const payload = await jsonRequest(
-          coverageCellClaimantsUrl(properties.x, properties.y, periodControl.month),
-          fetchImpl,
-        );
-        if (requestId !== cellPopupRequestId) return;
-        renderCellPopup(payload.claimants, event.point);
-      } catch {
-        if (requestId === cellPopupRequestId) cellPopup.hidden = true;
-      }
     });
   } catch {
     setStatus('Map unavailable. Check your connection and try again.');

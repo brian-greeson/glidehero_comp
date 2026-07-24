@@ -75,7 +75,9 @@ The Competitive Map gives every pilot additive credit for each competition cell
 they claim. A cell can count for more than one pilot, so the leaderboard separates
 each pilot's claimed cells into exclusive cells and cells shared with other pilots.
 Selecting a pilot shows that pilot's coverage; Overview shows how many pilots have
-covered each cell. Selecting a covered cell lists its claimants.
+covered each cell. Selecting any covered cell highlights it and shows the latest
+flight track for each claimant in that period; when a pilot is selected, only
+that pilot's track is shown.
 
 Competition pages default to All Time. Current Month limits coverage to claims in
 the browser-selected local month, using each flight's stored competition month.

@@ -62,7 +62,8 @@ export function initializeMapPage({ documentRef = document, maplibre = globalThi
   if (!maplibre || !fetchImpl) return;
   if (root.dataset.dashboardMode === 'personal') {
     initializePersonalDashboard({
-      documentRef, maplibre, fetchImpl, locationRef, navigatorRef, storage, periodSelection: period,
+      documentRef, maplibre, fetchImpl, locationRef, historyRef, navigatorRef, storage,
+      periodSelection: period,
     });
   } else if (root.hasAttribute('data-competition-coverage')) {
     initializeCompetitionCoverage({ documentRef, maplibre, fetchImpl, locationRef, historyRef, now, navigatorRef, storage });

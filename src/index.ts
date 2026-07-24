@@ -46,6 +46,7 @@ import { createWorkerControlService } from './services/workerControlService.js';
 import { createFlightProcessingControlService } from './services/flightProcessingControlService.js';
 import { createUserHistoryRebuildService } from './services/userHistoryRebuildService.js';
 import { createFlightDetailService } from './services/flightDetailService.js';
+import { createCellFlightTrackService } from './services/cellFlightTrackService.js';
 
 const config = parseConfig(process.env);
 const { db } = createDatabase(config.databaseUrl);
@@ -83,6 +84,7 @@ const arenaProgress = createArenaProgressService(db, { cellSize: config.gridClai
 const monthlyCoverage = createMonthlyCoverageService(db, { cellSize: config.gridClaimCellSize });
 const mapGrid = createMapGridService(db, { cellSize: config.gridClaimCellSize });
 const territoryTiles = createTerritoryTileService(db, { cellSize: config.gridClaimCellSize });
+const cellFlightTracks = createCellFlightTrackService(db, { cellSize: config.gridClaimCellSize });
 const territoryTileSettings = createTerritoryTileSettingsService();
 const profiles = createProfileService(db, {
   cellSize: config.gridClaimCellSize,
@@ -151,6 +153,7 @@ const webMiddleware = [
     mapGrid,
     coverage: monthlyCoverage,
     territoryTiles,
+    cellFlightTracks,
     arenas,
     arenaProgress,
     renderPage: createPageRenderer({

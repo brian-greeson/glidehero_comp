@@ -12,8 +12,3 @@ export type MonthlyCoverageLeaderboard = {
   leaders: MonthlyCoveragePilot[];
   currentPilot: MonthlyCoveragePilot | null;
 };
-
-export type MonthlyCoverageCellClaimant = {
-  userId: string;
-  displayName: string;
-};

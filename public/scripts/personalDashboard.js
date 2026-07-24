@@ -1,10 +1,25 @@
 import { createLatestRequest } from './latestRequest.js';
-import { installPersonalTerritorySource } from './personalMap.js';
+import {
+  installPersonalTerritorySource,
+  personalCellFeatureAtPoint,
+  personalCellTracksUrl,
+  updatePersonalTerritoryTiles,
+} from './personalMap.js';
 import { renderPersonalStats } from './personalStatsView.js';
 import { personalStatsUrl } from './viewportQuery.js';
 import { initializeMapFlightAids } from './mapFlightAids.js';
 import { mapViewportFromSearch, updateMapModeLinks } from './mapViewportUrl.js';
-import { mapPeriodFromSearch } from './competitionPeriod.js';
+import {
+  ALL_TIME_COMPETITION_PERIOD,
+  CURRENT_MONTH_COMPETITION_PERIOD,
+  competitionPageUrl,
+  formatBrowserLocalMonth,
+  mapPeriodFromSearch,
+} from './competitionPeriod.js';
+import {
+  createMapCellTrackSelection,
+  installMapCellTrackLayers,
+} from './mapCellTracks.js';
 
 export function initializePersonalDashboard({
   documentRef = document,
@@ -12,6 +27,7 @@ export function initializePersonalDashboard({
   fetchImpl = window.fetch.bind(window),
   navigatorRef = globalThis.navigator,
   locationRef = globalThis.location,
+  historyRef = globalThis.history,
   storage,
   periodSelection,
   now = () => new Date(),
@@ -19,7 +35,7 @@ export function initializePersonalDashboard({
   const mapElement = documentRef.querySelector('[data-dashboard-map]');
   const emptyState = documentRef.querySelector('[data-map-empty-state]');
   const statsCard = documentRef.querySelector('[data-personal-stats]');
-  const period = periodSelection ?? mapPeriodFromSearch(locationRef?.search ?? '', now());
+  let period = periodSelection ?? mapPeriodFromSearch(locationRef?.search ?? '', now());
 
   function showStatus(message) {
     if (!emptyState) return;
@@ -34,6 +50,7 @@ export function initializePersonalDashboard({
 
   let map;
   let mapReady = false;
+  let cellTrackSelection;
   const statsRequest = createLatestRequest(async ({ signal, isCurrent }, bounds) => {
     statsCard?.setAttribute('aria-busy', 'true');
     try {
@@ -58,7 +75,9 @@ export function initializePersonalDashboard({
       center: initialViewport?.center ?? [-106.2, 39.2],
       zoom: initialViewport?.zoom ?? 7,
     });
-    const syncModeLinks = () => updateMapModeLinks({ documentRef, locationRef, map });
+    const syncModeLinks = () => updateMapModeLinks({
+      documentRef, locationRef, map, periodSelection: period,
+    });
     syncModeLinks();
     map.addControl(new maplibre.NavigationControl(), 'top-right');
     map.once('error', () => showStatus('Map unavailable. Check your connection and try again.'));
@@ -72,6 +91,23 @@ export function initializePersonalDashboard({
         },
         period.month,
       );
+      installMapCellTrackLayers(map);
+      cellTrackSelection = createMapCellTrackSelection({
+        map,
+        cellFeatureAtPoint: personalCellFeatureAtPoint,
+        loadCellTracks: async (cell, selectedPeriod, signal) => {
+          const response = await fetchImpl(personalCellTracksUrl(cell, selectedPeriod.month), {
+            credentials: 'same-origin',
+            headers: { accept: 'application/json' },
+            signal,
+          });
+          if (!response.ok) {
+            throw new Error(`Personal cell tracks request failed with ${response.status}.`);
+          }
+          return response.json();
+        },
+      });
+      map.on?.('click', (event) => cellTrackSelection.handleClick(event, period));
       initializeMapFlightAids({
         map, mapElement, documentRef, fetchImpl, navigatorRef, storage,
       });
@@ -84,6 +120,44 @@ export function initializePersonalDashboard({
         void statsRequest.run(map.getBounds());
       }
     });
+    for (const link of documentRef.querySelectorAll?.('[data-map-period-link]') ?? []) {
+      link.addEventListener('click', async (event) => {
+        event?.preventDefault?.();
+        const nextPeriodName = link.dataset.mapPeriodLink;
+        if (![
+          ALL_TIME_COMPETITION_PERIOD,
+          CURRENT_MONTH_COMPETITION_PERIOD,
+        ].includes(nextPeriodName)) return;
+        const month = nextPeriodName === CURRENT_MONTH_COMPETITION_PERIOD
+          ? formatBrowserLocalMonth(now())
+          : null;
+        period = {
+          period: nextPeriodName,
+          month,
+        };
+        historyRef?.replaceState?.(
+          null,
+          '',
+          competitionPageUrl(
+            locationRef?.pathname ?? '/personal',
+            month,
+            locationRef?.search ?? '',
+          ),
+        );
+        for (const periodLink of documentRef.querySelectorAll?.('[data-map-period-link]') ?? []) {
+          const selected = periodLink.dataset.mapPeriodLink === period.period;
+          periodLink.classList?.toggle?.('is-active', selected);
+          periodLink.setAttribute?.('aria-current', selected ? 'page' : 'false');
+        }
+        syncModeLinks();
+        if (!mapReady) return;
+        updatePersonalTerritoryTiles(map, period.month);
+        const refreshes = [];
+        if (map.getBounds) refreshes.push(statsRequest.run(map.getBounds()));
+        if (cellTrackSelection) refreshes.push(cellTrackSelection.refresh(period));
+        await Promise.all(refreshes);
+      });
+    }
   } catch {
     showStatus('Map unavailable. Check your connection and try again.');
   }
