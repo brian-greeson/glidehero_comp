@@ -5,7 +5,8 @@
 Authenticated map pages expose **Replay month** for the fixed set of completed
 tracks intersecting the captured viewport. Requests use the browser launch-local
 selected month and are scoped to the signed-in pilot on Personal; Competitive
-includes all pilots. Tracks are fetched once when the panel opens and are not
+includes all pilots; Following includes the signed-in pilot and pilots they
+currently follow. Tracks are fetched once when the panel opens and are not
 refetched while the viewport moves. Animation is browser-only: independent
 flight durations are interpolated on one timeline, with pause/play, rewind,
 restart, 1x/5x/50x/100x/200x speeds, and previous/next month navigation (next is
@@ -87,9 +88,16 @@ The Competitive Map gives every pilot additive credit for each competition cell
 they claim. A cell can count for more than one pilot, so the leaderboard separates
 each pilot's claimed cells into exclusive cells and cells shared with other pilots.
 Selecting a pilot shows that pilot's coverage; Overview shows how many pilots have
-covered each cell. Selecting any covered cell highlights it and shows the latest
-flight track for each claimant in that period; when a pilot is selected, only
-that pilot's track is shown.
+covered each cell. Selecting any covered cell highlights it, lists the pilots in
+the active scope who claimed it, and shows every flight track that claimed it in
+the selected period. Selecting a pilot filters both the displayed territory and
+claiming tracks to that pilot.
+
+The Following map is the same additive competition view limited to the signed-in
+pilot and pilots they currently follow. It is available globally at `/following`
+and within an Arena by selecting Following. Follow changes affect subsequent
+Following requests; they do not create separate claims or scoring. Exclusive
+and shared-cell status still reflects every pilot who claimed the cell.
 
 Competition pages default to All Time. Current Month limits coverage to claims in
 the browser-selected local month, using each flight's stored competition month.
@@ -199,11 +207,28 @@ activity kinds, but Release 4 currently writes only flight activities. Comments,
 messaging, reposts, manual posts, photo or video uploads, groups, general-purpose
 notifications, and feed preferences remain out of scope.
 
+### Glider profiles and flight hours
+
+Authenticated pilot profiles can display a glider's manufacturer, model, size,
+year, catalog-derived EN rating, optional competition ID, and total flight
+hours. Pilots manage only their own glider. Make, model, size, and EN rating are
+validated against the checked-in paraglider catalog; browser search is a
+progressive enhancement over the server-validated form.
+
+The pilot supplies the initial hours. While a glider is configured, each newly
+completed flight adds its duration exactly once. Reprocessing reconciles a
+flight's credited duration, and administrative deletion removes its credit.
+When glider details change, the pilot explicitly chooses whether to keep the
+current hours or reset them to zero; a reset starts a new attribution generation
+so older flight credits cannot later change the new glider's total.
+
 ### Map routes and navigation
 
 - `/` displays login and signup to signed-out visitors. A signed-in request to
   `/` redirects to `/personal`.
 - `/global` displays the viewport-based additive coverage competition.
+- `/following` displays the same competition limited to the signed-in pilot and
+  pilots they currently follow.
 - `/personal` displays the signed-in pilot's permanent Personal Map and
   viewport Stats.
 - `/activity` displays the authenticated pilot's followed-and-own activity feed,
@@ -212,13 +237,15 @@ notifications, and feed preferences remain out of scope.
   Follow/Unfollow control when the profile belongs to another pilot.
 - `/arena/{country-code}/{name}-{source-id}` displays a fixed-area additive
   coverage competition backed by a canonical Arena polygon.
-- Signed-out requests to Global, Personal, Activity, Arena, and pilot-profile
-  pages redirect to `/`.
+- Signed-out requests to Global, Following, Personal, Activity, Arena, and
+  pilot-profile pages redirect to `/`.
 - Invalid or unavailable Arena routes display an Arena 404 page.
 
-The Competitive and Personal controls navigate between `/global` and
-`/personal`. Arena pages remain Competitive views; selecting Personal navigates
-to `/personal` rather than applying Arena filtering to personal territory.
+The responsive map-view controls navigate among Personal, Following, and
+Competitive. Outside an Arena these use `/personal`, `/following`, and `/global`.
+Arena pages retain their Arena path for Following and Competitive; selecting
+Personal navigates to `/personal` rather than applying Arena filtering to
+personal territory.
 
 ### Live map flight aids
 
@@ -257,6 +284,7 @@ Included features:
 - Unique-cell milestones.
 - Total-cell and enclosed-cell personal bests.
 - Monthly competitive territory map.
+- Following-scoped global and Arena competition maps.
 - Dynamic viewport-based leaderboard.
 - Unified grid- and polygon-authored Arena search and fixed-area leaderboards.
 - Arena personal progress and Release 2 exploration achievements.
@@ -264,6 +292,8 @@ Included features:
   achievements.
 - Authenticated pilot following, Activity feed, grouped flight accomplishments,
   and Like reactions.
+- Catalog-validated profile glider information with generation-safe flight-hour
+  tracking.
 - Responsive flight territory previews in Activity and Profile recent flights.
 - Optional grid overlay and foreground live-position trail on every map.
 - Flight statistics after upload.

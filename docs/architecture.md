@@ -136,6 +136,19 @@ The authenticated Activity surface is also owned by `webRouter.ts`:
 
 Pilot display names in competition leaderboards link to `/pilots/:userId`; the
 profile page exposes the same Follow/Unfollow control used by Activity search.
+`GET /following` renders the viewport competition for the viewer and pilots
+they currently follow. Arena routes use `?view=following` for the same scope
+without introducing a second Arena route. The scope is propagated through
+leaderboard, vector-tile, selected-cell-track, Arena-search, and replay requests.
+User-dependent tile responses vary on `Cookie`.
+
+The current pilot's profile also owns the glider form endpoints:
+
+- `GET /profile/glider/search` returns bounded matches from the checked-in
+  paraglider catalog for the progressively enhanced combobox.
+- `POST /profile/glider` validates and saves catalog identity, year,
+  competition ID, hours, and the explicit keep/reset choice when the glider
+  details change. Validation failures re-render the profile with HTTP 422.
 
 Completed-flight detail is authenticated but not owner-restricted:
 `GET /flights/:flightId` renders the flight page and
@@ -202,7 +215,8 @@ accomplishments, launch-local Daily/Monthly statistics, and Like toggling.
 `mapReplayService.ts` owns the authenticated replay data contract. It selects
 completed flights whose full track intersects the captured viewport and whose
 launch-local start falls in the requested `YYYY-MM` month. Personal requests
-are restricted to the signed-in user; Competitive requests include all pilots.
+are restricted to the signed-in user; Following requests include that user and
+pilots they currently follow; Competitive requests include all pilots.
 The `/v1/map-replay` route validates authentication, month, mode, and bounds,
 then delegates to this service. Replay animation, controls, and temporary map
 layer dimming remain browser concerns in `public/scripts/mapReplay*.js`; they
@@ -213,6 +227,14 @@ most-accomplished, highest-cell, and greatest five-point-distance flights with
 recent-flight tie-breaking. Feed reads batch-load accomplishment
 sources for the visible page and calculate Like counts/viewer state in the
 same query rather than issuing one query per card.
+
+`profileService.ts` owns catalog validation and transactional glider-profile
+updates. Changed glider details require an explicit choice to retain or reset
+hours. Resetting increments the profile's hours generation so credits associated
+with an older glider cannot later adjust the current total. Flight completion
+credits parsed duration once against the current generation.
+`adminFlightService.ts` subtracts only current-generation credit on deletion
+and reconciles the credited duration after successful reprocessing.
 
 `flightDetailService.ts` owns the completed-flight summary and map reads used by
 the detail routes. It loads the pilot, launch-local time inputs, progress,
@@ -262,6 +284,7 @@ Domain modules contain framework-independent business concepts, rules, calculati
 Existing examples include:
 
 - IGC parsing and flight calculations.
+- Paraglider catalog search, matching, and EN-rating lookup.
 - Competition-month normalization.
 - Launch-time-zone rules.
 - Arena route identifiers.
@@ -286,6 +309,12 @@ Organize related concepts in a feature directory such as:
 - `src/domain/territory/`
 
 Do not move a database query into the domain merely because it contains a business rule. Keep the query in a service and extract only the pure rule or transformation.
+
+`src/domain/glider/catalog.ts` loads
+`data/paraglider_models_sizes_en_ratings.csv` at process startup and exposes
+catalog search and exact make/model/size lookup. The CSV is a checked-in
+application data artifact, not user input; profile persistence stores the
+catalog-derived EN rating so reads do not need to infer it from free-form data.
 
 ## 7. Persistence foundation
 
@@ -320,6 +349,14 @@ reactor_user_id)` row, carries the activity owner for a composite foreign-key
 check, cascades activity/user deletion, and rejects self-reactions. These
 constraints enforce the idempotency and self-action rules even when a service
 is bypassed.
+
+Glider identity and total hours are stored on `profiles`. Identity is either
+complete (manufacturer, model, size, year, and EN rating) or absent; competition
+ID is optional. `glider_hours_generation` identifies the current attribution
+era. Each credited `flights` row stores both the duration credited and its
+generation. This lets completion remain idempotent and lets reprocessing or
+administrative deletion adjust the total only when the flight credit still
+belongs to the current glider.
 
 ### `src/db/client.ts`
 
@@ -414,15 +451,21 @@ on-demand Mapbox Vector Tiles by `TerritoryTileService`. Each query derives its
 grid range from the requested tile envelope before constructing cell geometry.
 Personal cells are dissolved into connected regions within the tile query;
 competition tiles contain per-cell claimant metadata. Arena tiles apply the
-canonical Arena center-coverage rule in addition to the tile range.
+canonical Arena center-coverage rule in addition to the tile range. The
+Following competition scope limits emitted cells and pilot selections to the
+viewer plus current followees; `MonthlyCoverageService` applies the same scope
+to Global and Arena leaderboard rows. Claimant counts remain global, so
+exclusive/shared classification continues to reflect every pilot who claimed a
+cell.
 
 Selecting an exact Personal or competition cell requests its full flight
 tracks from `CellFlightTrackService` and renders them in shared static GeoJSON
 highlight and line layers. Personal selection returns every claiming flight
-for the signed-in pilot. Competition selection returns the latest claiming
-flight per claimant for the active period, or only the selected pilot's latest
-flight. Selection remains while the map moves and is refreshed when its period
-or competition pilot scope changes.
+for the signed-in pilot. Competition selection returns every claiming flight
+for the active period and scope, plus the distinct pilots used by the claimant
+popup; selecting a leaderboard pilot filters both results to that pilot.
+Selection remains while the map moves and is refreshed when its period,
+Following scope, or competition pilot selection changes.
 
 Tile zoom ranges are centralized in `src/config/territoryTiles.ts` and supplied
 to both the HTTP coordinate validation and the rendered MapLibre source
@@ -507,6 +550,11 @@ Put a view in the narrowest matching family:
 - Keep a genuinely shared layout at the root only when multiple view families intentionally use the same shell. Do not move a feature-specific component to the root to avoid a qualified include path.
 
 Authenticated presentation adapters convert service results into typed, display-ready models and belong in `src/views/authenticated/adapters/`. Authenticated model types, preview fixtures, and presentation-only helpers belong alongside that family in `src/views/authenticated/`. They should not contain database access or application workflows.
+
+`authenticated/components/gliderInformation.vto` is the reusable profile card
+for glider display and owner-only editing. `authenticated/adapters/profileView.ts`
+formats stored hours and supplies the edit model; the template never reads the
+catalog or database directly.
 
 ### Renderers
 
@@ -612,6 +660,13 @@ remain functional without JavaScript. `public/styles/app-ui/activity.css` owns
 the responsive feed, search, statistics, accomplishment, and Like presentation;
 the Like icon is a thumbs-up inline, repository-native SVG using `currentColor`.
 
+`public/scripts/app-ui/profile.js` progressively enhances the glider form with
+debounced catalog search, keyboard-accessible results, size/EN-rating updates,
+and keep/reset confirmation. The POST endpoint repeats all authoritative
+validation. `public/scripts/app-ui/mapMobileControls.js` owns the compact
+Personal/Following/Competitive menu; desktop markup exposes the same modes
+directly.
+
 The shared `flightMapPreview.vto` component renders the responsive wide/mobile
 thumbnail pair used by Activity flight cards and Profile recent-flight rows.
 `app.js` installs a delegated image-error fallback and also repairs images that
@@ -641,13 +696,15 @@ outside each configured zoom range.
 layers and owns click selection, replacement, clearing, and stale-request
 protection. Personal tracks receive deterministic per-flight colors; competition
 tracks reuse the pilot color registry shared with territory and leaderboard
-rendering.
+rendering. `mapCellClaimants.js` renders the selected competition cell's
+scope-filtered pilot list in a MapLibre popup and clears it with the shared
+selection lifecycle.
 
-Changing the competition period or selected pilot replaces the competition
-tile URL so MapLibre reloads the correct scope. Arena tile URLs include the
-Arena source ID and apply the same polygon membership rule used by its complete
-leaderboard. Personal stats and the Global leaderboard remain viewport-based
-JSON requests and refresh independently of territory tiles.
+Changing the competition period, Following scope, or selected pilot replaces
+the competition tile URL so MapLibre reloads the correct view. Arena tile URLs
+include the Arena source ID and apply the same polygon membership rule used by
+its complete leaderboard. Personal stats and the Global leaderboard remain
+viewport-based JSON requests and refresh independently of territory tiles.
 
 ### Asynchronous flight uploads
 
