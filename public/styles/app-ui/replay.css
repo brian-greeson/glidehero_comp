@@ -3,14 +3,17 @@
 .map-replay-controls__bar { display: flex; min-width: 0; align-items: center; gap: .65rem; min-height: 72px; padding: .7rem .9rem; border: 1px solid rgb(112 136 158 / 38%); border-radius: 1rem; color: #fff; background: rgb(5 18 29 / 94%); box-shadow: 0 12px 30px rgb(5 18 29 / 32%); -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px); }
 .map-replay-button { display: grid; width: 44px; height: 44px; flex: 0 0 auto; place-items: center; padding: 0; border: 1px solid rgb(151 174 194 / 30%); border-radius: 50%; color: #e8f3fa; background: transparent; cursor: pointer; }
 .map-replay-button:hover { border-color: rgb(48 217 204 / 75%); color: #30d9cc; }
-.map-replay-button:focus-visible, .map-replay-speed select:focus-visible, .map-replay-progress input:focus-visible { outline: 2px solid #30d9cc; outline-offset: 2px; }
-.map-replay-button:disabled, .map-replay-speed select:disabled, .map-replay-progress input:disabled { cursor: not-allowed; opacity: .45; }
+.map-replay-button:focus-visible, .map-replay-sync:focus-visible, .map-replay-speed select:focus-visible, .map-replay-progress input:focus-visible { outline: 2px solid #30d9cc; outline-offset: 2px; }
+.map-replay-button:disabled, .map-replay-sync:disabled, .map-replay-speed select:disabled, .map-replay-progress input:disabled { cursor: not-allowed; opacity: .45; }
 .map-replay-button svg { width: 23px; height: 23px; overflow: visible; fill: currentColor; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .map-replay-button--play { width: 54px; height: 54px; border-color: #30d9cc; color: #30d9cc; }
 .map-replay-button--play svg { stroke: none; }
 .map-replay-button--close svg { fill: none; }
 .map-replay-divider { width: 1px; height: 40px; flex: 0 0 auto; background: rgb(151 174 194 / 25%); }
 .map-replay-speed select { min-height: 40px; padding: 0 2rem 0 .8rem; border: 1px solid rgb(151 174 194 / 30%); border-radius: 1.25rem; color: #fff; background: #132433; font: inherit; font-size: .9rem; cursor: pointer; }
+.map-replay-sync { min-height: 40px; padding: 0 .8rem; border: 1px solid rgb(151 174 194 / 30%); border-radius: 1.25rem; color: #e8f3fa; background: transparent; font: inherit; font-size: .78rem; font-weight: 750; cursor: pointer; }
+.map-replay-sync:hover:not(:disabled) { border-color: rgb(48 217 204 / 75%); color: #30d9cc; }
+.map-replay-sync[aria-pressed='true'] { border-color: #30d9cc; color: #041724; background: #30d9cc; }
 .map-replay-progress { display: grid; min-width: 8rem; flex: 1; gap: .35rem; }
 .map-replay-progress span { font-size: .9rem; font-variant-numeric: tabular-nums; text-align: center; white-space: nowrap; }
 .map-replay-progress input { width: 100%; height: 4px; margin: 0; accent-color: #168af7; cursor: pointer; }
@@ -20,6 +23,7 @@
   .map-replay-button--play { width: 46px; height: 46px; }
   .map-replay-divider { height: 34px; }
   .map-replay-speed select { min-height: 36px; padding-right: 1.5rem; font-size: .78rem; }
+  .map-replay-sync { min-height: 36px; padding-inline: .65rem; font-size: .72rem; }
   .map-replay-progress { min-width: 0; }
   .map-replay-progress span { font-size: .74rem; }
   .map-replay-status { max-width: calc(100vw - 1.5rem); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -30,6 +34,7 @@
   .map-replay-button--play { width: 38px; height: 38px; }
   .map-replay-divider { display: none; }
   .map-replay-speed select { width: 46px; min-height: 32px; padding: 0 .2rem; }
+  .map-replay-sync { min-height: 32px; padding-inline: .4rem; font-size: .65rem; }
   .map-replay-progress { min-width: 4.25rem; }
   .map-replay-progress span { font-size: .62rem; }
 }

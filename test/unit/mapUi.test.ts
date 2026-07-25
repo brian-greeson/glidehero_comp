@@ -149,6 +149,8 @@ describe('refreshed map UI controls', () => {
     expect(html).toContain('data-competition-period-option="all-time" aria-pressed="false"');
     expect(html).toContain('data-competition-month-nav="previous" aria-label="Previous month">‹</button>');
     expect(html).toContain('class="map-desktop-replay"');
+    expect(html.match(/data-map-replay-sync/g)).toHaveLength(2);
+    expect(html).toContain('aria-label="Synchronize flight starts" aria-pressed="true" disabled');
     expect(html).toContain('aria-label="Viewport Leaderboard"');
     expect(html).toContain('class="map-leaderboard__scope">Viewport </span>Leaderboard');
     expect(html).not.toContain('<h2>Your Stats</h2>');

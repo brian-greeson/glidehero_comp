@@ -32,6 +32,7 @@ describe('map replay service', () => {
     const input = { month: '2026-08', west: -105, south: 39, east: -104, north: 40 } as const;
     const personal = await service.getReplay({ ...input, mode: 'personal', userId: a.userId });
     expect(personal.flights).toHaveLength(1);
+    expect(personal.flights[0]!.startOffsetMs).toBe(0);
     expect(personal.flights[0]!.points).toEqual([[-106, 39.5, 0], [-104, 39.5, 10_000], [-103, 39.5, 20_000]]);
     const fractionalViewport = await service.getReplay({
       month: '2026-08',
@@ -43,7 +44,13 @@ describe('map replay service', () => {
       north: 40.65739558460467,
     });
     expect(fractionalViewport.flights).toHaveLength(1);
-    expect((await service.getReplay({ ...input, mode: 'competitive', userId: a.userId })).flights).toHaveLength(3);
+    const competitive = await service.getReplay({ ...input, mode: 'competitive', userId: a.userId });
+    expect(competitive.flights).toHaveLength(3);
+    expect(competitive.flights.map((flight) => flight.startOffsetMs).sort((left, right) => left-right)).toEqual([
+      0,
+      24 * 60 * 60 * 1000,
+      2 * 24 * 60 * 60 * 1000,
+    ]);
     await database.db.insert(pilotFollows).values({ followerUserId: a.userId, followedUserId: b.userId });
     const following = await service.getReplay({ ...input, mode: 'following', userId: a.userId });
     expect(following.flights.map((flight) => flight.pilotUserId)).toEqual(expect.arrayContaining([a.userId, b.userId]));

@@ -171,6 +171,7 @@ describe('flight detail view', () => {
     expect(html).toContain('25 Unique Cells');
     expect(html).toContain('maplibre-gl@5.16.0');
     expect(html).toContain('/scripts/app-ui/flight.js');
+    expect(html).not.toContain('data-map-replay-sync');
 
     const emptyHtml = await createAuthenticatedPageRenderer()({
       ...shell,
