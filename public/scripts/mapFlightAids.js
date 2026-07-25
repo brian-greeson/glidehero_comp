@@ -1,14 +1,12 @@
 import { initializeMapGridOverlay } from './mapGridOverlay.js';
 import { initializeMapLocationTracker } from './mapLocationTracker.js';
-import { createMapTrailStore } from './mapTrailStore.js';
-import { initializeTrailLayers } from './mapTrailLayer.js';
+import { initializeMapPositionLayers } from './mapPositionLayer.js';
 
-function browserStorage(storage) {
-  if (storage !== undefined) return storage;
+function removeLegacySavedTrail() {
   try {
-    return window.localStorage;
+    globalThis.localStorage?.removeItem('glidehero.mapTrail.v1');
   } catch {
-    return null;
+    // Storage may be unavailable or blocked; the app no longer reads this data.
   }
 }
 
@@ -18,7 +16,6 @@ export function initializeMapFlightAids({
   documentRef = globalThis.document,
   fetchImpl = globalThis.fetch.bind(globalThis),
   navigatorRef = globalThis.navigator,
-  storage,
 }) {
   const statusElement = documentRef.querySelector('[data-map-flight-aid-status]');
   const status = (message = '') => {
@@ -26,16 +23,12 @@ export function initializeMapFlightAids({
     statusElement.textContent = message;
     statusElement.hidden = !message;
   };
-  const store = createMapTrailStore({
-    storage: browserStorage(storage),
-    onPersistenceError: () => status('Trail is visible, but new points cannot be saved.'),
-  });
-  initializeTrailLayers(map, store.snapshot());
+  removeLegacySavedTrail();
+  initializeMapPositionLayers(map);
   const location = initializeMapLocationTracker({
     map,
     documentRef,
     geolocation: navigatorRef?.geolocation,
-    store,
     status,
   });
   const grid = initializeMapGridOverlay({
@@ -47,6 +40,5 @@ export function initializeMapFlightAids({
   });
   map.addControl(grid.control, 'top-right');
   map.addControl(location.locationControl, 'top-right');
-  map.addControl(location.clearControl, 'top-right');
   return { grid, location };
 }

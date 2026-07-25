@@ -1,5 +1,5 @@
 import { createMapButtonControl } from './mapButtonControl.js';
-import { renderTrail, setCurrentPosition } from './mapTrailLayer.js';
+import { setCurrentPosition } from './mapPositionLayer.js';
 
 export const MAXIMUM_LOCATION_ACCURACY_METERS = 100;
 
@@ -7,13 +7,11 @@ export function initializeMapLocationTracker({
   map,
   documentRef = document,
   geolocation,
-  store,
   status = () => {},
 }) {
   let watchId = null;
   let following = false;
   let lastPosition = null;
-  let breakBeforeNextPoint = true;
 
   function updateLocationControl(label, pressed) {
     locationControl.setLabel(label);
@@ -24,8 +22,6 @@ export function initializeMapLocationTracker({
     if (watchId !== null) geolocation?.clearWatch?.(watchId);
     watchId = null;
     following = false;
-    breakBeforeNextPoint = true;
-    store.closeSegment();
     setCurrentPosition(map, null);
     updateLocationControl('Start location tracking', false);
     if (message) status(message);
@@ -36,14 +32,9 @@ export function initializeMapLocationTracker({
     const { longitude, latitude, accuracy } = position.coords;
     if (![longitude, latitude, accuracy].every(Number.isFinite)
       || accuracy > MAXIMUM_LOCATION_ACCURACY_METERS) return;
-    if (breakBeforeNextPoint) store.startSegment();
-    breakBeforeNextPoint = false;
-    const point = { longitude, latitude, timestamp: position.timestamp };
-    store.append(point);
+    const point = { longitude, latitude };
     lastPosition = point;
-    renderTrail(map, store.snapshot());
     setCurrentPosition(map, point);
-    clearControl.setHidden(false);
     status('');
     if (following) map.easeTo({ center: [longitude, latitude], duration: 0 });
   }
@@ -55,7 +46,6 @@ export function initializeMapLocationTracker({
     }
     status('');
     following = true;
-    breakBeforeNextPoint = true;
     watchId = geolocation.watchPosition(
       acceptPosition,
       (error) => stopTracking(error?.code === 1
@@ -82,50 +72,27 @@ export function initializeMapLocationTracker({
     stopTracking();
   }
 
-  function clearTrail() {
-    const removed = store.clear();
-    renderTrail(map, store.snapshot());
-    clearControl.setHidden(removed);
-    if (!removed) status('Unable to remove the saved trail from this browser.');
-  }
-
   const locationControl = createMapButtonControl({
     documentRef,
     label: 'Start location tracking',
     symbol: '◎',
     onClick: toggleLocation,
   });
-  const clearControl = createMapButtonControl({
-    documentRef,
-    label: 'Clear trail',
-    symbol: '⌫',
-    onClick: clearTrail,
-  });
-  clearControl.setHidden(!store.hasPoints());
 
   const onDragStart = () => {
     if (watchId === null) return;
     following = false;
     updateLocationControl('Resume following location', false);
   };
-  const onVisibilityChange = () => {
-    if (!documentRef.hidden || watchId === null) return;
-    store.closeSegment();
-    breakBeforeNextPoint = true;
-  };
   map.on('dragstart', onDragStart);
-  documentRef.addEventListener?.('visibilitychange', onVisibilityChange);
 
   return {
     locationControl,
-    clearControl,
     toggleLocation,
-    clearTrail,
     stopTracking,
     destroy() {
       stopTracking();
       map.off?.('dragstart', onDragStart);
-      documentRef.removeEventListener?.('visibilitychange', onVisibilityChange);
     },
   };
 }
