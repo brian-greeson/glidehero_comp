@@ -15,6 +15,7 @@ function element(dataset: Record<string, string> = {}) {
   return {
     dataset,
     hidden: true,
+    disabled: false,
     textContent: '',
     addEventListener: vi.fn((name: string, listener: () => void) => {
       listeners.set(name, listener);
@@ -36,7 +37,12 @@ function mapHarness() {
       sources.set(id, { ...source, setData: vi.fn() });
     }),
     addLayer: vi.fn((layer: any) => layers.push(layer)),
+    getLayer: vi.fn((id: string) => layers.find((layer) => layer.id === id)),
+    removeLayer: vi.fn((id: string) => { const index = layers.findIndex((layer) => layer.id === id); if (index >= 0) layers.splice(index, 1); }),
+    removeSource: vi.fn((id: string) => sources.delete(id)),
     getSource: vi.fn((id: string) => sources.get(id)),
+    getPaintProperty: vi.fn(),
+    setPaintProperty: vi.fn(),
     fitBounds: vi.fn(),
     once: vi.fn((name: string, handler: any) => {
       if (name === 'load') loadHandler = handler;
@@ -56,16 +62,33 @@ function mapHarness() {
   };
 }
 
+function replayElements() {
+  return {
+    open: element(),
+    panel: element(),
+    status: element(),
+    play: element(),
+    label: element(),
+    icon: element(),
+    close: element(),
+    slider: element(),
+    elapsed: element(),
+    speed: element(),
+  };
+}
+
 describe('flight detail map', () => {
   it('normalizes missing optional GeoJSON and score entries', () => {
     const normalized = normalizeFlightDetailPayload({
       track: feature('LineString', [[-105, 39], [-104, 40]]),
+      replay: { durationMs: 1000, points: [[-105, 39, 0]] },
       scores: { fivePoint: { legs: feature('LineString', [[-105, 39], [-104, 40]]) } },
     });
 
     expect(normalized.directCells).toEqual(emptyGeoJson);
     expect(normalized.scores.fivePoint.turnpoints).toEqual(emptyGeoJson);
     expect(normalized.scores.threePoint).toBeUndefined();
+    expect(normalized.replay?.points).toEqual([[-105, 39, 0]]);
   });
 
   it('chooses a deterministic palette color with the greatest contrast', () => {
@@ -222,5 +245,78 @@ describe('flight detail map', () => {
     expect(controller?.selectedKey).toBe('track');
     expect(status.hidden).toBe(false);
     expect(status.textContent).toBe('Unable to load this flight map. Try again.');
+  });
+
+  it('initializes flight replay paused, preserves static sources, and cleans up on close', async () => {
+    const harness = mapHarness();
+    const replayDom = replayElements();
+    const mapElement = element({ mapStyleUrl: '/map-style.json', mapDataUrl: '/flights/flight-1/map' });
+    const status = element();
+    const trackGeoJson = feature('LineString', [[-105, 39], [-104, 40]]);
+    const payload = {
+      track: trackGeoJson,
+      replay: { flightId: 'flight-1', pilotUserId: 'pilot-1', points: [[-105, 39, 0], [-104, 40, 1000]], durationMs: 1000 },
+    };
+    const fetchImpl = vi.fn(async () => new Response(JSON.stringify(payload), { status: 200 }));
+    const replayBySelector: Record<string, any[]> = {
+      '[data-map-replay-open]': [replayDom.open], '[data-map-replay-panel]': [replayDom.panel],
+      '[data-map-replay-status]': [replayDom.status], '[data-map-replay-play]': [replayDom.play],
+      '[data-map-replay-play-label]': [replayDom.label], '[data-map-replay-play-icon]': [replayDom.icon],
+      '[data-map-replay-close]': [replayDom.close], '[data-map-replay-slider]': [replayDom.slider],
+      '[data-map-replay-elapsed]': [replayDom.elapsed], '[data-map-replay-speed]': [replayDom.speed],
+    };
+    const documentRef = {
+      querySelector: (selector: string) => new Map<string, any>([
+        ['[data-flight-detail-map]', mapElement], ['[data-flight-map-status]', status], ['[data-map-replay]', mapElement],
+      ]).get(selector) ?? null,
+      querySelectorAll: (selector: string) => selector === '[data-flight-map-distance]' ? [] : (replayBySelector[selector] ?? []),
+    };
+    const controller = initializeFlightDetailMap({ documentRef, maplibre: harness.maplibre, fetchImpl });
+    expect(replayDom.open.disabled).toBe(true);
+    await harness.load();
+    expect(controller?.replayControls).toBeDefined();
+    expect(replayDom.open.disabled).toBe(false);
+    expect(replayDom.play.disabled).toBe(true);
+
+    replayDom.open.click();
+    await Promise.resolve();
+    expect(replayDom.panel.hidden).toBe(false);
+    expect(replayDom.play.disabled).toBe(false);
+    expect(replayDom.label.textContent).toBe('Play');
+    expect(harness.map.getPaintProperty).not.toHaveBeenCalled();
+    expect(harness.sources.get(FLIGHT_DETAIL_SOURCE_IDS.track).setData).not.toHaveBeenCalled();
+    expect(harness.sources.get('map-replay-tracks').setData).toHaveBeenCalled();
+    expect(harness.layers.find((layer) => layer.id === 'map-replay-tracks-line')).toBeDefined();
+
+    replayDom.close.click();
+    expect(replayDom.panel.hidden).toBe(true);
+    expect(harness.sources.has('map-replay-tracks')).toBe(false);
+    expect(harness.sources.has(FLIGHT_DETAIL_SOURCE_IDS.track)).toBe(true);
+  });
+
+  it('keeps replay controls disabled and reports unavailable when replay payload is missing', async () => {
+    const harness = mapHarness();
+    const replayDom = replayElements();
+    const mapElement = element({ mapStyleUrl: '/map-style.json', mapDataUrl: '/flights/flight-1/map' });
+    const status = element();
+    const fetchImpl = vi.fn(async () => new Response(JSON.stringify({ track: emptyGeoJson }), { status: 200 }));
+    const replayBySelector: Record<string, any[]> = {
+      '[data-map-replay-open]': [replayDom.open], '[data-map-replay-panel]': [replayDom.panel], '[data-map-replay-status]': [replayDom.status],
+      '[data-map-replay-play]': [replayDom.play], '[data-map-replay-play-label]': [replayDom.label], '[data-map-replay-play-icon]': [replayDom.icon],
+      '[data-map-replay-close]': [replayDom.close], '[data-map-replay-slider]': [replayDom.slider], '[data-map-replay-elapsed]': [replayDom.elapsed], '[data-map-replay-speed]': [replayDom.speed],
+    };
+    const documentRef = {
+      querySelector: (selector: string) => selector === '[data-flight-detail-map]' ? mapElement : (selector === '[data-flight-map-status]' ? status : mapElement),
+      querySelectorAll: (selector: string) => selector === '[data-flight-map-distance]' ? [] : (replayBySelector[selector] ?? []),
+    };
+    initializeFlightDetailMap({ documentRef, maplibre: harness.maplibre, fetchImpl });
+    expect(replayDom.open.disabled).toBe(true);
+    await harness.load();
+    expect(replayDom.open.disabled).toBe(true);
+    replayDom.open.click();
+    await Promise.resolve();
+    expect(replayDom.status.textContent).toBe('Replay unavailable.');
+    expect(replayDom.play.disabled).toBe(true);
+    expect(harness.sources.has('map-replay-tracks')).toBe(false);
   });
 });

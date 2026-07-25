@@ -1,3 +1,7 @@
+import { createMapReplayTimeline } from './mapReplayTimeline.js';
+import { installMapReplayLayer } from './mapReplayLayer.js';
+import { initializeReplayControls } from './replayControlsController.js';
+
 export const FLIGHT_DETAIL_SOURCE_IDS = Object.freeze({
   directCells: 'flight-detail-direct-cells',
   enclosedCells: 'flight-detail-enclosed-cells',
@@ -51,6 +55,7 @@ const EMPTY_FEATURE_COLLECTION = Object.freeze({
  */
 export function normalizeFlightDetailPayload(payload = {}) {
   const source = payload && typeof payload === 'object' ? payload : {};
+  const replay = source.replay && typeof source.replay === 'object' ? source.replay : null;
   const scores = {};
   for (const key of FLIGHT_DETAIL_SCORE_KEYS) {
     const score = source.scores?.[key];
@@ -68,6 +73,7 @@ export function normalizeFlightDetailPayload(payload = {}) {
     launch: source.launch ?? EMPTY_FEATURE_COLLECTION,
     landing: source.landing ?? EMPTY_FEATURE_COLLECTION,
     scores,
+    replay: replay ? { ...replay, points: Array.isArray(replay.points) ? replay.points : [] } : null,
   };
 }
 
@@ -305,6 +311,10 @@ export function initializeFlightDetailMap({
   const buttons = [
     ...(documentRef.querySelectorAll?.('[data-flight-map-distance]') ?? []),
   ];
+  const replayEntries = [
+    ...(documentRef.querySelectorAll?.('[data-map-replay-open]') ?? []),
+  ];
+  replayEntries.forEach((entry) => { entry.disabled = true; });
   if (!mapElement) return;
 
   function setStatus(message = '') {
@@ -322,6 +332,7 @@ export function initializeFlightDetailMap({
   let selectedKey = 'track';
   let ready = false;
   let map;
+  let replayControls;
 
   function renderSelection(requestedKey) {
     const key = ready
@@ -366,6 +377,27 @@ export function initializeFlightDetailMap({
         if (bounds) {
           map.fitBounds(bounds, { padding: 48, maxZoom: 14, duration: 0 });
         }
+        replayControls = initializeReplayControls({
+          documentRef,
+          onOpen: ({ setTimeline, setStatus, isCurrent }) => {
+            const replay = payload.replay;
+            if (!replay || !Array.isArray(replay.points) || replay.points.length === 0) {
+              setStatus('Replay unavailable.');
+              return;
+            }
+            if (!isCurrent()) return;
+            const layer = installMapReplayLayer(map, { dimLayerIds: [], colorForPilot: () => chooseContrastingTrackColor(payload.territoryColor ?? mapElement.dataset.territoryColor) });
+            const timeline = createMapReplayTimeline({ flights: [replay] });
+            const originalDestroy = timeline.destroy;
+            timeline.destroy = () => { layer.close?.(); originalDestroy(); };
+            timeline.subscribe((state) => layer.update(state));
+            setTimeline(timeline);
+            setStatus('Replay ready.');
+          },
+        });
+        if (payload.replay?.points?.length) {
+          replayEntries.forEach((entry) => { entry.disabled = false; });
+        }
         setStatus('');
       } catch {
         setStatus('Unable to load this flight map. Try again.');
@@ -382,5 +414,8 @@ export function initializeFlightDetailMap({
       return selectedKey;
     },
     selectDistance: renderSelection,
+    get replayControls() {
+      return replayControls;
+    },
   };
 }

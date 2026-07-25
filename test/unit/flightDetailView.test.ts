@@ -93,6 +93,58 @@ describe('flight detail view', () => {
     ]);
     expect(payload.scores.fivePoint?.turnpoints.features[0]?.properties).toEqual({});
     expect(payload.scores.threePoint).toBeUndefined();
+    expect(payload.replay).toEqual({
+      flightId,
+      pilotUserId: ownerId,
+      durationMs: 600_000,
+      points: [[-105, 40, 0], [-104.9, 40.1, 600_000]],
+    });
+  });
+
+  it('keeps ordered points and clamps invalid or duplicate timestamps in replay data', () => {
+    const payload = createFlightMapPayload(summary, {
+      ...mapData,
+      track: [
+        { ...mapData.track[0]!, recordedAt: new Date('invalid') },
+        { ...mapData.track[0]!, longitude: -104.8, recordedAt: new Date('2026-07-23T14:00:00.000Z') },
+        { ...mapData.track[0]!, longitude: -104.7, recordedAt: new Date('2026-07-23T14:00:00.000Z') },
+        { ...mapData.track[0]!, longitude: -104.6, recordedAt: new Date('2026-07-23T14:05:00.000Z') },
+      ],
+    });
+    expect(payload.replay).toEqual({
+      flightId,
+      pilotUserId: ownerId,
+      durationMs: 300_000,
+      points: [
+        [-105, 40, 0],
+        [-104.8, 40, 0],
+        [-104.7, 40, 0],
+        [-104.6, 40, 300_000],
+      ],
+    });
+  });
+
+  it('clamps backward timestamps and preserves duration when the final timestamp is invalid', () => {
+    const payload = createFlightMapPayload(summary, {
+      ...mapData,
+      track: [
+        { ...mapData.track[0]!, recordedAt: new Date('2026-07-23T14:00:00.000Z') },
+        { ...mapData.track[0]!, longitude: -104.8, recordedAt: new Date('2026-07-23T14:05:00.000Z') },
+        { ...mapData.track[0]!, longitude: -104.7, recordedAt: new Date('2026-07-23T14:02:00.000Z') },
+        { ...mapData.track[0]!, longitude: -104.6, recordedAt: new Date('invalid') },
+      ],
+    });
+    expect(payload.replay).toEqual({
+      flightId,
+      pilotUserId: ownerId,
+      durationMs: 300_000,
+      points: [
+        [-105, 40, 0],
+        [-104.8, 40, 300_000],
+        [-104.7, 40, 300_000],
+        [-104.6, 40, 300_000],
+      ],
+    });
   });
 
   it('renders MapLibre assets, accessible loading state, disabled missing scores, and all achievements', async () => {

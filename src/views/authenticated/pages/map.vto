@@ -19,7 +19,7 @@
         {{ include "authenticated/components/mapLeaderboard.vto" { compact: true } }}
       {{ /if }}
       {{ include "authenticated/components/mapMobileControls.vto" { mode, period } }}
-      <div data-map-replay class="map-mobile-replay"><button type="button" data-map-replay-open aria-controls="map-replay-panel-mobile" aria-expanded="false">Replay</button>{{ include "authenticated/components/mapReplayControls.vto" { panelId: "map-replay-panel-mobile", showSkip: false } }}</div>
+      <div data-map-replay class="map-mobile-replay"><button type="button" data-map-replay-open aria-controls="map-replay-panel-mobile" aria-expanded="false">Replay</button>{{ include "authenticated/components/mapReplayControls.vto" { panelId: "map-replay-panel-mobile" } }}</div>
     </section>
   </section>
 {{ /layout }}

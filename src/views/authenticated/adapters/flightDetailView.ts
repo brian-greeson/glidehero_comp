@@ -138,6 +138,16 @@ export function createFlightMapPayload(summary: FlightDetailSummary, mapData: Fl
     const score = summary.scores?.[key];
     if (score) scores[key] = scoreGeoJson(score);
   }
+  let firstTimestamp: number | undefined;
+  let previousElapsedMs = 0;
+  const replayPoints = mapData.track.map((point) => {
+    const timestamp = point.recordedAt.getTime();
+    if (Number.isFinite(timestamp)) {
+      firstTimestamp ??= timestamp;
+      previousElapsedMs = Math.max(previousElapsedMs, timestamp - firstTimestamp);
+    }
+    return [point.longitude, point.latitude, previousElapsedMs] as [number, number, number];
+  });
   return {
     territoryColor: summary.territoryColor,
     directCells: mapData.directCells,
@@ -153,5 +163,11 @@ export function createFlightMapPayload(summary: FlightDetailSummary, mapData: Fl
     launch: pointFeature(mapData.launch),
     landing: pointFeature(mapData.landing),
     scores,
+    replay: {
+      flightId: summary.id,
+      pilotUserId: summary.ownerUserId,
+      durationMs: replayPoints.at(-1)?.[2] ?? 0,
+      points: replayPoints,
+    },
   };
 }
