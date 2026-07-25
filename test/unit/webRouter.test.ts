@@ -758,7 +758,7 @@ describe('webRouter', () => {
         headers: { cookie: 'glidehero_session=valid-token' },
       });
       expect(authenticated.status).toBe(302);
-      expect(authenticated.headers.get('location')).toBe('/personal');
+      expect(authenticated.headers.get('location')).toBe('/activity');
     });
   });
 

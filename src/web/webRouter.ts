@@ -799,7 +799,7 @@ export function createWebRouter(dependencies: {
 
   router.get('/', async (req, res) => {
     if (res.locals.currentUser) {
-      res.redirect(302, '/personal');
+      res.redirect(302, '/activity');
       return;
     }
     await render(res, dependencies.renderPage, 200, {

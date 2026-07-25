@@ -43,7 +43,8 @@ function uploadHarness(initialTotal, fetchImplementation) {
     ['[data-upload-trigger]', element()], ['[data-upload-close]', element()],
     ['[data-upload-dialog]', element()], ['[data-upload-list]', element()], ['[data-upload-overall]', element()],
     ['[data-upload-failures]', element()], ['[data-upload-progress-state]', element()],
-    ['[data-processing-state]', element()], ['[data-flight-progress-bar]', element()],
+    ['[data-processing-state]', element()], ['[data-processing-message]', element()],
+    ['[data-flight-progress-bar]', element()],
   ]);
   selectors.get('[data-upload-failures]').hidden = true;
   selectors.get('[data-processing-state]').hidden = true;
@@ -56,7 +57,7 @@ function uploadHarness(initialTotal, fetchImplementation) {
   const windowRef = {
     setTimeout(callback, delay) { callback.delay = delay; timers.push(callback); return callback; },
     clearTimeout(timer) { const index = timers.indexOf(timer); if (index >= 0) timers.splice(index, 1); },
-    location: { reload: vi.fn() },
+    location: { assign: vi.fn(), reload: vi.fn() },
     alert: vi.fn(),
   };
   let progressTotal = initialTotal;
@@ -377,7 +378,7 @@ describe('flight upload active-file capacity', () => {
   //   expect(harness.windowRef.alert).not.toHaveBeenCalled();
   // });
 
-  it('keeps the modal open after successful uploads and accepts more files without reloading', async () => {
+  it('redirects a successful upload batch to activity after three seconds', async () => {
     const harness = uploadHarness(0);
 
     harness.select(harness.uploadInput, files(1, 'first'));
@@ -385,17 +386,17 @@ describe('flight upload active-file capacity', () => {
     harness.xhr.instances[0].succeed();
     await vi.waitFor(() => expect(harness.selectors.get('[data-upload-overall]').textContent).toBe('1/1'));
     expect(harness.selectors.get('[data-upload-dialog]').open).toBe(true);
-    expect(harness.timers.some((timer) => timer.delay === 500)).toBe(false);
-    expect(harness.windowRef.location.reload).not.toHaveBeenCalled();
+    expect(harness.selectors.get('[data-processing-message]').textContent).toBe(
+      'Upload successful, this dialog will close in 3 seconds.',
+    );
+    const redirectTimer = harness.timers.find((timer) => timer.delay === 3_000);
+    expect(redirectTimer).toBeDefined();
+    expect(harness.windowRef.location.assign).not.toHaveBeenCalled();
 
-    harness.select(harness.uploadMoreInput, files(1, 'second'));
+    redirectTimer();
 
-    await vi.waitFor(() => expect(harness.xhr.instances).toHaveLength(2));
-    harness.xhr.instances[1].succeed();
-    await vi.waitFor(() => expect(harness.selectors.get('[data-upload-overall]').textContent).toBe('2/2'));
-    expect(harness.selectors.get('[data-upload-dialog]').open).toBe(true);
-    expect(harness.timers.some((timer) => timer.delay === 500)).toBe(false);
-    expect(harness.windowRef.location.reload).not.toHaveBeenCalled();
+    expect(harness.selectors.get('[data-upload-dialog]').open).toBe(false);
+    expect(harness.windowRef.location.assign).toHaveBeenCalledWith('/activity');
   });
 
   it('uses one file-count bar and replaces it with processing state after all attempts finish', async () => {
@@ -435,6 +436,7 @@ describe('flight upload active-file capacity', () => {
     harness.selectors.get('[data-upload-trigger]').dispatch('click');
     await vi.waitFor(() => expect(harness.selectors.get('[data-processing-state]').hidden).toBe(false));
     expect(harness.selectors.get('[data-upload-progress-state]').hidden).toBe(true);
+    expect(harness.selectors.get('[data-processing-message]').textContent).toBe('Flights are processing in the background.');
   });
 
   it('shows a new local upload bar while older server work is processing', async () => {
@@ -467,7 +469,8 @@ describe('flight upload active-file capacity', () => {
     expect(failedList.append).toHaveBeenCalledOnce();
     expect(failedList.append.mock.calls[0][0].textContent).toBe('mixed-1.igc: Object upload failed.');
     expect(failures.hidden).toBe(false);
-    expect(harness.selectors.get('[data-processing-state]').hidden).toBe(false);
+    expect(harness.selectors.get('[data-processing-state]').hidden).toBe(true);
+    expect(harness.timers.some((timer) => timer.delay === 3_000)).toBe(false);
   });
 
   it('keeps the upload modal open when an upload fails', async () => {
@@ -479,8 +482,8 @@ describe('flight upload active-file capacity', () => {
 
     await vi.waitFor(() => expect(harness.selectors.get('[data-upload-overall]').textContent).toBe('1/1'));
     expect(harness.selectors.get('[data-upload-dialog]').open).toBe(true);
-    expect(harness.timers.some((timer) => timer.delay === 500)).toBe(false);
-    expect(harness.windowRef.location.reload).not.toHaveBeenCalled();
+    expect(harness.timers.some((timer) => timer.delay === 3_000)).toBe(false);
+    expect(harness.windowRef.location.assign).not.toHaveBeenCalled();
   });
 });
 
@@ -495,6 +498,8 @@ describe('flight ZIP uploads', () => {
 
     expect(template).toContain('data-upload-more-input type="file" multiple');
     expect(template).not.toContain('accept=');
+    expect(template).toContain('Upload successful, this dialog will close in 3 seconds.');
+    expect(template).not.toContain('flight-processing-spinner');
   });
 
   it('rejects unsupported files after selection', async () => {

@@ -4,6 +4,7 @@ const MAX_ACTIVE_FILES = 1_000;
 const MAX_FILE_BYTES = 100 * 1024 * 1024;
 const CONCURRENCY = 4;
 const PROGRESS_POLL_INTERVAL_MS = 5_000;
+const SUCCESS_REDIRECT_DELAY_MS = 3_000;
 
 function putFile(url, file) {
   return new Promise((resolve, reject) => {
@@ -34,15 +35,17 @@ export function initializeFlightUploads(documentRef = document, windowRef = glob
   const uploadFailures = documentRef.querySelector('[data-upload-failures]');
   const uploadProgressState = documentRef.querySelector('[data-upload-progress-state]');
   const processingState = documentRef.querySelector('[data-processing-state]');
+  const processingMessage = documentRef.querySelector('[data-processing-message]');
   const overall = documentRef.querySelector('[data-upload-overall]');
   const progressBar = documentRef.querySelector('[data-flight-progress-bar]');
-  if (!windowRef || !uploadTrigger || !uploadDialog || !uploadList || !uploadFailures || !uploadProgressState || !processingState || !overall || !progressBar) return;
+  if (!windowRef || !uploadTrigger || !uploadDialog || !uploadList || !uploadFailures || !uploadProgressState || !processingState || !processingMessage || !overall || !progressBar) return;
   const inputs = [...documentRef.querySelectorAll('[data-upload-more-input]')];
 
   const pending = [];
   let running = 0;
   let settled = 0;
   let selected = 0;
+  let failed = 0;
   let serverTotal = 0;
   let serverFinished = 0;
   let serverWorkActive = false;
@@ -56,6 +59,7 @@ export function initializeFlightUploads(documentRef = document, windowRef = glob
   let initialProgressResolved = false;
   let progressPollTimer = null;
   let progressRequestId = 0;
+  let successRedirectTimer = null;
 
   function updateUploadTrigger() {
     const localWorkActive = selected > settled || currentReservations.size > 0;
@@ -67,9 +71,24 @@ export function initializeFlightUploads(documentRef = document, windowRef = glob
     progressBar.max = Math.max(selected, 1);
     progressBar.value = settled;
     const localUploadsActive = selected > settled;
-    const processing = !localUploadsActive && (serverWorkActive || (selected > 0 && settled === selected));
+    const localUploadsSuccessful = selected > 0
+      && settled === selected
+      && failed === 0
+      && running === 0
+      && pending.length === 0;
+    const processing = !localUploadsActive && failed === 0 && (serverWorkActive || localUploadsSuccessful);
     uploadProgressState.hidden = processing;
     processingState.hidden = !processing;
+    processingMessage.textContent = localUploadsSuccessful
+      ? 'Upload successful, this dialog will close in 3 seconds.'
+      : 'Flights are processing in the background.';
+    if (localUploadsSuccessful && successRedirectTimer === null) {
+      successRedirectTimer = windowRef.setTimeout(() => {
+        successRedirectTimer = null;
+        if (uploadDialog.open) uploadDialog.close();
+        windowRef.location.assign('/activity');
+      }, SUCCESS_REDIRECT_DELAY_MS);
+    }
     updateUploadTrigger();
   }
 
@@ -117,6 +136,7 @@ export function initializeFlightUploads(documentRef = document, windowRef = glob
       const item = pending.shift();
       running += 1;
       void upload(item).catch(async (error) => {
+        failed += 1;
         appendFailedUpload(item.file, error);
         await releaseFailedUpload(item);
       }).finally(() => {
@@ -134,6 +154,10 @@ export function initializeFlightUploads(documentRef = document, windowRef = glob
     if (valid.length > MAX_ACTIVE_FILES - accountedTotal) {
       windowRef.alert(`You can have at most ${MAX_ACTIVE_FILES} active flight uploads.`);
       return;
+    }
+    if (successRedirectTimer !== null) {
+      windowRef.clearTimeout?.(successRedirectTimer);
+      successRedirectTimer = null;
     }
     for (const file of valid) {
       const item = { file };
