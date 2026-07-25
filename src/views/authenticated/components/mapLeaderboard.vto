@@ -1,10 +1,15 @@
 <section class="{{ if typeof compact !== 'undefined' && compact }}map-leaderboard map-leaderboard--coverage map-leaderboard--compact{{ else }}map-control-group map-leaderboard map-leaderboard--coverage{{ /if }}" data-territory-leaderboard data-territory-leaderboard-variant="{{ if typeof compact !== 'undefined' && compact }}compact{{ else }}full{{ /if }}" aria-busy="true">
   <header class="map-leaderboard__heading">
-    <h2>{{ if typeof compact !== 'undefined' && compact }}{{ include "authenticated/components/icon.vto" { name: "trophy" } }}{{ /if }}Viewport Leaderboard</h2>
-    <button type="button" data-territory-allpilots aria-pressed="true">Show All{{ if typeof compact !== 'undefined' && compact }}{{ include "authenticated/components/icon.vto" { name: "chevron-right" } }}{{ /if }}</button>
+    <h2 aria-label="Viewport Leaderboard">{{ include "authenticated/components/icon.vto" { name: "trophy" } }}<span><span class="map-leaderboard__scope">Viewport </span>Leaderboard</span></h2>
+    <button type="button" data-territory-allpilots aria-pressed="true"><span>Show All</span>{{ include "authenticated/components/icon.vto" { name: "chevron-right" } }}</button>
   </header>
   <p class="leaderboard-status" data-territory-status aria-live="polite">Loading coverage…</p>
-  <div class="coverage-table" role="table" aria-label="Coverage leaders"><div data-territory-list role="rowgroup"></div></div>
+  <div class="coverage-table" role="table" aria-label="Coverage leaders">
+    {{ if typeof compact === 'undefined' || !compact }}
+      <div class="coverage-table__columns" role="row"><span role="columnheader">Pilot</span><span role="columnheader">Cells</span><span role="columnheader">Area</span></div>
+    {{ /if }}
+    <div data-territory-list role="rowgroup"></div>
+  </div>
   {{ if typeof compact === 'undefined' || !compact }}
     <div class="current-pilot-result" data-territory-current-pilot hidden></div>
   {{ /if }}

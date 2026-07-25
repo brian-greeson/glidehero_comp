@@ -10,9 +10,7 @@
   <section class="map-control-group">
     <h2>Time Range</h2>
     <div class="map-desktop-period-controls" data-segmented-control role="group" aria-label="Time range">
-      {{ if mode !== 'personal' }}
-        <button type="button" data-competition-period-option="all-time" aria-pressed="{{ if period === 'all-time' }}true{{ else }}false{{ /if }}">{{ include "authenticated/components/icon.vto" { name: "calendar" } }}<span>All Time</span></button>
-      {{ /if }}
+      <button type="button" data-competition-period-option="all-time" aria-pressed="{{ if period === 'all-time' }}true{{ else }}false{{ /if }}">{{ include "authenticated/components/icon.vto" { name: "calendar" } }}<span>All Time</span></button>
       <div class="map-desktop-month-control">
         <button type="button" data-competition-period-option="current-month" aria-pressed="{{ if period === 'current-month' }}true{{ else }}false{{ /if }}"><span data-current-month-option>Current Month</span></button>
         <div class="map-month-navigation" role="group" aria-label="Month navigation">

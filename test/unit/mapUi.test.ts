@@ -48,6 +48,10 @@ describe('refreshed map UI controls', () => {
     expect(competitive).toContain('data-territory-leaderboard-variant="full"');
     expect(competitive).toContain('data-territory-leaderboard-variant="compact"');
     expect(competitive).toContain('map-leaderboard--compact');
+    expect(competitive).toContain('class="coverage-table__columns"');
+    expect(competitive).toContain('<span role="columnheader">Pilot</span>');
+    expect(competitive).toContain('<span role="columnheader">Cells</span>');
+    expect(competitive).toContain('<span role="columnheader">Area</span>');
 
     const personal = await render(mapModel('personal'));
     expect(personal).not.toContain('data-territory-leaderboard');
@@ -64,6 +68,11 @@ describe('refreshed map UI controls', () => {
     expect(css).toContain(`rgb(255 255 255 / var(${opacityVariable}))`);
     expect(css).toContain('.map-leaderboard--compact { display: none; }');
     expect(css).toContain('.map-mobile-replay { display: none; }');
+    expect(css).toContain('.map-mode-control { grid-template-columns: 1fr; }');
+    expect(css).toContain('.map-stage .maplibregl-ctrl-group');
+    expect(css).toContain('@media (min-width: 901px) and (max-width: 1050px)');
+    expect(css).toContain('.app-ui-body--map .desktop-navigation__item { min-width: 96px;');
+    expect(css).toContain("@media (prefers-reduced-motion: reduce)");
 
     const mobileRules = css.slice(css.indexOf('@media (max-width: 900px)'));
     expect(mobileRules).toContain('.map-leaderboard--compact { position: absolute;');
@@ -137,9 +146,29 @@ describe('refreshed map UI controls', () => {
     expect(html).toContain('>All Pilots</span>');
     expect(html).toContain('class="map-desktop-period-controls"');
     expect(html).toContain('class="map-desktop-month-control"');
+    expect(html).toContain('data-competition-period-option="all-time" aria-pressed="false"');
     expect(html).toContain('data-competition-month-nav="previous" aria-label="Previous month">‹</button>');
     expect(html).toContain('class="map-desktop-replay"');
+    expect(html).toContain('aria-label="Viewport Leaderboard"');
+    expect(html).toContain('class="map-leaderboard__scope">Viewport </span>Leaderboard');
     expect(html).not.toContain('<h2>Your Stats</h2>');
+  });
+
+  it('offers All Time in the desktop Personal sidebar as well as mobile', async () => {
+    const render = createAuthenticatedPageRenderer();
+    const html = await render({
+      ...createAuthenticatedShellModel({ page: 'map' as const, user: { displayName: 'Pilot' }, mapHref: '/personal' }),
+      page: 'map' as const,
+      mode: 'personal',
+      period: 'current-month' as const,
+      location: 'Personal Map',
+      metrics: [],
+      leaderboard: [],
+    });
+    const sidebar = html.match(/<aside class="map-sidebar"[\s\S]*?<\/aside>/)?.[0];
+
+    expect(sidebar).toContain('data-competition-period-option="all-time" aria-pressed="false"');
+    expect(sidebar).toContain('data-competition-period-option="current-month" aria-pressed="true"');
   });
 
   it('turns period controls into links that preserve map URL state', () => {
