@@ -13,12 +13,12 @@ describe('map replay timeline', () => {
       ], now: () => clock, requestAnimationFrame: (cb: (time: number) => void) => { const id = next++; callbacks.set(id, cb); return id; }, cancelAnimationFrame: (id: number) => callbacks.delete(id),
     });
     expect(timeline.snapshot().rate).toBe(60);
-    expect(timeline.snapshot().synchronized).toBe(true);
+    expect(timeline.snapshot()).toMatchObject({ synchronized: false, duration: 5500 });
     timeline.setRate(1);
     timeline.play(); clock = 250; callbacks.get(1)?.(clock); 
     expect(timeline.snapshot().flights[0].marker).toEqual([2.5, 0]);
-    expect(timeline.snapshot().flights[1].marker).toEqual([5, 7.5]);
-    timeline.pause(); timeline.seek(1000); expect(timeline.snapshot().finished).toBe(true);
+    expect(timeline.snapshot().flights[1].marker).toBeNull();
+    timeline.pause(); timeline.seek(5500); expect(timeline.snapshot().finished).toBe(true);
     timeline.play(); expect(timeline.snapshot().elapsedMs).toBe(0);
   });
 
@@ -60,7 +60,6 @@ describe('map replay timeline', () => {
       { flightId: 'single', pilotUserId: 'r', startOffsetMs: 1100, durationMs: 0, points: [[5, 5, 0]] },
     ] });
 
-    timeline.setSynchronized(false);
     expect(timeline.snapshot()).toMatchObject({ synchronized: false, elapsedMs: 0, duration: 1200, playing: false });
     timeline.seek(999);
     expect(timeline.snapshot().flights[1]).toMatchObject({ track: [], marker: null, completed: false });
@@ -87,11 +86,11 @@ describe('map replay timeline', () => {
     timeline.play();
     callback?.(1);
     expect(timeline.snapshot().elapsedMs).toBeGreaterThan(0);
-    timeline.setSynchronized(false);
-    expect(timeline.snapshot()).toMatchObject({ synchronized: false, elapsedMs: 0, duration: 1100, playing: false, finished: false });
-    expect(cancelled).toBe(1);
-    timeline.seek(500);
     timeline.setSynchronized(true);
     expect(timeline.snapshot()).toMatchObject({ synchronized: true, elapsedMs: 0, duration: 100, playing: false, finished: false });
+    expect(cancelled).toBe(1);
+    timeline.seek(50);
+    timeline.setSynchronized(false);
+    expect(timeline.snapshot()).toMatchObject({ synchronized: false, elapsedMs: 0, duration: 1100, playing: false, finished: false });
   });
 });

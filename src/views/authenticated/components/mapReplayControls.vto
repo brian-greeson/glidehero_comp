@@ -7,7 +7,7 @@
     </button>
     <span class="map-replay-divider" aria-hidden="true"></span>
     <label class="map-replay-speed"><span class="sr-only">Replay speed</span><select data-map-replay-speed disabled><option value="1">1×</option><option value="5">5×</option><option value="60" selected>60×</option><option value="100">100×</option><option value="200">200×</option></select></label>
-    {{ if showSync }}<button class="map-replay-sync" type="button" data-map-replay-sync aria-label="Synchronize flight starts" aria-pressed="true" disabled><span>Sync</span></button>{{ /if }}
+    {{ if showSync }}<button class="map-replay-sync" type="button" data-map-replay-sync aria-label="Synchronize flight starts" aria-pressed="false" disabled><span>Sync</span></button>{{ /if }}
     <div class="map-replay-progress">
       <span data-map-replay-elapsed>0:00 / 0:00</span>
       <input type="range" data-map-replay-slider min="0" max="0" value="0" step="1" aria-label="Replay position" disabled>

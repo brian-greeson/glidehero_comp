@@ -40,7 +40,7 @@ export function initializeReplayControls({ documentRef = document, root: provide
   const close = () => {
     requestToken += 1; timeline?.destroy?.(); timeline = null; opened = false;
     panels.forEach((n) => { n.hidden = true; }); entries.forEach((n) => { n.hidden = false; n.setAttribute('aria-expanded', 'false'); });
-    setEnabled(false); setPlayState(false); syncs.forEach((sync) => { sync.setAttribute('aria-pressed', 'true'); });
+    setEnabled(false); setPlayState(false); syncs.forEach((sync) => { sync.setAttribute('aria-pressed', 'false'); });
     onClose?.();
   };
   const open = async () => {

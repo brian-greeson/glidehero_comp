@@ -36,7 +36,7 @@ export function createMapReplayTimeline({ flights = [], now = () => performance.
     const startOffset = !synchronized && Number.isFinite(flight.startOffsetMs) ? Math.max(0, flight.startOffsetMs) : 0;
     return Math.max(max, startOffset + flightDuration);
   }, 0);
-  let synchronized = true; let duration = calculateDuration(synchronized);
+  let synchronized = false; let duration = calculateDuration(synchronized);
   let elapsedMs = 0; let rate = 60; let playing = false; let finished = false; let frameId = null; let lastNow = 0;
   const listeners = new Set();
   const snapshot = () => ({ elapsedMs, duration, rate, playing, finished, synchronized, flights: sourceFlights.map((flight) => renderFlight(flight, elapsedMs, synchronized)) });

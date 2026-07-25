@@ -30,7 +30,7 @@ describe('shared replay controls', () => {
     const timelines: any[] = [];
     const controller: any = initializeReplayControls({ documentRef, onOpen: ({ setTimeline }: any) => {
       const timeline: any = {
-        synchronized: true,
+        synchronized: false,
         subscribe: (cb: any) => { timeline.cb = cb; cb({ elapsedMs: 0, duration: 1000, rate: 60, playing: false, synchronized: timeline.synchronized }); },
         snapshot: () => ({ playing: false, synchronized: timeline.synchronized }),
         setRate: vi.fn(),
@@ -45,12 +45,12 @@ describe('shared replay controls', () => {
     timelines[0].cb({ elapsedMs: 0, duration: 1000, rate: 200, playing: false });
     expect(speeds.map((speed) => speed.value)).toEqual(['200', '200']);
     syncs[1].click();
-    expect(timelines[0].setSynchronized).toHaveBeenCalledWith(false);
-    expect(syncs.every((sync) => sync.setAttribute.mock.calls.some((call: unknown[]) => call[0] === 'aria-pressed' && call[1] === 'false'))).toBe(true);
+    expect(timelines[0].setSynchronized).toHaveBeenCalledWith(true);
+    expect(syncs.every((sync) => sync.setAttribute.mock.calls.some((call: unknown[]) => call[0] === 'aria-pressed' && call[1] === 'true'))).toBe(true);
     close.click(); open.click();
     expect(timelines).toHaveLength(2);
     expect(speeds.map((speed) => speed.value)).toEqual(['60', '60']);
-    expect(syncs.every((sync) => sync.setAttribute.mock.calls.some((call: unknown[]) => call[0] === 'aria-pressed' && call[1] === 'true'))).toBe(true);
+    expect(syncs.every((sync) => sync.setAttribute.mock.calls.some((call: unknown[]) => call[0] === 'aria-pressed' && call[1] === 'false'))).toBe(true);
     controller.destroy();
   });
 });
