@@ -174,7 +174,7 @@
   .map-leaderboard--compact .leaderboard-swatch { width: 8px; height: 8px; }
   .map-leaderboard--compact .leaderboard-rank { min-width: 1.3rem; text-align: right; }
   .map-leaderboard--compact .coverage-pilot-row > span:not(.coverage-pilot-name) { font-variant-numeric: tabular-nums; white-space: nowrap; }
-  .map-arena-search { top: .75rem; width: 50%; }
+  .map-arena-search { z-index: 21; top: .75rem; width: 50%; }
 }
 @media (prefers-reduced-motion: reduce) {
   .map-leaderboard--coverage[aria-busy='true'] .leaderboard-status::before { animation: none; }

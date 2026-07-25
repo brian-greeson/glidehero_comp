@@ -82,7 +82,7 @@ describe('refreshed map UI controls', () => {
     expect(mobileRules).toContain('.map-mobile-period-controls { position: fixed;');
     expect(mobileRules).toContain('.map-mobile-replay { display: block; }');
     expect(mobileRules).toContain('.map-leaderboard--compact { position: absolute; z-index: 8; bottom: calc(4rem + env(safe-area-inset-bottom, 0px));');
-    expect(mobileRules).toContain('.map-arena-search { top: .75rem; width: 50%; }');
+    expect(mobileRules).toContain('.map-arena-search { z-index: 21; top: .75rem; width: 50%; }');
     expect(mobileRules).not.toContain('.mobile-map-sheet { position: fixed;');
     expect(css.slice(css.indexOf('@media (max-width: 390px)'))).toContain('.map-mobile-period-controls { right: .75rem; left: .75rem; }');
   });
