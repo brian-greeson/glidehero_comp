@@ -32,6 +32,7 @@ export function initializeArenaSearch({
   let requestSequence = 0;
   let arenas = [];
   let activeIndex = -1;
+  let selectingOption = false;
 
   function navigateToArena(path) {
     const selection = periodSelection ?? mapPeriodFromSearch(locationRef.search);
@@ -99,8 +100,18 @@ export function initializeArenaSearch({
         option.setAttribute('role', 'option');
         option.setAttribute('aria-selected', 'false');
         option.textContent = arenaResultLabel(arena);
-        option.addEventListener('pointerdown', (event) => event.preventDefault());
-        option.addEventListener('click', () => navigateToArena(arena.path));
+        option.addEventListener('pointerdown', (event) => {
+          selectingOption = true;
+          event.preventDefault();
+        });
+        option.addEventListener('pointercancel', () => {
+          selectingOption = false;
+          close();
+        });
+        option.addEventListener('click', () => {
+          selectingOption = false;
+          navigateToArena(arena.path);
+        });
         results.append(option);
       });
     }
@@ -164,6 +175,6 @@ export function initializeArenaSearch({
     }
   });
   root.addEventListener('focusout', (event) => {
-    if (!root.contains(event.relatedTarget)) close();
+    if (!selectingOption && !root.contains(event.relatedTarget)) close();
   });
 }
