@@ -67,22 +67,15 @@ describe('adminFlightService management', () => {
     expect(reprocess).not.toHaveBeenCalled();
   });
 
-  it('applies a corrected duration delta once when reprocessing a current-generation flight', async () => {
+  it('leaves the simple glider-hours counter unchanged when reprocessing', async () => {
     const stored = await storedFlight();
     await database.db.insert(profiles).values({
       userId: stored.user.id,
       displayName: 'Corrected Duration Pilot',
-      gliderManufacturer: 'Ozone',
-      gliderModel: 'Ultralite 5',
-      gliderSize: '17',
-      gliderYear: 2025,
-      gliderEnRating: 'C',
       gliderHoursSeconds: 7_200,
     });
     await database.db.update(flights).set({
       durationSeconds: 4_000,
-      gliderHoursCreditedSeconds: 3_600,
-      gliderHoursGeneration: 0,
     }).where(eq(flights.id, stored.flight.id));
     const { service } = serviceHarness();
 
@@ -92,9 +85,7 @@ describe('adminFlightService management', () => {
       .resolves.toMatchObject({ status: 'completed' });
 
     const [profile] = await database.db.select({ hours: profiles.gliderHoursSeconds }).from(profiles);
-    const [flight] = await database.db.select({ credit: flights.gliderHoursCreditedSeconds }).from(flights);
-    expect(profile?.hours).toBe(7_600);
-    expect(flight?.credit).toBe(4_000);
+    expect(profile?.hours).toBe(7_200);
   });
 
   it('sorts selected-user flights by flight date or upload date in either direction', async () => {
@@ -149,23 +140,15 @@ describe('adminFlightService management', () => {
     await expect(service.deleteFlight({ userId: stored.user.id, flightId: stored.flight.id })).resolves.toBe('already_deleted');
   });
 
-  it('subtracts only a current-generation glider-hours credit when deleting a flight', async () => {
+  it('subtracts the deleted flight duration from the glider-hours counter', async () => {
     const stored = await storedFlight();
     await database.db.insert(profiles).values({
       userId: stored.user.id,
       displayName: 'Glider Pilot',
-      gliderManufacturer: 'Ozone',
-      gliderModel: 'Ultralite 5',
-      gliderSize: '17',
-      gliderYear: 2025,
-      gliderEnRating: 'C',
       gliderHoursSeconds: 7_200,
-      gliderHoursGeneration: 2,
     });
     await database.db.update(flights).set({
       durationSeconds: 3_600,
-      gliderHoursCreditedSeconds: 3_600,
-      gliderHoursGeneration: 2,
     }).where(eq(flights.id, stored.flight.id));
 
     const { service } = serviceHarness();

@@ -6,7 +6,6 @@ import { AuthFailure, type AuthenticatedUser, type AuthService } from '../servic
 import type { MonthlyCoveragePeriod, MonthlyCoverageService } from '../services/monthlyCoverageService.js';
 import type { MapGridService } from '../services/mapGridService.js';
 import { GliderValidationError, normalizeTerritoryColor, type ProfileService } from '../services/profileService.js';
-import { searchGliderModels } from '../domain/glider/catalog.js';
 import type { GridClaimService } from '../services/gridClaimService.js';
 import type { AdminFlightService } from '../services/adminFlightService.js';
 import type { ArenaService } from '../services/arenaService.js';
@@ -225,6 +224,7 @@ export function createWebRouter(dependencies: {
     currentUser: AuthenticatedUser,
     status: number,
     gliderEditor?: {
+      modelId: string;
       manufacturer: string;
       model: string;
       size: string;
@@ -1458,13 +1458,18 @@ export function createWebRouter(dependencies: {
     res.redirect(303, dashboardSuccessRedirect(formBody(req.body).returnTo, 'territoryColor'));
   });
 
-  router.get('/profile/glider/search', (req, res) => {
+  router.get('/profile/glider/search', async (req, res, next) => {
     if (!res.locals.currentUser) {
       res.status(401).json({ error: { code: 'unauthorized', message: 'Sign in to search the glider catalog.' } });
       return;
     }
-    const q = typeof req.query.q === 'string' ? req.query.q : '';
-    res.json(searchGliderModels(q));
+    try {
+      if (!dependencies.profiles.searchGliderModels) throw new Error('Glider catalog is unavailable.');
+      const q = typeof req.query.q === 'string' ? req.query.q : '';
+      res.json(await dependencies.profiles.searchGliderModels(q));
+    } catch (error) {
+      next(error);
+    }
   });
 
   router.post('/profile/glider', async (req, res, next) => {
@@ -1472,6 +1477,7 @@ export function createWebRouter(dependencies: {
     if (!currentUser) { res.redirect(303, '/login'); return; }
     const body = formBody(req.body);
     const draft = {
+      modelId: typeof body.gliderModelId === 'string' ? body.gliderModelId : '',
       manufacturer: typeof body.manufacturer === 'string' ? body.manufacturer : '',
       model: typeof body.model === 'string' ? body.model : '',
       size: typeof body.size === 'string' ? body.size : '',
@@ -1489,9 +1495,7 @@ export function createWebRouter(dependencies: {
       }
       await dependencies.profiles.saveGliderDetails({
         userId: currentUser.userId,
-        manufacturer: draft.manufacturer,
-        model: draft.model,
-        size: draft.size,
+        gliderModelId: draft.modelId,
         year: Number(draft.year),
         competitionId: draft.competitionId,
         hours: Number(draft.hours),

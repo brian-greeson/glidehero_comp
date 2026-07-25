@@ -10,11 +10,11 @@
     {{ if gliderIsCurrent }}<p class="profile-empty">Add your glider to track its flight hours.</p>{{ /if }}
   {{ /if }}
   {{ if gliderIsCurrent }}
-  <form method="post" action="/profile/glider" class="glider-card__form" data-glider-form data-initial-manufacturer="{{ if glider }}{{ glider.manufacturer }}{{ /if }}" data-initial-model="{{ if glider }}{{ glider.model }}{{ /if }}" data-initial-size="{{ if glider }}{{ glider.size }}{{ /if }}" data-initial-year="{{ if glider }}{{ glider.year }}{{ /if }}" data-initial-competition-id="{{ if glider }}{{ glider.competitionId }}{{ /if }}"{{ if !gliderEditor.isOpen }} hidden{{ /if }}>
+  <form method="post" action="/profile/glider" class="glider-card__form" data-glider-form data-initial-model-id="{{ gliderEditor.modelId }}" data-initial-year="{{ if glider }}{{ glider.year }}{{ /if }}" data-initial-competition-id="{{ if glider }}{{ glider.competitionId }}{{ /if }}"{{ if !gliderEditor.isOpen }} hidden{{ /if }}>
     {{ if gliderEditor.error }}<p class="glider-card__error" role="alert">{{ gliderEditor.error }}</p>{{ /if }}
     <label for="glider-model-search">Make / model</label>
     <input id="glider-model-search" name="modelSearch" value="{{ if gliderEditor.manufacturer }}{{ gliderEditor.manufacturer }} {{ gliderEditor.model }}{{ /if }}" autocomplete="off" role="combobox" aria-autocomplete="list" aria-controls="glider-model-results" aria-expanded="false" data-glider-model required>
-    <input type="hidden" name="manufacturer" data-glider-manufacturer value="{{ gliderEditor.manufacturer }}"><input type="hidden" name="model" data-glider-model-value value="{{ gliderEditor.model }}">
+    <input type="hidden" name="gliderModelId" data-glider-model-id value="{{ gliderEditor.modelId }}"><input type="hidden" name="manufacturer" data-glider-manufacturer value="{{ gliderEditor.manufacturer }}"><input type="hidden" name="model" data-glider-model-value value="{{ gliderEditor.model }}">
     <div id="glider-model-results" data-glider-results class="glider-card__results" role="listbox" hidden></div>
     <p class="glider-card__search-status" data-glider-search-status aria-live="polite"></p>
     <label for="glider-size">Size</label>

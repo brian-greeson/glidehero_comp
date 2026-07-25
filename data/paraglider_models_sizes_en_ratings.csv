@@ -1,238 +1,772 @@
-manufacturer,model,size,en_rating
-Ozone,Moxie,XXS,A
-Ozone,Moxie,XS,A
-Ozone,Moxie,S,A
-Ozone,Moxie,M,A
-Ozone,Moxie,L,A
-Ozone,Moxie,XL,A
-Ozone,Buzz Z7,XS,B
-Ozone,Buzz Z7,S,B
-Ozone,Buzz Z7,MS,B
-Ozone,Buzz Z7,ML,B
-Ozone,Buzz Z7,L,B
-Ozone,Buzz Z7,XL,B
-Ozone,Geo 7,XS,B
-Ozone,Geo 7,S,B
-Ozone,Geo 7,MS,B
-Ozone,Geo 7,ML,B
-Ozone,Geo 7,L,B
-Ozone,Vibe GT,XXS,B
-Ozone,Vibe GT,XS,B
-Ozone,Vibe GT,S,B
-Ozone,Vibe GT,MS,B
-Ozone,Vibe GT,ML,B
-Ozone,Vibe GT,L,B
-Ozone,Vibe GT,XL,B
-Ozone,Delta 5,XS,C
-Ozone,Delta 5,S,C
-Ozone,Delta 5,MS,C
-Ozone,Delta 5,ML,C
-Ozone,Delta 5,L,C
-Ozone,Delta 5,XL,C
-Ozone,Alpina 5,XS,C
-Ozone,Alpina 5,S,C
-Ozone,Alpina 5,MS,C
-Ozone,Alpina 5,ML,C
-Ozone,Alpina 5,L,C
-Ozone,Alpina 5,XL,C
-Ozone,Alpina GT 5,XS,C
-Ozone,Alpina GT 5,S,C
-Ozone,Alpina GT 5,MS,C
-Ozone,Alpina GT 5,ML,C
-Ozone,Alpina GT 5,L,C
-Ozone,Alpina GT 5,XL,C
-Ozone,Photon,XS,C
-Ozone,Photon,S,C
-Ozone,Photon,MS,C
-Ozone,Photon,ML,C
-Ozone,Photon,L,C
-Ozone,Photon,XL,C
-Ozone,Zeolite 2,XS,D
-Ozone,Zeolite 2,S,D
-Ozone,Zeolite 2,MS,D
-Ozone,Zeolite 2,ML,D
-Ozone,Zeolite 2 GT,XS,D
-Ozone,Zeolite 2 GT,S,D
-Ozone,Zeolite 2 GT,MS,D
-Ozone,Zeolite 2 GT,ML,D
-Ozone,Zeno 2,XS,D
-Ozone,Zeno 2,S,D
-Ozone,Zeno 2,MS,D
-Ozone,Zeno 2,ML,D
-Ozone,Zeno 2,L,D
-Ozone,Ultralite 5,13,Uncertified
-Ozone,Ultralite 5,15,Uncertified
-Ozone,Ultralite 5,17,C
-Ozone,Ultralite 5,19,B
-Ozone,Ultralite 5,21,A
-Ozone,Ultralite 5,23,A
-Ozone,Ultralite 5,25,A
-Ozone,Magnum 4,38,B
-Ozone,Magnum 4,41,B
-Ozone,Magnum 4,44,B
-UP,RIMO 2,XS,A
-UP,RIMO 2,S,A
-UP,RIMO 2,SM,A
-UP,RIMO 2,M,A
-UP,RIMO 2,L,A
-UP,MANA 2,21,A/B
-UP,MANA 2,23,A
-UP,MANA 2,25,A
-UP,MANA 2,27,A
-UP,DENA,XS,A
-UP,DENA,S,A
-UP,DENA,S/M,A
-UP,DENA,M,A
-UP,DENA,L,A
-UP,MAKALU 5,S,B
-UP,MAKALU 5,SM,B
-UP,MAKALU 5,M,B
-UP,MAKALU 5,L,B
-UP,KIBO X,XS,B
-UP,KIBO X,S,B
-UP,KIBO X,S/M,B
-UP,KIBO X,M,B
-UP,KIBO X,L,B
-UP,LHOTSE X,XS,B
-UP,LHOTSE X,S,B
-UP,LHOTSE X,SM,B
-UP,LHOTSE X,M,B
-UP,TORRE,S,C
-UP,TORRE,SM,C
-UP,TORRE,M,C
-UP,TORRE,L,C
-UP,TORRE,XL,C
-UP,MERU 2,S,D
-UP,MERU 2,S/M,D
-UP,MERU 2,M,D
-UP,MERU 2,L,D
-Niviuk,Koyot 6 P,20,A
-Niviuk,Koyot 6 P,22,A
-Niviuk,Koyot 6 P,24,A
-Niviuk,Koyot 6 P,26,A
-Niviuk,Koyot 6 P,28,A
-Niviuk,Hook 6 P,20,B
-Niviuk,Hook 6 P,22,A+
-Niviuk,Hook 6 P,24,A+
-Niviuk,Hook 6 P,26,A+
-Niviuk,Hook 6 P,28,A+
-Niviuk,Kode 2 P,12,Uncertified
-Niviuk,Kode 2 P,14,D
-Niviuk,Kode 2 P,16,C
-Niviuk,Kode 2 P,18,A/C
-Niviuk,Kode 2 P,20,A/B
-Niviuk,Kode 2 P,22,A
-Niviuk,Kode 2 P,24,A
-Niviuk,Kode 2 P,26,A
-Niviuk,Artik 7 P,20,C
-Niviuk,Artik 7 P,22,C
-Niviuk,Artik 7 P,23,C
-Niviuk,Artik 7 P,24,C
-Niviuk,Artik 7 P,26,C
-Niviuk,Artik 7 P,28,C
-Niviuk,Artik R 2,20,C
-Niviuk,Artik R 2,21,C
-Niviuk,Artik R 2,23,C
-Niviuk,Artik R 2,24,C
-Niviuk,Artik R 2,25,C
-Niviuk,Artik R 2,27,C
-Gin,Yeti 6,21,A
-Gin,Yeti 6,23,A
-Gin,Yeti 6,25,A
-Gin,Yeti 6,27,A
-Gin,Calypso 2,XXS,B
-Gin,Calypso 2,XS,B
-Gin,Calypso 2,S,B
-Gin,Calypso 2,M,B
-Gin,Calypso 2,L,B
-Gin,Bonanza 3,XXS,C
-Gin,Bonanza 3,XS,C
-Gin,Bonanza 3,S,C
-Gin,Bonanza 3,M,C
-Gin,Bonanza 3,L,C
-Gin,Fuse 4,37,B
-Gin,Fuse 4,41,B
-Gin,Fuse 4,44,B
-Little Cloud,GT2,20,Uncertified
-Little Cloud,GT2,22,Uncertified
-Little Cloud,GT2,24,B
-Little Cloud,GT2,26,Uncertified
-Little Cloud,GT2,28,Uncertified
-Little Cloud,Gracchio Mk3,20,Uncertified
-Little Cloud,Gracchio Mk3,21,Uncertified
-Little Cloud,Gracchio Mk3,22,Uncertified
-Little Cloud,Gracchio Mk3,23,Uncertified
-Little Cloud,Gracchio Mk3,24,Uncertified
-Little Cloud,Gracchio Mk3,25,Uncertified
-Little Cloud,Gracchio Mk3,27,Uncertified
-Little Cloud,Urubu Mk2,20.5,Uncertified
-Little Cloud,Urubu Mk2,22,Uncertified
-Little Cloud,Urubu Mk2,23.5,Uncertified
-Little Cloud,Urubu Mk2,25,Uncertified
-Little Cloud,Urubu Mk2,26.5,Uncertified
-Little Cloud,Urubu King,S,Uncertified
-Little Cloud,Urubu King,M,Uncertified
-Little Cloud,Urubu King,L,Uncertified
-Little Cloud,Puffin V2,14,Uncertified
-Little Cloud,Puffin V2,16,Uncertified
-Little Cloud,Puffin V2,19,Uncertified
-Skywalk,MINT,75,C
-Skywalk,MINT,85,C
-Skywalk,MINT,95,C
-Skywalk,MINT,105,C
-Skywalk,MINT,115,C
-Skywalk,MINT,125,C
-Skywalk,TEQUILA6,75,B
-Skywalk,TEQUILA6,85,B
-Skywalk,TEQUILA6,95,B
-Skywalk,TEQUILA6,105,B
-Skywalk,TEQUILA6,115,B
-Skywalk,TEQUILA6,135,B
-Skywalk,ARAK AIR2,70+,B
-Skywalk,ARAK AIR2,80+,B
-Skywalk,ARAK AIR2,95+,B
-Skywalk,ARAK AIR2,105+,B
-Skywalk,ARAK AIR2,115+,B
-Skywalk,JOIN'T5,200,B
-Skywalk,JOIN'T5,220,B
-Skywalk,JOIN'T5,240,B
-Nova,NIVO,XXS,A
-Nova,NIVO,XS,A
-Nova,NIVO,S,A
-Nova,NIVO,M,A
-Nova,NIVO,L,A
-Nova,NIVO,XL,A
-Nova,ION 7 Light,XXXS,B
-Nova,ION 7 Light,XXS,B
-Nova,ION 7 Light,XS,B
-Nova,ION 7 Light,S,B
-Nova,ION 7 Light,M,B
-Nova,ION 7 Light,L,B
-Nova,CODEX,XXS,C
-Nova,CODEX,XS,C
-Nova,CODEX,S,C
-Nova,CODEX,M,C
-Nova,CODEX,L,C
-Nova,BION 3,L,B
-Nova,MENTOR 7,XS,B
-Nova,MENTOR 7,S,B
-Nova,MENTOR 7,M,B
-PHI,BEAT 2,18,B
-PHI,BEAT 2,20,B
-PHI,BEAT 2,22,B
-PHI,BEAT 2,23,B
-PHI,BEAT 2,24,B
-PHI,BEAT 2,26,B
-PHI,TENOR 2 light,17,B
-PHI,TENOR 2 light,19,B
-PHI,TENOR 2 light,21,B
-PHI,TENOR 2 light,22,B
-PHI,TENOR 2 light,23,B
-PHI,TENOR 2 light,25,B
-PHI,MAESTRO 2 light,17,B
-PHI,MAESTRO 2 light,18,B
-PHI,MAESTRO 2 light,19,B
-PHI,MAESTRO 2 light,21,B
-PHI,MAESTRO 2 light,22,B
-PHI,MAESTRO 2 light,23,B
-PHI,MAESTRO 2 light,25,B
+manufacturer,model,size,en_rating,discipline,catalog_status,source_url,notes
+Ozone,Moxie,XXS,A,Paraglider,Current,https://flyozone.com/paragliders/products/gliders/moxie,
+Ozone,Moxie,XS,A,Paraglider,Current,https://flyozone.com/paragliders/products/gliders/moxie,
+Ozone,Moxie,S,A,Paraglider,Current,https://flyozone.com/paragliders/products/gliders/moxie,
+Ozone,Moxie,M,A,Paraglider,Current,https://flyozone.com/paragliders/products/gliders/moxie,
+Ozone,Moxie,L,A,Paraglider,Current,https://flyozone.com/paragliders/products/gliders/moxie,
+Ozone,Moxie,XL,A,Paraglider,Current,https://flyozone.com/paragliders/products/gliders/moxie,
+Ozone,Alta GT,XXS,A,Paraglider,Current,https://flyozone.com/paragliders/products/gliders/alta-gt,
+Ozone,Alta GT,XS,A,Paraglider,Current,https://flyozone.com/paragliders/products/gliders/alta-gt,
+Ozone,Alta GT,S,A,Paraglider,Current,https://flyozone.com/paragliders/products/gliders/alta-gt,
+Ozone,Alta GT,M,A,Paraglider,Current,https://flyozone.com/paragliders/products/gliders/alta-gt,
+Ozone,Alta GT,L,A,Paraglider,Current,https://flyozone.com/paragliders/products/gliders/alta-gt,
+Ozone,Alta GT,XL,A,Paraglider,Current,https://flyozone.com/paragliders/products/gliders/alta-gt,
+Ozone,Buzz Z7,XS,B,Paraglider,Current,https://flyozone.com/paragliders/products/gliders/buzz-z7,
+Ozone,Buzz Z7,S,B,Paraglider,Current,https://flyozone.com/paragliders/products/gliders/buzz-z7,
+Ozone,Buzz Z7,MS,B,Paraglider,Current,https://flyozone.com/paragliders/products/gliders/buzz-z7,
+Ozone,Buzz Z7,ML,B,Paraglider,Current,https://flyozone.com/paragliders/products/gliders/buzz-z7,
+Ozone,Buzz Z7,L,B,Paraglider,Current,https://flyozone.com/paragliders/products/gliders/buzz-z7,
+Ozone,Buzz Z7,XL,B,Paraglider,Current,https://flyozone.com/paragliders/products/gliders/buzz-z7,
+Ozone,Geo 7,XS,B,Paraglider,Current,https://flyozone.com/paragliders/products/gliders/geo-7,
+Ozone,Geo 7,S,B,Paraglider,Current,https://flyozone.com/paragliders/products/gliders/geo-7,
+Ozone,Geo 7,MS,B,Paraglider,Current,https://flyozone.com/paragliders/products/gliders/geo-7,
+Ozone,Geo 7,ML,B,Paraglider,Current,https://flyozone.com/paragliders/products/gliders/geo-7,
+Ozone,Geo 7,L,B,Paraglider,Current,https://flyozone.com/paragliders/products/gliders/geo-7,
+Ozone,Vibe GT,XXS,A,Paraglider,Current,https://flyozone.com/paragliders/products/gliders/vibe-gt,XXS has a size-specific EN A test result. Other listed sizes are EN B.
+Ozone,Vibe GT,XS,B,Paraglider,Current,https://flyozone.com/paragliders/products/gliders/vibe-gt,XXS has a size-specific EN A test result. Other listed sizes are EN B.
+Ozone,Vibe GT,S,B,Paraglider,Current,https://flyozone.com/paragliders/products/gliders/vibe-gt,XXS has a size-specific EN A test result. Other listed sizes are EN B.
+Ozone,Vibe GT,MS,B,Paraglider,Current,https://flyozone.com/paragliders/products/gliders/vibe-gt,XXS has a size-specific EN A test result. Other listed sizes are EN B.
+Ozone,Vibe GT,ML,B,Paraglider,Current,https://flyozone.com/paragliders/products/gliders/vibe-gt,XXS has a size-specific EN A test result. Other listed sizes are EN B.
+Ozone,Vibe GT,L,B,Paraglider,Current,https://flyozone.com/paragliders/products/gliders/vibe-gt,XXS has a size-specific EN A test result. Other listed sizes are EN B.
+Ozone,Vibe GT,XL,B,Paraglider,Current,https://flyozone.com/paragliders/products/gliders/vibe-gt,XXS has a size-specific EN A test result. Other listed sizes are EN B.
+Ozone,Rush 6,XS,B,Paraglider,Current,https://flyozone.com/paragliders/products/gliders/rush-6,
+Ozone,Rush 6,S,B,Paraglider,Current,https://flyozone.com/paragliders/products/gliders/rush-6,
+Ozone,Rush 6,MS,B,Paraglider,Current,https://flyozone.com/paragliders/products/gliders/rush-6,
+Ozone,Rush 6,ML,B,Paraglider,Current,https://flyozone.com/paragliders/products/gliders/rush-6,
+Ozone,Rush 6,L,B,Paraglider,Current,https://flyozone.com/paragliders/products/gliders/rush-6,
+Ozone,Rush 6,XL,B,Paraglider,Current,https://flyozone.com/paragliders/products/gliders/rush-6,
+Ozone,Swift 6,XS,B,Paraglider,Current,https://flyozone.com/paragliders/products/gliders/swift-6,
+Ozone,Swift 6,S,B,Paraglider,Current,https://flyozone.com/paragliders/products/gliders/swift-6,
+Ozone,Swift 6,MS,B,Paraglider,Current,https://flyozone.com/paragliders/products/gliders/swift-6,
+Ozone,Swift 6,ML,B,Paraglider,Current,https://flyozone.com/paragliders/products/gliders/swift-6,
+Ozone,Swift 6,L,B,Paraglider,Current,https://flyozone.com/paragliders/products/gliders/swift-6,
+Ozone,Delta 5,XS,C,Paraglider,Current,https://flyozone.com/paragliders/products/gliders/delta-5,
+Ozone,Delta 5,S,C,Paraglider,Current,https://flyozone.com/paragliders/products/gliders/delta-5,
+Ozone,Delta 5,MS,C,Paraglider,Current,https://flyozone.com/paragliders/products/gliders/delta-5,
+Ozone,Delta 5,ML,C,Paraglider,Current,https://flyozone.com/paragliders/products/gliders/delta-5,
+Ozone,Delta 5,L,C,Paraglider,Current,https://flyozone.com/paragliders/products/gliders/delta-5,
+Ozone,Delta 5,XL,C,Paraglider,Current,https://flyozone.com/paragliders/products/gliders/delta-5,
+Ozone,Alpina 4,XS,C,Paraglider,Recent previous,https://flyozone.com/paragliders/products/gliders/alpina-4,
+Ozone,Alpina 4,S,C,Paraglider,Recent previous,https://flyozone.com/paragliders/products/gliders/alpina-4,
+Ozone,Alpina 4,MS,C,Paraglider,Recent previous,https://flyozone.com/paragliders/products/gliders/alpina-4,
+Ozone,Alpina 4,ML,C,Paraglider,Recent previous,https://flyozone.com/paragliders/products/gliders/alpina-4,
+Ozone,Alpina 4,L,C,Paraglider,Recent previous,https://flyozone.com/paragliders/products/gliders/alpina-4,
+Ozone,Alpina 4 GT,XS,C,Paraglider,Current,https://flyozone.com/paragliders/products/gliders/alpina-4-gt,
+Ozone,Alpina 4 GT,S,C,Paraglider,Current,https://flyozone.com/paragliders/products/gliders/alpina-4-gt,
+Ozone,Alpina 4 GT,MS,C,Paraglider,Current,https://flyozone.com/paragliders/products/gliders/alpina-4-gt,
+Ozone,Alpina 4 GT,ML,C,Paraglider,Current,https://flyozone.com/paragliders/products/gliders/alpina-4-gt,
+Ozone,Alpina 4 GT,L,C,Paraglider,Current,https://flyozone.com/paragliders/products/gliders/alpina-4-gt,
+Ozone,Alpina 4 GT,XL,C,Paraglider,Current,https://flyozone.com/paragliders/products/gliders/alpina-4-gt,
+Ozone,Alpina 5,XS,C,Paraglider,Current,https://flyozone.com/paragliders/products/gliders/alpina-5,
+Ozone,Alpina 5,S,C,Paraglider,Current,https://flyozone.com/paragliders/products/gliders/alpina-5,
+Ozone,Alpina 5,MS,C,Paraglider,Current,https://flyozone.com/paragliders/products/gliders/alpina-5,
+Ozone,Alpina 5,ML,C,Paraglider,Current,https://flyozone.com/paragliders/products/gliders/alpina-5,
+Ozone,Alpina 5,L,C,Paraglider,Current,https://flyozone.com/paragliders/products/gliders/alpina-5,
+Ozone,Alpina 5,XL,C,Paraglider,Current,https://flyozone.com/paragliders/products/gliders/alpina-5,
+Ozone,Photon,XS,C,Paraglider,Current,https://flyozone.com/paragliders/products/gliders/photon,
+Ozone,Photon,S,C,Paraglider,Current,https://flyozone.com/paragliders/products/gliders/photon,
+Ozone,Photon,MS,C,Paraglider,Current,https://flyozone.com/paragliders/products/gliders/photon,
+Ozone,Photon,ML,C,Paraglider,Current,https://flyozone.com/paragliders/products/gliders/photon,
+Ozone,Photon,L,C,Paraglider,Current,https://flyozone.com/paragliders/products/gliders/photon,
+Ozone,Photon,XL,C,Paraglider,Current,https://flyozone.com/paragliders/products/gliders/photon,
+Ozone,Lyght,XS,C,Paraglider,Current,https://flyozone.com/paragliders/products/gliders/lyght,
+Ozone,Lyght,S,C,Paraglider,Current,https://flyozone.com/paragliders/products/gliders/lyght,
+Ozone,Lyght,MS,C,Paraglider,Current,https://flyozone.com/paragliders/products/gliders/lyght,
+Ozone,Lyght,ML,C,Paraglider,Current,https://flyozone.com/paragliders/products/gliders/lyght,
+Ozone,Lyght,L,C,Paraglider,Current,https://flyozone.com/paragliders/products/gliders/lyght,
+Ozone,Zeolite 2 GT,XS,D,Paraglider,Current,https://flyozone.com/paragliders/products/gliders/zeolite-2-gt,
+Ozone,Zeolite 2 GT,S,D,Paraglider,Current,https://flyozone.com/paragliders/products/gliders/zeolite-2-gt,
+Ozone,Zeolite 2 GT,MS,D,Paraglider,Current,https://flyozone.com/paragliders/products/gliders/zeolite-2-gt,
+Ozone,Zeolite 2 GT,ML,D,Paraglider,Current,https://flyozone.com/paragliders/products/gliders/zeolite-2-gt,
+Ozone,Zeolite 2 GT,L,D,Paraglider,Current,https://flyozone.com/paragliders/products/gliders/zeolite-2-gt,
+Ozone,Zeolite 2,XS,D,Paraglider,Current,https://flyozone.com/paragliders/products/gliders/zeolite-2,
+Ozone,Zeolite 2,S,D,Paraglider,Current,https://flyozone.com/paragliders/products/gliders/zeolite-2,
+Ozone,Zeolite 2,MS,D,Paraglider,Current,https://flyozone.com/paragliders/products/gliders/zeolite-2,
+Ozone,Zeolite 2,ML,D,Paraglider,Current,https://flyozone.com/paragliders/products/gliders/zeolite-2,
+Ozone,Zeno 2,XS,D,Paraglider,Current,https://flyozone.com/paragliders/products/gliders/zeno-2,
+Ozone,Zeno 2,S,D,Paraglider,Current,https://flyozone.com/paragliders/products/gliders/zeno-2,
+Ozone,Zeno 2,MS,D,Paraglider,Current,https://flyozone.com/paragliders/products/gliders/zeno-2,
+Ozone,Zeno 2,ML,D,Paraglider,Current,https://flyozone.com/paragliders/products/gliders/zeno-2,
+Ozone,Zeno 2,L,D,Paraglider,Current,https://flyozone.com/paragliders/products/gliders/zeno-2,
+Ozone,Enzo 3,XXS,CCC,Competition,Current,https://flyozone.com/paragliders/products/gliders/enzo-3,
+Ozone,Enzo 3,XS,CCC,Competition,Current,https://flyozone.com/paragliders/products/gliders/enzo-3,
+Ozone,Enzo 3,S,CCC,Competition,Current,https://flyozone.com/paragliders/products/gliders/enzo-3,
+Ozone,Enzo 3,M,CCC,Competition,Current,https://flyozone.com/paragliders/products/gliders/enzo-3,
+Ozone,Enzo 3,L,CCC,Competition,Current,https://flyozone.com/paragliders/products/gliders/enzo-3,
+Ozone,Enzo 3,XL,CCC,Competition,Current,https://flyozone.com/paragliders/products/gliders/enzo-3,
+Ozone,Ultralite 5,13,Uncertified,Hike and fly,Current,https://flyozone.com/paragliders/products/gliders/ultralite-5,Certification varies by size and certified weight range.
+Ozone,Ultralite 5,15,Uncertified,Hike and fly,Current,https://flyozone.com/paragliders/products/gliders/ultralite-5,Certification varies by size and certified weight range.
+Ozone,Ultralite 5,17,C,Hike and fly,Current,https://flyozone.com/paragliders/products/gliders/ultralite-5,Certification varies by size and certified weight range.
+Ozone,Ultralite 5,19,B,Hike and fly,Current,https://flyozone.com/paragliders/products/gliders/ultralite-5,Certification varies by size and certified weight range.
+Ozone,Ultralite 5,21,A,Hike and fly,Current,https://flyozone.com/paragliders/products/gliders/ultralite-5,Certification varies by size and certified weight range.
+Ozone,Ultralite 5,23,A,Hike and fly,Current,https://flyozone.com/paragliders/products/gliders/ultralite-5,Certification varies by size and certified weight range.
+Ozone,Ultralite 5,25,A,Hike and fly,Current,https://flyozone.com/paragliders/products/gliders/ultralite-5,Certification varies by size and certified weight range.
+Ozone,Session,15,Load test,Acro,Current,https://flyozone.com/paragliders/products/gliders/session,
+Ozone,Session,16,Load test,Acro,Current,https://flyozone.com/paragliders/products/gliders/session,
+Ozone,Session,17,Load test,Acro,Current,https://flyozone.com/paragliders/products/gliders/session,
+Ozone,Magnum 4,38,B,Tandem,Current,https://flyozone.com/paragliders/products/gliders/magnum-4,
+Ozone,Magnum 4,41,B,Tandem,Current,https://flyozone.com/paragliders/products/gliders/magnum-4,
+Ozone,Magnum 4,44,B,Tandem,Current,https://flyozone.com/paragliders/products/gliders/magnum-4,
+Ozone,Swiftmax 2,41,B,Tandem,Current,https://flyozone.com/paragliders/products/gliders/swiftmax-2,
+Ozone,Wisp 2,37,B,Tandem,Current,https://flyozone.com/paragliders/products/gliders/wisp-2,
+Gradient,GO,24,A,Paraglider,Legacy reference,https://service.dhv.de/db3/muster/liste?fhersteller=Gradient&fmuster=&lang=en&s=1,"Included because Gradient was explicitly requested. The official certification entries predate the five-year window, and no qualifying current Gradient catalog was found."
+Gradient,GO,26,A,Paraglider,Legacy reference,https://service.dhv.de/db3/muster/liste?fhersteller=Gradient&fmuster=&lang=en&s=1,"Included because Gradient was explicitly requested. The official certification entries predate the five-year window, and no qualifying current Gradient catalog was found."
+Gradient,GO,28,A,Paraglider,Legacy reference,https://service.dhv.de/db3/muster/liste?fhersteller=Gradient&fmuster=&lang=en&s=1,"Included because Gradient was explicitly requested. The official certification entries predate the five-year window, and no qualifying current Gradient catalog was found."
+Gradient,GO,30,A,Paraglider,Legacy reference,https://service.dhv.de/db3/muster/liste?fhersteller=Gradient&fmuster=&lang=en&s=1,"Included because Gradient was explicitly requested. The official certification entries predate the five-year window, and no qualifying current Gradient catalog was found."
+UP,RIMO 2,XS,A,Paraglider,Current,https://www.up-paragliders.com/paragliders/rimo-2,
+UP,RIMO 2,S,A,Paraglider,Current,https://www.up-paragliders.com/paragliders/rimo-2,
+UP,RIMO 2,SM,A,Paraglider,Current,https://www.up-paragliders.com/paragliders/rimo-2,
+UP,RIMO 2,M,A,Paraglider,Current,https://www.up-paragliders.com/paragliders/rimo-2,
+UP,RIMO 2,L,A,Paraglider,Current,https://www.up-paragliders.com/paragliders/rimo-2,
+UP,MANA 2,21,A/B,Hike and fly,Current,https://www.up-paragliders.com/paragliders/mana-2,Size 21 has different classifications across certified weight ranges.
+UP,MANA 2,23,A,Hike and fly,Current,https://www.up-paragliders.com/paragliders/mana-2,Size 21 has different classifications across certified weight ranges.
+UP,MANA 2,25,A,Hike and fly,Current,https://www.up-paragliders.com/paragliders/mana-2,Size 21 has different classifications across certified weight ranges.
+UP,MANA 2,27,A,Hike and fly,Current,https://www.up-paragliders.com/paragliders/mana-2,Size 21 has different classifications across certified weight ranges.
+UP,DENA,XS,A,Paraglider,Current,https://www.up-paragliders.com/paragliders/dena,
+UP,DENA,S,A,Paraglider,Current,https://www.up-paragliders.com/paragliders/dena,
+UP,DENA,S/M,A,Paraglider,Current,https://www.up-paragliders.com/paragliders/dena,
+UP,DENA,M,A,Paraglider,Current,https://www.up-paragliders.com/paragliders/dena,
+UP,DENA,L,A,Paraglider,Current,https://www.up-paragliders.com/paragliders/dena,
+UP,MAKALU 5,S,B,Paraglider,Current,https://www.up-paragliders.com/paragliders/makalu-5,
+UP,MAKALU 5,SM,B,Paraglider,Current,https://www.up-paragliders.com/paragliders/makalu-5,
+UP,MAKALU 5,M,B,Paraglider,Current,https://www.up-paragliders.com/paragliders/makalu-5,
+UP,MAKALU 5,L,B,Paraglider,Current,https://www.up-paragliders.com/paragliders/makalu-5,
+UP,KIBO X,XS,B,Paraglider,Current,https://www.up-paragliders.com/paragliders/kibo-x,
+UP,KIBO X,S,B,Paraglider,Current,https://www.up-paragliders.com/paragliders/kibo-x,
+UP,KIBO X,S/M,B,Paraglider,Current,https://www.up-paragliders.com/paragliders/kibo-x,
+UP,KIBO X,M,B,Paraglider,Current,https://www.up-paragliders.com/paragliders/kibo-x,
+UP,KIBO X,L,B,Paraglider,Current,https://www.up-paragliders.com/paragliders/kibo-x,
+UP,LHOTSE X,XS,B,Hike and fly,Current,https://www.up-paragliders.com/paragliders/lhotse-x,
+UP,LHOTSE X,S,B,Hike and fly,Current,https://www.up-paragliders.com/paragliders/lhotse-x,
+UP,LHOTSE X,SM,B,Hike and fly,Current,https://www.up-paragliders.com/paragliders/lhotse-x,
+UP,LHOTSE X,M,B,Hike and fly,Current,https://www.up-paragliders.com/paragliders/lhotse-x,
+UP,SUMMIT X,S,B,Paraglider,Current,https://www.up-paragliders.com/paragliders/summit-x,
+UP,SUMMIT X,SM,B,Paraglider,Current,https://www.up-paragliders.com/paragliders/summit-x,
+UP,SUMMIT X,M,B,Paraglider,Current,https://www.up-paragliders.com/paragliders/summit-x,
+UP,SUMMIT X,L,B,Paraglider,Current,https://www.up-paragliders.com/paragliders/summit-x,
+UP,KANGRI X,21,B,Hike and fly,Current,https://www.up-paragliders.com/paragliders/kangri-x,
+UP,KANGRI X,23,B,Hike and fly,Current,https://www.up-paragliders.com/paragliders/kangri-x,
+UP,KANGRI X,25,B,Hike and fly,Current,https://www.up-paragliders.com/paragliders/kangri-x,
+UP,KAILASH,16,C,Miniwing,Current,https://www.up-paragliders.com/paragliders/kailash,
+UP,KAILASH,19,C,Miniwing,Current,https://www.up-paragliders.com/paragliders/kailash,
+UP,TRANGO X,S,C,Paraglider,Current,https://www.up-paragliders.com/paragliders/trango-x,
+UP,TRANGO X,SM,C,Paraglider,Current,https://www.up-paragliders.com/paragliders/trango-x,
+UP,TRANGO X,M,C,Paraglider,Current,https://www.up-paragliders.com/paragliders/trango-x,
+UP,TRANGO X,L,C,Paraglider,Current,https://www.up-paragliders.com/paragliders/trango-x,
+UP,TORRE,S,C,Paraglider,Current,https://www.up-paragliders.com/paragliders/torre,
+UP,TORRE,SM,C,Paraglider,Current,https://www.up-paragliders.com/paragliders/torre,
+UP,TORRE,M,C,Paraglider,Current,https://www.up-paragliders.com/paragliders/torre,
+UP,TORRE,L,C,Paraglider,Current,https://www.up-paragliders.com/paragliders/torre,
+UP,TORRE,XL,C,Paraglider,Current,https://www.up-paragliders.com/paragliders/torre,
+UP,MERU 2,S,D,Paraglider,Current,https://www.up-paragliders.com/paragliders/meru-2,
+UP,MERU 2,S/M,D,Paraglider,Current,https://www.up-paragliders.com/paragliders/meru-2,
+UP,MERU 2,M,D,Paraglider,Current,https://www.up-paragliders.com/paragliders/meru-2,
+UP,MERU 2,L,D,Paraglider,Current,https://www.up-paragliders.com/paragliders/meru-2,
+UP,MISTI,14,Load test,Acro and freestyle,Current,https://www.up-paragliders.com/paragliders/misti,
+UP,MISTI,16,Load test,Acro and freestyle,Current,https://www.up-paragliders.com/paragliders/misti,
+UP,MISTI,18,Load test,Acro and freestyle,Current,https://www.up-paragliders.com/paragliders/misti,
+UP,MISTI,20,Load test,Acro and freestyle,Current,https://www.up-paragliders.com/paragliders/misti,
+UP,MISTI,22,Load test,Acro and freestyle,Current,https://www.up-paragliders.com/paragliders/misti,
+UP,MISTI,24,Load test,Acro and freestyle,Current,https://www.up-paragliders.com/paragliders/misti,
+UP,MISTI,33 Bi,Load test,Acro and freestyle,Current,https://www.up-paragliders.com/paragliders/misti,
+UP,K2 5,38,B,Tandem,Current,https://www.up-paragliders.com/paragliders/k2-5,
+UP,K2 5,41,B,Tandem,Current,https://www.up-paragliders.com/paragliders/k2-5,
+UP,K2 5,44,B,Tandem,Current,https://www.up-paragliders.com/paragliders/k2-5,
+Niviuk,Koyot 6,20,A,Paraglider,Current,https://niviuk.com/en/koyot-6,
+Niviuk,Koyot 6,22,A,Paraglider,Current,https://niviuk.com/en/koyot-6,
+Niviuk,Koyot 6,24,A,Paraglider,Current,https://niviuk.com/en/koyot-6,
+Niviuk,Koyot 6,26,A,Paraglider,Current,https://niviuk.com/en/koyot-6,
+Niviuk,Koyot 6,28,A,Paraglider,Current,https://niviuk.com/en/koyot-6,
+Niviuk,Koyot 6,30,A,Paraglider,Current,https://niviuk.com/en/koyot-6,
+Niviuk,Hook 6,20,B,Paraglider,Current,https://niviuk.com/en/hook-6,
+Niviuk,Hook 6,22,B,Paraglider,Current,https://niviuk.com/en/hook-6,
+Niviuk,Hook 6,24,B,Paraglider,Current,https://niviuk.com/en/hook-6,
+Niviuk,Hook 6,26,B,Paraglider,Current,https://niviuk.com/en/hook-6,
+Niviuk,Hook 6,28,B,Paraglider,Current,https://niviuk.com/en/hook-6,
+Niviuk,Hook 6,31,B,Paraglider,Current,https://niviuk.com/en/hook-6,
+Niviuk,Hiko,20,B,Paraglider,Current,https://niviuk.com/en/hiko,
+Niviuk,Hiko,22,B,Paraglider,Current,https://niviuk.com/en/hiko,
+Niviuk,Hiko,24,B,Paraglider,Current,https://niviuk.com/en/hiko,
+Niviuk,Hiko,26,B,Paraglider,Current,https://niviuk.com/en/hiko,
+Niviuk,Hiko,28,B,Paraglider,Current,https://niviuk.com/en/hiko,
+Niviuk,Hiko,30,B,Paraglider,Current,https://niviuk.com/en/hiko,
+Niviuk,Ikuma 3,20,B+,Paraglider,Current,https://niviuk.com/en/ikuma-3,
+Niviuk,Ikuma 3,22,B+,Paraglider,Current,https://niviuk.com/en/ikuma-3,
+Niviuk,Ikuma 3,24,B+,Paraglider,Current,https://niviuk.com/en/ikuma-3,
+Niviuk,Ikuma 3,26,B+,Paraglider,Current,https://niviuk.com/en/ikuma-3,
+Niviuk,Ikuma 3,28,B+,Paraglider,Current,https://niviuk.com/en/ikuma-3,
+Niviuk,Ikuma 3,30,B+,Paraglider,Current,https://niviuk.com/en/ikuma-3,
+Niviuk,Artik R 2,20,C,Paraglider,Current,https://niviuk.com/en/artik-r-2,
+Niviuk,Artik R 2,21,C,Paraglider,Current,https://niviuk.com/en/artik-r-2,
+Niviuk,Artik R 2,23,C,Paraglider,Current,https://niviuk.com/en/artik-r-2,
+Niviuk,Artik R 2,24,C,Paraglider,Current,https://niviuk.com/en/artik-r-2,
+Niviuk,Artik R 2,25,C,Paraglider,Current,https://niviuk.com/en/artik-r-2,
+Niviuk,Artik R 2,27,C,Paraglider,Current,https://niviuk.com/en/artik-r-2,
+Niviuk,Peak 6,21,D,Paraglider,Current,https://niviuk.com/en/peak-6,
+Niviuk,Peak 6,22,D,Paraglider,Current,https://niviuk.com/en/peak-6,
+Niviuk,Peak 6,24,D,Paraglider,Current,https://niviuk.com/en/peak-6,
+Niviuk,Peak 6,26,D,Paraglider,Current,https://niviuk.com/en/peak-6,
+Niviuk,Icepeak X-One,20,CCC,Competition,Current,https://niviuk.com/en/icepeak-x-one,
+Niviuk,Icepeak X-One,22,CCC,Competition,Current,https://niviuk.com/en/icepeak-x-one,
+Niviuk,Icepeak X-One,24,CCC,Competition,Current,https://niviuk.com/en/icepeak-x-one,
+Niviuk,Icepeak X-One,25,CCC,Competition,Current,https://niviuk.com/en/icepeak-x-one,
+Niviuk,Icepeak X-One,26,CCC,Competition,Current,https://niviuk.com/en/icepeak-x-one,
+Niviuk,Bi Roller 2,30,B,Tandem and acro,Current,https://niviuk.com/en/bi-roller-2,
+Niviuk,Bi Roller 2,34,B,Tandem and acro,Current,https://niviuk.com/en/bi-roller-2,
+Niviuk,Jester,14,EN 926-1,Acro,Current,https://niviuk.com/en/jester,
+Niviuk,Jester,16,EN 926-1,Acro,Current,https://niviuk.com/en/jester,
+Niviuk,Jester,18,EN 926-1,Acro,Current,https://niviuk.com/en/jester,
+Niviuk,Jester,21,EN 926-1,Acro,Current,https://niviuk.com/en/jester,
+Niviuk,Jester,24,EN 926-1,Acro,Current,https://niviuk.com/en/jester,
+Niviuk,Target,20,A,Accuracy,Current,https://niviuk.com/en/target,
+Niviuk,Target,22,A,Accuracy,Current,https://niviuk.com/en/target,
+Niviuk,Target,24,A,Accuracy,Current,https://niviuk.com/en/target,
+Niviuk,Target,26,A,Accuracy,Current,https://niviuk.com/en/target,
+Niviuk,Target,28,A,Accuracy,Current,https://niviuk.com/en/target,
+Niviuk,Target,30,A,Accuracy,Current,https://niviuk.com/en/target,
+Niviuk,Takoo 6,38,B,Tandem,Current,https://niviuk.com/en/takoo-6,
+Niviuk,Takoo 6,41,B,Tandem,Current,https://niviuk.com/en/takoo-6,
+Niviuk,Takoo 6,44,B,Tandem,Current,https://niviuk.com/en/takoo-6,
+Niviuk,Koyot 6 P,20,A,Hike and fly,Current,https://niviuk.com/en/koyot-6-p,
+Niviuk,Koyot 6 P,22,A,Hike and fly,Current,https://niviuk.com/en/koyot-6-p,
+Niviuk,Koyot 6 P,24,A,Hike and fly,Current,https://niviuk.com/en/koyot-6-p,
+Niviuk,Koyot 6 P,26,A,Hike and fly,Current,https://niviuk.com/en/koyot-6-p,
+Niviuk,Koyot 6 P,28,A,Hike and fly,Current,https://niviuk.com/en/koyot-6-p,
+Niviuk,Hook 6 P,20,B,Hike and fly,Current,https://niviuk.com/en/hook-6-p,The smallest size has a higher classification than the rest of the range.
+Niviuk,Hook 6 P,22,A+,Hike and fly,Current,https://niviuk.com/en/hook-6-p,The smallest size has a higher classification than the rest of the range.
+Niviuk,Hook 6 P,24,A+,Hike and fly,Current,https://niviuk.com/en/hook-6-p,The smallest size has a higher classification than the rest of the range.
+Niviuk,Hook 6 P,26,A+,Hike and fly,Current,https://niviuk.com/en/hook-6-p,The smallest size has a higher classification than the rest of the range.
+Niviuk,Hook 6 P,28,A+,Hike and fly,Current,https://niviuk.com/en/hook-6-p,The smallest size has a higher classification than the rest of the range.
+Niviuk,Kode 2 P,12,Uncertified,Hike and fly and miniwing,Current,https://niviuk.com/en/kode-2-p,Classification varies by size and certified weight range.
+Niviuk,Kode 2 P,14,D,Hike and fly and miniwing,Current,https://niviuk.com/en/kode-2-p,Classification varies by size and certified weight range.
+Niviuk,Kode 2 P,16,C,Hike and fly and miniwing,Current,https://niviuk.com/en/kode-2-p,Classification varies by size and certified weight range.
+Niviuk,Kode 2 P,18,A/C,Hike and fly and miniwing,Current,https://niviuk.com/en/kode-2-p,Classification varies by size and certified weight range.
+Niviuk,Kode 2 P,20,A/B,Hike and fly and miniwing,Current,https://niviuk.com/en/kode-2-p,Classification varies by size and certified weight range.
+Niviuk,Kode 2 P,22,A,Hike and fly and miniwing,Current,https://niviuk.com/en/kode-2-p,Classification varies by size and certified weight range.
+Niviuk,Kode 2 P,24,A,Hike and fly and miniwing,Current,https://niviuk.com/en/kode-2-p,Classification varies by size and certified weight range.
+Niviuk,Kode 2 P,26,A,Hike and fly and miniwing,Current,https://niviuk.com/en/kode-2-p,Classification varies by size and certified weight range.
+Niviuk,Hiko P,20,B,Hike and fly,Current,https://niviuk.com/en/hiko-p,
+Niviuk,Hiko P,22,B,Hike and fly,Current,https://niviuk.com/en/hiko-p,
+Niviuk,Hiko P,24,B,Hike and fly,Current,https://niviuk.com/en/hiko-p,
+Niviuk,Hiko P,26,B,Hike and fly,Current,https://niviuk.com/en/hiko-p,
+Niviuk,Hiko P,28,B,Hike and fly,Current,https://niviuk.com/en/hiko-p,
+Niviuk,Ikuma 3 P,20,B+,Hike and fly,Current,https://niviuk.com/en/ikuma-3-p,
+Niviuk,Ikuma 3 P,22,B+,Hike and fly,Current,https://niviuk.com/en/ikuma-3-p,
+Niviuk,Ikuma 3 P,24,B+,Hike and fly,Current,https://niviuk.com/en/ikuma-3-p,
+Niviuk,Ikuma 3 P,26,B+,Hike and fly,Current,https://niviuk.com/en/ikuma-3-p,
+Niviuk,Ikuma 3 P,28,B+,Hike and fly,Current,https://niviuk.com/en/ikuma-3-p,
+Niviuk,Artik 7 P,20,C,Hike and fly,Current,https://niviuk.com/en/artik-7-p,
+Niviuk,Artik 7 P,22,C,Hike and fly,Current,https://niviuk.com/en/artik-7-p,
+Niviuk,Artik 7 P,23,C,Hike and fly,Current,https://niviuk.com/en/artik-7-p,
+Niviuk,Artik 7 P,24,C,Hike and fly,Current,https://niviuk.com/en/artik-7-p,
+Niviuk,Artik 7 P,26,C,Hike and fly,Current,https://niviuk.com/en/artik-7-p,
+Niviuk,Artik 7 P,28,C,Hike and fly,Current,https://niviuk.com/en/artik-7-p,
+Niviuk,Klimber 3 P,20,D,Hike and fly,Current,https://niviuk.com/en/klimber-3-p,
+Niviuk,Klimber 3 P,22,D,Hike and fly,Current,https://niviuk.com/en/klimber-3-p,
+Niviuk,Klimber 3 P,24,D,Hike and fly,Current,https://niviuk.com/en/klimber-3-p,
+Niviuk,Klimber 3 P,26,D,Hike and fly,Current,https://niviuk.com/en/klimber-3-p,
+Niviuk,Skin 4 P,14,C,Single surface,Current,https://niviuk.com/en/skin-4-p,
+Niviuk,Skin 4 P,16,B,Single surface,Current,https://niviuk.com/en/skin-4-p,
+Niviuk,Skin 4 P,18,B,Single surface,Current,https://niviuk.com/en/skin-4-p,
+Niviuk,Skin 4 P,20,B,Single surface,Current,https://niviuk.com/en/skin-4-p,
+Niviuk,Bi Skin 2 P,31,B,Single surface tandem,Current,https://niviuk.com/en/bi-skin-2-p,
+Gin,Yeti 6,21,A,Hike and fly,Current,https://www.gingliders.com/en/paragliders/beginner-and-intermediate/yeti-6/,
+Gin,Yeti 6,23,A,Hike and fly,Current,https://www.gingliders.com/en/paragliders/beginner-and-intermediate/yeti-6/,
+Gin,Yeti 6,25,A,Hike and fly,Current,https://www.gingliders.com/en/paragliders/beginner-and-intermediate/yeti-6/,
+Gin,Yeti 6,27,A,Hike and fly,Current,https://www.gingliders.com/en/paragliders/beginner-and-intermediate/yeti-6/,
+Gin,Bolero 8,XXS,A,Paraglider,Current,https://www.gingliders.com/en/paragliders/beginner-and-intermediate/bolero-8/,
+Gin,Bolero 8,XS,A,Paraglider,Current,https://www.gingliders.com/en/paragliders/beginner-and-intermediate/bolero-8/,
+Gin,Bolero 8,S,A,Paraglider,Current,https://www.gingliders.com/en/paragliders/beginner-and-intermediate/bolero-8/,
+Gin,Bolero 8,M,A,Paraglider,Current,https://www.gingliders.com/en/paragliders/beginner-and-intermediate/bolero-8/,
+Gin,Bolero 8,L,A,Paraglider,Current,https://www.gingliders.com/en/paragliders/beginner-and-intermediate/bolero-8/,
+Gin,Elise,XXS,A,Light paraglider,Current,https://www.gingliders.com/en/paragliders/beginner-and-intermediate/elise/,
+Gin,Elise,XS,A,Light paraglider,Current,https://www.gingliders.com/en/paragliders/beginner-and-intermediate/elise/,
+Gin,Elise,S,A,Light paraglider,Current,https://www.gingliders.com/en/paragliders/beginner-and-intermediate/elise/,
+Gin,Elise,M,A,Light paraglider,Current,https://www.gingliders.com/en/paragliders/beginner-and-intermediate/elise/,
+Gin,Elise,L,A,Light paraglider,Current,https://www.gingliders.com/en/paragliders/beginner-and-intermediate/elise/,
+Gin,Calypso 2,XXS,B,Light paraglider,Current,https://www.gingliders.com/en/paragliders/beginner-and-intermediate/calypso-2/,
+Gin,Calypso 2,XS,B,Light paraglider,Current,https://www.gingliders.com/en/paragliders/beginner-and-intermediate/calypso-2/,
+Gin,Calypso 2,S,B,Light paraglider,Current,https://www.gingliders.com/en/paragliders/beginner-and-intermediate/calypso-2/,
+Gin,Calypso 2,M,B,Light paraglider,Current,https://www.gingliders.com/en/paragliders/beginner-and-intermediate/calypso-2/,
+Gin,Calypso 2,L,B,Light paraglider,Current,https://www.gingliders.com/en/paragliders/beginner-and-intermediate/calypso-2/,
+Gin,Evora,XXS,B,Paraglider,Current,https://www.gingliders.com/en/paragliders/beginner-and-intermediate/evora/,
+Gin,Evora,XS,B,Paraglider,Current,https://www.gingliders.com/en/paragliders/beginner-and-intermediate/evora/,
+Gin,Evora,S,B,Paraglider,Current,https://www.gingliders.com/en/paragliders/beginner-and-intermediate/evora/,
+Gin,Evora,M,B,Paraglider,Current,https://www.gingliders.com/en/paragliders/beginner-and-intermediate/evora/,
+Gin,Evora,L,B,Paraglider,Current,https://www.gingliders.com/en/paragliders/beginner-and-intermediate/evora/,
+Gin,Evora,XL,B,Paraglider,Current,https://www.gingliders.com/en/paragliders/beginner-and-intermediate/evora/,
+Gin,Bandit 2,XXS,B,Light paraglider,Current,https://www.gingliders.com/en/paragliders/beginner-and-intermediate/bandit-2/,
+Gin,Bandit 2,XS,B,Light paraglider,Current,https://www.gingliders.com/en/paragliders/beginner-and-intermediate/bandit-2/,
+Gin,Bandit 2,S,B,Light paraglider,Current,https://www.gingliders.com/en/paragliders/beginner-and-intermediate/bandit-2/,
+Gin,Bandit 2,M,B,Light paraglider,Current,https://www.gingliders.com/en/paragliders/beginner-and-intermediate/bandit-2/,
+Gin,Bandit 2,L,B,Light paraglider,Current,https://www.gingliders.com/en/paragliders/beginner-and-intermediate/bandit-2/,
+Gin,Avid,XXS,B,Paraglider,Current,https://www.gingliders.com/en/paragliders/sport/avid/,
+Gin,Avid,XS,B,Paraglider,Current,https://www.gingliders.com/en/paragliders/sport/avid/,
+Gin,Avid,S,B,Paraglider,Current,https://www.gingliders.com/en/paragliders/sport/avid/,
+Gin,Avid,M,B,Paraglider,Current,https://www.gingliders.com/en/paragliders/sport/avid/,
+Gin,Avid,L,B,Paraglider,Current,https://www.gingliders.com/en/paragliders/sport/avid/,
+Gin,Explorer 2,XXS,B,Light paraglider,Current,https://www.gingliders.com/en/paragliders/sport/explorer-2/,
+Gin,Explorer 2,XS,B,Light paraglider,Current,https://www.gingliders.com/en/paragliders/sport/explorer-2/,
+Gin,Explorer 2,S,B,Light paraglider,Current,https://www.gingliders.com/en/paragliders/sport/explorer-2/,
+Gin,Explorer 2,M,B,Light paraglider,Current,https://www.gingliders.com/en/paragliders/sport/explorer-2/,
+Gin,Explorer 2,L,B,Light paraglider,Current,https://www.gingliders.com/en/paragliders/sport/explorer-2/,
+Gin,Bonanza 3,XXS,C,Paraglider,Current,https://www.gingliders.com/en/paragliders/sport/bonanza-3/,
+Gin,Bonanza 3,XS,C,Paraglider,Current,https://www.gingliders.com/en/paragliders/sport/bonanza-3/,
+Gin,Bonanza 3,S,C,Paraglider,Current,https://www.gingliders.com/en/paragliders/sport/bonanza-3/,
+Gin,Bonanza 3,M,C,Paraglider,Current,https://www.gingliders.com/en/paragliders/sport/bonanza-3/,
+Gin,Bonanza 3,L,C,Paraglider,Current,https://www.gingliders.com/en/paragliders/sport/bonanza-3/,
+Gin,Camino 2,XXS,C,Light paraglider,Current,https://www.gingliders.com/en/paragliders/sport/camino-2/,
+Gin,Camino 2,XS,C,Light paraglider,Current,https://www.gingliders.com/en/paragliders/sport/camino-2/,
+Gin,Camino 2,S,C,Light paraglider,Current,https://www.gingliders.com/en/paragliders/sport/camino-2/,
+Gin,Camino 2,M,C,Light paraglider,Current,https://www.gingliders.com/en/paragliders/sport/camino-2/,
+Gin,Camino 2,L,C,Light paraglider,Current,https://www.gingliders.com/en/paragliders/sport/camino-2/,
+Gin,GTO 3,XXS,C,Paraglider,Current,https://www.gingliders.com/en/paragliders/sport/gto-3/,
+Gin,GTO 3,XS,C,Paraglider,Current,https://www.gingliders.com/en/paragliders/sport/gto-3/,
+Gin,GTO 3,S,C,Paraglider,Current,https://www.gingliders.com/en/paragliders/sport/gto-3/,
+Gin,GTO 3,M,C,Paraglider,Current,https://www.gingliders.com/en/paragliders/sport/gto-3/,
+Gin,GTO 3,L,C,Paraglider,Current,https://www.gingliders.com/en/paragliders/sport/gto-3/,
+Gin,GTO 3,XL,C,Paraglider,Current,https://www.gingliders.com/en/paragliders/sport/gto-3/,
+Gin,Leopard,XS,D,Paraglider,Current,https://www.gingliders.com/en/paragliders/high-performance/leopard/,
+Gin,Leopard,S,D,Paraglider,Current,https://www.gingliders.com/en/paragliders/high-performance/leopard/,
+Gin,Leopard,M,D,Paraglider,Current,https://www.gingliders.com/en/paragliders/high-performance/leopard/,
+Gin,Leopard,L,D,Paraglider,Current,https://www.gingliders.com/en/paragliders/high-performance/leopard/,
+Gin,Puma,XS,D,Hike and fly performance,Current,https://www.gingliders.com/en/paragliders/high-performance/puma/,
+Gin,Puma,S,D,Hike and fly performance,Current,https://www.gingliders.com/en/paragliders/high-performance/puma/,
+Gin,Puma,M,D,Hike and fly performance,Current,https://www.gingliders.com/en/paragliders/high-performance/puma/,
+Gin,Puma,L,D,Hike and fly performance,Current,https://www.gingliders.com/en/paragliders/high-performance/puma/,
+Gin,Boomerang 12,S,CCC,Competition,Current,https://www.gingliders.com/en/paragliders/high-performance/boomerang-12/,
+Gin,Boomerang 12,SM,CCC,Competition,Current,https://www.gingliders.com/en/paragliders/high-performance/boomerang-12/,
+Gin,Boomerang 12,M,CCC,Competition,Current,https://www.gingliders.com/en/paragliders/high-performance/boomerang-12/,
+Gin,Boomerang 12,ML,CCC,Competition,Current,https://www.gingliders.com/en/paragliders/high-performance/boomerang-12/,
+Gin,Boomerang 12,L,CCC,Competition,Current,https://www.gingliders.com/en/paragliders/high-performance/boomerang-12/,
+Gin,Boomerang 12,XL,CCC,Competition,Current,https://www.gingliders.com/en/paragliders/high-performance/boomerang-12/,
+Gin,Fuse 4,37,B,Tandem,Current,https://www.gingliders.com/en/paragliders/tandem/fuse-4/,
+Gin,Fuse 4,41,B,Tandem,Current,https://www.gingliders.com/en/paragliders/tandem/fuse-4/,
+Gin,Fuse 4,44,B,Tandem,Current,https://www.gingliders.com/en/paragliders/tandem/fuse-4/,
+Gin,Fuse mini,32,B,Small tandem,Current,https://www.gingliders.com/en/paragliders/tandem/fuse-mini/,
+Gin,Fuse mini,35,B,Small tandem,Current,https://www.gingliders.com/en/paragliders/tandem/fuse-mini/,
+Gin,Yeti tandem 3,37,A,Light tandem,Current,https://www.gingliders.com/en/paragliders/tandem/yeti-tandem-3/,
+Gin,Yeti tandem 3,41,B,Light tandem,Current,https://www.gingliders.com/en/paragliders/tandem/yeti-tandem-3/,
+Gin,Griffin,14,Uncertified,Miniwing,Current,https://www.gingliders.com/en/paragliders/mini-wings/griffin/,The manufacturer lists an EN C test report for size 16. The adjacent sizes are not listed with flight-test reports.
+Gin,Griffin,16,C,Miniwing,Current,https://www.gingliders.com/en/paragliders/mini-wings/griffin/,The manufacturer lists an EN C test report for size 16. The adjacent sizes are not listed with flight-test reports.
+Gin,Griffin,18,Uncertified,Miniwing,Current,https://www.gingliders.com/en/paragliders/mini-wings/griffin/,The manufacturer lists an EN C test report for size 16. The adjacent sizes are not listed with flight-test reports.
+Little Cloud,GT2,20,EN 926-1,Paraglider,Current,https://littlecloud.fr/en/gt2-en/,Only size 24 has an EN flight classification. Other sizes list structural certification.
+Little Cloud,GT2,22,EN 926-1,Paraglider,Current,https://littlecloud.fr/en/gt2-en/,Only size 24 has an EN flight classification. Other sizes list structural certification.
+Little Cloud,GT2,24,B,Paraglider,Current,https://littlecloud.fr/en/gt2-en/,Only size 24 has an EN flight classification. Other sizes list structural certification.
+Little Cloud,GT2,26,EN 926-1,Paraglider,Current,https://littlecloud.fr/en/gt2-en/,Only size 24 has an EN flight classification. Other sizes list structural certification.
+Little Cloud,GT2,28,EN 926-1,Paraglider,Current,https://littlecloud.fr/en/gt2-en/,Only size 24 has an EN flight classification. Other sizes list structural certification.
+Little Cloud,Gracchio Mk3,20,Uncertified,Paraglider,Current,https://littlecloud.fr/en/gracchio-mk3-en/,
+Little Cloud,Gracchio Mk3,21,Uncertified,Paraglider,Current,https://littlecloud.fr/en/gracchio-mk3-en/,
+Little Cloud,Gracchio Mk3,22,Uncertified,Paraglider,Current,https://littlecloud.fr/en/gracchio-mk3-en/,
+Little Cloud,Gracchio Mk3,23,Uncertified,Paraglider,Current,https://littlecloud.fr/en/gracchio-mk3-en/,
+Little Cloud,Gracchio Mk3,24,Uncertified,Paraglider,Current,https://littlecloud.fr/en/gracchio-mk3-en/,
+Little Cloud,Gracchio Mk3,25,Uncertified,Paraglider,Current,https://littlecloud.fr/en/gracchio-mk3-en/,
+Little Cloud,Gracchio Mk3,27,Uncertified,Paraglider,Current,https://littlecloud.fr/en/gracchio-mk3-en/,
+Little Cloud,Urubu Mk2,20.5,Uncertified,Paraglider,Current,https://littlecloud.fr/en/urubu-mk2-en/,
+Little Cloud,Urubu Mk2,22,Uncertified,Paraglider,Current,https://littlecloud.fr/en/urubu-mk2-en/,
+Little Cloud,Urubu Mk2,23.5,Uncertified,Paraglider,Current,https://littlecloud.fr/en/urubu-mk2-en/,
+Little Cloud,Urubu Mk2,25,Uncertified,Paraglider,Current,https://littlecloud.fr/en/urubu-mk2-en/,
+Little Cloud,Urubu Mk2,26.5,Uncertified,Paraglider,Current,https://littlecloud.fr/en/urubu-mk2-en/,
+Little Cloud,Urubu King,S,Uncertified,Paraglider,Recent previous,https://littlecloud.fr/en/urubu-king-en/,
+Little Cloud,Urubu King,M,Uncertified,Paraglider,Recent previous,https://littlecloud.fr/en/urubu-king-en/,
+Little Cloud,Urubu King,L,Uncertified,Paraglider,Recent previous,https://littlecloud.fr/en/urubu-king-en/,
+Little Cloud,Puffin V2,14,Uncertified,Miniwing,Current,https://littlecloud.fr/en/puffin-v2-en/,
+Little Cloud,Puffin V2,16,Uncertified,Miniwing,Current,https://littlecloud.fr/en/puffin-v2-en/,
+Little Cloud,Puffin V2,19,Uncertified,Miniwing,Current,https://littlecloud.fr/en/puffin-v2-en/,
+Little Cloud,Bidule,S (31),D,Tandem,Current,https://littlecloud.fr/en/bidule-en/,
+Little Cloud,Bidule,XL (38),C,Tandem,Current,https://littlecloud.fr/en/bidule-en/,
+Little Cloud,SuperFly,17,EN 926-1,Miniwing,Current,https://littlecloud.fr/en/superfly-en/,
+Little Cloud,SuperFly,19.5,EN 926-1,Miniwing,Current,https://littlecloud.fr/en/superfly-en/,
+Little Cloud,SuperFly,22.5,EN 926-1,Miniwing,Current,https://littlecloud.fr/en/superfly-en/,
+Little Cloud,Kagoo2,14,EN 926-1,Miniwing,Current,https://littlecloud.fr/en/kagoo2-en/,
+Little Cloud,Kagoo2,16,EN 926-1,Miniwing,Current,https://littlecloud.fr/en/kagoo2-en/,
+Little Cloud,Kagoo2,18,EN 926-1,Miniwing,Current,https://littlecloud.fr/en/kagoo2-en/,
+Little Cloud,Kagoo2,20,EN 926-1,Miniwing,Current,https://littlecloud.fr/en/kagoo2-en/,
+Little Cloud,Kagoo2,23,EN 926-1,Miniwing,Current,https://littlecloud.fr/en/kagoo2-en/,
+Little Cloud,La Mouette,14,Load test,Parakite,Current,https://littlecloud.fr/en/la-mouette-en/,
+Little Cloud,La Mouette,16,Load test,Parakite,Current,https://littlecloud.fr/en/la-mouette-en/,
+Little Cloud,La Mouette,19,Load test,Parakite,Current,https://littlecloud.fr/en/la-mouette-en/,
+Little Cloud,La Mouette,22,Load test,Parakite,Current,https://littlecloud.fr/en/la-mouette-en/,
+Little Cloud,La Mouette,25,Load test,Parakite,Current,https://littlecloud.fr/en/la-mouette-en/,
+Little Cloud,The Spiruline Pro,8,EN 926-1,Miniwing,Current,https://littlecloud.fr/en/the-spiruline-pro-en/,
+Little Cloud,The Spiruline Pro,10,EN 926-1,Miniwing,Current,https://littlecloud.fr/en/the-spiruline-pro-en/,
+Little Cloud,The Spiruline Pro,12,EN 926-1,Miniwing,Current,https://littlecloud.fr/en/the-spiruline-pro-en/,
+Skywalk,MESCAL7,75,A,Paraglider,Current,https://skywalk.info/project/mescal7/,
+Skywalk,MESCAL7,85,A,Paraglider,Current,https://skywalk.info/project/mescal7/,
+Skywalk,MESCAL7,95,A,Paraglider,Current,https://skywalk.info/project/mescal7/,
+Skywalk,MESCAL7,105,A,Paraglider,Current,https://skywalk.info/project/mescal7/,
+Skywalk,MESCAL7,115,A,Paraglider,Current,https://skywalk.info/project/mescal7/,
+Skywalk,MESCAL7,135,A,Paraglider,Current,https://skywalk.info/project/mescal7/,
+Skywalk,TEQUILA6,75,B,Paraglider,Current,https://skywalk.info/project/tequila6/,
+Skywalk,TEQUILA6,85,B,Paraglider,Current,https://skywalk.info/project/tequila6/,
+Skywalk,TEQUILA6,95,B,Paraglider,Current,https://skywalk.info/project/tequila6/,
+Skywalk,TEQUILA6,105,B,Paraglider,Current,https://skywalk.info/project/tequila6/,
+Skywalk,TEQUILA6,115,B,Paraglider,Current,https://skywalk.info/project/tequila6/,
+Skywalk,TEQUILA6,135,B,Paraglider,Current,https://skywalk.info/project/tequila6/,
+Skywalk,ARAK2,75,B,Paraglider,Current,https://skywalk.info/project/arak2/,
+Skywalk,ARAK2,85,B,Paraglider,Current,https://skywalk.info/project/arak2/,
+Skywalk,ARAK2,95,B,Paraglider,Current,https://skywalk.info/project/arak2/,
+Skywalk,ARAK2,105,B,Paraglider,Current,https://skywalk.info/project/arak2/,
+Skywalk,ARAK2,115,B,Paraglider,Current,https://skywalk.info/project/arak2/,
+Skywalk,ARAK2,135,B,Paraglider,Current,https://skywalk.info/project/arak2/,
+Skywalk,CHILI5,75,B,Paraglider,Current,https://skywalk.info/project/chili5/,
+Skywalk,CHILI5,85,B,Paraglider,Current,https://skywalk.info/project/chili5/,
+Skywalk,CHILI5,95,B,Paraglider,Current,https://skywalk.info/project/chili5/,
+Skywalk,CHILI5,105,B,Paraglider,Current,https://skywalk.info/project/chili5/,
+Skywalk,CHILI5,115,B,Paraglider,Current,https://skywalk.info/project/chili5/,
+Skywalk,CHILI5,135,B,Paraglider,Current,https://skywalk.info/project/chili5/,
+Skywalk,MINT,75,C,Paraglider,Current,https://skywalk.info/project/mint/,
+Skywalk,MINT,85,C,Paraglider,Current,https://skywalk.info/project/mint/,
+Skywalk,MINT,95,C,Paraglider,Current,https://skywalk.info/project/mint/,
+Skywalk,MINT,105,C,Paraglider,Current,https://skywalk.info/project/mint/,
+Skywalk,MINT,115,C,Paraglider,Current,https://skywalk.info/project/mint/,
+Skywalk,MINT,125,C,Paraglider,Current,https://skywalk.info/project/mint/,
+Skywalk,MASALA4,70+,A,Hike and fly,Current,https://skywalk.info/project/masala4/,
+Skywalk,MASALA4,80+,A,Hike and fly,Current,https://skywalk.info/project/masala4/,
+Skywalk,MASALA4,95+,A,Hike and fly,Current,https://skywalk.info/project/masala4/,
+Skywalk,MASALA4,105+,A,Hike and fly,Current,https://skywalk.info/project/masala4/,
+Skywalk,MASALA4,120,A,Hike and fly,Current,https://skywalk.info/project/masala4/,
+Skywalk,ARAK AIR2,70+,B,Hike and fly,Current,https://skywalk.info/project/arak-air2/,
+Skywalk,ARAK AIR2,80+,B,Hike and fly,Current,https://skywalk.info/project/arak-air2/,
+Skywalk,ARAK AIR2,95+,B,Hike and fly,Current,https://skywalk.info/project/arak-air2/,
+Skywalk,ARAK AIR2,105+,B,Hike and fly,Current,https://skywalk.info/project/arak-air2/,
+Skywalk,ARAK AIR2,115+,B,Hike and fly,Current,https://skywalk.info/project/arak-air2/,
+Skywalk,CUMEO2,70+,B,Hike and fly,Current,https://skywalk.info/project/cumeo2/,
+Skywalk,CUMEO2,80+,B,Hike and fly,Current,https://skywalk.info/project/cumeo2/,
+Skywalk,CUMEO2,95+,B,Hike and fly,Current,https://skywalk.info/project/cumeo2/,
+Skywalk,CUMEO2,105+,B,Hike and fly,Current,https://skywalk.info/project/cumeo2/,
+Skywalk,CUMEO2,115+,B,Hike and fly,Current,https://skywalk.info/project/cumeo2/,
+Skywalk,SAGE,75+,C,Hike and fly,Current,https://skywalk.info/project/sage/,
+Skywalk,SAGE,85+,C,Hike and fly,Current,https://skywalk.info/project/sage/,
+Skywalk,SAGE,95+,C,Hike and fly,Current,https://skywalk.info/project/sage/,
+Skywalk,SAGE,105+,C,Hike and fly,Current,https://skywalk.info/project/sage/,
+Skywalk,SAGE,115+,C,Hike and fly,Current,https://skywalk.info/project/sage/,
+Skywalk,X-ALPS6,75+,D,Hike and fly competition,Current,https://skywalk.info/project/x-alps6/,
+Skywalk,X-ALPS6,85+,D,Hike and fly competition,Current,https://skywalk.info/project/x-alps6/,
+Skywalk,X-ALPS6,95+,D,Hike and fly competition,Current,https://skywalk.info/project/x-alps6/,
+Skywalk,X-ALPS6,105+,D,Hike and fly competition,Current,https://skywalk.info/project/x-alps6/,
+Skywalk,SPIRIT,75+,C,Miniwing,Current,https://skywalk.info/project/spirit/,Classification depends on size and certified takeoff-weight interval.
+Skywalk,SPIRIT,85+,B/C,Miniwing,Current,https://skywalk.info/project/spirit/,Classification depends on size and certified takeoff-weight interval.
+Skywalk,SPIRIT,105+,A/B/C,Miniwing,Current,https://skywalk.info/project/spirit/,Classification depends on size and certified takeoff-weight interval.
+Skywalk,SPIRIT,120,A/B,Miniwing,Current,https://skywalk.info/project/spirit/,Classification depends on size and certified takeoff-weight interval.
+Skywalk,TONIC2,XS,C,Miniwing,Current,https://skywalk.info/project/tonic2/,Classification depends on certified takeoff-weight interval.
+Skywalk,TONIC2,S,B/C,Miniwing,Current,https://skywalk.info/project/tonic2/,Classification depends on certified takeoff-weight interval.
+Skywalk,TONIC2,M,B/C,Miniwing,Current,https://skywalk.info/project/tonic2/,Classification depends on certified takeoff-weight interval.
+Skywalk,PACE,70+,B,Single surface,Current,https://skywalk.info/project/pace/,
+Skywalk,PACE,85+,B,Single surface,Current,https://skywalk.info/project/pace/,
+Skywalk,PACE,95+,B,Single surface,Current,https://skywalk.info/project/pace/,
+Skywalk,JOIN'T5,200,B,Tandem,Current,https://skywalk.info/project/joint5/,
+Skywalk,JOIN'T5,220,B,Tandem,Current,https://skywalk.info/project/joint5/,
+Skywalk,JOIN'T5,240,B,Tandem,Current,https://skywalk.info/project/joint5/,
+Nova,NIVO,XXS,A,Paraglider,Recent previous,https://www.nova.eu/en/gliders/nivo/,
+Nova,NIVO,XS,A,Paraglider,Recent previous,https://www.nova.eu/en/gliders/nivo/,
+Nova,NIVO,S,A,Paraglider,Recent previous,https://www.nova.eu/en/gliders/nivo/,
+Nova,NIVO,M,A,Paraglider,Recent previous,https://www.nova.eu/en/gliders/nivo/,
+Nova,NIVO,L,A,Paraglider,Recent previous,https://www.nova.eu/en/gliders/nivo/,
+Nova,NIVO,XL,A,Paraglider,Recent previous,https://www.nova.eu/en/gliders/nivo/,
+Nova,DOUBLESKIN 2,16,A,Single surface,Recent previous,https://www.nova.eu/en/gliders/doubleskin-2/,
+Nova,DOUBLESKIN 2,18,A,Single surface,Recent previous,https://www.nova.eu/en/gliders/doubleskin-2/,
+Nova,DOUBLESKIN 2,20,A,Single surface,Recent previous,https://www.nova.eu/en/gliders/doubleskin-2/,
+Nova,AONIC 2,XXXS,A,Paraglider,Recent previous,https://www.nova.eu/en/gliders/aonic-2/,
+Nova,AONIC 2,XXS,A,Paraglider,Recent previous,https://www.nova.eu/en/gliders/aonic-2/,
+Nova,AONIC 2,XS,A,Paraglider,Recent previous,https://www.nova.eu/en/gliders/aonic-2/,
+Nova,AONIC 2,S,A,Paraglider,Recent previous,https://www.nova.eu/en/gliders/aonic-2/,
+Nova,AONIC 2,M,A,Paraglider,Recent previous,https://www.nova.eu/en/gliders/aonic-2/,
+Nova,AONIC 2,L,A,Paraglider,Recent previous,https://www.nova.eu/en/gliders/aonic-2/,
+Nova,NEXO,XXS,B,Paraglider,Recent previous,https://www.nova.eu/en/gliders/nexo/,
+Nova,NEXO,XS,B,Paraglider,Recent previous,https://www.nova.eu/en/gliders/nexo/,
+Nova,NEXO,S,B,Paraglider,Recent previous,https://www.nova.eu/en/gliders/nexo/,
+Nova,NEXO,M,B,Paraglider,Recent previous,https://www.nova.eu/en/gliders/nexo/,
+Nova,NEXO,L,B,Paraglider,Recent previous,https://www.nova.eu/en/gliders/nexo/,
+Nova,ION 7 Light,XXXS,B,Light paraglider,Recent previous,https://www.nova.eu/en/gliders/ion-7-light/,
+Nova,ION 7 Light,XXS,B,Light paraglider,Recent previous,https://www.nova.eu/en/gliders/ion-7-light/,
+Nova,ION 7 Light,XS,B,Light paraglider,Recent previous,https://www.nova.eu/en/gliders/ion-7-light/,
+Nova,ION 7 Light,S,B,Light paraglider,Recent previous,https://www.nova.eu/en/gliders/ion-7-light/,
+Nova,ION 7 Light,M,B,Light paraglider,Recent previous,https://www.nova.eu/en/gliders/ion-7-light/,
+Nova,ION 7 Light,L,B,Light paraglider,Recent previous,https://www.nova.eu/en/gliders/ion-7-light/,
+Nova,MENTOR 7,XS,B,Paraglider,Recent previous,https://www.nova.eu/en/gliders/mentor-7/,
+Nova,MENTOR 7,S,B,Paraglider,Recent previous,https://www.nova.eu/en/gliders/mentor-7/,
+Nova,MENTOR 7,M,B,Paraglider,Recent previous,https://www.nova.eu/en/gliders/mentor-7/,
+Nova,MENTOR 7 Light,XXS,B,Light paraglider,Recent previous,https://www.nova.eu/en/gliders/mentor-7-light/,
+Nova,MENTOR 7 Light,XS,B,Light paraglider,Recent previous,https://www.nova.eu/en/gliders/mentor-7-light/,
+Nova,MENTOR 7 Light,S,B,Light paraglider,Recent previous,https://www.nova.eu/en/gliders/mentor-7-light/,
+Nova,MENTOR 7 Light,M,B,Light paraglider,Recent previous,https://www.nova.eu/en/gliders/mentor-7-light/,
+Nova,MENTOR 7 Light,L,B,Light paraglider,Recent previous,https://www.nova.eu/en/gliders/mentor-7-light/,
+Nova,CODEX,XXS,C,Paraglider,Recent previous,https://www.nova.eu/en/gliders/codex/,EN C. German LTF classification is D.
+Nova,CODEX,XS,C,Paraglider,Recent previous,https://www.nova.eu/en/gliders/codex/,EN C. German LTF classification is D.
+Nova,CODEX,S,C,Paraglider,Recent previous,https://www.nova.eu/en/gliders/codex/,EN C. German LTF classification is D.
+Nova,CODEX,M,C,Paraglider,Recent previous,https://www.nova.eu/en/gliders/codex/,EN C. German LTF classification is D.
+Nova,CODEX,L,C,Paraglider,Recent previous,https://www.nova.eu/en/gliders/codex/,EN C. German LTF classification is D.
+Nova,VORTEX,XXXS,C,Light paraglider,Recent previous,https://www.nova.eu/en/gliders/vortex/,EN C. German LTF classification is D.
+Nova,VORTEX,XXS,C,Light paraglider,Recent previous,https://www.nova.eu/en/gliders/vortex/,EN C. German LTF classification is D.
+Nova,VORTEX,XS,C,Light paraglider,Recent previous,https://www.nova.eu/en/gliders/vortex/,EN C. German LTF classification is D.
+Nova,VORTEX,S,C,Light paraglider,Recent previous,https://www.nova.eu/en/gliders/vortex/,EN C. German LTF classification is D.
+Nova,VORTEX,M,C,Light paraglider,Recent previous,https://www.nova.eu/en/gliders/vortex/,EN C. German LTF classification is D.
+Nova,XENON 3,XS,D,Light performance,Recent previous,https://www.nova.eu/en/gliders/xenon-3/,
+Nova,XENON 3,S,D,Light performance,Recent previous,https://www.nova.eu/en/gliders/xenon-3/,
+Nova,XENON 3,M,D,Light performance,Recent previous,https://www.nova.eu/en/gliders/xenon-3/,
+Nova,XENON 3,L,D,Light performance,Recent previous,https://www.nova.eu/en/gliders/xenon-3/,
+Nova,BANTAM 2,12,D,Miniwing,Recent previous,https://www.nova.eu/en/gliders/bantam-2/,
+Nova,BANTAM 2,14,D,Miniwing,Recent previous,https://www.nova.eu/en/gliders/bantam-2/,
+Nova,BANTAM 2,16,D,Miniwing,Recent previous,https://www.nova.eu/en/gliders/bantam-2/,
+Nova,BION 3,L,B,Tandem,Recent previous,https://www.nova.eu/en/gliders/bion-3/,
+Nova,GLITCH,18,Load test,Acro,Recent previous,https://www.nova.eu/en/gliders/glitch/,
+Nova,GLITCH,20,Load test,Acro,Recent previous,https://www.nova.eu/en/gliders/glitch/,
+Nova,GLITCH,22,Load test,Acro,Recent previous,https://www.nova.eu/en/gliders/glitch/,
+PHI,FANTASIA,18,A,Paraglider,Current,https://phi-air.com/wp-content/uploads/2025/10/PHI-Techdata-Eng.pdf,
+PHI,FANTASIA,20,A,Paraglider,Current,https://phi-air.com/wp-content/uploads/2025/10/PHI-Techdata-Eng.pdf,
+PHI,FANTASIA,22,A,Paraglider,Current,https://phi-air.com/wp-content/uploads/2025/10/PHI-Techdata-Eng.pdf,
+PHI,FANTASIA,24,A,Paraglider,Current,https://phi-air.com/wp-content/uploads/2025/10/PHI-Techdata-Eng.pdf,
+PHI,FANTASIA,26,A,Paraglider,Current,https://phi-air.com/wp-content/uploads/2025/10/PHI-Techdata-Eng.pdf,
+PHI,SOLA,18,A,Paraglider,Current,https://phi-air.com/wp-content/uploads/2025/10/PHI-Techdata-Eng.pdf,Extreme extended load ranges can have a higher classification.
+PHI,SOLA,20,A,Paraglider,Current,https://phi-air.com/wp-content/uploads/2025/10/PHI-Techdata-Eng.pdf,Extreme extended load ranges can have a higher classification.
+PHI,SOLA,22,A,Paraglider,Current,https://phi-air.com/wp-content/uploads/2025/10/PHI-Techdata-Eng.pdf,Extreme extended load ranges can have a higher classification.
+PHI,SOLA,24,A,Paraglider,Current,https://phi-air.com/wp-content/uploads/2025/10/PHI-Techdata-Eng.pdf,Extreme extended load ranges can have a higher classification.
+PHI,SOLA,26,A,Paraglider,Current,https://phi-air.com/wp-content/uploads/2025/10/PHI-Techdata-Eng.pdf,Extreme extended load ranges can have a higher classification.
+PHI,SOLA GT,18,A,Paraglider,Current,https://phi-air.com/wp-content/uploads/2025/10/PHI-Techdata-Eng.pdf,Extreme extended load ranges can have a higher classification.
+PHI,SOLA GT,20,A,Paraglider,Current,https://phi-air.com/wp-content/uploads/2025/10/PHI-Techdata-Eng.pdf,Extreme extended load ranges can have a higher classification.
+PHI,SOLA GT,22,A,Paraglider,Current,https://phi-air.com/wp-content/uploads/2025/10/PHI-Techdata-Eng.pdf,Extreme extended load ranges can have a higher classification.
+PHI,SOLA GT,24,A,Paraglider,Current,https://phi-air.com/wp-content/uploads/2025/10/PHI-Techdata-Eng.pdf,Extreme extended load ranges can have a higher classification.
+PHI,SOLA GT,26,A,Paraglider,Current,https://phi-air.com/wp-content/uploads/2025/10/PHI-Techdata-Eng.pdf,Extreme extended load ranges can have a higher classification.
+PHI,SOLA UL,12,D,Hike and fly and miniwing,Current,https://phi-air.com/wp-content/uploads/2025/10/PHI-Techdata-Eng.pdf,
+PHI,SOLA UL,14,D,Hike and fly and miniwing,Current,https://phi-air.com/wp-content/uploads/2025/10/PHI-Techdata-Eng.pdf,
+PHI,SOLA UL,16,C,Hike and fly and miniwing,Current,https://phi-air.com/wp-content/uploads/2025/10/PHI-Techdata-Eng.pdf,
+PHI,SOLA UL,19,A,Hike and fly and miniwing,Current,https://phi-air.com/wp-content/uploads/2025/10/PHI-Techdata-Eng.pdf,
+PHI,SONATA 2,18,A,Paraglider,Current,https://phi-air.com/wp-content/uploads/2025/10/PHI-Techdata-Eng.pdf,
+PHI,SONATA 2,20,A,Paraglider,Current,https://phi-air.com/wp-content/uploads/2025/10/PHI-Techdata-Eng.pdf,
+PHI,SONATA 2,22,A,Paraglider,Current,https://phi-air.com/wp-content/uploads/2025/10/PHI-Techdata-Eng.pdf,
+PHI,SONATA 2,24,A,Paraglider,Current,https://phi-air.com/wp-content/uploads/2025/10/PHI-Techdata-Eng.pdf,
+PHI,SONATA 2,26,A,Paraglider,Current,https://phi-air.com/wp-content/uploads/2025/10/PHI-Techdata-Eng.pdf,
+PHI,VIOLA 2,16,A,Light paraglider,Current,https://phi-air.com/wp-content/uploads/2025/10/PHI-Techdata-Eng.pdf,Extended load ranges may have a higher classification.
+PHI,VIOLA 2,18,A,Light paraglider,Current,https://phi-air.com/wp-content/uploads/2025/10/PHI-Techdata-Eng.pdf,Extended load ranges may have a higher classification.
+PHI,VIOLA 2,20,A,Light paraglider,Current,https://phi-air.com/wp-content/uploads/2025/10/PHI-Techdata-Eng.pdf,Extended load ranges may have a higher classification.
+PHI,VIOLA 2,22,A,Light paraglider,Current,https://phi-air.com/wp-content/uploads/2025/10/PHI-Techdata-Eng.pdf,Extended load ranges may have a higher classification.
+PHI,VIOLA 2,24,A,Light paraglider,Current,https://phi-air.com/wp-content/uploads/2025/10/PHI-Techdata-Eng.pdf,Extended load ranges may have a higher classification.
+PHI,VIOLA 2,26,A,Light paraglider,Current,https://phi-air.com/wp-content/uploads/2025/10/PHI-Techdata-Eng.pdf,Extended load ranges may have a higher classification.
+PHI,SYMPHONIA 2,18,A,Paraglider,Current,https://phi-air.com/wp-content/uploads/2025/10/PHI-Techdata-Eng.pdf,
+PHI,SYMPHONIA 2,20,A,Paraglider,Current,https://phi-air.com/wp-content/uploads/2025/10/PHI-Techdata-Eng.pdf,
+PHI,SYMPHONIA 2,22,A,Paraglider,Current,https://phi-air.com/wp-content/uploads/2025/10/PHI-Techdata-Eng.pdf,
+PHI,SYMPHONIA 2,23,A,Paraglider,Current,https://phi-air.com/wp-content/uploads/2025/10/PHI-Techdata-Eng.pdf,
+PHI,SYMPHONIA 2,24,A,Paraglider,Current,https://phi-air.com/wp-content/uploads/2025/10/PHI-Techdata-Eng.pdf,
+PHI,SYMPHONIA 2,26,A,Paraglider,Current,https://phi-air.com/wp-content/uploads/2025/10/PHI-Techdata-Eng.pdf,
+PHI,SYMPHONIA 2 light,18,A,Light paraglider,Current,https://phi-air.com/wp-content/uploads/2025/10/PHI-Techdata-Eng.pdf,
+PHI,SYMPHONIA 2 light,20,A,Light paraglider,Current,https://phi-air.com/wp-content/uploads/2025/10/PHI-Techdata-Eng.pdf,
+PHI,SYMPHONIA 2 light,22,A,Light paraglider,Current,https://phi-air.com/wp-content/uploads/2025/10/PHI-Techdata-Eng.pdf,
+PHI,SYMPHONIA 2 light,23,A,Light paraglider,Current,https://phi-air.com/wp-content/uploads/2025/10/PHI-Techdata-Eng.pdf,
+PHI,SYMPHONIA 2 light,24,A,Light paraglider,Current,https://phi-air.com/wp-content/uploads/2025/10/PHI-Techdata-Eng.pdf,
+PHI,SYMPHONIA 2 light,26,A,Light paraglider,Current,https://phi-air.com/wp-content/uploads/2025/10/PHI-Techdata-Eng.pdf,
+PHI,TENOR 2,17,B,Paraglider,Current,https://phi-air.com/wp-content/uploads/2025/10/PHI-Techdata-Eng.pdf,
+PHI,TENOR 2,19,B,Paraglider,Current,https://phi-air.com/wp-content/uploads/2025/10/PHI-Techdata-Eng.pdf,
+PHI,TENOR 2,21,B,Paraglider,Current,https://phi-air.com/wp-content/uploads/2025/10/PHI-Techdata-Eng.pdf,
+PHI,TENOR 2,22,B,Paraglider,Current,https://phi-air.com/wp-content/uploads/2025/10/PHI-Techdata-Eng.pdf,
+PHI,TENOR 2,23,B,Paraglider,Current,https://phi-air.com/wp-content/uploads/2025/10/PHI-Techdata-Eng.pdf,
+PHI,TENOR 2,25,B,Paraglider,Current,https://phi-air.com/wp-content/uploads/2025/10/PHI-Techdata-Eng.pdf,
+PHI,TENOR 2 light,17,B,Light paraglider,Current,https://phi-air.com/wp-content/uploads/2025/10/PHI-Techdata-Eng.pdf,
+PHI,TENOR 2 light,19,B,Light paraglider,Current,https://phi-air.com/wp-content/uploads/2025/10/PHI-Techdata-Eng.pdf,
+PHI,TENOR 2 light,21,B,Light paraglider,Current,https://phi-air.com/wp-content/uploads/2025/10/PHI-Techdata-Eng.pdf,
+PHI,TENOR 2 light,22,B,Light paraglider,Current,https://phi-air.com/wp-content/uploads/2025/10/PHI-Techdata-Eng.pdf,
+PHI,TENOR 2 light,23,B,Light paraglider,Current,https://phi-air.com/wp-content/uploads/2025/10/PHI-Techdata-Eng.pdf,
+PHI,TENOR 2 light,25,B,Light paraglider,Current,https://phi-air.com/wp-content/uploads/2025/10/PHI-Techdata-Eng.pdf,
+PHI,BEAT 2,18,B,Paraglider,Current,https://phi-air.com/wp-content/uploads/2025/10/PHI-Techdata-Eng.pdf,
+PHI,BEAT 2,20,B,Paraglider,Current,https://phi-air.com/wp-content/uploads/2025/10/PHI-Techdata-Eng.pdf,
+PHI,BEAT 2,22,B,Paraglider,Current,https://phi-air.com/wp-content/uploads/2025/10/PHI-Techdata-Eng.pdf,
+PHI,BEAT 2,23,B,Paraglider,Current,https://phi-air.com/wp-content/uploads/2025/10/PHI-Techdata-Eng.pdf,
+PHI,BEAT 2,24,B,Paraglider,Current,https://phi-air.com/wp-content/uploads/2025/10/PHI-Techdata-Eng.pdf,
+PHI,BEAT 2,26,B,Paraglider,Current,https://phi-air.com/wp-content/uploads/2025/10/PHI-Techdata-Eng.pdf,
+PHI,BEAT 2 light,18,B,Light paraglider,Current,https://phi-air.com/wp-content/uploads/2025/10/PHI-Techdata-Eng.pdf,
+PHI,BEAT 2 light,20,B,Light paraglider,Current,https://phi-air.com/wp-content/uploads/2025/10/PHI-Techdata-Eng.pdf,
+PHI,BEAT 2 light,22,B,Light paraglider,Current,https://phi-air.com/wp-content/uploads/2025/10/PHI-Techdata-Eng.pdf,
+PHI,BEAT 2 light,23,B,Light paraglider,Current,https://phi-air.com/wp-content/uploads/2025/10/PHI-Techdata-Eng.pdf,
+PHI,BEAT 2 light,24,B,Light paraglider,Current,https://phi-air.com/wp-content/uploads/2025/10/PHI-Techdata-Eng.pdf,
+PHI,BEAT 2 light,26,B,Light paraglider,Current,https://phi-air.com/wp-content/uploads/2025/10/PHI-Techdata-Eng.pdf,
+PHI,BEAT 2 light,28,B,Light paraglider,Current,https://phi-air.com/wp-content/uploads/2025/10/PHI-Techdata-Eng.pdf,
+PHI,MAESTRO 3,19,B,Paraglider,Current,https://phi-air.com/wp-content/uploads/2025/10/PHI-Techdata-Eng.pdf,
+PHI,MAESTRO 3,21,B,Paraglider,Current,https://phi-air.com/wp-content/uploads/2025/10/PHI-Techdata-Eng.pdf,
+PHI,MAESTRO 3,22,B,Paraglider,Current,https://phi-air.com/wp-content/uploads/2025/10/PHI-Techdata-Eng.pdf,
+PHI,MAESTRO 3,23,B,Paraglider,Current,https://phi-air.com/wp-content/uploads/2025/10/PHI-Techdata-Eng.pdf,
+PHI,MAESTRO 3 light,17,B,Light paraglider,Current,https://phi-air.com/wp-content/uploads/2025/10/PHI-Techdata-Eng.pdf,
+PHI,MAESTRO 3 light,18,B,Light paraglider,Current,https://phi-air.com/wp-content/uploads/2025/10/PHI-Techdata-Eng.pdf,
+PHI,MAESTRO 3 light,19,B,Light paraglider,Current,https://phi-air.com/wp-content/uploads/2025/10/PHI-Techdata-Eng.pdf,
+PHI,MAESTRO 3 light,21,B,Light paraglider,Current,https://phi-air.com/wp-content/uploads/2025/10/PHI-Techdata-Eng.pdf,
+PHI,MAESTRO 3 light,22,B,Light paraglider,Current,https://phi-air.com/wp-content/uploads/2025/10/PHI-Techdata-Eng.pdf,
+PHI,MAESTRO 3 light,23,B,Light paraglider,Current,https://phi-air.com/wp-content/uploads/2025/10/PHI-Techdata-Eng.pdf,
+PHI,MAESTRO 3 light,24,B,Light paraglider,Current,https://phi-air.com/wp-content/uploads/2025/10/PHI-Techdata-Eng.pdf,
+PHI,MAESTRO 3 light,25,B,Light paraglider,Current,https://phi-air.com/wp-content/uploads/2025/10/PHI-Techdata-Eng.pdf,
+PHI,MAESTRO 2 light,17,B,Light paraglider,Recent previous,https://phi-air.com/wp-content/uploads/2025/10/PHI-Techdata-Eng.pdf,
+PHI,MAESTRO 2 light,18,B,Light paraglider,Recent previous,https://phi-air.com/wp-content/uploads/2025/10/PHI-Techdata-Eng.pdf,
+PHI,MAESTRO 2 light,19,B,Light paraglider,Recent previous,https://phi-air.com/wp-content/uploads/2025/10/PHI-Techdata-Eng.pdf,
+PHI,MAESTRO 2 light,21,B,Light paraglider,Recent previous,https://phi-air.com/wp-content/uploads/2025/10/PHI-Techdata-Eng.pdf,
+PHI,MAESTRO 2 light,22,B,Light paraglider,Recent previous,https://phi-air.com/wp-content/uploads/2025/10/PHI-Techdata-Eng.pdf,
+PHI,MAESTRO 2 light,23,B,Light paraglider,Recent previous,https://phi-air.com/wp-content/uploads/2025/10/PHI-Techdata-Eng.pdf,
+PHI,MAESTRO 2 light,25,B,Light paraglider,Recent previous,https://phi-air.com/wp-content/uploads/2025/10/PHI-Techdata-Eng.pdf,
+PHI,ALLEGRO,19,C,Paraglider,Current,https://phi-air.com/wp-content/uploads/2025/10/PHI-Techdata-Eng.pdf,
+PHI,ALLEGRO,20,C,Paraglider,Current,https://phi-air.com/wp-content/uploads/2025/10/PHI-Techdata-Eng.pdf,
+PHI,ALLEGRO,21,C,Paraglider,Current,https://phi-air.com/wp-content/uploads/2025/10/PHI-Techdata-Eng.pdf,
+PHI,ALLEGRO,22,C,Paraglider,Current,https://phi-air.com/wp-content/uploads/2025/10/PHI-Techdata-Eng.pdf,
+PHI,ALLEGRO,24,C,Paraglider,Current,https://phi-air.com/wp-content/uploads/2025/10/PHI-Techdata-Eng.pdf,
+PHI,ALLEGRO light,17,C,Light paraglider,Current,https://phi-air.com/wp-content/uploads/2025/10/PHI-Techdata-Eng.pdf,
+PHI,ALLEGRO light,19,C,Light paraglider,Current,https://phi-air.com/wp-content/uploads/2025/10/PHI-Techdata-Eng.pdf,
+PHI,ALLEGRO light,20,C,Light paraglider,Current,https://phi-air.com/wp-content/uploads/2025/10/PHI-Techdata-Eng.pdf,
+PHI,ALLEGRO light,21,C,Light paraglider,Current,https://phi-air.com/wp-content/uploads/2025/10/PHI-Techdata-Eng.pdf,
+PHI,ALLEGRO light,22,C,Light paraglider,Current,https://phi-air.com/wp-content/uploads/2025/10/PHI-Techdata-Eng.pdf,
+PHI,ALLEGRO light,24,C,Light paraglider,Current,https://phi-air.com/wp-content/uploads/2025/10/PHI-Techdata-Eng.pdf,
+PHI,SCALA 2,18,C,Paraglider,Current,https://phi-air.com/wp-content/uploads/2025/10/PHI-Techdata-Eng.pdf,
+PHI,SCALA 2,19,C,Paraglider,Current,https://phi-air.com/wp-content/uploads/2025/10/PHI-Techdata-Eng.pdf,
+PHI,SCALA 2,20,C,Paraglider,Current,https://phi-air.com/wp-content/uploads/2025/10/PHI-Techdata-Eng.pdf,
+PHI,SCALA 2,21,C,Paraglider,Current,https://phi-air.com/wp-content/uploads/2025/10/PHI-Techdata-Eng.pdf,
+PHI,SCALA 2,23,C,Paraglider,Current,https://phi-air.com/wp-content/uploads/2025/10/PHI-Techdata-Eng.pdf,
+PHI,SCALA 2 light,18,C,Light paraglider,Current,https://phi-air.com/wp-content/uploads/2025/10/PHI-Techdata-Eng.pdf,
+PHI,SCALA 2 light,19,C,Light paraglider,Current,https://phi-air.com/wp-content/uploads/2025/10/PHI-Techdata-Eng.pdf,
+PHI,SCALA 2 light,20,C,Light paraglider,Current,https://phi-air.com/wp-content/uploads/2025/10/PHI-Techdata-Eng.pdf,
+PHI,CONCERTO,36,A,Tandem,Current,https://phi-air.com/wp-content/uploads/2025/10/PHI-Techdata-Eng.pdf,
+PHI,RONDO,190,B,Tandem,Current,https://phi-air.com/wp-content/uploads/2025/10/PHI-Techdata-Eng.pdf,
+PHI,RONDO,210,B,Tandem,Current,https://phi-air.com/wp-content/uploads/2025/10/PHI-Techdata-Eng.pdf,
+PHI,RONDO,230,B,Tandem,Current,https://phi-air.com/wp-content/uploads/2025/10/PHI-Techdata-Eng.pdf,
+PHI,RONDO C,190,B,Tandem,Current,https://phi-air.com/wp-content/uploads/2025/10/PHI-Techdata-Eng.pdf,
+PHI,RONDO C,210,B,Tandem,Current,https://phi-air.com/wp-content/uploads/2025/10/PHI-Techdata-Eng.pdf,
+PHI,RONDO C,230,B,Tandem,Current,https://phi-air.com/wp-content/uploads/2025/10/PHI-Techdata-Eng.pdf,
+Mac Para,Progress 2,23 (XS),A,Paraglider,Current,https://www.macpara.com/en/paragliders/free-flying/progress-2,
+Mac Para,Progress 2,25 (S),A,Paraglider,Current,https://www.macpara.com/en/paragliders/free-flying/progress-2,
+Mac Para,Progress 2,27 (M),A,Paraglider,Current,https://www.macpara.com/en/paragliders/free-flying/progress-2,
+Mac Para,Progress 2,30 (L),A,Paraglider,Current,https://www.macpara.com/en/paragliders/free-flying/progress-2,
+Mac Para,Progress 2,33 (XL),A,Paraglider,Current,https://www.macpara.com/en/paragliders/free-flying/progress-2,
+Mac Para,Muse 5,22 (XS),A,Paraglider,Current,https://www.macpara.com/en/paragliders/free-flying/muse-5,
+Mac Para,Muse 5,25 (S),A,Paraglider,Current,https://www.macpara.com/en/paragliders/free-flying/muse-5,
+Mac Para,Muse 5,27 (M),A,Paraglider,Current,https://www.macpara.com/en/paragliders/free-flying/muse-5,
+Mac Para,Muse 5,29 (L),A,Paraglider,Current,https://www.macpara.com/en/paragliders/free-flying/muse-5,
+Mac Para,Muse 5,31 (XL),A,Paraglider,Current,https://www.macpara.com/en/paragliders/free-flying/muse-5,
+Mac Para,Muse 5,34 (XXL),A,Paraglider,Current,https://www.macpara.com/en/paragliders/free-flying/muse-5,
+Mac Para,Aravis,17 (XXS),A,Hike and fly,Current,https://www.macpara.com/en/paragliders/free-flying/aravis,Corrected from the earlier CSV. Size 17 is also EN A.
+Mac Para,Aravis,19 (XS),A,Hike and fly,Current,https://www.macpara.com/en/paragliders/free-flying/aravis,Corrected from the earlier CSV. Size 17 is also EN A.
+Mac Para,Aravis,21 (S),A,Hike and fly,Current,https://www.macpara.com/en/paragliders/free-flying/aravis,Corrected from the earlier CSV. Size 17 is also EN A.
+Mac Para,Aravis,23 (M),A,Hike and fly,Current,https://www.macpara.com/en/paragliders/free-flying/aravis,Corrected from the earlier CSV. Size 17 is also EN A.
+Mac Para,Aravis,25 (L),A,Hike and fly,Current,https://www.macpara.com/en/paragliders/free-flying/aravis,Corrected from the earlier CSV. Size 17 is also EN A.
+Mac Para,Aravis,28 (XL),A,Hike and fly,Current,https://www.macpara.com/en/paragliders/free-flying/aravis,Corrected from the earlier CSV. Size 17 is also EN A.
+Mac Para,Illusion 2,22 (XS),B,Paraglider,Current,https://www.macpara.com/en/paragliders/free-flying/illusion-2,
+Mac Para,Illusion 2,24 (S),B,Paraglider,Current,https://www.macpara.com/en/paragliders/free-flying/illusion-2,
+Mac Para,Illusion 2,26 (M),B,Paraglider,Current,https://www.macpara.com/en/paragliders/free-flying/illusion-2,
+Mac Para,Illusion 2,28 (L),B,Paraglider,Current,https://www.macpara.com/en/paragliders/free-flying/illusion-2,
+Mac Para,Illusion 2,30 (XL),B,Paraglider,Current,https://www.macpara.com/en/paragliders/free-flying/illusion-2,
+Mac Para,Illusion 2,33 (XXL),B,Paraglider,Current,https://www.macpara.com/en/paragliders/free-flying/illusion-2,
+Mac Para,Eden 8,21 (XS),B,Paraglider,Current,https://www.macpara.com/en/paragliders/free-flying/eden-8,
+Mac Para,Eden 8,23 (S),B,Paraglider,Current,https://www.macpara.com/en/paragliders/free-flying/eden-8,
+Mac Para,Eden 8,26 (M),B,Paraglider,Current,https://www.macpara.com/en/paragliders/free-flying/eden-8,
+Mac Para,Eden 8,28 (L),B,Paraglider,Current,https://www.macpara.com/en/paragliders/free-flying/eden-8,
+Mac Para,Eden 8,30 (XL),B,Paraglider,Current,https://www.macpara.com/en/paragliders/free-flying/eden-8,
+Mac Para,Eden 8,33 (XXL),B,Paraglider,Current,https://www.macpara.com/en/paragliders/free-flying/eden-8,
+Mac Para,Elan 3,22 (XS),C,Paraglider,Current,https://www.macpara.com/en/paragliders/free-flying/elan-3,
+Mac Para,Elan 3,24 (S),C,Paraglider,Current,https://www.macpara.com/en/paragliders/free-flying/elan-3,
+Mac Para,Elan 3,26 (M),C,Paraglider,Current,https://www.macpara.com/en/paragliders/free-flying/elan-3,
+Mac Para,Elan 3,28 (L),C,Paraglider,Current,https://www.macpara.com/en/paragliders/free-flying/elan-3,
+Mac Para,Elan 3,30 (XL),C,Paraglider,Current,https://www.macpara.com/en/paragliders/free-flying/elan-3,
+Mac Para,Elan 3,33 (XXL),C,Paraglider,Current,https://www.macpara.com/en/paragliders/free-flying/elan-3,
+Mac Para,Verve,21 (S),C,Paraglider,Current,https://www.macpara.com/en/paragliders/free-flying/verve,
+Mac Para,Verve,23 (M),C,Paraglider,Current,https://www.macpara.com/en/paragliders/free-flying/verve,
+Mac Para,Verve,25 (L),C,Paraglider,Current,https://www.macpara.com/en/paragliders/free-flying/verve,
+Mac Para,Verve,27 (XL),C,Paraglider,Current,https://www.macpara.com/en/paragliders/free-flying/verve,
+Mac Para,Verve,30 (XXL),C,Paraglider,Current,https://www.macpara.com/en/paragliders/free-flying/verve,
+Mac Para,Elixir,22 (S),Pending,Paraglider,Current,https://www.macpara.com/en/paragliders/free-flying/elixir,
+Mac Para,Elixir,24 (M),C,Paraglider,Current,https://www.macpara.com/en/paragliders/free-flying/elixir,
+Mac Para,Elixir,26 (L),C,Paraglider,Current,https://www.macpara.com/en/paragliders/free-flying/elixir,
+Mac Para,Elixir,29 (XL),Pending,Paraglider,Current,https://www.macpara.com/en/paragliders/free-flying/elixir,
+Mac Para,Magus,22 (S),D,Paraglider,Current,https://www.macpara.com/en/paragliders/free-flying/magus,
+Mac Para,Magus,24 (M),D,Paraglider,Current,https://www.macpara.com/en/paragliders/free-flying/magus,
+Mac Para,Magus,26 (L),D,Paraglider,Current,https://www.macpara.com/en/paragliders/free-flying/magus,
+Mac Para,Pasha 7,39 (M),B,Tandem,Current,https://www.macpara.com/en/paragliders/free-flying/pasha-7,
+Mac Para,Pasha 7,42 (L),B,Tandem,Current,https://www.macpara.com/en/paragliders/free-flying/pasha-7,
+Flow,Future 2,XS,A,Paraglider,Current,https://www.flowparagliders.com.au/future-2,
+Flow,Future 2,S,A,Paraglider,Current,https://www.flowparagliders.com.au/future-2,
+Flow,Future 2,M,A,Paraglider,Current,https://www.flowparagliders.com.au/future-2,
+Flow,Future 2,L,A,Paraglider,Current,https://www.flowparagliders.com.au/future-2,
+Flow,Cosmos 2,XXS,B,Paraglider,Current,https://www.flowparagliders.com.au/cosmos-2,
+Flow,Cosmos 2,XS,B,Paraglider,Current,https://www.flowparagliders.com.au/cosmos-2,
+Flow,Cosmos 2,S,B,Paraglider,Current,https://www.flowparagliders.com.au/cosmos-2,
+Flow,Cosmos 2,M,B,Paraglider,Current,https://www.flowparagliders.com.au/cosmos-2,
+Flow,Cosmos 2,L,B,Paraglider,Current,https://www.flowparagliders.com.au/cosmos-2,
+Flow,Freedom 2,XS,B,Paraglider,Current,https://www.flowparagliders.com.au/freedom-2,
+Flow,Freedom 2,S,B,Paraglider,Current,https://www.flowparagliders.com.au/freedom-2,
+Flow,Freedom 2,M,B,Paraglider,Current,https://www.flowparagliders.com.au/freedom-2,
+Flow,Freedom 2,L,B,Paraglider,Current,https://www.flowparagliders.com.au/freedom-2,
+Flow,F2 Light,XS,B,Light paraglider,Current,https://www.flowparagliders.com.au/f2-light,
+Flow,F2 Light,S,B,Light paraglider,Current,https://www.flowparagliders.com.au/f2-light,
+Flow,F2 Light,M,B,Light paraglider,Current,https://www.flowparagliders.com.au/f2-light,
+Flow,F2 Light,L,B,Light paraglider,Current,https://www.flowparagliders.com.au/f2-light,
+Flow,Panorama 2,32,EN 926-1,Tandem,Current,https://www.flowparagliders.com.au/panorama-2,
+Flow,Panorama 2,39,B,Tandem,Current,https://www.flowparagliders.com.au/panorama-2,
+Flow,Panorama 2,41,B,Tandem,Current,https://www.flowparagliders.com.au/panorama-2,
+Flow,Mystic+,XS,C,Paraglider,Current,https://www.flowparagliders.com.au/mystic-plus,
+Flow,Mystic+,M,C,Paraglider,Current,https://www.flowparagliders.com.au/mystic-plus,
+Flow,Mystic+,L,C,Paraglider,Current,https://www.flowparagliders.com.au/mystic-plus,
+Flow,Mystic,S,C,Paraglider,Recent previous,https://www.flowparagliders.com.au/mystic,
+Flow,Fusion,S,C,Paraglider,Current,https://www.flowparagliders.com.au/fusion,
+Flow,Fusion,M,C,Paraglider,Current,https://www.flowparagliders.com.au/fusion,
+Flow,Fusion,ML,C,Paraglider,Current,https://www.flowparagliders.com.au/fusion,
+Flow,Fusion,L,C,Paraglider,Current,https://www.flowparagliders.com.au/fusion,
+Flow,Fusion Light,S,C,Light paraglider,Current,https://www.flowparagliders.com.au/fusion-light,
+Flow,Fusion Light,M,C,Light paraglider,Current,https://www.flowparagliders.com.au/fusion-light,
+Flow,Fusion Light,ML,C,Light paraglider,Current,https://www.flowparagliders.com.au/fusion-light,
+Flow,XCRacer 2,S,D,Paraglider,Current,https://www.flowparagliders.com.au/xcracer-2,
+Flow,XCRacer 2,M,D,Paraglider,Current,https://www.flowparagliders.com.au/xcracer-2,
+Flow,XCRacer 2,ML,D,Paraglider,Current,https://www.flowparagliders.com.au/xcracer-2,
+Flow,XCRacer 2,L,D,Paraglider,Current,https://www.flowparagliders.com.au/xcracer-2,
+Flow,Spectra 2,XS,CCC,Competition,Current,https://www.flowparagliders.com.au/spectra-2,
+Flow,Spectra 2,S,CCC,Competition,Current,https://www.flowparagliders.com.au/spectra-2,
+Flow,Spectra 2,M,CCC,Competition,Current,https://www.flowparagliders.com.au/spectra-2,
+Flow,Spectra 2,ML,CCC,Competition,Current,https://www.flowparagliders.com.au/spectra-2,
+Flow,Spectra 2,L,CCC,Competition,Current,https://www.flowparagliders.com.au/spectra-2,
+Flow,Spectra 2,XL,CCC,Competition,Current,https://www.flowparagliders.com.au/spectra-2,
+Flow,Yoti 3,15,EN 926-1,Miniwing,Current,https://www.flowparagliders.com.au/yoti-3,
+Flow,Yoti 3,17,EN 926-1,Miniwing,Current,https://www.flowparagliders.com.au/yoti-3,
+Flow,Yoti 3,19,EN 926-1,Miniwing,Current,https://www.flowparagliders.com.au/yoti-3,
+Flow,Yoti 3,21,EN 926-1,Miniwing,Current,https://www.flowparagliders.com.au/yoti-3,
+Flow,Yoti 3 Light,15,EN 926-1,Light miniwing,Current,https://www.flowparagliders.com.au/yoti-3-light,
+Flow,Yoti 3 Light,17,EN 926-1,Light miniwing,Current,https://www.flowparagliders.com.au/yoti-3-light,
+Flow,Yoti 3 Light,19,EN 926-1,Light miniwing,Current,https://www.flowparagliders.com.au/yoti-3-light,
+Flow,Yoti 3 Light,21,EN 926-1,Light miniwing,Current,https://www.flowparagliders.com.au/yoti-3-light,
+Davinci,Duet Pro,40,B,Tandem,Current,https://flydavinci.com/duet-pro,
+Davinci,Duet Pro,42,B,Tandem,Current,https://flydavinci.com/duet-pro,
+Davinci,Popera,XS,D,Paraglider,Current,https://flydavinci.com/popera,
+Davinci,Popera,S,D,Paraglider,Current,https://flydavinci.com/popera,
+Davinci,Popera,M,D,Paraglider,Current,https://flydavinci.com/popera,
+Davinci,Popera,L,D,Paraglider,Current,https://flydavinci.com/popera,
+Davinci,Mambo,XS,C,Paraglider,Current,https://flydavinci.com/mambo,
+Davinci,Mambo,S,C,Paraglider,Current,https://flydavinci.com/mambo,
+Davinci,Mambo,M,C,Paraglider,Current,https://flydavinci.com/mambo,
+Davinci,Mambo,L,C,Paraglider,Current,https://flydavinci.com/mambo,
+Davinci,Tango,XS,C,Paraglider,Current,https://flydavinci.com/tango,
+Davinci,Tango,S,C,Paraglider,Current,https://flydavinci.com/tango,
+Davinci,Tango,M,C,Paraglider,Current,https://flydavinci.com/tango,
+Davinci,Tango,L,C,Paraglider,Current,https://flydavinci.com/tango,
+Davinci,Funky 2,XS,B,Paraglider,Current,https://flydavinci.com/funky-2,
+Davinci,Funky 2,S,B,Paraglider,Current,https://flydavinci.com/funky-2,
+Davinci,Funky 2,M,B,Paraglider,Current,https://flydavinci.com/funky-2,
+Davinci,Funky 2,L,B,Paraglider,Current,https://flydavinci.com/funky-2,
+Davinci,Classic 2,XS,A,Paraglider,Current,https://flydavinci.com/classic-2,
+Davinci,Classic 2,S,A,Paraglider,Current,https://flydavinci.com/classic-2,
+Davinci,Classic 2,M,A,Paraglider,Current,https://flydavinci.com/classic-2,
+Davinci,Classic 2,L,A,Paraglider,Current,https://flydavinci.com/classic-2,
+Davinci,Hula,19,A,Hike and fly,Current,https://flydavinci.com/hula,
+Davinci,Hula,21,A,Hike and fly,Current,https://flydavinci.com/hula,
+Davinci,Hula,23,A,Hike and fly,Current,https://flydavinci.com/hula,
+Davinci,Hula,25,A,Hike and fly,Current,https://flydavinci.com/hula,
+Davinci,Hula,27,A,Hike and fly,Current,https://flydavinci.com/hula,
+Davinci,Hula,29,A,Hike and fly,Current,https://flydavinci.com/hula,
+Davinci,Rhythm 2,XXS,A,Paraglider,Current,https://flydavinci.com/rhythm-2,
+Davinci,Rhythm 2,XS,A,Paraglider,Current,https://flydavinci.com/rhythm-2,
+Davinci,Rhythm 2,S,A,Paraglider,Current,https://flydavinci.com/rhythm-2,
+Davinci,Rhythm 2,M,A,Paraglider,Current,https://flydavinci.com/rhythm-2,
+Davinci,Rhythm 2,L,A,Paraglider,Current,https://flydavinci.com/rhythm-2,
+Davinci,Point 2,XXS,A,Paraglider,Current,https://flydavinci.com/point-2,
+Davinci,Point 2,XS,A,Paraglider,Current,https://flydavinci.com/point-2,
+Davinci,Point 2,S,A,Paraglider,Current,https://flydavinci.com/point-2,
+Davinci,Point 2,M,A,Paraglider,Current,https://flydavinci.com/point-2,
+Davinci,Point 2,L,A,Paraglider,Current,https://flydavinci.com/point-2,
+Davinci,Point 2,XL,A,Paraglider,Current,https://flydavinci.com/point-2,
+Davinci,DOREMI,16,EN 926-1,Miniwing,Current,https://flydavinci.com/doremi,
+Davinci,DOREMI,18,EN 926-1,Miniwing,Current,https://flydavinci.com/doremi,
+Davinci,DOREMI,20,EN 926-1,Miniwing,Current,https://flydavinci.com/doremi,
+Davinci,Tune,20,EN 926-1,Miniwing,Current,https://flydavinci.com/tune,
+Davinci,Tune,22,EN 926-1,Miniwing,Current,https://flydavinci.com/tune,
+Davinci,Tune,24,EN 926-1,Miniwing,Current,https://flydavinci.com/tune,
+Davinci,Tune,26,EN 926-1,Miniwing,Current,https://flydavinci.com/tune,
+Davinci,Tune,28,EN 926-1,Miniwing,Current,https://flydavinci.com/tune,

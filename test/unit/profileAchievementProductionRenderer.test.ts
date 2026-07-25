@@ -141,6 +141,7 @@ describe('production Profile and Achievements rendering', () => {
   it('renders the owner glider editor and the public saved glider without owner controls', async () => {
     const profile = productionProfile({
       glider: {
+        modelId: '00000000-0000-4000-8000-000000000017',
         manufacturer: 'Ozone',
         model: 'Ultralite 5',
         size: '17',

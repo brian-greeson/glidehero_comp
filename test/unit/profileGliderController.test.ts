@@ -71,6 +71,7 @@ function gliderFormFixture() {
   const results = new FakeElement();
   results.hidden = true;
   (results as any).querySelectorAll = () => [];
+  const gliderModelId = new FakeInput();
   const manufacturer = new FakeInput();
   const modelValue = new FakeInput();
   const size = new FakeSelect();
@@ -84,6 +85,7 @@ function gliderFormFixture() {
     ['[data-glider-cancel]', cancel],
     ['[data-glider-model]', modelInput],
     ['[data-glider-results]', results],
+    ['[data-glider-model-id]', gliderModelId],
     ['[data-glider-manufacturer]', manufacturer],
     ['[data-glider-model-value]', modelValue],
     ['[data-glider-size]', size],
@@ -98,7 +100,7 @@ function gliderFormFixture() {
     querySelectorAll: () => [],
     createElement: () => new FakeElement(),
   };
-  return { documentRef, modelInput, results, status, cancel };
+  return { documentRef, modelInput, gliderModelId, size, rating, results, status, cancel };
 }
 
 describe('profile glider search controller', () => {
@@ -128,6 +130,7 @@ describe('profile glider search controller', () => {
 
     initializeProfileLists(fixture.documentRef as any);
     fixture.modelInput.value = 'Ozone';
+    fixture.gliderModelId.value = '00000000-0000-4000-8000-000000000017';
     fixture.modelInput.dispatch('input');
     await vi.advanceTimersByTimeAsync(120);
 
@@ -143,8 +146,29 @@ describe('profile glider search controller', () => {
     expect(fixture.results.hidden).toBe(true);
     expect(fixture.results.children).toHaveLength(0);
     expect(fixture.modelInput.attributes.get('aria-expanded')).toBe('false');
+    expect(fixture.gliderModelId.value).toBe('');
     expect(fixture.status.textContent).toBe('');
     vi.useRealTimers();
+    vi.unstubAllGlobals();
+  });
+
+  it('stores the selected size catalog ID and rating for form submission', () => {
+    vi.stubGlobal('HTMLElement', FakeElement);
+    vi.stubGlobal('HTMLInputElement', FakeInput);
+    vi.stubGlobal('HTMLSelectElement', FakeSelect);
+    const fixture = gliderFormFixture();
+
+    initializeProfileLists(fixture.documentRef as any);
+    fixture.size.selectedOptions = [{
+      dataset: {
+        modelId: '00000000-0000-4000-8000-000000000017',
+        rating: 'C',
+      },
+    }];
+    fixture.size.dispatch('change');
+
+    expect(fixture.gliderModelId.value).toBe('00000000-0000-4000-8000-000000000017');
+    expect(fixture.rating.textContent).toBe('C');
     vi.unstubAllGlobals();
   });
 });

@@ -36,6 +36,7 @@ export function initializeProfileLists(documentRef = document) {
   const cancel = card.querySelector('[data-glider-cancel]');
   const modelInput = card.querySelector('[data-glider-model]');
   const results = card.querySelector('[data-glider-results]');
+  const gliderModelId = card.querySelector('[data-glider-model-id]');
   const manufacturer = card.querySelector('[data-glider-manufacturer]');
   const modelValue = card.querySelector('[data-glider-model-value]');
   const size = card.querySelector('[data-glider-size]');
@@ -73,11 +74,13 @@ export function initializeProfileLists(documentRef = document) {
     size.replaceChildren(new Option('Select size', ''));
     for (const item of sizes) {
       const option = new Option(item.value, item.value, false, item.value === selectedValue);
+      option.dataset.modelId = item.id;
       option.dataset.rating = item.enRating;
       size.add(option);
     }
     size.disabled = false;
     const selected = size.selectedOptions[0];
+    if (gliderModelId instanceof HTMLInputElement) gliderModelId.value = selected?.dataset.modelId || '';
     if (rating) rating.textContent = selected?.dataset.rating || 'Select a size';
   }
 
@@ -118,6 +121,7 @@ export function initializeProfileLists(documentRef = document) {
   }
 
   modelInput.addEventListener('input', () => {
+    if (gliderModelId instanceof HTMLInputElement) gliderModelId.value = '';
     if (manufacturer instanceof HTMLInputElement) manufacturer.value = '';
     if (modelValue instanceof HTMLInputElement) modelValue.value = '';
     if (size instanceof HTMLSelectElement) {
@@ -202,15 +206,15 @@ export function initializeProfileLists(documentRef = document) {
     }
   });
   size?.addEventListener('change', () => {
-    if (rating && size instanceof HTMLSelectElement) {
-      rating.textContent = size.selectedOptions[0]?.dataset.rating || 'Select a size';
+    if (size instanceof HTMLSelectElement) {
+      const selected = size.selectedOptions[0];
+      if (gliderModelId instanceof HTMLInputElement) gliderModelId.value = selected?.dataset.modelId || '';
+      if (rating) rating.textContent = selected?.dataset.rating || 'Select a size';
     }
   });
   form.addEventListener('submit', (event) => {
     const detailsChanged = (
-      (manufacturer instanceof HTMLInputElement ? manufacturer.value : '') !== form.dataset.initialManufacturer
-      || (modelValue instanceof HTMLInputElement ? modelValue.value : '') !== form.dataset.initialModel
-      || (size instanceof HTMLSelectElement ? size.value : '') !== form.dataset.initialSize
+      (gliderModelId instanceof HTMLInputElement ? gliderModelId.value : '') !== form.dataset.initialModelId
       || (form.elements.namedItem('year')?.value ?? '') !== form.dataset.initialYear
       || (form.elements.namedItem('competitionId')?.value.trim() ?? '') !== form.dataset.initialCompetitionId
     );

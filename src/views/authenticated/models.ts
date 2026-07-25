@@ -194,6 +194,7 @@ export type ProfilePageModel = AuthenticatedShellModel & {
   titles: ProfileTitleView[];
   flights: FlightView[];
   glider: {
+    modelId: string;
     manufacturer: string;
     model: string;
     size: string;
@@ -205,6 +206,7 @@ export type ProfilePageModel = AuthenticatedShellModel & {
   gliderIsCurrent: boolean;
   gliderCurrentYear: number;
   gliderEditor: {
+    modelId: string;
     manufacturer: string;
     model: string;
     size: string;

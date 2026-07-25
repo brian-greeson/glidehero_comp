@@ -77,6 +77,7 @@ export function pilotProfileToView(summary: PilotProfileSummary, options: Profil
   }));
 
   const glider = summary.glider ? {
+    modelId: summary.glider.modelId,
     manufacturer: summary.glider.manufacturer,
     model: summary.glider.model,
     size: summary.glider.size,
@@ -99,6 +100,7 @@ export function pilotProfileToView(summary: PilotProfileSummary, options: Profil
     gliderIsCurrent: options.isCurrent ?? false,
     gliderCurrentYear: new Date().getUTCFullYear(),
     gliderEditor: {
+      modelId: glider?.modelId ?? '',
       manufacturer: glider?.manufacturer ?? '',
       model: glider?.model ?? '',
       size: glider?.size ?? '',

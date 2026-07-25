@@ -1,6 +1,6 @@
-import { eq, sql } from 'drizzle-orm';
+import { asc, eq, sql } from 'drizzle-orm';
 import type { Database } from '../db/client.js';
-import { profiles } from '../db/schema.js';
+import { gliderModels, profiles } from '../db/schema.js';
 import { nextUniqueCellMilestone } from './progressionAchievementService.js';
 import { findAchievementDefinition, type AchievementCategory, type AchievementDefinition } from '../domain/achievement/catalog.js';
 import {
@@ -15,9 +15,10 @@ import {
 import { arenaPath } from '../domain/arena/arenaRoute.js';
 import { arenaCellOwnershipPredicateSql, claimCellCenterSql } from './arenaGeometrySql.js';
 import { createUserAchievementProgressService, type UserAchievementProgressService } from './userAchievementProgressService.js';
-import { findGlider } from '../domain/glider/catalog.js';
+import { searchGliderModels, type GliderModelSearchResult } from '../domain/glider/catalog.js';
 
 const territoryColorPattern = /^#[0-9a-f]{6}$/i;
+const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 export type UpdateTerritoryColorInput = {
   userId: string;
@@ -46,6 +47,7 @@ export type PilotProfileSummary = {
 };
 
 export type GliderProfile = {
+  modelId: string;
   manufacturer: string;
   model: string;
   size: string;
@@ -54,8 +56,12 @@ export type GliderProfile = {
   enRating: string;
   hours: number;
 };
-export type SaveGliderDetailsInput = Omit<GliderProfile, 'enRating'> & {
+export type SaveGliderDetailsInput = {
   userId: string;
+  gliderModelId: string;
+  year: number;
+  competitionId: string | null;
+  hours: number;
   resetHours: boolean | null;
 };
 
@@ -138,6 +144,7 @@ export interface ProfileService {
   getDashboardAchievementProgress(userId: string): Promise<AchievementProgressCard[]>;
   getPilotProfile(userId: string): Promise<PilotProfileSummary | null>;
   getPilotAchievements(userId: string): Promise<PilotAchievementsSummary | null>;
+  searchGliderModels?(query: string): Promise<GliderModelSearchResult[]>;
   saveGliderDetails?(input: SaveGliderDetailsInput): Promise<void>;
 }
 
@@ -160,8 +167,9 @@ type StoredPilotProfile = {
   achievementCount: number | string;
   followerCount: number | string;
   followingCount: number | string;
+  gliderModelId: string | null;
   gliderManufacturer: string | null;
-  gliderModel: string | null;
+  gliderModelName: string | null;
   gliderSize: string | null;
   gliderYear: number | string | null;
   gliderCompetitionId: string | null;
@@ -761,15 +769,17 @@ export function createProfileService(database: Database, options: { cellSize: nu
           )::integer AS "achievementCount",
           (SELECT COUNT(*)::integer FROM pilot_follows follows WHERE follows.followed_user_id = users.user_id) AS "followerCount",
           (SELECT COUNT(*)::integer FROM pilot_follows follows WHERE follows.follower_user_id = users.user_id) AS "followingCount"
-          ,profiles.glider_manufacturer AS "gliderManufacturer"
-          ,profiles.glider_model AS "gliderModel"
-          ,profiles.glider_size AS "gliderSize"
+          ,profiles.glider_model_id AS "gliderModelId"
+          ,glider_models.manufacturer AS "gliderManufacturer"
+          ,glider_models.model AS "gliderModelName"
+          ,glider_models.size AS "gliderSize"
           ,profiles.glider_year AS "gliderYear"
           ,profiles.glider_competition_id AS "gliderCompetitionId"
-          ,profiles.glider_en_rating AS "gliderEnRating"
+          ,glider_models.en_rating AS "gliderEnRating"
           ,profiles.glider_hours_seconds AS "gliderHoursSeconds"
         FROM users
         INNER JOIN profiles ON profiles.user_id = users.user_id
+        LEFT JOIN glider_models ON glider_models.id = profiles.glider_model_id
         WHERE users.user_id = ${userId}
       `);
       const row = result.rows[0];
@@ -839,16 +849,31 @@ export function createProfileService(database: Database, options: { cellSize: nu
           leadMarginCells: Number(leadership.leadingCellCount) - Number(leadership.nextRankCellCount),
           leadingSince: displayDate(leadership.tookLeadAt),
         })),
-        glider: row.gliderManufacturer && row.gliderModel && row.gliderSize && row.gliderYear && row.gliderEnRating
-          ? { manufacturer: row.gliderManufacturer, model: row.gliderModel, size: row.gliderSize, year: Number(row.gliderYear), competitionId: row.gliderCompetitionId, enRating: row.gliderEnRating, hours: Number(row.gliderHoursSeconds ?? 0) / 3600 }
+        glider: row.gliderModelId && row.gliderManufacturer && row.gliderModelName && row.gliderSize && row.gliderYear && row.gliderEnRating
+          ? { modelId: row.gliderModelId, manufacturer: row.gliderManufacturer, model: row.gliderModelName, size: row.gliderSize, year: Number(row.gliderYear), competitionId: row.gliderCompetitionId, enRating: row.gliderEnRating, hours: Number(row.gliderHoursSeconds ?? 0) / 3600 }
           : null,
       };
     },
 
+    async searchGliderModels(query) {
+      const entries = await database
+        .select({
+          id: gliderModels.id,
+          manufacturer: gliderModels.manufacturer,
+          model: gliderModels.model,
+          size: gliderModels.size,
+          enRating: gliderModels.enRating,
+        })
+        .from(gliderModels)
+        .orderBy(asc(gliderModels.sortOrder));
+      return searchGliderModels(entries, query);
+    },
+
     async saveGliderDetails(input) {
-      const entry = findGlider(input.manufacturer, input.model, input.size);
       const currentYear = new Date().getUTCFullYear();
-      if (!entry) throw new GliderValidationError('Select a make, model, and size from the catalog.');
+      if (!uuidPattern.test(input.gliderModelId)) {
+        throw new GliderValidationError('Select a make, model, and size from the catalog.');
+      }
       if (!Number.isInteger(input.year) || input.year < 1980 || input.year > currentYear) {
         throw new GliderValidationError(`Enter a four-digit year from 1980 through ${currentYear}.`);
       }
@@ -860,11 +885,16 @@ export function createProfileService(database: Database, options: { cellSize: nu
       }
       const hoursSeconds = Math.round(input.hours * 3600);
       await database.transaction(async (tx) => {
+        const [entry] = await tx
+          .select({ id: gliderModels.id })
+          .from(gliderModels)
+          .where(eq(gliderModels.id, input.gliderModelId))
+          .limit(1);
+        if (!entry) throw new GliderValidationError('Select a make, model, and size from the catalog.');
+
         const [stored] = await tx
           .select({
-            manufacturer: profiles.gliderManufacturer,
-            model: profiles.gliderModel,
-            size: profiles.gliderSize,
+            gliderModelId: profiles.gliderModelId,
             year: profiles.gliderYear,
             competitionId: profiles.gliderCompetitionId,
           })
@@ -875,9 +905,7 @@ export function createProfileService(database: Database, options: { cellSize: nu
         if (!stored) throw new GliderValidationError('Pilot profile not found.');
 
         const competitionId = input.competitionId?.trim() || null;
-        const detailsChanged = stored.manufacturer !== entry.manufacturer
-          || stored.model !== entry.model
-          || stored.size !== entry.size
+        const detailsChanged = stored.gliderModelId !== entry.id
           || stored.year !== input.year
           || stored.competitionId !== competitionId;
         if (detailsChanged && input.resetHours === null) {
@@ -885,14 +913,10 @@ export function createProfileService(database: Database, options: { cellSize: nu
         }
 
         await tx.update(profiles).set({
-          gliderManufacturer: entry.manufacturer,
-          gliderModel: entry.model,
-          gliderSize: entry.size,
+          gliderModelId: entry.id,
           gliderYear: input.year,
           gliderCompetitionId: competitionId,
-          gliderEnRating: entry.enRating,
           gliderHoursSeconds: detailsChanged && input.resetHours ? 0 : hoursSeconds,
-          gliderHoursGeneration: sql`${profiles.gliderHoursGeneration} + ${detailsChanged && input.resetHours ? 1 : 0}`,
           updatedAt: new Date(),
         }).where(eq(profiles.userId, input.userId));
       });

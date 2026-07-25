@@ -24,6 +24,10 @@ export const relations = defineRelations(schema, (r) => ({
   },
   profiles: {
     user: r.one.users({ from: r.profiles.userId, to: r.users.id }),
+    gliderModel: r.one.gliderModels({ from: r.profiles.gliderModelId, to: r.gliderModels.id }),
+  },
+  gliderModels: {
+    profiles: r.many.profiles({ from: r.gliderModels.id, to: r.profiles.gliderModelId }),
   },
   appSessions: {
     user: r.one.users({ from: r.appSessions.userId, to: r.users.id }),

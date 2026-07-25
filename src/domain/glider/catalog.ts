@@ -1,18 +1,10 @@
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
-
-export type GliderCatalogEntry = { manufacturer: string; model: string; size: string; enRating: string };
-
-function loadCatalog(): GliderCatalogEntry[] {
-  const path = resolve(process.cwd(), 'data/paraglider_models_sizes_en_ratings.csv');
-  const lines = readFileSync(path, 'utf8').trim().split(/\r?\n/);
-  return lines.slice(1).map((line) => {
-    const [manufacturer, model, size, enRating] = line.split(',').map((part) => part.trim());
-    return { manufacturer: manufacturer ?? '', model: model ?? '', size: size ?? '', enRating: enRating ?? '' };
-  }).filter((entry) => entry.manufacturer && entry.model && entry.size && entry.enRating);
-}
-
-export const gliderCatalog = loadCatalog();
+export type GliderCatalogEntry = {
+  id: string;
+  manufacturer: string;
+  model: string;
+  size: string;
+  enRating: string;
+};
 
 function normalize(value: string): string { return value.toLowerCase().replace(/[^a-z0-9]/g, ''); }
 
@@ -87,12 +79,12 @@ function tokenScore(query: string, value: string): number {
 export type GliderModelSearchResult = {
   manufacturer: string;
   model: string;
-  sizes: Array<{ value: string; enRating: string }>;
+  sizes: Array<{ id: string; value: string; enRating: string }>;
 };
 
-export function searchGliderModels(query: string, limit = 8): GliderModelSearchResult[] {
+export function searchGliderModels(entries: readonly GliderCatalogEntry[], query: string, limit = 8): GliderModelSearchResult[] {
   const grouped = new Map<string, GliderModelSearchResult & { score: number }>();
-  for (const entry of gliderCatalog) {
+  for (const entry of entries) {
     const key = `${entry.manufacturer}\u0000${entry.model}`;
     const valueScore = Math.max(
       score(query, entry.manufacturer),
@@ -104,18 +96,10 @@ export function searchGliderModels(query: string, limit = 8): GliderModelSearchR
     const current = grouped.get(key) ?? { manufacturer: entry.manufacturer, model: entry.model, sizes: [], score: valueScore };
     current.score = Math.max(current.score, valueScore);
     if (!current.sizes.some((size) => size.value === entry.size)) {
-      current.sizes.push({ value: entry.size, enRating: entry.enRating });
+      current.sizes.push({ id: entry.id, value: entry.size, enRating: entry.enRating });
     }
     grouped.set(key, current);
   }
   return [...grouped.values()].sort((a, b) => b.score - a.score || a.manufacturer.localeCompare(b.manufacturer) || a.model.localeCompare(b.model)).slice(0, limit)
     .map(({ manufacturer, model, sizes }) => ({ manufacturer, model, sizes }));
-}
-
-export function findGlider(manufacturer: string, model: string, size: string): GliderCatalogEntry | null {
-  return gliderCatalog.find((entry) => entry.manufacturer === manufacturer && entry.model === model && entry.size === size) ?? null;
-}
-
-export function gliderModelSizes(manufacturer: string, model: string): string[] {
-  return gliderCatalog.filter((entry) => entry.manufacturer === manufacturer && entry.model === model).map((entry) => entry.size);
 }

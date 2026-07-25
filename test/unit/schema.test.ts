@@ -1,6 +1,37 @@
 import { getTableConfig } from 'drizzle-orm/pg-core';
 import { describe, expect, it } from 'vitest';
-import { arenaCurrentLeaders, arenaLeadershipEvents, arenaLeadershipStates, arenas, launches, userArenaProgress } from '../../src/db/schema.js';
+import { arenaCurrentLeaders, arenaLeadershipEvents, arenaLeadershipStates, arenas, flights, gliderModels, launches, profiles, userArenaProgress } from '../../src/db/schema.js';
+
+describe('glider schema', () => {
+  it('normalizes catalog identity while keeping only the simple hours counter on profiles', () => {
+    const catalog = getTableConfig(gliderModels);
+    expect(catalog.columns.map((column) => column.name)).toEqual([
+      'id', 'manufacturer', 'model', 'size', 'en_rating', 'discipline', 'catalog_status', 'source_url', 'sort_order',
+    ]);
+    expect(catalog.columns.map((column) => column.name)).not.toContain('notes');
+    expect(catalog.uniqueConstraints.map((constraint) => constraint.name)).toEqual([
+      'glider_models_manufacturer_model_size_unique',
+      'glider_models_sort_order_unique',
+    ]);
+
+    const profile = getTableConfig(profiles);
+    expect(profile.columns.map((column) => column.name)).toEqual(expect.arrayContaining([
+      'glider_model_id', 'glider_year', 'glider_competition_id', 'glider_hours_seconds',
+    ]));
+    const profileColumnNames = profile.columns.map((column) => column.name);
+    for (const removedColumn of [
+      'glider_manufacturer', 'glider_model', 'glider_size', 'glider_en_rating', 'glider_hours_generation',
+    ]) {
+      expect(profileColumnNames).not.toContain(removedColumn);
+    }
+    expect(profile.foreignKeys.some((foreignKey) => foreignKey.reference().foreignTable === gliderModels)).toBe(true);
+
+    const flight = getTableConfig(flights);
+    const flightColumnNames = flight.columns.map((column) => column.name);
+    expect(flightColumnNames).not.toContain('glider_hours_credited_seconds');
+    expect(flightColumnNames).not.toContain('glider_hours_generation');
+  });
+});
 
 describe('launch schema', () => {
   it('preserves the source launch fields and lookup indexes', () => {

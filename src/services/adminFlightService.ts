@@ -98,8 +98,6 @@ export function createAdminFlightService(
         processingStatus: flights.processingStatus,
         processedAt: flights.processedAt,
         durationSeconds: flights.durationSeconds,
-        gliderHoursCreditedSeconds: flights.gliderHoursCreditedSeconds,
-        gliderHoursGeneration: flights.gliderHoursGeneration,
       })
       .from(flights)
       .innerJoin(igcFiles, eq(flights.igcFileId, igcFiles.id))
@@ -125,7 +123,7 @@ export function createAdminFlightService(
         flightId: input.flightId,
         cellSize: configuredCellSize,
       });
-      if (flight.gliderHoursCreditedSeconds && flight.gliderHoursGeneration !== null) {
+      if (flight.durationSeconds && flight.durationSeconds > 0) {
         await tx
           .select({ userId: profiles.userId })
           .from(profiles)
@@ -134,13 +132,10 @@ export function createAdminFlightService(
           .for('update');
       }
       await tx.delete(igcFiles).where(and(eq(igcFiles.id, flight.igcFileId), eq(igcFiles.userId, input.userId)));
-      if (flight.gliderHoursCreditedSeconds && flight.gliderHoursGeneration !== null) {
+      if (flight.durationSeconds && flight.durationSeconds > 0) {
         await tx.update(profiles).set({
-          gliderHoursSeconds: sql`GREATEST(0, ${profiles.gliderHoursSeconds} - ${flight.gliderHoursCreditedSeconds})`,
-        }).where(and(
-          eq(profiles.userId, input.userId),
-          eq(profiles.gliderHoursGeneration, flight.gliderHoursGeneration),
-        ));
+          gliderHoursSeconds: sql`GREATEST(0, ${profiles.gliderHoursSeconds} - ${flight.durationSeconds})`,
+        }).where(eq(profiles.userId, input.userId));
       }
       if (flight.processingStatus === 'completed') {
         if (arenaLeadershipOptions?.userArenaProgress) {
@@ -176,40 +171,6 @@ export function createAdminFlightService(
       }
     });
     return 'deleted' as const;
-  }
-
-  async function reconcileCurrentGliderHours(flightId: string) {
-    await database.transaction(async (tx) => {
-      const locked = await tx.execute<{
-        userId: string;
-        durationSeconds: number | null;
-        creditedSeconds: number | null;
-        creditedGeneration: number | null;
-        currentGeneration: number;
-        manufacturer: string | null;
-      }>(sql`
-        SELECT
-          flights.user_id AS "userId",
-          flights.duration_seconds AS "durationSeconds",
-          flights.glider_hours_credited_seconds AS "creditedSeconds",
-          flights.glider_hours_generation AS "creditedGeneration",
-          profiles.glider_hours_generation AS "currentGeneration",
-          profiles.glider_manufacturer AS "manufacturer"
-        FROM flights
-        INNER JOIN profiles ON profiles.user_id = flights.user_id
-        WHERE flights.flight_id = ${flightId}
-        FOR UPDATE OF flights, profiles
-      `);
-      const row = locked.rows[0];
-      if (!row?.manufacturer || row.durationSeconds === null || row.creditedSeconds === null) return;
-      if (row.creditedGeneration !== row.currentGeneration) return;
-      const deltaSeconds = row.durationSeconds - row.creditedSeconds;
-      if (deltaSeconds === 0) return;
-      await tx.update(flights).set({ gliderHoursCreditedSeconds: row.durationSeconds }).where(eq(flights.id, flightId));
-      await tx.update(profiles).set({
-        gliderHoursSeconds: sql`GREATEST(0, ${profiles.gliderHoursSeconds} + ${deltaSeconds})`,
-      }).where(eq(profiles.userId, row.userId));
-    });
   }
 
   return {
@@ -268,9 +229,6 @@ export function createAdminFlightService(
         return { status: 'not_found' };
       }
       const result = await gridClaim.reprocess({ flightId: input.flightId });
-      if (result.status === 'completed') {
-        await reconcileCurrentGliderHours(input.flightId);
-      }
       if (result.status === 'completed' && storage?.thumbnailLifecycle) {
         try {
           await storage.thumbnailLifecycle.generateForFlight(input.flightId);

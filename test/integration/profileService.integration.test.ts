@@ -1,5 +1,7 @@
+import { readFileSync } from 'node:fs';
+import { asc } from 'drizzle-orm';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { achievementRecordEvents, achievementRecords, achievements, flights, flightProgress, igcFiles, personalGridClaims, pilotFollows, profiles as profileRows } from '../../src/db/schema.js';
+import { achievementRecordEvents, achievementRecords, achievements, flights, flightProgress, gliderModels, igcFiles, personalGridClaims, pilotFollows, profiles as profileRows } from '../../src/db/schema.js';
 import { createAuthService } from '../../src/services/authService.js';
 import { createProfileService, normalizeTerritoryColor } from '../../src/services/profileService.js';
 import { createUserAchievementProgressService } from '../../src/services/userAchievementProgressService.js';
@@ -27,6 +29,44 @@ afterAll(async () => {
 });
 
 describe('profileService', () => {
+  it('seeds exactly the authoritative 771-row glider catalog without notes', async () => {
+    const expected = readFileSync(new URL('../../data/paraglider_models_sizes_en_ratings.csv', import.meta.url), 'utf8')
+      .trim()
+      .split(/\r?\n/)
+      .slice(1)
+      .map((line) => line.split(',').slice(0, 7).join(','));
+    const stored = await database.db
+      .select({
+        manufacturer: gliderModels.manufacturer,
+        model: gliderModels.model,
+        size: gliderModels.size,
+        enRating: gliderModels.enRating,
+        discipline: gliderModels.discipline,
+        catalogStatus: gliderModels.catalogStatus,
+        sourceUrl: gliderModels.sourceUrl,
+        sortOrder: gliderModels.sortOrder,
+      })
+      .from(gliderModels)
+      .orderBy(asc(gliderModels.sortOrder));
+    const actual = stored.map((row) => [
+      row.manufacturer,
+      row.model,
+      row.size,
+      row.enRating,
+      row.discipline,
+      row.catalogStatus,
+      row.sourceUrl,
+    ].join(','));
+
+    expect(actual).toEqual(expected);
+    expect(actual).toHaveLength(771);
+    expect(stored.map((row) => row.sortOrder)).toEqual(Array.from({ length: 771 }, (_, index) => index + 1));
+
+    const service = createProfileService(database.db, { cellSize: 1_000 });
+    const [moxie] = await service.searchGliderModels?.('Ozone Moxie') ?? [];
+    expect(moxie?.sizes.map((size) => size.value)).toEqual(['XXS', 'XS', 'S', 'M', 'L', 'XL']);
+  });
+
   it('normalizes a trimmed six-digit hex color and rejects other values', () => {
     expect(normalizeTerritoryColor('  #a1B2c3  ')).toBe('#A1B2C3');
     expect(normalizeTerritoryColor('#ABC')).toBeNull();
@@ -79,11 +119,14 @@ describe('profileService', () => {
       password: 'correct horse battery staple',
     });
     const service = createProfileService(database.db, { cellSize: 1_000 });
+    const [ultralite] = await service.searchGliderModels?.('Ozone Ultralite 5') ?? [];
+    const ultralite17 = ultralite?.sizes.find((size) => size.value === '17');
+    const [photon] = await service.searchGliderModels?.('Ozone Photon') ?? [];
+    const photonS = photon?.sizes.find((size) => size.value === 'S');
+    if (!ultralite17 || !photonS) throw new Error('Seeded glider models were not found.');
     const details = {
       userId: pilot.user.userId,
-      manufacturer: 'Ozone',
-      model: 'Ultralite 5',
-      size: '17',
+      gliderModelId: ultralite17.id,
       year: 2025,
       competitionId: ' USA 42 ',
       hours: 12.3,
@@ -94,6 +137,7 @@ describe('profileService', () => {
     await expect(service.saveGliderDetails?.({ ...details, resetHours: false })).resolves.toBeUndefined();
     await expect(service.getPilotProfile(pilot.user.userId)).resolves.toMatchObject({
       glider: {
+        modelId: ultralite17.id,
         manufacturer: 'Ozone',
         model: 'Ultralite 5',
         size: '17',
@@ -107,18 +151,25 @@ describe('profileService', () => {
       .resolves.toBeUndefined();
     const [afterHours] = await database.db.select({
       seconds: profileRows.gliderHoursSeconds,
-      generation: profileRows.gliderHoursGeneration,
     }).from(profileRows);
-    expect(afterHours).toEqual({ seconds: 52_560, generation: 0 });
+    expect(afterHours).toEqual({ seconds: 52_560 });
 
-    await expect(service.saveGliderDetails?.({ ...details, model: 'Photon', size: 'S', resetHours: true }))
+    await expect(service.saveGliderDetails?.({ ...details, gliderModelId: photonS.id, resetHours: true }))
       .resolves.toBeUndefined();
     const [afterReset] = await database.db.select({
       seconds: profileRows.gliderHoursSeconds,
-      generation: profileRows.gliderHoursGeneration,
-      rating: profileRows.gliderEnRating,
+      modelId: profileRows.gliderModelId,
     }).from(profileRows);
-    expect(afterReset).toEqual({ seconds: 0, generation: 1, rating: 'C' });
+    expect(afterReset).toEqual({ seconds: 0, modelId: photonS.id });
+    await expect(service.getPilotProfile(pilot.user.userId)).resolves.toMatchObject({
+      glider: { model: 'Photon', size: 'S', enRating: 'C' },
+    });
+
+    await expect(service.saveGliderDetails?.({
+      ...details,
+      gliderModelId: '00000000-0000-4000-8000-000000000099',
+      resetHours: false,
+    })).rejects.toThrow('Select a make, model, and size from the catalog.');
   });
 
   it('returns follower and following counts for current and public profiles', async () => {

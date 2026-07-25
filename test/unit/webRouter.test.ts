@@ -130,6 +130,11 @@ function dependencies() {
     getDashboardAchievementProgress: vi.fn(async () => []),
     getPilotProfile: vi.fn(async () => null),
     getPilotAchievements: vi.fn(async () => null),
+    searchGliderModels: vi.fn(async () => [{
+      manufacturer: 'Ozone',
+      model: 'Buzz Z7',
+      sizes: [{ id: '00000000-0000-4000-8000-000000000017', value: 'XS', enRating: 'B' }],
+    }]),
   };
   const follow: FollowService = {
     follow: vi.fn(async () => undefined),

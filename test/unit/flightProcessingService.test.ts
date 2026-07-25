@@ -264,6 +264,9 @@ describe('FlightProcessingService', () => {
           queryChunks: [expect.objectContaining({ value: ['clock_timestamp()'] })],
         }),
       }),
+      expect.objectContaining({
+        gliderHoursSeconds: expect.anything(),
+      }),
     ]);
   });
 

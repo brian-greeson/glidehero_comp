@@ -116,11 +116,13 @@ describe('FlightProcessingService with a real IGC file', () => {
     if (!database) throw new Error('Test database was not initialized.');
     const auth = createAuthService(database.db, { sessionTtlSeconds: 60 });
     const pilot = await auth.signup({ email: 'pilot@example.com', password: 'correct horse battery staple' });
-    await createProfileService(database.db, { cellSize: 1_000 }).saveGliderDetails?.({
+    const profiles = createProfileService(database.db, { cellSize: 1_000 });
+    const [ultralite] = await profiles.searchGliderModels?.('Ozone Ultralite 5') ?? [];
+    const ultralite17 = ultralite?.sizes.find((size) => size.value === '17');
+    if (!ultralite17) throw new Error('Seeded glider model was not found.');
+    await profiles.saveGliderDetails?.({
       userId: pilot.user.userId,
-      manufacturer: 'Ozone',
-      model: 'Ultralite 5',
-      size: '17',
+      gliderModelId: ultralite17.id,
       year: 2025,
       competitionId: null,
       hours: 0,
@@ -150,7 +152,6 @@ describe('FlightProcessingService with a real IGC file', () => {
       last_fix: Date;
       cumulative_distance_meters: number;
       duration_seconds: number;
-      glider_hours_credited_seconds: number;
       glider_hours_seconds: number;
       total_distance_meters: number;
       total_distance_calc_version: number;
@@ -217,7 +218,6 @@ describe('FlightProcessingService with a real IGC file', () => {
               f.launch_timezone,
               f.distance_meters AS cumulative_distance_meters,
               f.duration_seconds,
-              f.glider_hours_credited_seconds,
               (SELECT glider_hours_seconds FROM profiles WHERE user_id = f.user_id) AS glider_hours_seconds,
               fs.total_distance_meters,
               fs.total_distance_calc_version,
@@ -269,7 +269,6 @@ describe('FlightProcessingService with a real IGC file', () => {
         six_point_distance_calc_version: 1,
       }),
     ]);
-    expect(persisted.rows[0]?.glider_hours_credited_seconds).toBe(persisted.rows[0]?.duration_seconds);
     expect(persisted.rows[0]?.glider_hours_seconds).toBe(persisted.rows[0]?.duration_seconds);
     expect(persisted.rows[0]?.total_distance_meters).toBe(persisted.rows[0]?.cumulative_distance_meters);
     expect(persisted.rows[0]?.three_point_distance_meters).toBeCloseTo(24_089.859916730784, 8);
@@ -507,6 +506,11 @@ describe('FlightProcessingService with a real IGC file', () => {
       six_point_distance_calc_version: null,
       six_point_distance_metadata: null,
     })]);
+    const hours = await database.pool.query<{ glider_hours_seconds: number }>(
+      'SELECT glider_hours_seconds FROM profiles WHERE user_id = $1',
+      [pilot.user.userId],
+    );
+    expect(hours.rows).toEqual([{ glider_hours_seconds: 0 }]);
   }, 60_000);
 
   it('allows only one concurrent processor to persist identical flight content', async () => {
