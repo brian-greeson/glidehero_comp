@@ -28,7 +28,7 @@
   .map-replay-progress span { font-size: .74rem; }
   .map-replay-status { max-width: calc(100vw - 1.5rem); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 }
-@media (max-width: 350px) {
+@media (max-width: 375px) {
   .map-replay-controls__bar { gap: .25rem; padding-inline: .4rem; }
   .map-replay-button { width: 30px; height: 30px; }
   .map-replay-button--play { width: 38px; height: 38px; }

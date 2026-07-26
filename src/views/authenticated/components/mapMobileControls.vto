@@ -12,7 +12,7 @@
     </div>
   </div>
   <div class="map-mobile-period-controls">
-    <button type="button" data-competition-period-option="all-time" aria-pressed="{{ if period === 'all-time' }}true{{ else }}false{{ /if }}">{{ include "authenticated/components/icon.vto" { name: "calendar" } }}<span>All Time</span></button>
+    <button type="button" data-competition-period-option="all-time" aria-pressed="{{ if period === 'all-time' }}true{{ else }}false{{ /if }}">{{ include "authenticated/components/icon.vto" { name: "calendar" } }}<span>All Time</span>{{ include "authenticated/components/icon.vto" { name: "chevron-down", className: "map-mobile-period-chevron" } }}</button>
     <div class="map-mobile-month-control">
       <button type="button" data-competition-period-option="current-month" aria-pressed="{{ if period === 'current-month' }}true{{ else }}false{{ /if }}"><span data-current-month-option>Current Month</span></button>
       <div class="map-mobile-month-navigation" role="group" aria-label="Month navigation">

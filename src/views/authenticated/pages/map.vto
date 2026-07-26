@@ -19,7 +19,7 @@
         {{ include "authenticated/components/mapLeaderboard.vto" { compact: true } }}
       {{ /if }}
       {{ include "authenticated/components/mapMobileControls.vto" { mode, period } }}
-      <div data-map-replay class="map-mobile-replay"><button type="button" data-map-replay-open aria-controls="map-replay-panel-mobile" aria-expanded="false">Replay</button>{{ include "authenticated/components/mapReplayControls.vto" { panelId: "map-replay-panel-mobile", showSync: true } }}</div>
+      <div data-map-replay class="map-mobile-replay"><button type="button" data-map-replay-open aria-controls="map-replay-panel-mobile" aria-expanded="false"><span class="map-mobile-replay__icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M9 7v10l8-5z"/></svg></span><span>Replay</span></button>{{ include "authenticated/components/mapReplayControls.vto" { panelId: "map-replay-panel-mobile", showSync: true } }}</div>
     </section>
   </section>
 {{ /layout }}

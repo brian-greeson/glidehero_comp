@@ -82,7 +82,10 @@ describe('refreshed map UI controls', () => {
     expect(mobileRules).toContain('.map-mobile-period-controls { position: fixed;');
     expect(mobileRules).toContain('.map-mobile-replay { display: block; }');
     expect(mobileRules).toContain('.map-leaderboard--compact { position: absolute; z-index: 8; bottom: calc(4rem + env(safe-area-inset-bottom, 0px));');
-    expect(mobileRules).toContain('.map-arena-search { z-index: 21; top: .75rem; width: 50%; }');
+    expect(mobileRules).toContain('.map-arena-search { z-index: 21; top: .75rem; right: calc(.75rem + 8.75rem + .65rem); left: .75rem; width: auto; transform: none; }');
+    expect(mobileRules).toContain('.map-page[data-dashboard] .map-mobile-replay { bottom: calc(5.75rem + env(safe-area-inset-bottom, 0px)); }');
+    expect(mobileRules).toContain('.map-stage .maplibregl-ctrl-top-right { top: calc(.75rem + 44px + .65rem); right: .75rem; }');
+    expect(mobileRules).toContain('.map-mobile-replay__icon { display: grid;');
     expect(mobileRules).not.toContain('.mobile-map-sheet { position: fixed;');
     expect(css.slice(css.indexOf('@media (max-width: 390px)'))).toContain('.map-mobile-period-controls { right: .75rem; left: .75rem; }');
   });
@@ -105,10 +108,12 @@ describe('refreshed map UI controls', () => {
     expect(html).toContain('>All Pilots</span>');
     expect(html).toContain('class="map-mobile-period-controls"');
     expect(html).toContain('data-competition-period-option="all-time" aria-pressed="false"');
+    expect(html).toContain('map-mobile-period-chevron');
     expect(html).toContain('data-competition-period-option="current-month" aria-pressed="true"');
     expect(html).toContain('class="map-mobile-month-control"');
     expect(html).toContain('data-competition-month-nav="previous" aria-label="Previous month">‹</button>');
     expect(html).toContain('data-competition-month-nav="next" aria-label="Next month">›</button>');
+    expect(html).toContain('class="map-mobile-replay__icon"');
     expect(html).not.toContain('data-map-sheet');
     expect(html).not.toContain('map-scale');
   });
