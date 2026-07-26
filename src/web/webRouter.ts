@@ -1385,7 +1385,7 @@ export function createWebRouter(dependencies: {
         displayName: parsed.data.displayName || undefined,
       });
       res.setHeader('set-cookie', dependencies.cookie.set(session.token));
-      res.redirect(303, '/personal?onboarding=1');
+      res.redirect(303, '/personal');
     } catch (error) {
       if (error instanceof AuthFailure && error.code === 'duplicate_email') {
         await render(res, dependencies.renderPage, 409, {

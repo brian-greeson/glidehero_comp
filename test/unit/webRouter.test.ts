@@ -960,7 +960,7 @@ describe('webRouter', () => {
         }),
       });
       expect(response.status).toBe(303);
-      expect(response.headers.get('location')).toBe('/personal?onboarding=1');
+      expect(response.headers.get('location')).toBe('/personal');
       expect(response.headers.get('set-cookie')).toContain(
         'glidehero_session=new-token; Max-Age=604800; Path=/; HttpOnly; SameSite=Lax',
       );
