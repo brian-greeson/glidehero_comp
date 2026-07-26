@@ -42,7 +42,7 @@ export function createAuthenticatedShellModel(input: AuthenticatedShellInput): A
       initials: initialsForDisplayName(displayName),
       isAdmin: input.isAdmin ?? false,
     },
-    navigation: navigationFor(input.mapHref ?? '/personal'),
+    navigation: navigationFor(input.mapHref ?? '/following'),
     donateUrl: input.donateUrl ?? DEFAULT_DONATE_URL,
     adminUrl: input.adminUrl ?? DEFAULT_ADMIN_URL,
     logoutUrl: input.logoutUrl ?? DEFAULT_LOGOUT_URL,

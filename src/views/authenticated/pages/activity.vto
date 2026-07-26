@@ -30,7 +30,6 @@
           <div id="activity-stats-monthly" class="activity-stats-card__period" data-activity-stats-panel="monthly" aria-labelledby="activity-stats-monthly-button">
             <div class="activity-stats-card__grid">
               <div class="activity-stat-tile activity-stat-tile--count">
-                <span class="activity-stat-tile__icon">{{ include "authenticated/components/icon.vto" { name: "flight" } }}</span>
                 <span><span class="activity-stat-tile__label">Flights</span><strong>{{ activityStats.monthly.flightCount }}</strong></span>
               </div>
               {{ include "authenticated/components/activityStatisticWinner.vto" { label: "Most territory in one flight", kind: "territory", winner: activityStats.monthly.mostCells } }}
@@ -41,7 +40,6 @@
           <div id="activity-stats-daily" class="activity-stats-card__period" data-activity-stats-panel="daily" aria-labelledby="activity-stats-daily-button" hidden>
             <div class="activity-stats-card__grid">
               <div class="activity-stat-tile activity-stat-tile--count">
-                <span class="activity-stat-tile__icon">{{ include "authenticated/components/icon.vto" { name: "flight" } }}</span>
                 <span><span class="activity-stat-tile__label">Flights</span><strong>{{ activityStats.daily.flightCount }}</strong></span>
               </div>
               {{ include "authenticated/components/activityStatisticWinner.vto" { label: "Most territory in one flight", kind: "territory", winner: activityStats.daily.mostCells } }}

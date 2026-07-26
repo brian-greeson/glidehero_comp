@@ -16,7 +16,7 @@ describe('refreshed app shell model', () => {
     });
 
     expect(model.navigation.map((item) => item.href)).toEqual([
-      '/personal', '/activity', '/achievements', '/profile',
+      '/following', '/activity', '/achievements', '/profile',
     ]);
     expect(model.user).toEqual({ displayName: 'Alex Summit', initials: 'AS', isAdmin: true });
     expect(model.donateUrl).toBe('https://ko-fi.com/U6U0I4TSK');
