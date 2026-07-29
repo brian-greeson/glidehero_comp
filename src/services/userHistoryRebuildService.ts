@@ -7,9 +7,11 @@ import {
   activities,
   arenaLeadershipEvents,
   arenas,
+  bulkImports,
   flightProgress,
   flights,
   userAchievementProgress,
+  userWorkflowState,
   users,
 } from '../db/schema.js';
 import { awardAchievement } from './achievementService.js';
@@ -133,7 +135,30 @@ export type UserHistoryBatchedRebuildService = UserHistoryRebuildService & {
       }) => void;
     },
   ): Promise<BatchedUserHistoryRebuildSummary>;
+  /** Replay achievement-derived state without touching Activity rows. */
+  replayAchievements?(options: AchievementOnlyReplayOptions): Promise<AchievementOnlyReplayResult>;
 };
+
+export type AchievementOnlyReplayOptions = {
+  userId: string;
+  /** `full` rebuilds all completed flights; `suffix` starts at dirtyStartedAt. */
+  mode: 'full' | 'suffix';
+  dirtyStartedAt?: Date;
+  /** Zero-based flight cursor for restart/resume. */
+  cursor?: number;
+  /** When supplied, the three-flight replay and its resume cursor commit together. */
+  bulkImportId?: string;
+  onBatchCommitted?: (progress: { cursor: number; nextCursor: number; flightCount: number; done: boolean }) => void | Promise<void>;
+};
+
+export type AchievementOnlyReplayResult = {
+  cursor: number;
+  nextCursor: number;
+  processedFlights: number;
+  done: boolean;
+};
+
+export const ACHIEVEMENT_REPLAY_BATCH_SIZE = 3;
 
 export class BatchedUserHistoryRebuildError extends Error {
   constructor(
@@ -322,6 +347,7 @@ async function replayFlights(
   completedFlights: readonly UserHistoryRebuildFlight[],
   state: UserHistoryReplayState,
   cellSize: number,
+  publishActivities = true,
 ): Promise<{ activitiesCreated: number; flightProgressCreated: number }> {
   const progressionAchievements = createProgressionAchievementService();
   const activity = createActivityService();
@@ -384,15 +410,17 @@ async function replayFlights(
     if (!arenaEvaluation.snapshot) throw new Error('Arena achievement replay returned no progress snapshot.');
     state.finalArenaSnapshot = arenaEvaluation.snapshot;
 
-    await activity.publishFlightInTransaction(transaction, {
-      actorUserId: userId,
-      sourceFlightId: flight.id,
-      publishedAt: flight.startedAt,
-    });
+    if (publishActivities) {
+      await activity.publishFlightInTransaction(transaction, {
+        actorUserId: userId,
+        sourceFlightId: flight.id,
+        publishedAt: flight.startedAt,
+      });
+    }
   }
 
   return {
-    activitiesCreated: completedFlights.length,
+    activitiesCreated: publishActivities ? completedFlights.length : 0,
     flightProgressCreated: completedFlights.length,
   };
 }
@@ -411,6 +439,40 @@ async function finalizeUserHistory(
     state.finalArenaSnapshot,
     { promoteToComplete: true },
   );
+}
+
+async function resetAchievementDerived(
+  transaction: RebuildTransaction,
+  userId: string,
+  mode: AchievementOnlyReplayOptions['mode'],
+  dirtyStartedAt?: Date,
+): Promise<void> {
+  if (mode === 'full') {
+    await transaction.delete(achievementRecordEvents).where(eq(achievementRecordEvents.userId, userId));
+    await transaction.delete(achievementRecords).where(eq(achievementRecords.userId, userId));
+    await transaction.delete(achievements).where(eq(achievements.userId, userId));
+    await transaction.delete(flightProgress).where(eq(flightProgress.userId, userId));
+    await transaction.delete(userAchievementProgress).where(eq(userAchievementProgress.userId, userId));
+    return;
+  }
+  if (!dirtyStartedAt) throw new Error('dirtyStartedAt is required for suffix achievement replay.');
+  const suffixFlights = sql`SELECT id FROM flights WHERE user_id = ${userId} AND processing_status = 'completed' AND started_at >= ${dirtyStartedAt}`;
+  await transaction.delete(achievementRecordEvents).where(and(
+    eq(achievementRecordEvents.userId, userId),
+    sql`${achievementRecordEvents.sourceFlightId} IN (${suffixFlights})`,
+  ));
+  await transaction.delete(achievementRecords).where(and(
+    eq(achievementRecords.userId, userId),
+    sql`${achievementRecords.sourceFlightId} IN (${suffixFlights})`,
+  ));
+  await transaction.delete(achievements).where(and(
+    eq(achievements.userId, userId),
+    sql`${achievements.sourceFlightId} IN (${suffixFlights})`,
+  ));
+  await transaction.delete(flightProgress).where(and(
+    eq(flightProgress.userId, userId),
+    sql`${flightProgress.flightId} IN (${suffixFlights})`,
+  ));
 }
 
 function assignCreatedHistoryCounts(
@@ -591,6 +653,162 @@ export function createUserHistoryRebuildService(
         }
         throw new BatchedUserHistoryRebuildError(summary, error);
       }
+    },
+
+    async replayAchievements(replayOptions) {
+      const cursor = Math.max(0, replayOptions.cursor ?? 0);
+      const [initialDirtyState] = await database.select({
+        revision: userWorkflowState.dirtyRevision,
+      }).from(userWorkflowState).where(eq(userWorkflowState.userId, replayOptions.userId));
+      const flightsResult = await database
+        .select({ id: flights.id, startedAt: flights.startedAt })
+        .from(flights)
+        .where(and(
+          eq(flights.userId, replayOptions.userId),
+          eq(flights.processingStatus, 'completed'),
+        ))
+        .orderBy(asc(flights.startedAt), asc(flights.id));
+      const allFlights = validCompletedFlights(flightsResult);
+      const boundary = replayOptions.mode === 'suffix' ? replayOptions.dirtyStartedAt : undefined;
+      if (replayOptions.mode === 'suffix' && !boundary) throw new Error('dirtyStartedAt is required for suffix achievement replay.');
+      const prefixFlights = boundary ? allFlights.filter((flight) => flight.startedAt < boundary) : [];
+      const selectedFlights = boundary ? allFlights.filter((flight) => flight.startedAt >= boundary) : allFlights;
+      if (selectedFlights.length === 0) {
+        if (replayOptions.bulkImportId) {
+          const completed = await database.transaction(async (transaction) => {
+            await lockUserProgression(transaction, replayOptions.userId);
+            const [currentDirtyState] = await transaction.select({
+              revision: userWorkflowState.dirtyRevision,
+            }).from(userWorkflowState).where(eq(userWorkflowState.userId, replayOptions.userId));
+            if ((currentDirtyState?.revision ?? 0) !== (initialDirtyState?.revision ?? 0)) {
+              await transaction.update(bulkImports).set({
+                phase: 'replaying',
+                replayCursor: 0,
+                replayCheckpointCount: 0,
+                updatedAt: new Date(),
+              }).where(eq(bulkImports.id, replayOptions.bulkImportId!));
+              return false;
+            }
+            await transaction.update(bulkImports).set({
+              phase: 'completed',
+              lastError: null,
+              updatedAt: new Date(),
+            }).where(and(
+              eq(bulkImports.id, replayOptions.bulkImportId!),
+              eq(bulkImports.userId, replayOptions.userId),
+            ));
+            await transaction.update(userWorkflowState).set({
+              dirtyAchievementBoundary: null,
+              updatedAt: new Date(),
+            }).where(eq(userWorkflowState.userId, replayOptions.userId));
+            return true;
+          });
+          return { cursor, nextCursor: 0, processedFlights: 0, done: completed };
+        }
+        return { cursor, nextCursor: cursor, processedFlights: 0, done: true };
+      }
+      if (cursor > selectedFlights.length) throw new Error('Achievement replay cursor is beyond the flight list.');
+      if (replayOptions.bulkImportId && cursor === selectedFlights.length && cursor > 0) {
+        await database.update(bulkImports).set({
+          phase: 'replaying',
+          replayCursor: 0,
+          replayCheckpointCount: 0,
+          updatedAt: new Date(),
+        }).where(and(
+          eq(bulkImports.id, replayOptions.bulkImportId),
+          eq(bulkImports.userId, replayOptions.userId),
+        ));
+        return { cursor, nextCursor: 0, processedFlights: 0, done: false };
+      }
+      const nextCursor = Math.min(cursor + ACHIEVEMENT_REPLAY_BATCH_SIZE, selectedFlights.length);
+      const batch = selectedFlights.slice(cursor, nextCursor);
+
+      // Build progression context before opening the short write transaction;
+      // only the current three-flight batch is processed while locks are held.
+      const state = emptyReplayState();
+      for (const prior of [...prefixFlights, ...selectedFlights.slice(0, cursor)]) {
+        const candidates = await selectCandidateCells(database, prior.id, options.cellSize);
+        for (const cell of candidates.cells) state.seenCells.add(cellKey(cell));
+        state.historicalFlightIds.push(prior.id);
+        const total = candidates.directCellCount + candidates.enclosedCellCount;
+        if (total > 0 && (state.totalRecord === null || total > state.totalRecord)) state.totalRecord = total;
+        if (candidates.enclosedCellCount > 0 && (state.enclosedRecord === null || candidates.enclosedCellCount > state.enclosedRecord)) {
+          state.enclosedRecord = candidates.enclosedCellCount;
+        }
+      }
+
+      const result = await database.transaction(async (transaction) => {
+        await lockArenaCatalogShared(transaction);
+        await lockUserProgression(transaction, replayOptions.userId);
+        if (cursor === 0) {
+          await resetAchievementDerived(
+            transaction,
+            replayOptions.userId,
+            replayOptions.mode,
+            replayOptions.dirtyStartedAt,
+          );
+        }
+        await replayFlights(transaction, replayOptions.userId, batch, state, options.cellSize, false);
+        if (replayOptions.bulkImportId) {
+          const checkpoint = await transaction.update(bulkImports)
+            .set({
+              replayCursor: nextCursor,
+              replayCheckpointCount: sql`${bulkImports.replayCheckpointCount} + ${batch.length}`,
+              updatedAt: new Date(),
+            })
+            .where(and(
+              eq(bulkImports.id, replayOptions.bulkImportId),
+              eq(bulkImports.userId, replayOptions.userId),
+              eq(bulkImports.phase, 'replaying'),
+            ))
+            .returning({ id: bulkImports.id });
+          if (!checkpoint.length) throw new Error('Bulk achievement replay is no longer active.');
+        }
+        let done = nextCursor >= selectedFlights.length;
+        if (done && replayOptions.bulkImportId) {
+          const [currentDirtyState] = await transaction.select({
+            revision: userWorkflowState.dirtyRevision,
+          }).from(userWorkflowState).where(eq(userWorkflowState.userId, replayOptions.userId));
+          if ((currentDirtyState?.revision ?? 0) !== (initialDirtyState?.revision ?? 0)) {
+            await transaction.update(bulkImports).set({
+              replayCursor: 0,
+              replayCheckpointCount: 0,
+              updatedAt: new Date(),
+            }).where(eq(bulkImports.id, replayOptions.bulkImportId));
+            done = false;
+          }
+        }
+        if (done) {
+          await finalizeUserHistory(transaction, replayOptions.userId, state, progressProjection);
+          if (replayOptions.bulkImportId) {
+            await transaction.update(bulkImports).set({
+              phase: 'completed',
+              lastError: null,
+              updatedAt: new Date(),
+            }).where(and(
+              eq(bulkImports.id, replayOptions.bulkImportId),
+              eq(bulkImports.userId, replayOptions.userId),
+            ));
+            await transaction.update(userWorkflowState).set({
+              dirtyAchievementBoundary: null,
+              updatedAt: new Date(),
+            }).where(eq(userWorkflowState.userId, replayOptions.userId));
+          }
+        }
+        return { processedFlights: batch.length, done };
+      });
+      await replayOptions.onBatchCommitted?.({
+        cursor,
+        nextCursor,
+        flightCount: result.processedFlights,
+        done: result.done,
+      });
+      return {
+        cursor,
+        nextCursor,
+        processedFlights: result.processedFlights,
+        done: result.done,
+      };
     },
   };
 }

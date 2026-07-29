@@ -36,7 +36,9 @@ Flight ingestion crosses both processes:
 Browser
   -> upload intent from web process
   -> private object storage
-  -> Valkey work queue
+  -> object verification and minimal IGC parsing
+  -> pending flight and workflow member in PostgreSQL
+  -> chronological activation in Valkey work queue
   -> worker
   -> flight processing services
   -> PostgreSQL/PostGIS
@@ -244,16 +246,35 @@ External state has different durability:
 
 ## Flight-processing pipeline
 
-The upload and processing pipeline is deliberately asynchronous:
+The upload and processing pipeline is deliberately asynchronous and has two
+user-facing entry paths:
 
-1. The web process authenticates the pilot and creates an upload intent.
-2. The browser uploads directly to private object storage.
-3. The web process queues a job in Valkey.
-4. A worker claims the job and downloads the object.
-5. Processing parses the flight and writes its durable results transactionally.
-6. Rebuildable projections and generated artifacts are updated from the
-   completed flight.
-7. Queue state records a terminal outcome for status reporting and recovery.
+- A regular upload accepts one or more IGC files. Each flight must fall within
+  the inclusive 30-day launch-local calendar window. A user's sealed regular
+  batches merge into one queue ordered by `started_at`, then flight UUID.
+- A bulk historical upload accepts one ZIP in the browser, expands its IGC
+  members, and accepts flights of any age. Only one bulk import may remain
+  active for a user. Its valid flights are processed in the same deterministic
+  order; invalid and duplicate members do not stop later flights.
+
+Both paths use the same durable preparation sequence:
+
+1. The web process authenticates the pilot and creates an open regular batch or
+   preparing bulk import.
+2. The browser uploads each IGC directly to private object storage.
+3. The web process verifies the object, parses enough IGC data to determine the
+   flight time and launch timezone, and calculates the content hash.
+4. One short PostgreSQL transaction creates `igc_files`, a `flights` row with
+   `pending` processing status, and its workflow member.
+5. After the browser seals the workflow, PostgreSQL atomically claims only the
+   oldest eligible member. Valkey receives that member's job only after the
+   claim succeeds.
+6. A worker downloads the object and changes the prepared flight from
+   `pending` to `processing` before performing the expensive calculations.
+7. The flight transaction persists track, score, territory, progression, and
+   terminal flight state. Terminal workflow state then releases the next
+   chronological member.
+8. Queue state records the outcome for status reporting, cleanup, and recovery.
 
 The database transaction is the boundary for durable completion. Optional
 generated artifacts must not turn an already committed flight into a failed
@@ -262,6 +283,60 @@ flight.
 Queue consumers must remain restart-safe and safe to scale horizontally.
 Recovery, cleanup, retries, acknowledgements, and terminal-state reconciliation
 belong in the worker services rather than in the entry point.
+
+### Upload workflow state
+
+`flightUploadWorkflowService` owns durable scheduling state:
+
+- `regular_upload_batches` and `regular_upload_members` provide the shared
+  per-user regular queue. A partial unique index permits only one processing
+  regular member per user.
+- `bulk_imports` and `bulk_import_members` provide the historical-import
+  lifecycle. Preparing, processing, replaying, and failed imports remain active,
+  so a second import cannot begin prematurely.
+- `user_workflow_state.dirty_achievement_boundary` coalesces chronological
+  correction work to the earliest affected flight, while `dirty_revision`
+  prevents replay from clearing work requested by a concurrent flight.
+
+PostgreSQL is the scheduling authority. Valkey stores upload status and delivers
+only the currently activated job. Workflow members also act as a durable outbox:
+maintenance can reconstruct missing Valkey state from `igc_files`, `flights`,
+and the member row. Claimed-member reconciliation settles terminal flights and
+reactivates pending flights after a failed handoff or worker interruption. If
+Valkey loses a job after PostgreSQL fenced its flight as `processing`,
+maintenance atomically returns the flight and member to `pending` before
+reactivating it with a new processing token.
+Open regular batches and preparing bulk imports can be cancelled and expire
+after the abandoned-upload window. Admission locks the accepting workflow row,
+and sealing, claiming, replay, cancellation, and expiry require an explicit
+non-terminal phase so late browser requests cannot revive cancelled work.
+Globally duplicate content never references the existing pilot's flight or joins
+the new pilot's workflow. Its redundant object uses the retryable removal
+tombstone before deletion.
+
+### Activity and achievement ordering
+
+Regularly uploaded flights publish their Activity row transactionally when the
+flight completes. Bulk historical flights never publish Activity rows.
+
+Achievement evaluation is deferred for every bulk flight and for regular
+flights completed while a bulk import or chronological correction is active.
+After bulk flight processing finishes, all completed flights are replayed by
+`started_at`, then flight UUID. A backdated regular upload uses the earliest
+dirty boundary to replay only the affected suffix. Activity rows and reactions
+are not deleted or recreated by either replay mode.
+
+Achievement replay commits at most three flights per transaction. For bulk
+imports, the replay cursor is updated in the same transaction as those three
+flights. The last transaction also completes or restarts the import, eliminating
+a checkpoint-to-finalization crash window. A replay failure keeps the import
+active and maintenance retries it from the last committed cursor. If a regular
+flight completes during the full replay, the dirty revision atomically restarts
+the replay before the import can be completed.
+
+Admin deletion takes the per-user progression lock and refuses completed-flight
+deletion while a bulk replay, failed resumable replay, or dirty suffix correction
+is active. This keeps the ordered flight list stable across replay checkpoints.
 
 ## Server-rendered presentation
 

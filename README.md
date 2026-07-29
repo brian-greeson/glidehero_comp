@@ -13,8 +13,10 @@ workers for flight processing.
 
 ### Flight processing
 
-- Authenticated upload of individual IGC files and archives containing IGC
-  files.
+- Regular multi-IGC uploads for flights from the previous 30 launch-local
+  calendar days, processed in chronological order.
+- Bulk historical ZIP imports for flights of any age, with durable progress
+  and retryable achievement recalculation.
 - Direct browser uploads to private object storage.
 - Asynchronous parsing, duplicate detection, scoring, and claim generation.
 - Flight summaries, distance scores, and private territory previews.

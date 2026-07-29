@@ -1,8 +1,23 @@
-import { DeleteObjectCommand, HeadObjectCommand, PutObjectCommand, type S3 } from '@aws-sdk/client-s3';
+import { DeleteObjectCommand, GetObjectCommand, HeadObjectCommand, PutObjectCommand, type S3 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { Batch, InfBoundary, Script, type GlideClient } from '@valkey/valkey-glide';
+import { and, eq, sql } from 'drizzle-orm';
 import { randomUUID } from 'node:crypto';
 import { AppError } from '../domain/errors.js';
+import { createHash } from 'node:crypto';
+import { parseIgcFlight } from '../domain/igc/parseIgcFlight.js';
+import { regularFlightUploadWindow } from '../domain/igc/flightUploadWindow.js';
+import { resolveLaunchTimeZone } from '../domain/competition/launchTimeZone.js';
+import {
+  bulkImportMembers,
+  bulkImports,
+  flights,
+  igcFiles,
+  regularUploadBatches,
+  regularUploadMembers,
+} from '../db/schema.js';
+import type { Database } from '../db/client.js';
+import type { FlightUploadWorkflowService } from './flightUploadWorkflowService.js';
 
 export const FLIGHT_JOB_STREAM = 'glidehero:flight-jobs';
 export const FLIGHT_JOB_GROUP = 'flight-workers';
@@ -32,6 +47,11 @@ export type UploadJob = {
   error?: string;
   heartbeatAt?: number;
   processingToken?: string;
+  batchId?: string;
+  historyImportId?: string;
+  workflowMemberId?: string;
+  contentHash?: string;
+  activatedAt?: number;
 };
 
 export type UploadProgress = {
@@ -85,14 +105,25 @@ if job.userId ~= ARGV[2] then return 'forbidden' end
 if job.status ~= 'uploading' then return 'unchanged' end
 job.status = 'queued'
 job.updatedAt = tonumber(ARGV[3])
+if ARGV[5] ~= '' then job.flightId = ARGV[5] end
+if ARGV[6] ~= '' then job.contentHash = ARGV[6] end
+if ARGV[7] ~= '' then job.workflowMemberId = ARGV[7] end
 redis.call('SET', KEYS[1], cjson.encode(job))
 for index = 5, #KEYS do
   redis.call('ZREM', KEYS[index], ARGV[1])
 end
 redis.call('ZADD', KEYS[4], job.createdAt, ARGV[1])
 redis.call('ZREM', KEYS[3], ARGV[1])
-redis.call('XADD', KEYS[2], '*', 'jobId', ARGV[1])
+if ARGV[4] ~= 'staged' then redis.call('XADD', KEYS[2], '*', 'jobId', ARGV[1]) end
 return 'queued'
+`);
+const activateUploadScript = new Script(`
+local raw = redis.call('GET', KEYS[1])
+if not raw then return 'missing' end
+local ok, job = pcall(cjson.decode, raw)
+if not ok or job.status ~= 'queued' or job.activatedAt then return 'unchanged' end
+job.activatedAt = tonumber(ARGV[2]); job.workflowMemberId = ARGV[3]; job.updatedAt = tonumber(ARGV[2])
+redis.call('SET', KEYS[1], cjson.encode(job)); redis.call('XADD', KEYS[2], '*', 'jobId', ARGV[1]); return 'activated'
 `);
 const claimQueuedJobScript = new Script(`
 local raw = redis.call('GET', KEYS[1])
@@ -213,8 +244,9 @@ export function isIgcFilename(filename: string): boolean {
 }
 
 export interface FlightUploadQueueService {
-  createIntent(input: { userId: string; originalFilename: string; contentType: string; byteSize: number }): Promise<{ id: string; uploadUrl: string }>;
+  createIntent(input: { userId: string; originalFilename: string; contentType: string; byteSize: number; batchId?: string; historyImportId?: string }): Promise<{ id: string; uploadUrl: string }>;
   complete(input: { userId: string; id: string }): Promise<void>;
+  activateJob(id: string, workflowMemberId: string): Promise<boolean>;
   cancel(input: { userId: string; id: string }): Promise<boolean>;
   getJob(id: string): Promise<UploadJob | null>;
   claimJob(id: string): Promise<UploadJob | null>;
@@ -251,10 +283,40 @@ export function createFlightUploadQueueService(
     bucketFolder: string;
     keyFactory?: (userId: string) => string;
     presign?: (command: PutObjectCommand) => Promise<string>;
+    database?: Database;
+    workflowService?: FlightUploadWorkflowService;
+    now?: () => Date;
   },
 ): FlightUploadQueueService {
   const keyFactory = options.keyFactory
     ?? ((userId) => `${flightUploadPrefix(options.bucketFolder, userId)}${randomUUID()}.igc`);
+
+  async function markQueuedFailure(job: UploadJob, error: string): Promise<void> {
+    job.status = 'failed'; job.error = error; job.updatedAt = Date.now();
+    await saveJob(job);
+  }
+  async function markQueuedDuplicate(job: UploadJob): Promise<void> {
+    job.status = 'duplicate'; job.error = 'Duplicate flight.'; job.updatedAt = Date.now();
+    const raw = JSON.stringify(job);
+    const transaction = new Batch(true)
+      .set(jobKey(job.id), raw)
+      .zadd(userJobsKey(job.userId), { [job.id]: job.createdAt })
+      .zadd(allJobsKey, { [job.id]: job.createdAt })
+      .set(removalKey(job.id), raw)
+      .zadd(removalPendingKey, { [job.id]: Date.now() });
+    removeAllStatusIndexes(transaction, job.userId, [job.id]);
+    transaction.zadd(userJobsByStatusKey(job.userId, 'duplicate'), { [job.id]: job.createdAt });
+    await execAtomic(transaction, 'Unable to atomically record duplicate flight cleanup.');
+    try {
+      await options.s3Client.send(new DeleteObjectCommand({
+        Bucket: options.bucketName,
+        Key: job.bucketKey,
+      }));
+      await finalizeRemoval(job.id);
+    } catch (error) {
+      console.error('Unable to delete duplicate IGC object', error);
+    }
+  }
 
   async function getJob(id: string): Promise<UploadJob | null> {
     const raw = decode(await valkey.get(jobKey(id)));
@@ -309,6 +371,55 @@ export function createFlightUploadQueueService(
     removeAllStatusIndexes(transaction, job.userId, [job.id]);
     transaction.zadd(userJobsByStatusKey(job.userId, job.status), { [job.id]: job.createdAt });
     await execAtomic(transaction, 'Unable to atomically save flight upload status.');
+  }
+
+  async function reconstructWorkflowJob(id: string, workflowMemberId: string): Promise<UploadJob | null> {
+    if (!options.database) return null;
+    const result = await options.database.execute(sql`
+      SELECT m.user_id AS "userId", m.batch_id AS "batchId", NULL::uuid AS "historyImportId",
+        f.flight_id AS "flightId", f.content_hash AS "contentHash",
+        i.original_filename AS "originalFilename", i.content_type AS "contentType",
+        i.byte_size AS "byteSize", i.bucket_key AS "bucketKey",
+        extract(epoch FROM m.created_at) * 1000 AS "createdAt"
+      FROM regular_upload_members m
+      JOIN flights f ON f.flight_id = m.flight_id
+      JOIN igc_files i ON i.igc_file_id = f.igc_file_id
+      WHERE m.id = ${workflowMemberId} AND m.upload_job_id = ${id}
+      UNION ALL
+      SELECT m.user_id AS "userId", NULL::uuid AS "batchId", m.import_id AS "historyImportId",
+        f.flight_id AS "flightId", f.content_hash AS "contentHash",
+        i.original_filename AS "originalFilename", i.content_type AS "contentType",
+        i.byte_size AS "byteSize", i.bucket_key AS "bucketKey",
+        extract(epoch FROM m.created_at) * 1000 AS "createdAt"
+      FROM bulk_import_members m
+      JOIN flights f ON f.flight_id = m.flight_id
+      JOIN igc_files i ON i.igc_file_id = f.igc_file_id
+      WHERE m.id = ${workflowMemberId} AND m.upload_job_id = ${id}
+      LIMIT 1
+    `);
+    const row = result.rows[0] as {
+      userId: string; batchId: string | null; historyImportId: string | null;
+      flightId: string; contentHash: string; originalFilename: string;
+      contentType: string; byteSize: number; bucketKey: string; createdAt: number | string;
+    } | undefined;
+    if (!row) return null;
+    const now = Date.now();
+    return {
+      id,
+      userId: row.userId,
+      originalFilename: row.originalFilename,
+      contentType: row.contentType,
+      byteSize: Number(row.byteSize),
+      bucketKey: row.bucketKey,
+      status: 'queued',
+      createdAt: Number(row.createdAt),
+      updatedAt: now,
+      flightId: row.flightId,
+      contentHash: row.contentHash,
+      workflowMemberId,
+      ...(row.batchId ? { batchId: row.batchId } : {}),
+      ...(row.historyImportId ? { historyImportId: row.historyImportId } : {}),
+    };
   }
 
   async function readProgress(userId: string): Promise<UploadProgress> {
@@ -408,11 +519,13 @@ export function createFlightUploadQueueService(
       if (!Number.isInteger(input.byteSize) || input.byteSize < 1 || input.byteSize > MAX_IGC_FILE_BYTES) {
         throw new AppError(422, 'invalid_request', 'IGC files must be 10 MB or smaller.');
       }
+      if (input.batchId && input.historyImportId) throw new AppError(422, 'invalid_request', 'Upload workflow metadata is mutually exclusive.');
       const now = Date.now();
       const job: UploadJob = {
         id: randomUUID(), userId: input.userId, originalFilename: input.originalFilename,
         contentType: input.contentType || 'application/octet-stream', byteSize: input.byteSize,
         bucketKey: keyFactory(input.userId), status: 'uploading', createdAt: now, updatedAt: now,
+        batchId: input.batchId, historyImportId: input.historyImportId,
       };
       const uploadUrl = await (options.presign ?? ((command) => getSignedUrl(options.s3Client, command, { expiresIn: 15 * 60 })))(new PutObjectCommand({
         Bucket: options.bucketName, Key: job.bucketKey, ContentType: job.contentType, ContentLength: job.byteSize,
@@ -435,20 +548,158 @@ export function createFlightUploadQueueService(
       if (object.ContentLength !== job.byteSize || job.byteSize > MAX_IGC_FILE_BYTES) {
         throw new AppError(422, 'invalid_request', 'Uploaded file size did not match the selected file.');
       }
+      const workflow = options.workflowService && options.database && (job.batchId || job.historyImportId);
+      const database = options.database;
+      const workflowService = options.workflowService;
+      let prepared: { flightId: string; memberId: string; contentHash: string } | undefined;
+      if (workflow) {
+        const response = await options.s3Client.send(new GetObjectCommand({ Bucket: options.bucketName, Key: job.bucketKey }));
+        const bytes = response.Body ? await response.Body.transformToByteArray() : new Uint8Array();
+        const source = Buffer.from(bytes).toString('utf8');
+        try {
+          const parsed = parseIgcFlight(source);
+          const contentHash = createHash('sha256').update(bytes).digest('hex');
+          const launchTimezone = resolveLaunchTimeZone({ latitude: parsed.launchLatitude, longitude: parsed.launchLongitude });
+          if (job.batchId) {
+            const window = regularFlightUploadWindow(parsed.startedAt, launchTimezone, options.now?.() ?? new Date());
+            if (!window.accepted) {
+              await markQueuedFailure(job, window.reason === 'too_old' ? 'Flight is older than 30 days.' : 'Flight starts in the future.');
+              return;
+            }
+          }
+          const [previousPreparation] = await database!
+            .select({ flightId: flights.id, contentHash: flights.contentHash })
+            .from(igcFiles)
+            .innerJoin(flights, eq(flights.igcFileId, igcFiles.id))
+            .where(eq(igcFiles.bucketKey, job.bucketKey))
+            .limit(1);
+          if (previousPreparation) {
+            const [member] = job.batchId
+              ? await database!.select({ id: regularUploadMembers.id })
+                .from(regularUploadMembers)
+                .where(eq(regularUploadMembers.uploadJobId, job.id))
+                .limit(1)
+              : await database!.select({ id: bulkImportMembers.id })
+                .from(bulkImportMembers)
+                .where(eq(bulkImportMembers.uploadJobId, job.id))
+                .limit(1);
+            if (!member) throw new Error('Prepared flight is missing its upload workflow member.');
+            prepared = { flightId: previousPreparation.flightId, memberId: member.id, contentHash: previousPreparation.contentHash };
+            job.flightId = previousPreparation.flightId;
+            job.contentHash = previousPreparation.contentHash;
+            job.workflowMemberId = member.id;
+          } else {
+            const existing = await database!
+              .select({ id: flights.id })
+              .from(flights)
+              .where(eq(flights.contentHash, contentHash))
+              .limit(1);
+            if (existing[0]) {
+              // A content hash is globally unique, but the existing flight can
+              // belong to another pilot. A duplicate is terminal upload state;
+              // it must never reference the existing flight or join this
+              // pilot's workflow.
+              job.contentHash = contentHash;
+              await markQueuedDuplicate(job);
+              return;
+            }
+            const row = await database!.transaction(async (tx) => {
+            if (job.batchId) {
+              const [batch] = await tx.select({ id: regularUploadBatches.id })
+                .from(regularUploadBatches)
+                .where(and(
+                  eq(regularUploadBatches.id, job.batchId),
+                  eq(regularUploadBatches.userId, job.userId),
+                  eq(regularUploadBatches.status, 'open'),
+                ))
+                .for('update');
+              if (!batch) throw new Error('Regular upload batch is not open.');
+            } else if (job.historyImportId) {
+              const [historyImport] = await tx.select({ id: bulkImports.id })
+                .from(bulkImports)
+                .where(and(
+                  eq(bulkImports.id, job.historyImportId),
+                  eq(bulkImports.userId, job.userId),
+                  eq(bulkImports.phase, 'preparing'),
+                ))
+                .for('update');
+              if (!historyImport) throw new Error('Bulk import is not accepting files.');
+            }
+            const [file] = await tx.insert(igcFiles).values({ userId: job.userId, originalFilename: job.originalFilename, contentType: job.contentType, byteSize: job.byteSize, bucketKey: job.bucketKey }).returning({ id: igcFiles.id });
+            if (!file) throw new Error('Unable to create IGC file');
+            const [flight] = await tx.insert(flights).values({ userId: job.userId, igcFileId: file.id, contentHash, processingStatus: 'pending', startedAt: parsed.startedAt, endedAt: parsed.endedAt, durationSeconds: Math.round(parsed.durationSeconds), distanceMeters: parsed.distanceMeters, launchLatitude: parsed.launchLatitude, launchLongitude: parsed.launchLongitude, launchTimezone }).returning({ id: flights.id });
+            if (!flight) throw new Error('Unable to create flight');
+            const [member] = job.batchId
+              ? await tx.insert(regularUploadMembers).values({
+                  batchId: job.batchId,
+                  userId: job.userId,
+                  flightId: flight.id,
+                  uploadJobId: job.id,
+                  startedAt: parsed.startedAt,
+                }).returning({ id: regularUploadMembers.id })
+              : await tx.insert(bulkImportMembers).values({
+                  importId: job.historyImportId!,
+                  userId: job.userId,
+                  flightId: flight.id,
+                  uploadJobId: job.id,
+                  startedAt: parsed.startedAt,
+                }).returning({ id: bulkImportMembers.id });
+            if (!member) throw new Error('Unable to add flight to upload workflow.');
+            return { flightId: flight.id, memberId: member.id };
+            });
+            prepared = { flightId: row.flightId, memberId: row.memberId, contentHash };
+            job.flightId = row.flightId; job.contentHash = contentHash; job.workflowMemberId = row.memberId;
+          }
+        } catch (error) {
+          await markQueuedFailure(job, error instanceof Error ? error.message : 'Invalid IGC file.'); return;
+        }
+      }
       const result = decode(await valkey.invokeScript(completeUploadScript, {
         keys: [
           jobKey(job.id), FLIGHT_JOB_STREAM, uploadExpiryKey, userJobsByStatusKey(job.userId, 'queued'),
           ...uploadJobStatuses.map((status) => userJobsByStatusKey(job.userId, status)),
         ],
-        args: [job.id, input.userId, String(Date.now())],
+        args: [
+          job.id,
+          input.userId,
+          String(Date.now()),
+          workflow ? 'staged' : 'stream',
+          prepared?.flightId ?? '',
+          prepared?.contentHash ?? '',
+          prepared?.memberId ?? '',
+        ],
       }));
       if (result === 'missing' || result === 'forbidden') throw new AppError(404, 'invalid_request', 'Upload not found.');
       if (result === 'invalid') throw new Error('Unable to decode flight upload state.');
     },
 
+    async activateJob(id, workflowMemberId) {
+      let job = await getJob(id);
+      if (!job || job.status === 'uploading') {
+        const restored = await reconstructWorkflowJob(id, workflowMemberId);
+        if (!restored) return false;
+        job = restored;
+        await saveJob(job);
+      }
+      const result = decode(await valkey.invokeScript(activateUploadScript, { keys: [jobKey(id), FLIGHT_JOB_STREAM], args: [id, String(Date.now()), workflowMemberId] }));
+      if (result === 'activated') return true;
+      const current = await getJob(id);
+      return Boolean(current?.activatedAt);
+    },
+
     async cancel(input) {
       const job = await getJob(input.id);
       if (!job || job.userId !== input.userId || job.status !== 'uploading') return false;
+      if (options.database) {
+        const prepared = await options.database.execute(sql`
+          SELECT EXISTS (
+            SELECT 1 FROM regular_upload_members WHERE upload_job_id = ${job.id}
+            UNION ALL
+            SELECT 1 FROM bulk_import_members WHERE upload_job_id = ${job.id}
+          ) AS value
+        `);
+        if (prepared.rows[0]?.value) return false;
+      }
       if (!await removeUploadingJob(job)) return false;
       try {
         await options.s3Client.send(new DeleteObjectCommand({ Bucket: options.bucketName, Key: job.bucketKey }));

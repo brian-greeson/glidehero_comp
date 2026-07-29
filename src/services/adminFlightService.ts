@@ -2,7 +2,7 @@ import { DeleteObjectCommand, GetObjectCommand, HeadObjectCommand, type S3 } fro
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { and, asc, desc, eq, sql } from 'drizzle-orm';
 import type { Database } from '../db/client.js';
-import { flights, igcFiles, users, profiles } from '../db/schema.js';
+import { bulkImports, flights, igcFiles, users, profiles, userWorkflowState } from '../db/schema.js';
 import type { GridClaimService } from './gridClaimService.js';
 import type { FlightUploadQueueService } from './flightUploadQueueService.js';
 import {
@@ -22,7 +22,7 @@ export type AdminFlight = {
   flightDate: string | null;
   pilotEmail: string;
   originalFilename: string;
-  processingStatus: 'processing' | 'completed' | 'failed';
+  processingStatus: 'pending' | 'processing' | 'completed' | 'failed';
 };
 
 export type AdminUserFlight = Omit<AdminFlight, 'pilotEmail'> & {
@@ -45,7 +45,7 @@ export interface AdminFlightService {
   listUserFlights(userId: string, sort?: AdminUserFlightSort): Promise<AdminUserFlight[]>;
   reprocessFlight(input: { flightId: string; userId?: string }): ReturnType<GridClaimService['reprocess']>;
   regenerateActivity(input: { flightId: string; userId: string }): Promise<'completed' | 'not_found' | 'not_completed'>;
-  deleteFlight(input: { flightId: string; userId: string }): Promise<'deleted' | 'already_deleted' | 'processing'>;
+  deleteFlight(input: { flightId: string; userId: string }): Promise<'deleted' | 'already_deleted' | 'processing' | 'replay_active'>;
   deleteAllUserFlights(userId: string): Promise<AdminBulkFlightDeleteResult>;
   createDownloadUrl(input: { flightId: string; userId: string }): Promise<{ url: string; filename: string } | null>;
 }
@@ -109,15 +109,30 @@ export function createAdminFlightService(
   async function deleteFlight(input: { flightId: string; userId: string }) {
     const flight = await storedFlight(input);
     if (!flight) return 'already_deleted' as const;
-    if (flight.processingStatus === 'processing') return 'processing' as const;
+    if (flight.processingStatus === 'pending' || flight.processingStatus === 'processing') return 'processing' as const;
     if (!storage) throw new Error('Admin flight storage is not configured.');
 
-    await database.transaction(async (tx) => {
+    return database.transaction(async (tx) => {
       const hasProjectionDependencies = flight.processingStatus === 'completed'
         && Boolean(arenaLeadershipOptions?.userArenaProgress || arenaLeadershipOptions?.userAchievementProgress);
       await lockArenaCatalogShared(tx);
-      if (hasProjectionDependencies) {
+      if (flight.processingStatus === 'completed') {
         await lockUserProgression(tx, input.userId);
+        const replayState = await tx.execute(sql`
+          SELECT (
+            EXISTS (
+              SELECT 1 FROM ${bulkImports}
+              WHERE ${bulkImports.userId} = ${input.userId}
+                AND ${bulkImports.phase} IN ('replaying', 'failed')
+            )
+            OR EXISTS (
+              SELECT 1 FROM ${userWorkflowState}
+              WHERE ${userWorkflowState.userId} = ${input.userId}
+                AND ${userWorkflowState.dirtyAchievementBoundary} IS NOT NULL
+            )
+          ) AS active
+        `);
+        if (Boolean(replayState.rows[0]?.active)) return 'replay_active' as const;
       }
       const arenaIds = await findEligibleArenaIdsForCompetitionFlight(tx, {
         flightId: input.flightId,
@@ -169,8 +184,8 @@ export function createAdminFlightService(
       if (storage.thumbnailLifecycle) {
         await storage.thumbnailLifecycle.deleteForFlight({ userId: input.userId, flightId: input.flightId });
       }
+      return 'deleted' as const;
     });
-    return 'deleted' as const;
   }
 
   return {
@@ -261,7 +276,7 @@ export function createAdminFlightService(
       const result: AdminBulkFlightDeleteResult = { deleted: 0, skipped: 0, failed: 0 };
 
       for (const flight of userFlights) {
-        if (flight.processingStatus === 'processing') {
+        if (flight.processingStatus === 'pending' || flight.processingStatus === 'processing') {
           result.skipped += 1;
           continue;
         }

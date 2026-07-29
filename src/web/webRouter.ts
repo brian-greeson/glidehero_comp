@@ -24,6 +24,7 @@ import { pilotProfileToView } from '../views/authenticated/adapters/profileView.
 import { createMapPageModel } from '../views/authenticated/adapters/mapView.js';
 import type { AuthenticatedPageModel } from '../views/authenticated/models.js';
 import type { FlightUploadQueueService } from '../services/flightUploadQueueService.js';
+import type { FlightUploadWorkflowService } from '../services/flightUploadWorkflowService.js';
 import type { FailedFlightCleanupService } from '../services/failedFlightCleanupService.js';
 import type { TerritoryTileService } from '../services/territoryTileService.js';
 import {
@@ -168,7 +169,9 @@ const uploadIntentSchema = z.object({
   originalFilename: z.string().min(1).max(255),
   contentType: z.string().max(255).default('application/octet-stream'),
   byteSize: z.number().int().positive(),
-}).strict();
+  batchId: z.string().uuid().optional(),
+  historyImportId: z.string().uuid().optional(),
+}).strict().refine((value) => Boolean(value.batchId) !== Boolean(value.historyImportId));
 
 function formBody(body: unknown): Record<string, unknown> {
   if (typeof body !== 'object' || body === null || Array.isArray(body)) return {};
@@ -187,6 +190,7 @@ export function createWebRouter(dependencies: {
   auth: AuthService;
   cookie: SessionCookie;
   uploadQueue?: FlightUploadQueueService;
+  uploadWorkflow?: FlightUploadWorkflowService;
   failedFlightCleanup?: FailedFlightCleanupService;
   profiles: ProfileService;
   follow?: FollowService;
@@ -218,6 +222,38 @@ export function createWebRouter(dependencies: {
   const territoryTileSettings = dependencies.territoryTileSettings ?? createTerritoryTileSettingsService();
   const adminEmails = new Set((dependencies.adminEmails ?? []).map((email) => email.trim().toLowerCase()));
   const isAdmin = (email: string) => adminEmails.has(email.trim().toLowerCase());
+
+  async function activateNextRegular(userId: string) {
+    if (!dependencies.uploadWorkflow || !dependencies.uploadQueue) return null;
+    const member = await dependencies.uploadWorkflow.claimNextRegular(userId);
+    if (member?.uploadJobId) {
+      try {
+        const activated = await dependencies.uploadQueue.activateJob(member.uploadJobId, member.id);
+        const job = activated ? null : await dependencies.uploadQueue.getJob(member.uploadJobId);
+        if (!activated && !job?.activatedAt) await dependencies.uploadWorkflow.releaseRegularClaim(member.id);
+      } catch (error) {
+        await dependencies.uploadWorkflow.releaseRegularClaim(member.id);
+        throw error;
+      }
+    }
+    return member;
+  }
+
+  async function activateNextBulk(importId: string, userId: string) {
+    if (!dependencies.uploadWorkflow || !dependencies.uploadQueue) return null;
+    const member = await dependencies.uploadWorkflow.claimNextBulk(importId, userId);
+    if (member?.uploadJobId) {
+      try {
+        const activated = await dependencies.uploadQueue.activateJob(member.uploadJobId, member.id);
+        const job = activated ? null : await dependencies.uploadQueue.getJob(member.uploadJobId);
+        if (!activated && !job?.activatedAt) await dependencies.uploadWorkflow.releaseBulkClaim(member.id);
+      } catch (error) {
+        await dependencies.uploadWorkflow.releaseBulkClaim(member.id);
+        throw error;
+      }
+    }
+    return member;
+  }
 
   async function renderCurrentProfile(
     res: Response,
@@ -376,6 +412,84 @@ export function createWebRouter(dependencies: {
     }
     try {
       res.status(201).json(await dependencies.uploadQueue.createIntent({ userId: currentUser.userId, ...input.data }));
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.post('/v1/flight-upload-batches', async (_req, res, next) => {
+    const currentUser = res.locals.currentUser;
+    if (!currentUser) return next(new AppError(401, 'unauthorized', 'Sign in before uploading flights.'));
+    if (!dependencies.uploadWorkflow) throw new Error('Upload workflow is not configured.');
+    try {
+      res.status(201).json(await dependencies.uploadWorkflow.createRegularBatch(currentUser.userId));
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.post('/v1/flight-upload-batches/:batchId/seal', async (req, res, next) => {
+    const currentUser = res.locals.currentUser;
+    if (!currentUser) return next(new AppError(401, 'unauthorized', 'Sign in before uploading flights.'));
+    if (!dependencies.uploadWorkflow) throw new Error('Upload workflow is not configured.');
+    if (!z.string().uuid().safeParse(req.params.batchId).success) return next(new AppError(400, 'invalid_request', 'Upload batch ID is invalid.'));
+    try {
+      const sealed = await dependencies.uploadWorkflow.sealRegularBatch(req.params.batchId, currentUser.userId);
+      if (!sealed) throw new AppError(409, 'conflict', 'This upload batch is no longer accepting changes.');
+      await activateNextRegular(currentUser.userId);
+      res.status(202).json({ status: 'processing' });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.post('/v1/flight-history-imports', async (_req, res, next) => {
+    const currentUser = res.locals.currentUser;
+    if (!currentUser) return next(new AppError(401, 'unauthorized', 'Sign in before uploading flight history.'));
+    if (!dependencies.uploadWorkflow) throw new Error('Upload workflow is not configured.');
+    try {
+      res.status(201).json(await dependencies.uploadWorkflow.createBulkImport(currentUser.userId));
+    } catch (error) {
+      if (error instanceof Error && error.message === 'An active bulk import already exists') {
+        return next(new AppError(409, 'conflict', error.message));
+      }
+      next(error);
+    }
+  });
+
+  router.post('/v1/flight-history-imports/:importId/seal', async (req, res, next) => {
+    const currentUser = res.locals.currentUser;
+    if (!currentUser) return next(new AppError(401, 'unauthorized', 'Sign in before uploading flight history.'));
+    if (!dependencies.uploadWorkflow) throw new Error('Upload workflow is not configured.');
+    if (!z.string().uuid().safeParse(req.params.importId).success) return next(new AppError(400, 'invalid_request', 'History import ID is invalid.'));
+    try {
+      const sealed = await dependencies.uploadWorkflow.sealBulkImport(req.params.importId, currentUser.userId);
+      if (!sealed) throw new AppError(409, 'conflict', 'This historical upload is no longer accepting changes.');
+      const member = await activateNextBulk(req.params.importId, currentUser.userId);
+      if (!member && !(await dependencies.uploadWorkflow.beginBulkReplay(req.params.importId, currentUser.userId))) {
+        throw new AppError(409, 'conflict', 'This historical upload is no longer active.');
+      }
+      res.status(202).json({ status: member ? 'processing' : 'replaying' });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.delete('/v1/flight-history-imports/:importId', async (req, res, next) => {
+    const currentUser = res.locals.currentUser;
+    if (!currentUser) return next(new AppError(401, 'unauthorized', 'Sign in before managing flight history.'));
+    if (!dependencies.uploadWorkflow || !dependencies.uploadQueue) throw new Error('Upload workflow is not configured.');
+    if (!z.string().uuid().safeParse(req.params.importId).success) return next(new AppError(400, 'invalid_request', 'History import ID is invalid.'));
+    try {
+      const { cancelled, jobs } = await dependencies.uploadWorkflow.cancelBulkImport(req.params.importId, currentUser.userId);
+      if (!cancelled) throw new AppError(409, 'conflict', 'This historical upload has already started or ended.');
+      for (const item of jobs) {
+        const job = await dependencies.uploadQueue.getJob(item.uploadJobId);
+        if (job && !['completed', 'duplicate', 'failed'].includes(job.status)) {
+          await dependencies.uploadQueue.saveJob({ ...job, status: 'failed', error: item.reason, updatedAt: Date.now() });
+        }
+      }
+      res.status(200).json({ cancelled: true });
     } catch (error) {
       next(error);
     }

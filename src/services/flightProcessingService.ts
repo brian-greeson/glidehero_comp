@@ -1,7 +1,7 @@
 import { GetObjectCommand, type S3 } from '@aws-sdk/client-s3';
-import { and, DrizzleQueryError, eq, isNotNull, sql } from 'drizzle-orm';
+import { and, DrizzleQueryError, eq, gt, isNotNull, sql } from 'drizzle-orm';
 import type { Database } from '../db/client.js';
-import { flightScores, flights, trackPoints, profiles } from '../db/schema.js';
+import { flightScores, flights, trackPoints, profiles, userWorkflowState } from '../db/schema.js';
 import { resolveLaunchTimeZone } from '../domain/competition/launchTimeZone.js';
 import {
   FIVE_POINT_DISTANCE_CALC_VERSION,
@@ -31,8 +31,23 @@ export type FlightProcessingOutcome =
   | { status: 'superseded'; flightId: string }
   | { status: 'duplicate'; message: typeof duplicateFlightMessage };
 
+export type FlightProcessingPolicy = {
+  evaluateAchievements?: boolean;
+  publishActivity?: boolean;
+  markDirtyBoundary?: boolean;
+};
+
 export interface FlightProcessingService {
-  process(input: { ownerUserId: string; igcFileId: string; bucketKey: string; contentHash: string; processingToken: string; source?: string }): Promise<FlightProcessingOutcome>;
+  process(input: {
+    ownerUserId: string;
+    igcFileId: string;
+    bucketKey: string;
+    contentHash: string;
+    processingToken: string;
+    flightId?: string;
+    source?: string;
+    policy?: FlightProcessingPolicy;
+  }): Promise<FlightProcessingOutcome>;
 }
 
 function isContentHashConflict(error: unknown): boolean {
@@ -96,16 +111,32 @@ export function createFlightProcessingService(
     async process(input) {
       const nPointSolverEnabled = await (options.isNPointSolverEnabled?.() ?? Promise.resolve(true));
       let flight: { id: string } | undefined;
-      try {
+      if (input.flightId) {
         [flight] = await database
-          .insert(flights)
-          .values({ userId: input.ownerUserId, igcFileId: input.igcFileId, contentHash: input.contentHash, processingToken: input.processingToken })
+          .update(flights)
+          .set({ processingStatus: 'processing', processingToken: input.processingToken, processingError: null })
+          .where(and(
+            eq(flights.id, input.flightId),
+            eq(flights.userId, input.ownerUserId),
+            eq(flights.igcFileId, input.igcFileId),
+            eq(flights.processingStatus, 'pending'),
+          ))
           .returning({ id: flights.id });
-      } catch (error) {
-        if (isContentHashConflict(error)) return { status: 'duplicate', message: duplicateFlightMessage };
-        throw error;
+      } else {
+        try {
+          [flight] = await database
+            .insert(flights)
+            .values({ userId: input.ownerUserId, igcFileId: input.igcFileId, contentHash: input.contentHash, processingToken: input.processingToken })
+            .returning({ id: flights.id });
+        } catch (error) {
+          if (isContentHashConflict(error)) return { status: 'duplicate', message: duplicateFlightMessage };
+          throw error;
+        }
       }
-      if (!flight) throw new Error('Flight insert returned no row.');
+      if (!flight) {
+        if (input.flightId) return { status: 'superseded', flightId: input.flightId };
+        throw new Error('Flight insert returned no row.');
+      }
 
       let source = input.source;
       if (source === undefined) {
@@ -210,11 +241,29 @@ export function createFlightProcessingService(
               .values(parsed.points.slice(start, start + TRACK_POINT_INSERT_BATCH_SIZE).map((point) => ({ flightId: flight.id, ...point })));
           }
 
-          await gridClaim.processInTransaction(tx, {
+          const claimInput = {
             flightId: flight.id,
             userId: input.ownerUserId,
             launchTimezone,
-          });
+          };
+          const [laterCompletedFlight] = input.policy?.markDirtyBoundary
+            ? await tx.select({ id: flights.id }).from(flights).where(and(
+                eq(flights.userId, input.ownerUserId),
+                eq(flights.processingStatus, 'completed'),
+                gt(flights.startedAt, parsed.startedAt),
+              )).limit(1)
+            : [];
+          const deferAchievements = input.policy?.evaluateAchievements === false || Boolean(laterCompletedFlight);
+          if (deferAchievements) {
+            await gridClaim.processInTransaction(tx, claimInput, {
+              evaluateAchievements: false,
+              evaluateArenaAchievements: false,
+              evaluateLeadership: true,
+              awardLeadershipAchievements: false,
+            });
+          } else {
+            await gridClaim.processInTransaction(tx, claimInput);
+          }
 
           const completed = await tx
             .update(flights)
@@ -233,17 +282,35 @@ export function createFlightProcessingService(
           const completedFlight = completed[0];
           if (!completedFlight) throw new ProcessingFenceLostError();
           if (!completedFlight.processedAt) throw new Error('Completed flight has no processed timestamp.');
+          if (deferAchievements && input.policy?.markDirtyBoundary) {
+            await tx.insert(userWorkflowState)
+              .values({
+                userId: input.ownerUserId,
+                dirtyAchievementBoundary: parsed.startedAt,
+                dirtyRevision: 1,
+              })
+              .onConflictDoUpdate({
+                target: userWorkflowState.userId,
+                set: {
+                  dirtyAchievementBoundary: sql`LEAST(COALESCE(${userWorkflowState.dirtyAchievementBoundary}, ${parsed.startedAt}), ${parsed.startedAt})`,
+                  dirtyRevision: sql`${userWorkflowState.dirtyRevision} + 1`,
+                  updatedAt: new Date(),
+                },
+              });
+          }
           await tx.update(profiles).set({
             gliderHoursSeconds: sql`${profiles.gliderHoursSeconds} + ${parsed.durationSeconds}`,
           }).where(and(
             eq(profiles.userId, input.ownerUserId),
             isNotNull(profiles.gliderModelId),
           ));
-          await activity.publishFlightInTransaction(tx, {
-            actorUserId: completedFlight.actorUserId,
-            sourceFlightId: completedFlight.id,
-            publishedAt: completedFlight.processedAt,
-          });
+          if (input.policy?.publishActivity ?? true) {
+            await activity.publishFlightInTransaction(tx, {
+              actorUserId: completedFlight.actorUserId,
+              sourceFlightId: completedFlight.id,
+              publishedAt: completedFlight.processedAt,
+            });
+          }
         });
       } catch (error) {
         if (error instanceof ProcessingFenceLostError) return { status: 'superseded', flightId: flight.id };

@@ -1,7 +1,7 @@
 import { extractIgcFilesFromZip } from './zipIgcFiles.js';
 
 const MAX_ACTIVE_FILES = 1_000;
-const MAX_FILE_BYTES = 100 * 1024 * 1024;
+const MAX_FILE_BYTES = 10 * 1024 * 1024;
 const CONCURRENCY = 4;
 const PROGRESS_POLL_INTERVAL_MS = 5_000;
 const SUCCESS_REDIRECT_DELAY_MS = 3_000;
@@ -38,6 +38,10 @@ export function initializeFlightUploads(documentRef = document, windowRef = glob
   const processingMessage = documentRef.querySelector('[data-processing-message]');
   const overall = documentRef.querySelector('[data-upload-overall]');
   const progressBar = documentRef.querySelector('[data-flight-progress-bar]');
+  const bulkTrigger = documentRef.querySelector('[data-upload-bulk-trigger]');
+  const bulkPanel = documentRef.querySelector('[data-upload-bulk-panel]');
+  const bulkInput = documentRef.querySelector('[data-upload-bulk-input]');
+  const bulkCancel = documentRef.querySelector('[data-upload-bulk-cancel]');
   if (!windowRef || !uploadTrigger || !uploadDialog || !uploadList || !uploadFailures || !uploadProgressState || !processingState || !processingMessage || !overall || !progressBar) return;
   const inputs = [...documentRef.querySelectorAll('[data-upload-more-input]')];
 
@@ -60,6 +64,9 @@ export function initializeFlightUploads(documentRef = document, windowRef = glob
   let progressPollTimer = null;
   let progressRequestId = 0;
   let successRedirectTimer = null;
+  const workflows = new Set();
+  let hasBulkWorkflow = false;
+  let activeBulkWorkflow = null;
 
   function updateUploadTrigger() {
     const localWorkActive = selected > settled || currentReservations.size > 0;
@@ -76,13 +83,14 @@ export function initializeFlightUploads(documentRef = document, windowRef = glob
       && failed === 0
       && running === 0
       && pending.length === 0;
+    const bulkActive = [...workflows].some((workflow) => workflow.kind === 'bulk' && !workflow.sealed);
     const processing = !localUploadsActive && failed === 0 && (serverWorkActive || localUploadsSuccessful);
     uploadProgressState.hidden = processing;
     processingState.hidden = !processing;
     processingMessage.textContent = localUploadsSuccessful
       ? 'Upload successful, this dialog will close in 3 seconds.'
       : 'Flights are processing in the background.';
-    if (localUploadsSuccessful && successRedirectTimer === null) {
+    if (localUploadsSuccessful && !bulkActive && !hasBulkWorkflow && successRedirectTimer === null) {
       successRedirectTimer = windowRef.setTimeout(() => {
         successRedirectTimer = null;
         if (uploadDialog.open) uploadDialog.close();
@@ -100,9 +108,12 @@ export function initializeFlightUploads(documentRef = document, windowRef = glob
   }
 
   async function upload(item) {
+    const metadata = { originalFilename: item.file.name, contentType: item.file.type || 'application/octet-stream', byteSize: item.file.size };
+    if (item.workflow.kind === 'regular') metadata.batchId = item.workflow.id;
+    else metadata.historyImportId = item.workflow.id;
     const intent = await jsonRequest('/v1/igc-uploads/intents', {
       method: 'POST',
-      body: JSON.stringify({ originalFilename: item.file.name, contentType: item.file.type || 'application/octet-stream', byteSize: item.file.size }),
+      body: JSON.stringify(metadata),
     });
     item.intentId = intent.id;
     currentIntentIds.add(intent.id);
@@ -142,13 +153,44 @@ export function initializeFlightUploads(documentRef = document, windowRef = glob
       }).finally(() => {
         running -= 1;
         settled += 1;
+        item.workflow.settled += 1;
         updateOverall();
+        void sealWorkflow(item.workflow);
         pump();
       });
     }
   }
 
-  function addFiles(valid) {
+  async function createWorkflow(kind) {
+    const endpoint = kind === 'regular' ? '/v1/flight-upload-batches' : '/v1/flight-history-imports';
+    const body = kind === 'regular' ? { kind: 'regular' } : {};
+    const result = await jsonRequest(endpoint, { method: 'POST', body: JSON.stringify(body) });
+    const workflow = { kind, id: result.id, total: 0, settled: 0, sealed: false };
+    if (kind === 'bulk') hasBulkWorkflow = true;
+    workflows.add(workflow);
+    return workflow;
+  }
+
+  async function sealWorkflow(workflow) {
+    if (!workflow || workflow.sealed || workflow.total === 0 || workflow.settled < workflow.total) return;
+    workflow.sealed = true;
+    const endpoint = workflow.kind === 'regular'
+      ? `/v1/flight-upload-batches/${workflow.id}/seal`
+      : `/v1/flight-history-imports/${workflow.id}/seal`;
+    try {
+      await jsonRequest(endpoint, { method: 'POST', body: '{}' });
+      if (workflow.kind === 'bulk') {
+        activeBulkWorkflow = null;
+        if (bulkCancel) bulkCancel.hidden = true;
+      }
+    } catch (error) {
+      workflow.sealed = false;
+      appendFailedUpload({ name: workflow.kind === 'bulk' ? 'Bulk import' : 'Regular upload' }, error);
+    }
+    updateOverall();
+  }
+
+  async function addFiles(valid, kind = 'regular') {
     if (modalServerBaseline === null) modalServerBaseline = serverTotal;
     const accountedTotal = Math.max(serverTotal, modalServerBaseline + observedExternalGrowth + currentReservations.size);
     if (valid.length > MAX_ACTIVE_FILES - accountedTotal) {
@@ -159,13 +201,34 @@ export function initializeFlightUploads(documentRef = document, windowRef = glob
       windowRef.clearTimeout?.(successRedirectTimer);
       successRedirectTimer = null;
     }
-    for (const file of valid) {
-      const item = { file };
+    const items = valid.map((file) => ({ file, workflow: null }));
+    for (const item of items) {
       currentReservations.add(item);
-      pending.push(item);
     }
     selected += valid.length;
     updateOverall();
+    let workflow;
+    try {
+      workflow = await createWorkflow(kind);
+    } catch (error) {
+      appendFailedUpload({ name: kind === 'bulk' ? 'Bulk import' : 'Regular upload' }, error);
+      for (const item of items) {
+        const index = pending.indexOf(item);
+        if (index >= 0) pending.splice(index, 1);
+        currentReservations.delete(item);
+      }
+      settled += items.length;
+      failed += items.length;
+      updateOverall();
+      return;
+    }
+    workflow.total = valid.length;
+    for (const item of items) item.workflow = workflow;
+    pending.push(...items);
+    if (kind === 'bulk') {
+      activeBulkWorkflow = workflow;
+      if (bulkCancel) bulkCancel.hidden = false;
+    }
     pump();
   }
 
@@ -239,18 +302,18 @@ export function initializeFlightUploads(documentRef = document, windowRef = glob
     if (uploadDialog.open) uploadDialog.close();
   }
 
-  async function prepareFiles(files) {
+  async function prepareFiles(files, mode = 'regular') {
     const prepared = [];
     const messages = [];
     let invalidFiles = 0;
     for (const file of files) {
       const lowerName = file.name.toLowerCase();
-      if (lowerName.endsWith('.igc')) {
+      if (mode === 'regular' && lowerName.endsWith('.igc')) {
         if (file.size > 0 && file.size <= MAX_FILE_BYTES) prepared.push(file);
         else invalidFiles += 1;
         continue;
       }
-      if (!lowerName.endsWith('.zip')) {
+      if (mode === 'regular' || !lowerName.endsWith('.zip')) {
         invalidFiles += 1;
         continue;
       }
@@ -264,11 +327,27 @@ export function initializeFlightUploads(documentRef = document, windowRef = glob
         messages.push(`${file.name}: ${error instanceof Error ? error.message : 'The ZIP archive could not be opened.'}`);
       }
     }
-    if (invalidFiles > 0) messages.unshift('Only non-empty .igc files of 10 MB or less and .zip archives can be uploaded.');
+    if (invalidFiles > 0) messages.unshift(mode === 'regular' ? 'Only non-empty .igc files of 10 MB or less can be uploaded here.' : 'Choose exactly one ZIP archive.');
     return { prepared, messages };
   }
 
   uploadTrigger.addEventListener('click', openUploadDialog);
+  bulkTrigger?.addEventListener('click', () => { if (bulkPanel) bulkPanel.hidden = !bulkPanel.hidden; });
+  bulkCancel?.addEventListener('click', async () => {
+    if (!activeBulkWorkflow) return;
+    const workflow = activeBulkWorkflow;
+    // Fence local completion callbacks before waiting for the server so the
+    // final upload cannot start sealing while cancellation is in flight.
+    workflow.sealed = true;
+    try {
+      await jsonRequest(`/v1/flight-history-imports/${workflow.id}`, { method: 'DELETE' });
+      activeBulkWorkflow = null;
+      bulkCancel.hidden = true;
+    } catch (error) {
+      workflow.sealed = false;
+      appendFailedUpload({ name: 'Bulk import' }, error);
+    }
+  });
   uploadClose?.addEventListener('click', closeUploadDialog);
   uploadDialog.addEventListener('close', stopProgressPolling);
   uploadDialog.addEventListener('cancel', (event) => {
@@ -284,11 +363,27 @@ export function initializeFlightUploads(documentRef = document, windowRef = glob
     input.value = '';
     if (!files.length) return;
     if (!uploadDialog.open) openUploadDialog();
-    void prepareFiles(files).then(async ({ prepared, messages }) => {
+    void prepareFiles(files, 'regular').then(async ({ prepared, messages }) => {
       if (messages.length) windowRef.alert(messages.join('\n'));
       if (!prepared.length) return;
       await initialProgress;
-      addFiles(prepared);
+      await addFiles(prepared, 'regular');
+    });
+  });
+
+  bulkInput?.addEventListener('change', () => {
+    const files = [...(bulkInput.files || [])];
+    bulkInput.value = '';
+    if (files.length !== 1 || !files[0].name.toLowerCase().endsWith('.zip')) {
+      windowRef.alert('Choose exactly one ZIP archive for a bulk historical upload.');
+      return;
+    }
+    if (!uploadDialog.open) openUploadDialog();
+    void prepareFiles(files, 'bulk').then(async ({ prepared, messages }) => {
+      if (messages.length) windowRef.alert(messages.join('\n'));
+      if (!prepared.length) return;
+      await initialProgress;
+      await addFiles(prepared, 'bulk');
     });
   });
 }

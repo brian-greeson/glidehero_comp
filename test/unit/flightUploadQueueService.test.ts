@@ -114,15 +114,25 @@ class FakeValkey {
       const raw = this.values.get(recordKey!);
       if (!raw) return 'missing';
       const job = JSON.parse(raw);
+      if (job.status === 'queued' && options.args.length === 3) {
+        if (job.activatedAt) return 'unchanged';
+        job.activatedAt = Number(userId); job.workflowMemberId = updatedAt;
+        this.values.set(recordKey!, JSON.stringify(job));
+        await this.xadd(FLIGHT_JOB_STREAM, [['jobId', id!]]);
+        return 'activated';
+      }
       if (job.userId !== userId) return 'forbidden';
       if (job.status !== 'uploading') return 'unchanged';
       job.status = 'queued';
       job.updatedAt = Number(updatedAt);
+      if (options.args[4]) job.flightId = options.args[4];
+      if (options.args[5]) job.contentHash = options.args[5];
+      if (options.args[6]) job.workflowMemberId = options.args[6];
       this.values.set(recordKey!, JSON.stringify(job));
       for (const key of statusKeys) this.sorted.get(key)?.delete(id!);
       await this.zadd(queuedKey!, { [id!]: job.createdAt });
       this.sorted.get(expiryKey!)?.delete(id!);
-      await this.xadd(FLIGHT_JOB_STREAM, [['jobId', id!]]);
+      if (options.args[3] !== 'staged') await this.xadd(FLIGHT_JOB_STREAM, [['jobId', id!]]);
       return 'queued';
     }
     if (options.keys[1]?.endsWith(':processing') && options.args.length === 3 && !options.args[2]?.startsWith('{')) {
@@ -216,6 +226,105 @@ function createFlightUploadQueueService(
 }
 
 describe('FlightUploadQueueService', () => {
+  it('keeps a duplicate out of the upload workflow and removes its uploaded object', async () => {
+    const valkey = new FakeValkey();
+    const source = [
+      'AXXXGLIDEHERO',
+      'HFDTE120726',
+      'B2359584000000N10500000WA0123401234',
+      'B0000024000060N10500060WA0123501235',
+    ].join('\r\n');
+    const bytes = Buffer.from(source);
+    const previousPreparation = {
+      from: vi.fn(() => ({
+        innerJoin: vi.fn(() => ({
+          where: vi.fn(() => ({ limit: vi.fn(async () => []) })),
+        })),
+      })),
+    };
+    const existingDuplicate = {
+      from: vi.fn(() => ({
+        where: vi.fn(() => ({ limit: vi.fn(async () => [{ id: 'other-users-flight' }]) })),
+      })),
+    };
+    const database = {
+      select: vi.fn()
+        .mockReturnValueOnce(previousPreparation)
+        .mockReturnValueOnce(existingDuplicate),
+    };
+    const send = vi.fn(async (command: object) => {
+      if (command.constructor.name === 'HeadObjectCommand') return { ContentLength: bytes.length };
+      if (command.constructor.name === 'GetObjectCommand') {
+        return { Body: { transformToByteArray: vi.fn(async () => bytes) } };
+      }
+      return {};
+    });
+    const workflow = {
+      addRegularMembers: vi.fn(),
+      addBulkMembers: vi.fn(),
+    };
+    const service = createFlightUploadQueueService(valkey as never, {
+      s3Client: { send } as never,
+      bucketName: 'flights',
+      presign: vi.fn(async () => 'signed'),
+      database: database as never,
+      workflowService: workflow as never,
+    });
+    const intent = await service.createIntent({
+      userId: 'user-2',
+      originalFilename: 'duplicate.igc',
+      contentType: 'text/plain',
+      byteSize: bytes.length,
+      historyImportId: '00000000-0000-4000-8000-000000000050',
+    });
+
+    await service.complete({ userId: 'user-2', id: intent.id });
+
+    expect(await service.getJob(intent.id)).toMatchObject({
+      status: 'duplicate',
+      contentHash: expect.any(String),
+    });
+    expect(await service.getJob(intent.id)).not.toHaveProperty('flightId');
+    expect(await service.getJob(intent.id)).not.toHaveProperty('workflowMemberId');
+    expect(workflow.addRegularMembers).not.toHaveBeenCalled();
+    expect(workflow.addBulkMembers).not.toHaveBeenCalled();
+    expect(send.mock.calls.filter(([command]) => command.constructor.name === 'DeleteObjectCommand')).toHaveLength(1);
+    expect(await service.pendingRemovals()).toEqual([]);
+  });
+
+  it('reconstructs and activates a missing Valkey job from its PostgreSQL workflow member', async () => {
+    const valkey = new FakeValkey();
+    const database = {
+      execute: vi.fn(async () => ({ rows: [{
+        userId: 'user-1',
+        batchId: 'batch-1',
+        historyImportId: null,
+        flightId: 'flight-1',
+        contentHash: 'hash-1',
+        originalFilename: 'flight.igc',
+        contentType: 'text/plain',
+        byteSize: 128,
+        bucketKey: 'uploads/flight.igc',
+        createdAt: 1_000,
+      }] })),
+    };
+    const service = createFlightUploadQueueService(valkey as never, {
+      s3Client: {} as never,
+      bucketName: 'flights',
+      presign: vi.fn(async () => 'signed'),
+      database: database as never,
+    });
+
+    await expect(service.activateJob('job-1', 'member-1')).resolves.toBe(true);
+    expect(await service.getJob('job-1')).toMatchObject({
+      status: 'queued',
+      flightId: 'flight-1',
+      workflowMemberId: 'member-1',
+      activatedAt: expect.any(Number),
+    });
+    expect(valkey.stream).toEqual([expect.objectContaining({ values: [['jobId', 'job-1']] })]);
+  });
+
   it('atomically admits at most 1,000 uploads across concurrent tabs', async () => {
     const valkey = new FakeValkey();
     const existing = Object.fromEntries(Array.from({ length: 998 }, (_, index) => [`existing-${index}`, index]));

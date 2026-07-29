@@ -15,6 +15,8 @@ import {
   type UploadJob,
 } from './flightUploadQueueService.js';
 import type { WorkerControlService, WorkerControlState, WorkerLiveState } from './workerControlService.js';
+import type { FlightUploadWorkflowService } from './flightUploadWorkflowService.js';
+import type { UserHistoryBatchedRebuildService } from './userHistoryRebuildService.js';
 
 const STALE_JOB_MS = 60_000;
 const HEARTBEAT_MS = 10_000;
@@ -84,6 +86,8 @@ export function createFlightWorkerService(
     streamReader?: Pick<GlideClient, 'xreadgroup'>;
     thumbnailLifecycle?: Pick<FlightThumbnailLifecycleService, 'generateForFlight'>;
     workerControl?: WorkerControlService;
+    uploadWorkflow?: FlightUploadWorkflowService;
+    historyRebuild?: UserHistoryBatchedRebuildService;
   },
 ): FlightWorkerService {
   const streamReader = options.streamReader ?? valkey;
@@ -433,6 +437,155 @@ export function createFlightWorkerService(
     return reconcileQueueFromDatabase(failed) || !existing?.flightId;
   }
 
+  async function activateNextRegular(userId: string): Promise<void> {
+    if (!options.uploadWorkflow) return;
+    const member = await options.uploadWorkflow.claimNextRegular(userId);
+    if (member?.uploadJobId) {
+      try {
+        const activated = await queue.activateJob(member.uploadJobId, member.id);
+        const job = activated ? null : await queue.getJob(member.uploadJobId);
+        if (!activated && !job?.activatedAt) await options.uploadWorkflow.releaseRegularClaim(member.id);
+      } catch (error) {
+        await options.uploadWorkflow.releaseRegularClaim(member.id);
+        throw error;
+      }
+    }
+  }
+
+  async function activateNextBulk(importId: string, userId: string): Promise<void> {
+    if (!options.uploadWorkflow) return;
+    const member = await options.uploadWorkflow.claimNextBulk(importId, userId);
+    if (member?.uploadJobId) {
+      try {
+        const activated = await queue.activateJob(member.uploadJobId, member.id);
+        const job = activated ? null : await queue.getJob(member.uploadJobId);
+        if (!activated && !job?.activatedAt) await options.uploadWorkflow.releaseBulkClaim(member.id);
+      } catch (error) {
+        await options.uploadWorkflow.releaseBulkClaim(member.id);
+        throw error;
+      }
+      return;
+    }
+    if (!(await options.uploadWorkflow.hasUnfinishedBulkMembers(importId, userId))) {
+      await options.uploadWorkflow.beginBulkReplay(importId, userId);
+    }
+  }
+
+  async function settleWorkflowMember(
+    job: UploadJob,
+    status: 'completed' | 'failed',
+    failureReason?: string,
+  ): Promise<void> {
+    if (!options.uploadWorkflow || !job.workflowMemberId) return;
+    if (job.batchId) {
+      await options.uploadWorkflow.recordRegularOutcome(job.workflowMemberId, status, failureReason);
+      await activateNextRegular(job.userId);
+      return;
+    }
+    if (job.historyImportId) {
+      await options.uploadWorkflow.recordBulkOutcome(job.workflowMemberId, status, failureReason);
+      await activateNextBulk(job.historyImportId, job.userId);
+    }
+  }
+
+  async function replayDeferredAchievements(shouldContinue: () => boolean): Promise<void> {
+    if (!options.uploadWorkflow || !options.historyRebuild?.replayAchievements || !shouldContinue()) return;
+    const [bulk] = await options.uploadWorkflow.listReplayableBulkImports(1);
+    if (bulk) {
+      try {
+        if (bulk.phase === 'failed') await options.uploadWorkflow.beginBulkReplay(bulk.id, bulk.userId);
+        const result = await options.historyRebuild.replayAchievements({
+          userId: bulk.userId,
+          mode: 'full',
+          cursor: bulk.replayCursor,
+          bulkImportId: bulk.id,
+        });
+      } catch (error) {
+        await options.uploadWorkflow.setBulkPhase(bulk.id, bulk.userId, 'failed', errorMessage(error));
+        throw error;
+      }
+      return;
+    }
+    const [dirty] = await options.uploadWorkflow.listDirtyUsers(1);
+    if (!dirty) return;
+    let cursor = 0;
+    while (shouldContinue()) {
+      const result = await options.historyRebuild.replayAchievements({
+        userId: dirty.userId,
+        mode: 'suffix',
+        dirtyStartedAt: dirty.dirtyStartedAt,
+        cursor,
+      });
+      cursor = result.nextCursor;
+      if (result.done) {
+        await options.uploadWorkflow.clearDirtyBoundary(dirty.userId, dirty.dirtyStartedAt, dirty.revision);
+        return;
+      }
+    }
+  }
+
+  function workflowJob(member: import('./flightUploadWorkflowService.js').RecoverableWorkflowMember): UploadJob {
+    return {
+      id: member.uploadJobId ?? member.id,
+      userId: member.userId,
+      originalFilename: '',
+      contentType: 'application/octet-stream',
+      byteSize: 0,
+      bucketKey: '',
+      status: 'processing',
+      createdAt: 0,
+      updatedAt: Date.now(),
+      flightId: member.flightId,
+      workflowMemberId: member.id,
+      ...(member.kind === 'regular' ? { batchId: member.batchId } : { historyImportId: member.importId }),
+    };
+  }
+
+  async function recoverWorkflowClaims(shouldContinue: () => boolean): Promise<void> {
+    if (!options.uploadWorkflow) return;
+    for (const member of await options.uploadWorkflow.listProcessingMembers(100)) {
+      if (!shouldContinue()) return;
+      if (member.flightStatus === 'completed') {
+        await settleWorkflowMember(workflowJob(member), 'completed');
+      } else if (member.flightStatus === 'failed') {
+        await settleWorkflowMember(workflowJob(member), 'failed', member.failureReason ?? genericFailure);
+      } else if (member.flightStatus === 'pending' && member.uploadJobId) {
+        const activated = await queue.activateJob(member.uploadJobId, member.id);
+        if (!activated) {
+          if (member.kind === 'regular') await options.uploadWorkflow.releaseRegularClaim(member.id);
+          else await options.uploadWorkflow.releaseBulkClaim(member.id);
+        }
+      } else if (
+        member.flightStatus === 'processing'
+        && member.processingToken
+        && member.uploadJobId
+        && !(await queue.getJob(member.uploadJobId))
+      ) {
+        const reset = await options.uploadWorkflow.resetOrphanedProcessingMember({
+          kind: member.kind,
+          memberId: member.id,
+          flightId: member.flightId,
+          processingToken: member.processingToken,
+        });
+        if (reset) {
+          if (member.kind === 'regular') await activateNextRegular(member.userId);
+          else await activateNextBulk(member.importId!, member.userId);
+        }
+      }
+    }
+  }
+
+  async function expireAbandonedWorkflows(): Promise<void> {
+    if (!options.uploadWorkflow) return;
+    const expired = await options.uploadWorkflow.expireAbandonedWorkflows(new Date(Date.now() - 24 * 60 * 60 * 1_000));
+    for (const item of expired) {
+      const job = await queue.getJob(item.uploadJobId);
+      if (job && !['completed', 'duplicate', 'failed'].includes(job.status)) {
+        await queue.saveJob({ ...job, status: 'failed', error: item.reason, updatedAt: Date.now() });
+      }
+    }
+  }
+
   const service: FlightWorkerService = {
     async ensureGroup() {
       try {
@@ -458,11 +611,17 @@ export function createFlightWorkerService(
       const previous = await existingFlight(job);
       if (previous?.flightId && previous.status === 'completed') {
         await reconcileQueueFromDatabase(job);
+        await settleWorkflowMember({ ...job, flightId: previous.flightId }, 'completed');
         await acknowledge(streamId);
         return;
       }
       if (previous?.flightId && previous.status === 'failed') {
         await reconcileQueueFromDatabase(job);
+        await settleWorkflowMember(
+          { ...job, flightId: previous.flightId },
+          'failed',
+          previous.processingError ?? genericFailure,
+        );
         await acknowledge(streamId);
         return;
       }
@@ -532,7 +691,20 @@ export function createFlightWorkerService(
           bucketKey: job.bucketKey,
           contentHash,
           processingToken: job.processingToken!,
+          ...(job.flightId ? { flightId: job.flightId } : {}),
           source: bytes.toString('utf8'),
+          ...(options.uploadWorkflow
+            ? {
+                policy: job.historyImportId
+                  ? { evaluateAchievements: false, publishActivity: false, markDirtyBoundary: false }
+                  : {
+                      evaluateAchievements: !(await options.uploadWorkflow.getActiveBulkImport(job.userId))
+                        && !(await options.uploadWorkflow.getDirtyBoundary(job.userId)),
+                      publishActivity: true,
+                      markDirtyBoundary: true,
+                    },
+              }
+            : {}),
         });
         clearInterval(heartbeat);
         await heartbeatWrite;
@@ -557,6 +729,11 @@ export function createFlightWorkerService(
           else await recordFailedOutcome();
           outcomeRecorded = true;
           await settleProcessedFlight(current, igcFileId, outcome);
+          if (outcome.status === 'completed') {
+            await settleWorkflowMember({ ...current, flightId: outcome.flightId }, 'completed');
+          } else if (outcome.status === 'failed') {
+            await settleWorkflowMember({ ...current, flightId: outcome.flightId }, 'failed', outcome.message);
+          }
         }
       } catch (error) {
         console.error('Unable to process queued flight', error);
@@ -564,7 +741,8 @@ export function createFlightWorkerService(
         if (!outcomeRecorded) await recordFailedOutcome();
         clearInterval(heartbeat);
         await heartbeatWrite;
-        await fail(current);
+        const settled = await fail(current);
+        if (settled) await settleWorkflowMember(current, 'failed', errorMessage(error));
       } finally {
         clearInterval(heartbeat);
         await setLiveStatus('idle');
@@ -599,6 +777,18 @@ export function createFlightWorkerService(
               if (!shouldContinue()) break;
               await reconcileQueueFromDatabase(job);
             }
+            if (job.workflowMemberId) {
+              const durable = await existingFlight(job);
+              if (durable?.flightId && durable.status === 'completed') {
+                await settleWorkflowMember({ ...job, flightId: durable.flightId }, 'completed');
+              } else {
+                await settleWorkflowMember(
+                  { ...job, ...(durable?.flightId ? { flightId: durable.flightId } : {}) },
+                  'failed',
+                  durable?.processingError ?? job.error,
+                );
+              }
+            }
             if (!shouldContinue()) break;
             await acknowledge(streamId);
           } else if (!job) {
@@ -610,6 +800,9 @@ export function createFlightWorkerService(
             if (!shouldContinue()) break;
             await acknowledge(streamId);
           } else if (['completed', 'duplicate'].includes(job.status)) {
+            if (job.status === 'completed' && job.workflowMemberId) {
+              await settleWorkflowMember(job, 'completed');
+            }
             await acknowledge(streamId);
           } else if (job.status === 'queued') {
             // The monitor must never become a second processor. Atomically put
@@ -619,6 +812,16 @@ export function createFlightWorkerService(
           } else if (!job.heartbeatAt || job.heartbeatAt <= Date.now() - STALE_JOB_MS) {
             if (!shouldContinue()) break;
             if (await reconcileQueueFromDatabase(job)) {
+              const durable = await existingFlight(job);
+              if (durable?.flightId && durable.status === 'completed') {
+                await settleWorkflowMember({ ...job, flightId: durable.flightId }, 'completed');
+              } else if (durable?.flightId && durable.status === 'failed') {
+                await settleWorkflowMember(
+                  { ...job, flightId: durable.flightId },
+                  'failed',
+                  durable.processingError ?? genericFailure,
+                );
+              }
               if (!shouldContinue()) break;
               await acknowledge(streamId);
               continue;
@@ -632,6 +835,11 @@ export function createFlightWorkerService(
             if (!shouldContinue()) break;
             if (settled) {
               await recordFailedOutcome();
+              await settleWorkflowMember(
+                job,
+                'failed',
+                'Processing stopped before this flight finished. Clear it and upload it again.',
+              );
               await acknowledge(streamId);
             }
           }
@@ -801,6 +1009,21 @@ export function createFlightWorkerService(
           await service.cleanupAbandoned(shouldContinue);
         } catch (error) {
           console.error('Unable to clean abandoned flight uploads', error);
+          await recordWorkerError(error);
+        }
+        if (!shouldContinue()) return;
+        try {
+          await recoverWorkflowClaims(shouldContinue);
+          await expireAbandonedWorkflows();
+        } catch (error) {
+          console.error('Unable to reconcile flight upload workflows', error);
+          await recordWorkerError(error);
+        }
+        if (!shouldContinue()) return;
+        try {
+          await replayDeferredAchievements(shouldContinue);
+        } catch (error) {
+          console.error('Unable to replay deferred flight achievements', error);
           await recordWorkerError(error);
         }
       });

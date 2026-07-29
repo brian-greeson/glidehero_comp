@@ -53,6 +53,7 @@ export interface TransactionalGridClaimService extends GridClaimService {
       evaluateAchievements?: boolean;
       evaluateArenaAchievements?: boolean;
       evaluateLeadership?: boolean;
+      awardLeadershipAchievements?: boolean;
     },
   ): Promise<GridClaimProcessResult>;
 }
@@ -81,11 +82,13 @@ export function createGridClaimService(
       evaluateAchievements?: boolean;
       evaluateArenaAchievements?: boolean;
       evaluateLeadership?: boolean;
+      awardLeadershipAchievements?: boolean;
     } = {},
   ): Promise<GridClaimProcessResult> {
     const evaluateAchievements = evaluationOptions.evaluateAchievements ?? true;
     const evaluateArenaAchievements = evaluationOptions.evaluateArenaAchievements ?? evaluateAchievements;
     const evaluateLeadership = evaluationOptions.evaluateLeadership ?? true;
+    const awardLeadershipAchievements = evaluationOptions.awardLeadershipAchievements ?? true;
     await lockArenaCatalogShared(transaction);
     await lockUserProgression(transaction, input.userId);
     const [flight] = await transaction
@@ -141,7 +144,11 @@ export function createGridClaimService(
       });
       if (arenaIds.length > 0) {
         if (arenaLeadership.applyFlightInTransaction) {
-          await arenaLeadership.applyFlightInTransaction(transaction, { arenaIds, flightId: input.flightId });
+          await arenaLeadership.applyFlightInTransaction(transaction, {
+            arenaIds,
+            flightId: input.flightId,
+            ...(awardLeadershipAchievements ? {} : { awardAchievements: false }),
+          });
         } else {
           await arenaLeadership.reconcileInTransaction(transaction, { arenaIds });
         }

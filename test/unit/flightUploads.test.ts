@@ -39,12 +39,15 @@ function files(count, prefix = 'flight') {
 
 function uploadHarness(initialTotal, fetchImplementation) {
   const uploadMoreInput = element();
+  const bulkInput = element();
   const selectors = new Map([
     ['[data-upload-trigger]', element()], ['[data-upload-close]', element()],
     ['[data-upload-dialog]', element()], ['[data-upload-list]', element()], ['[data-upload-overall]', element()],
     ['[data-upload-failures]', element()], ['[data-upload-progress-state]', element()],
     ['[data-processing-state]', element()], ['[data-processing-message]', element()],
     ['[data-flight-progress-bar]', element()],
+    ['[data-upload-bulk-trigger]', element()], ['[data-upload-bulk-panel]', element()], ['[data-upload-bulk-input]', bulkInput],
+    ['[data-upload-bulk-cancel]', element()],
   ]);
   selectors.get('[data-upload-failures]').hidden = true;
   selectors.get('[data-processing-state]').hidden = true;
@@ -70,6 +73,9 @@ function uploadHarness(initialTotal, fetchImplementation) {
       const id = `intent-${nextIntentId++}`;
       return { ok: true, json: async () => ({ id, uploadUrl: `https://uploads.test/${id}` }) };
     }
+    if (String(url) === '/v1/flight-upload-batches' || String(url) === '/v1/flight-history-imports') {
+      return { ok: true, json: async () => ({ id: String(url).includes('history') ? 'history-1' : 'batch-1' }) };
+    }
     if (options.method === 'DELETE') return { ok: true, json: async () => ({ removed: true }) };
     return { ok: true, json: async () => ({}) };
   };
@@ -92,7 +98,7 @@ function uploadHarness(initialTotal, fetchImplementation) {
   initializeFlightUploads(documentRef, windowRef);
 
   return {
-    selectors, uploadInput: uploadMoreInput, uploadMoreInput, timers, windowRef,
+    selectors, uploadInput: uploadMoreInput, uploadMoreInput, bulkInput, timers, windowRef,
     xhr: PendingXMLHttpRequest,
     setProgressTotal(total) { progressTotal = total; },
     select(input, selectedFiles) { input.files = selectedFiles; input.dispatch('change'); },
@@ -487,7 +493,7 @@ describe('flight upload active-file capacity', () => {
   });
 });
 
-describe('flight ZIP uploads', () => {
+describe('flight upload modes', () => {
   afterEach(() => vi.unstubAllGlobals());
 
   it('leaves mobile file selection unfiltered so standalone IGC files remain selectable', () => {
@@ -502,76 +508,93 @@ describe('flight ZIP uploads', () => {
     expect(template).not.toContain('flight-processing-spinner');
   });
 
-  it('rejects unsupported files after selection', async () => {
+  it('rejects regular ZIP files after selection', async () => {
     const harness = uploadHarness(0);
 
     harness.select(harness.uploadInput, [
-      { name: 'notes.txt', size: 1_024, type: 'text/plain' },
+      { name: 'history.zip', size: 1_024, type: 'application/zip' },
     ]);
 
     await vi.waitFor(() => expect(harness.windowRef.alert).toHaveBeenCalledWith(
-      'Only non-empty .igc files of 10 MB or less and .zip archives can be uploaded.',
+      'Only non-empty .igc files of 10 MB or less can be uploaded here.',
     ));
     expect(harness.xhr.instances).toHaveLength(0);
   });
 
-  it('expands ZIP entries and uploads each IGC through the existing intent flow', async () => {
+  it('creates one regular batch and seals after multi-IGC uploads settle', async () => {
     const harness = uploadHarness(0);
-    const archive = createZipFile([
-      { name: 'first.igc', contents: 'first flight', compression: 'stored' },
-      { name: 'folder/second.IGC', contents: 'second flight', compression: 'deflated' },
-      { name: 'notes.txt', contents: 'ignore me' },
-    ]);
-
-    harness.select(harness.uploadInput, [archive]);
+    harness.select(harness.uploadInput, files(2, 'regular'));
 
     await vi.waitFor(() => expect(harness.xhr.instances).toHaveLength(2));
+    const batchCalls = fetch.mock.calls.filter(([url]) => String(url) === '/v1/flight-upload-batches');
+    expect(batchCalls).toHaveLength(1);
+    expect(JSON.parse(batchCalls[0][1].body)).toEqual({ kind: 'regular' });
     const intentBodies = fetch.mock.calls
       .filter(([url]) => String(url) === '/v1/igc-uploads/intents')
       .map(([, options]) => JSON.parse(options.body));
     expect(intentBodies).toEqual([
-      expect.objectContaining({ originalFilename: 'first.igc', byteSize: 12 }),
-      expect.objectContaining({ originalFilename: 'second.IGC', byteSize: 13 }),
+      expect.objectContaining({ originalFilename: 'regular-0.igc', batchId: 'batch-1' }),
+      expect.objectContaining({ originalFilename: 'regular-1.igc', batchId: 'batch-1' }),
     ]);
-    expect(harness.selectors.get('[data-upload-overall]').textContent).toBe('0/2');
-    expect(harness.windowRef.alert).toHaveBeenCalledWith('flights.zip: skipped 1 non-IGC file.');
+    harness.xhr.instances.forEach((request) => request.succeed());
+    await vi.waitFor(() => expect(fetch).toHaveBeenCalledWith('/v1/flight-upload-batches/batch-1/seal', expect.objectContaining({ method: 'POST' })));
   });
 
-  it('uploads direct IGC files and ZIP entries selected together', async () => {
+  it('expands one bulk ZIP, sends history IDs, and seals without redirecting', async () => {
     const harness = uploadHarness(0);
-    const archive = createZipFile([{ name: 'archived.igc', contents: 'archive flight' }]);
-
-    harness.select(harness.uploadInput, [files(1, 'direct')[0], archive]);
-
-    await vi.waitFor(() => expect(harness.xhr.instances).toHaveLength(2));
-    const names = fetch.mock.calls
-      .filter(([url]) => String(url) === '/v1/igc-uploads/intents')
-      .map(([, options]) => JSON.parse(options.body).originalFilename);
-    expect(names).toEqual(['direct-0.igc', 'archived.igc']);
-  });
-
-  it('applies active-flight capacity to the number of extracted IGC files', async () => {
-    const harness = uploadHarness(999);
     const archive = createZipFile([
-      { name: 'one.igc', contents: 'one' },
-      { name: 'two.igc', contents: 'two' },
+      { name: 'first.igc', contents: 'first flight', compression: 'stored' },
+      { name: 'second.IGC', contents: 'second flight', compression: 'deflated' },
     ]);
-
-    harness.select(harness.uploadInput, [archive]);
-
-    await vi.waitFor(() => expect(harness.windowRef.alert).toHaveBeenCalledWith('You can have at most 1000 active flight uploads.'));
-    expect(harness.xhr.instances).toHaveLength(0);
-    expect(harness.selectors.get('[data-upload-list]').append).not.toHaveBeenCalled();
+    harness.select(harness.bulkInput, [archive]);
+    await vi.waitFor(() => expect(harness.xhr.instances).toHaveLength(2));
+    expect(fetch).toHaveBeenCalledWith('/v1/flight-history-imports', expect.objectContaining({ method: 'POST' }));
+    const intentBodies = fetch.mock.calls.filter(([url]) => String(url) === '/v1/igc-uploads/intents').map(([, options]) => JSON.parse(options.body));
+    expect(intentBodies.every((body) => body.historyImportId === 'history-1')).toBe(true);
+    harness.xhr.instances.forEach((request) => request.succeed());
+    await vi.waitFor(() => expect(fetch).toHaveBeenCalledWith('/v1/flight-history-imports/history-1/seal', expect.objectContaining({ method: 'POST' })));
+    expect(harness.windowRef.location.assign).not.toHaveBeenCalled();
   });
 
-  it('keeps the modal open and reports a corrupt ZIP without creating uploads', async () => {
+  it('prevents the final bulk completion from sealing while cancellation is in flight', async () => {
+    const cancellation = Promise.withResolvers<object>();
+    const harness = uploadHarness(0, async (url, options, fallback) => {
+      if (String(url) === '/v1/flight-history-imports/history-1' && options?.method === 'DELETE') {
+        return cancellation.promise;
+      }
+      return fallback(url, options);
+    });
+    const archive = createZipFile([
+      { name: 'first.igc', contents: 'first flight', compression: 'stored' },
+      { name: 'second.igc', contents: 'second flight', compression: 'stored' },
+    ]);
+    harness.select(harness.bulkInput, [archive]);
+    await vi.waitFor(() => expect(harness.xhr.instances).toHaveLength(2));
+
+    harness.selectors.get('[data-upload-bulk-cancel]').dispatch('click');
+    harness.xhr.instances.forEach((request) => request.succeed());
+    await vi.waitFor(() => expect(fetch).toHaveBeenCalledWith(
+      '/v1/flight-history-imports/history-1',
+      expect.objectContaining({ method: 'DELETE' }),
+    ));
+    await vi.waitFor(() => expect(fetch.mock.calls.filter(
+      ([url]) => String(url).endsWith('/complete'),
+    )).toHaveLength(2));
+    expect(fetch).not.toHaveBeenCalledWith(
+      '/v1/flight-history-imports/history-1/seal',
+      expect.anything(),
+    );
+
+    cancellation.resolve({ ok: true, json: async () => ({ cancelled: true }) });
+    await vi.waitFor(() => expect(harness.selectors.get('[data-upload-bulk-cancel]').hidden).toBe(true));
+  });
+
+  it('rejects non-ZIP and multiple bulk selections', async () => {
     const harness = uploadHarness(0);
-    const archive = new File(['not a zip'], 'broken.zip', { type: 'application/zip' });
-
-    harness.select(harness.uploadInput, [archive]);
-
-    await vi.waitFor(() => expect(harness.windowRef.alert).toHaveBeenCalledWith(expect.stringContaining('broken.zip: This is not a valid ZIP archive.')));
-    expect(harness.selectors.get('[data-upload-dialog]').open).toBe(true);
+    harness.select(harness.bulkInput, [{ name: 'notes.txt', size: 1_024, type: 'text/plain' }]);
+    expect(harness.windowRef.alert).toHaveBeenCalledWith('Choose exactly one ZIP archive for a bulk historical upload.');
+    harness.select(harness.bulkInput, [new File([''], 'a.zip'), new File([''], 'b.zip')]);
+    expect(harness.windowRef.alert).toHaveBeenCalledTimes(2);
     expect(harness.xhr.instances).toHaveLength(0);
   });
 });

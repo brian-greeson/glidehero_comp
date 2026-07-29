@@ -10,6 +10,7 @@ import type { ArenaService } from '../../src/services/arenaService.js';
 import type { ArenaProgressService } from '../../src/services/arenaProgressService.js';
 import type { MapGridService } from '../../src/services/mapGridService.js';
 import type { FlightUploadQueueService } from '../../src/services/flightUploadQueueService.js';
+import type { FlightUploadWorkflowService } from '../../src/services/flightUploadWorkflowService.js';
 import type { WorkerControlService } from '../../src/services/workerControlService.js';
 import type { FailedFlightCleanupService } from '../../src/services/failedFlightCleanupService.js';
 import { PilotNotFoundError, type FollowService } from '../../src/services/followService.js';
@@ -429,12 +430,32 @@ describe('webRouter', () => {
         jobs: [{ id: 'job-1', originalFilename: 'flight.igc', status: 'failed' as const, error: 'bad track' }],
       })),
       queueSummary: vi.fn(async () => ({ queued: 1, processing: 0, failed: 1, oldestQueuedAgeSeconds: 12 })),
+      getJob: vi.fn(async () => null),
+      saveJob: vi.fn(async () => undefined),
     } as unknown as FlightUploadQueueService;
     const failedFlightCleanup: FailedFlightCleanupService = { clearForUser: vi.fn(async () => 1) };
+    const uploadWorkflow = {
+      createRegularBatch: vi.fn(async () => ({ id: '00000000-0000-4000-8000-000000000040', status: 'open' as const })),
+      sealRegularBatch: vi.fn(async () => true),
+      claimNextRegular: vi.fn(async () => ({
+        id: '00000000-0000-4000-8000-000000000041',
+        flightId: '00000000-0000-4000-8000-000000000042',
+        startedAt: new Date('2026-07-20T12:00:00Z'),
+        uploadJobId: 'regular-job',
+        batchId: '00000000-0000-4000-8000-000000000040',
+      })),
+      createBulkImport: vi.fn(async () => ({ id: '00000000-0000-4000-8000-000000000050', phase: 'preparing' as const })),
+      sealBulkImport: vi.fn(async () => true),
+      claimNextBulk: vi.fn(async () => null),
+      beginBulkReplay: vi.fn(async () => true),
+      cancelBulkImport: vi.fn(async () => ({ cancelled: true, jobs: [] })),
+    } as unknown as FlightUploadWorkflowService;
+    uploadQueue.activateJob = vi.fn(async () => true);
     const router = createWebRouter({
       auth: base.auth,
       cookie: base.cookie,
       uploadQueue,
+      uploadWorkflow,
       failedFlightCleanup,
       profiles: base.profiles,
       gridClaim: base.gridClaim,
@@ -455,10 +476,63 @@ describe('webRouter', () => {
 
       const headers = { cookie: 'glidehero_session=valid-token', 'content-type': 'application/json' };
       const intent = await fetch(`${baseUrl}/v1/igc-uploads/intents`, {
-        method: 'POST', headers, body: JSON.stringify({ originalFilename: 'flight.igc', contentType: 'text/plain', byteSize: 100 }),
+        method: 'POST', headers, body: JSON.stringify({
+          originalFilename: 'flight.igc',
+          contentType: 'text/plain',
+          byteSize: 100,
+          batchId: '00000000-0000-4000-8000-000000000040',
+        }),
       });
       expect(intent.status).toBe(201);
-      expect(uploadQueue.createIntent).toHaveBeenCalledWith({ userId: user.userId, originalFilename: 'flight.igc', contentType: 'text/plain', byteSize: 100 });
+      expect(uploadQueue.createIntent).toHaveBeenCalledWith({
+        userId: user.userId,
+        originalFilename: 'flight.igc',
+        contentType: 'text/plain',
+        byteSize: 100,
+        batchId: '00000000-0000-4000-8000-000000000040',
+      });
+
+      const regularBatch = await fetch(`${baseUrl}/v1/flight-upload-batches`, {
+        method: 'POST', headers, body: JSON.stringify({ kind: 'regular' }),
+      });
+      expect(regularBatch.status).toBe(201);
+      const regularSeal = await fetch(`${baseUrl}/v1/flight-upload-batches/00000000-0000-4000-8000-000000000040/seal`, {
+        method: 'POST', headers, body: '{}',
+      });
+      expect(regularSeal.status).toBe(202);
+      expect(uploadQueue.activateJob).toHaveBeenCalledWith('regular-job', '00000000-0000-4000-8000-000000000041');
+
+      const bulkImport = await fetch(`${baseUrl}/v1/flight-history-imports`, {
+        method: 'POST', headers, body: '{}',
+      });
+      expect(bulkImport.status).toBe(201);
+      const bulkSeal = await fetch(`${baseUrl}/v1/flight-history-imports/00000000-0000-4000-8000-000000000050/seal`, {
+        method: 'POST', headers, body: '{}',
+      });
+      expect(bulkSeal.status).toBe(202);
+      expect(uploadWorkflow.beginBulkReplay).toHaveBeenCalledWith(
+        '00000000-0000-4000-8000-000000000050',
+        user.userId,
+      );
+      const bulkCancel = await fetch(`${baseUrl}/v1/flight-history-imports/00000000-0000-4000-8000-000000000050`, {
+        method: 'DELETE', headers,
+      });
+      expect(bulkCancel.status).toBe(200);
+      expect(uploadWorkflow.cancelBulkImport).toHaveBeenCalledWith(
+        '00000000-0000-4000-8000-000000000050',
+        user.userId,
+      );
+      vi.mocked(uploadWorkflow.cancelBulkImport).mockResolvedValueOnce({ cancelled: false, jobs: [] });
+      const lateBulkCancel = await fetch(`${baseUrl}/v1/flight-history-imports/00000000-0000-4000-8000-000000000050`, {
+        method: 'DELETE', headers,
+      });
+      expect(lateBulkCancel.status).toBe(409);
+
+      vi.mocked(uploadWorkflow.sealBulkImport).mockResolvedValueOnce(false);
+      const lateBulkSeal = await fetch(`${baseUrl}/v1/flight-history-imports/00000000-0000-4000-8000-000000000050/seal`, {
+        method: 'POST', headers, body: '{}',
+      });
+      expect(lateBulkSeal.status).toBe(409);
 
       const completed = await fetch(`${baseUrl}/v1/igc-uploads/00000000-0000-4000-8000-000000000030/complete`, { method: 'POST', headers, body: '{}' });
       expect(completed.status).toBe(202);

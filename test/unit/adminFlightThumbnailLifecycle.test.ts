@@ -99,4 +99,37 @@ describe('admin flight thumbnail lifecycle', () => {
     expect(txDelete).toHaveBeenCalledOnce();
     expect(deleteForFlight).toHaveBeenCalledWith({ userId, flightId });
   });
+
+  it('does not delete a completed flight while achievement replay is active', async () => {
+    const storedFlight = {
+      id: flightId,
+      userId,
+      igcFileId: 'file-1',
+      bucketKey: 'glidehero-test/uploads/user-1/flight.igc',
+      originalFilename: 'flight.igc',
+      processingStatus: 'completed' as const,
+    };
+    const where = vi.fn(async () => [storedFlight]);
+    const txDelete = vi.fn(async () => undefined);
+    const execute = vi.fn()
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [{ active: true }] });
+    const database = {
+      select: vi.fn(() => ({ from: vi.fn(() => ({ innerJoin: vi.fn(() => ({ where: vi.fn(() => ({ limit: where })) })) })) })),
+      transaction: vi.fn(async (callback: (tx: unknown) => Promise<unknown>) => callback({
+        execute,
+        delete: vi.fn(() => ({ where: txDelete })),
+      })),
+    };
+    const deleteForFlight = vi.fn(async () => undefined);
+    const service = createAdminFlightService(database as never, { reprocess: vi.fn() }, storage({
+      generateForFlight: vi.fn(async () => undefined),
+      deleteForFlight,
+    }));
+
+    await expect(service.deleteFlight({ flightId, userId })).resolves.toBe('replay_active');
+    expect(txDelete).not.toHaveBeenCalled();
+    expect(deleteForFlight).not.toHaveBeenCalled();
+  });
 });

@@ -81,6 +81,7 @@ function notice(query: Request['query']): { successMessage?: string; errorMessag
     reprocess: 'That flight could not be reprocessed.',
     activity: 'That flight activity could not be regenerated.',
     processing: 'Processing flights cannot be managed in this release.',
+    replay_active: 'Flights cannot be deleted while achievement history is being recalculated.',
     not_found: 'User not found.',
     duplicate_email: 'That email address already belongs to another user.',
     protected: 'The signed-in admin account is protected.',
@@ -130,7 +131,7 @@ export function createAdminUserRouter(dependencies: {
     const flights = selectedUser ? await dependencies.flights.listUserFlights(selectedUser.id, sort) : [];
     res.status(200).type('html').send(await dependencies.renderPage({
       currentUser, users, selectedUser: selectedUser ?? undefined, flights,
-      deletableFlightCount: flights.filter((flight) => flight.processingStatus !== 'processing').length,
+      deletableFlightCount: flights.filter((flight) => !['pending', 'processing'].includes(flight.processingStatus)).length,
       completedFlightCount: flights.filter((flight) => flight.processingStatus === 'completed').length,
       search, searchParam: encodeURIComponent(search), mode, flightSort: sort,
       flightDateSortUrl: selectedUser ? sortLocation(selectedUser.id, search, 'flightDate', sort) : '',
@@ -285,8 +286,8 @@ export function createAdminUserRouter(dependencies: {
     if (!userId.success || !flightId.success) { res.redirect(303, '/admin/users?error=invalid'); return; }
     try {
       const result = await dependencies.flights.deleteFlight({ userId: userId.data, flightId: flightId.data });
-      res.redirect(303, userLocation(userId.data, search, result === 'processing'
-        ? { kind: 'error', value: 'processing' } : { kind: 'success', value: 'flight_deleted' }, sort));
+      res.redirect(303, userLocation(userId.data, search, result === 'processing' || result === 'replay_active'
+        ? { kind: 'error', value: result } : { kind: 'success', value: 'flight_deleted' }, sort));
     } catch (error) { next(error); }
   });
 

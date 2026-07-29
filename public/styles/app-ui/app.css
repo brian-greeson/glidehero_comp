@@ -39,6 +39,7 @@ a { color: inherit; }
 .flight-upload-panel > header { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
 .flight-upload-eyebrow { margin: 0 0 .25rem; color: var(--app-blue); font-size: .68rem; font-weight: 850; letter-spacing: .08em; text-transform: uppercase; }
 .flight-upload-panel h2 { margin: 0; font-size: 1.25rem; }
+.flight-upload-description { max-width: 38rem; margin: .35rem 0 0; color: var(--app-muted); font-size: .8rem; }
 .flight-upload-close { display: inline-grid; width: 2.25rem; height: 2.25rem; padding: 0; border: 0; border-radius: 999px; place-items: center; color: var(--app-ink); background: var(--app-surface-soft); font-size: 1.5rem; line-height: 1; cursor: pointer; }
 .flight-upload-status { padding: .85rem; border-radius: .65rem; background: var(--app-surface-soft); }
 .flight-upload-progress { display: grid; gap: .55rem; }
@@ -56,6 +57,8 @@ a { color: inherit; }
 .flight-upload-panel footer { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: .75rem; }
 .flight-upload-action { display: inline-flex; min-height: 42px; align-items: center; justify-content: center; padding: .6rem .9rem; border: 1px solid var(--app-border); border-radius: .6rem; color: var(--app-blue); background: #fff; font-weight: 750; text-decoration: none; cursor: pointer; }
 .flight-upload-panel footer input { position: absolute; width: 1px; height: 1px; opacity: 0; }
+.flight-upload-bulk-help { flex: 1 1 100%; margin: 0; color: var(--app-muted); font-size: .78rem; }
+.flight-upload-bulk-help[hidden] { display: none; }
 .mobile-navigation { display: none; }
 .content-page { position: relative; z-index: 2; width: min(calc(100% - 3rem), 1340px); margin: -1.8rem auto 0; padding-bottom: 2rem; }
 .mountain-band { height: 150px; background: #f8fbfe url('/images/app-ui/mountains-premium-banner.png') 54% center / cover no-repeat; }

@@ -24,7 +24,7 @@
             <tr>
               <td>{{ flight.flightDate ?? '—' }}</td><td>{{ flight.uploadDate }}</td><td>{{ flight.originalFilename }}</td><td>{{ flight.processingStatus }}</td>
               <td class="admin-flight-actions">
-                {{ if flight.processingStatus !== 'processing' }}
+                {{ if flight.processingStatus !== 'pending' && flight.processingStatus !== 'processing' }}
                   <a href="/admin/users/{{ selectedUser.id }}/flights/{{ flight.id }}/igc">Download IGC</a>
                   {{ if flight.processingStatus === 'completed' }}<form method="post" action="/admin/users/{{ selectedUser.id }}/flights/{{ flight.id }}/reprocess"><input type="hidden" name="q" value="{{ search }}"><input type="hidden" name="sort" value="{{ flightSort.field }}"><input type="hidden" name="direction" value="{{ flightSort.direction }}"><button type="submit" class="admin-reprocess-button">Reprocess</button></form><form method="post" action="/admin/users/{{ selectedUser.id }}/flights/{{ flight.id }}/activity/regenerate"><input type="hidden" name="q" value="{{ search }}"><input type="hidden" name="sort" value="{{ flightSort.field }}"><input type="hidden" name="direction" value="{{ flightSort.direction }}"><button type="submit" class="admin-reprocess-button">Regenerate activity</button></form>{{ /if }}
                   <form method="post" action="/admin/users/{{ selectedUser.id }}/flights/{{ flight.id }}/delete" data-confirm="Delete {{ flight.originalFilename }} permanently?"><input type="hidden" name="q" value="{{ search }}"><input type="hidden" name="sort" value="{{ flightSort.field }}"><input type="hidden" name="direction" value="{{ flightSort.direction }}"><button type="submit" class="admin-user-danger">Delete</button></form>

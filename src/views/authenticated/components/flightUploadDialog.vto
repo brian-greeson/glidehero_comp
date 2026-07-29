@@ -3,7 +3,8 @@
     <header>
       <div>
         <p class="flight-upload-eyebrow">Flight upload</p>
-        <h2 id="flight-upload-title">Uploading flights</h2>
+        <h2 id="flight-upload-title">Upload flights</h2>
+        <p class="flight-upload-description">Regular uploads must have launched within the last 30 days, based on the launch location's local calendar.</p>
       </div>
       <button type="button" class="flight-upload-close" data-upload-close
         aria-label="Close upload status">&times;</button>
@@ -23,7 +24,9 @@
       <ul data-upload-list></ul>
     </section>
     <footer>
-      <label class="flight-upload-action">Choose flights<input data-upload-more-input type="file" multiple></label>
+      <label class="flight-upload-action">Choose regular flights<input data-upload-more-input type="file" multiple data-upload-regular-input></label>
+      <button type="button" class="flight-upload-action" data-upload-bulk-trigger>Bulk historical flight upload</button>
+      <p class="flight-upload-bulk-help" data-upload-bulk-panel hidden>Choose one ZIP containing IGC files of any age. This may take a while; only one bulk update can run at a time.<br><label>Choose ZIP<input data-upload-bulk-input type="file"></label> <button type="button" data-upload-bulk-cancel hidden>Cancel historical upload</button></p>
     </footer>
   </section>
 </dialog>

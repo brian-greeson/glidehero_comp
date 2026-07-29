@@ -13,6 +13,8 @@ import { createFlightThumbnailLifecycleService } from './services/flightThumbnai
 import { createUserAchievementProgressService } from './services/userAchievementProgressService.js';
 import { createWorkerControlService } from './services/workerControlService.js';
 import { createFlightProcessingControlService } from './services/flightProcessingControlService.js';
+import { createFlightUploadWorkflowService } from './services/flightUploadWorkflowService.js';
+import { createUserHistoryRebuildService } from './services/userHistoryRebuildService.js';
 
 // Blocking stream reads legitimately take several seconds. Keep GLIDE's native
 // slow-response diagnostics from reporting those successful reads as warnings;
@@ -39,10 +41,13 @@ const valkey = await createValkeyClient(config.valkeyUrl);
 const streamReader = await createValkeyClient(config.valkeyUrl, { requestTimeout: 10_000 });
 const workerControl = createWorkerControlService(valkey);
 const flightProcessingControl = createFlightProcessingControlService(valkey);
+const uploadWorkflow = createFlightUploadWorkflowService(db);
 const queue = createFlightUploadQueueService(valkey, {
   s3Client,
   bucketName: config.bucket.bucketName,
   bucketFolder: config.bucket.bucketFolder,
+  database: db,
+  workflowService: uploadWorkflow,
 });
 const userAchievementProgress = createUserAchievementProgressService(db, { cellSize: config.gridClaimCellSize });
 const processor = createFlightProcessingService(db, {
@@ -52,6 +57,9 @@ const processor = createFlightProcessingService(db, {
   userAchievementProgress,
   isNPointSolverEnabled: () => flightProcessingControl.isNPointSolverEnabled(),
 });
+const historyRebuild = createUserHistoryRebuildService(db, {
+  cellSize: config.gridClaimCellSize,
+});
 const worker = createFlightWorkerService(db, valkey, queue, processor, {
   s3Client,
   bucketName: config.bucket.bucketName,
@@ -59,6 +67,8 @@ const worker = createFlightWorkerService(db, valkey, queue, processor, {
   streamReader,
   thumbnailLifecycle,
   workerControl,
+  uploadWorkflow,
+  historyRebuild,
 });
 console.log('GlideHero flight worker started.');
 const outcome = await runFlightWorkerRuntime({ worker, valkey, streamReader, pool });

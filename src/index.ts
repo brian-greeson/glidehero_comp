@@ -13,6 +13,7 @@ import { createArenaProgressService } from './services/arenaProgressService.js';
 import { createGridClaimService } from './services/gridClaimService.js';
 import { createArenaLeadershipReconciliationService } from './services/arenaLeadershipReconciliationService.js';
 import { createFlightUploadQueueService } from './services/flightUploadQueueService.js';
+import { createFlightUploadWorkflowService } from './services/flightUploadWorkflowService.js';
 import { createFailedFlightCleanupService } from './services/failedFlightCleanupService.js';
 import { createProfileService } from './services/profileService.js';
 import { createMonthlyCoverageService } from './services/monthlyCoverageService.js';
@@ -95,10 +96,13 @@ const follow = createFollowService(db);
 const activity = createActivityService(db);
 const flightDetail = createFlightDetailService(db, { cellSize: config.gridClaimCellSize });
 const mapReplay = createMapReplayService(db);
+const uploadWorkflow = createFlightUploadWorkflowService(db);
 const uploadQueue = createFlightUploadQueueService(valkey, {
   s3Client,
   bucketName: config.bucket.bucketName,
   bucketFolder: config.bucket.bucketFolder,
+  database: db,
+  workflowService: uploadWorkflow,
 });
 const adminFlights = createAdminFlightService(db, gridClaim, {
   s3Client,
@@ -146,6 +150,7 @@ const webMiddleware = [
     auth,
     cookie,
     uploadQueue,
+    uploadWorkflow,
     failedFlightCleanup,
     profiles,
     follow,

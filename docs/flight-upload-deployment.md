@@ -10,6 +10,69 @@ and generate flight territory thumbnails.
 thumbnail requests. Browser-facing map styles continue to use the separately
 configured `MAPTILER_API_KEY`.
 
+## Chronological upload workflow rollout
+
+The regular and bulk upload paths require the web and worker processes to use
+the workflow schema and activation contract together. Roll them out as one
+version:
+
+1. Drain or pause all flight workers.
+2. Apply the checked-in migration while workers remain paused:
+
+   ```sh
+   npm run db:migrate
+   ```
+
+3. Deploy the web and worker artifacts as one coordinated release.
+4. Confirm every worker instance is running the new version, then resume flight
+   processing.
+
+Do not resume an older worker after the migration. The new web process creates
+pending `flights` rows and does not place every verified object directly on the
+Valkey stream; only a worker that understands workflow member activation can
+process and release those rows correctly.
+
+Post-deployment checks should confirm:
+
+- A regular batch containing flights in reverse file-selection order processes
+  them by `started_at`, then flight UUID.
+- A regular flight older than 30 launch-local calendar days is reported as a
+  failed upload and never enters processing.
+- A bulk ZIP can contain flights older than 30 days, and a second bulk import
+  receives a conflict while the first is preparing, processing, replaying, or
+  waiting on a failed replay retry.
+- Bulk flights create no Activity cards. Regular flights completed during the
+  import still create Activity cards but do not receive achievements until the
+  full replay succeeds.
+- `bulk_imports.replay_cursor` and `replay_checkpoint_count` advance in groups
+  of no more than three flights. A forced replay failure leaves the import in
+  `failed`; worker maintenance retries it until completion.
+
+Bulk member processing uses one transaction per flight. Achievement replay uses
+transactions of at most three flights, with the cursor committed in the same
+transaction. Do not replace these with one import-wide transaction: large
+historical imports must not hold progression locks for their entire duration.
+
+PostgreSQL is authoritative for workflow phase, member claims, and replay
+checkpoints. Missing Valkey activation records are reconstructed from the
+PostgreSQL workflow member during maintenance. Valkey remains the delivery and
+upload-status layer. If a Valkey record is lost after its PostgreSQL flight
+entered `processing`, maintenance resets the token-fenced flight and member to
+`pending` and activates it again. When
+investigating a stalled import, inspect the PostgreSQL workflow row first, then
+the corresponding upload job and worker status. A `failed` bulk phase is
+retryable and intentionally continues to block a second bulk import; do not mark
+it completed merely to clear the UI.
+
+Open regular batches and preparing historical imports expire after the
+24-hour abandoned-upload window. A pilot may also cancel a historical import
+while it is still preparing. Both paths terminalize pending members so an
+abandoned browser session cannot block the next historical import indefinitely.
+Workflow admission and lifecycle transitions are phase-fenced; late completion
+and seal requests receive a conflict rather than reviving cancelled work.
+Duplicate uploads create no workflow member or reference to the existing flight,
+and their redundant objects use retryable removal tombstones.
+
 ## Historical flight-progress backfill
 
 Before a production backfill, pause and drain the flight workers so no new flight claims or progression evaluations race the historical order. Deploy the schema and application code, then run the default dry-run:

@@ -115,7 +115,11 @@ export const igcFiles = pgTable(
   (table) => [index('igc_files_user_id_idx').on(table.userId), uniqueIndex('igc_files_bucket_key_idx').on(table.bucketKey)],
 );
 
-export const flightProcessingStatus = pgEnum('flight_processing_status', ['processing', 'completed', 'failed']);
+export const flightProcessingStatus = pgEnum('flight_processing_status', ['pending', 'processing', 'completed', 'failed']);
+
+export const uploadBatchStatus = pgEnum('upload_batch_status', ['open', 'sealed', 'cancelled']);
+export const workflowMemberStatus = pgEnum('workflow_member_status', ['pending', 'processing', 'completed', 'failed', 'skipped']);
+export const bulkImportPhase = pgEnum('bulk_import_phase', ['preparing', 'processing', 'replaying', 'completed', 'failed', 'cancelled']);
 
 export const flights = pgTable(
   'flights',
@@ -146,6 +150,70 @@ export const flights = pgTable(
     index('flights_started_at_idx').on(table.startedAt),
   ],
 );
+
+export const regularUploadBatches = pgTable('regular_upload_batches', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  status: uploadBatchStatus('status').notNull().default('open'),
+  ...timestamps,
+}, (table) => [index('regular_upload_batches_user_created_idx').on(table.userId, table.createdAt)]);
+
+export const regularUploadMembers = pgTable('regular_upload_members', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  batchId: uuid('batch_id').notNull().references(() => regularUploadBatches.id, { onDelete: 'cascade' }),
+  userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  flightId: uuid('flight_id').notNull().references(() => flights.id, { onDelete: 'cascade' }),
+  uploadJobId: text('upload_job_id'),
+  startedAt: timestamp('started_at', { withTimezone: true, mode: 'date' }).notNull(),
+  status: workflowMemberStatus('status').notNull().default('pending'),
+  claimedAt: timestamp('claimed_at', { withTimezone: true, mode: 'date' }),
+  failureReason: text('failure_reason'),
+  ...timestamps,
+}, (table) => [
+  unique('regular_upload_members_flight_unique').on(table.flightId),
+  uniqueIndex('regular_upload_members_upload_job_unique_idx').on(table.uploadJobId),
+  index('regular_upload_members_queue_idx').on(table.userId, table.status, table.startedAt, table.flightId),
+  uniqueIndex('regular_upload_members_one_processing_per_user_idx').on(table.userId).where(sql`${table.status} = 'processing'`),
+]);
+
+export const bulkImports = pgTable('bulk_imports', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  phase: bulkImportPhase('phase').notNull().default('preparing'),
+  replayCursor: integer('replay_cursor').notNull().default(0),
+  replayCheckpointCount: integer('replay_checkpoint_count').notNull().default(0),
+  lastError: text('last_error'),
+  ...timestamps,
+}, (table) => [
+  index('bulk_imports_user_phase_idx').on(table.userId, table.phase),
+  uniqueIndex('bulk_imports_one_active_per_user_idx').on(table.userId)
+    .where(sql`${table.phase} IN ('preparing', 'processing', 'replaying', 'failed')`),
+]);
+
+export const bulkImportMembers = pgTable('bulk_import_members', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  importId: uuid('import_id').notNull().references(() => bulkImports.id, { onDelete: 'cascade' }),
+  userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  flightId: uuid('flight_id').notNull().references(() => flights.id, { onDelete: 'cascade' }),
+  uploadJobId: text('upload_job_id'),
+  startedAt: timestamp('started_at', { withTimezone: true, mode: 'date' }).notNull(),
+  status: workflowMemberStatus('status').notNull().default('pending'),
+  claimedAt: timestamp('claimed_at', { withTimezone: true, mode: 'date' }),
+  failureReason: text('failure_reason'),
+  ...timestamps,
+}, (table) => [
+  unique('bulk_import_members_import_flight_unique').on(table.importId, table.flightId),
+  uniqueIndex('bulk_import_members_upload_job_unique_idx').on(table.uploadJobId),
+  index('bulk_import_members_queue_idx').on(table.importId, table.status, table.startedAt, table.flightId),
+  uniqueIndex('bulk_import_members_one_processing_idx').on(table.importId).where(sql`${table.status} = 'processing'`),
+]);
+
+export const userWorkflowState = pgTable('user_workflow_state', {
+  userId: uuid('user_id').primaryKey().references(() => users.id, { onDelete: 'cascade' }),
+  dirtyAchievementBoundary: timestamp('dirty_achievement_boundary', { withTimezone: true, mode: 'date' }),
+  dirtyRevision: integer('dirty_revision').notNull().default(0),
+  ...timestamps,
+});
 
 export type TotalDistanceMetadata = Record<string, never>;
 

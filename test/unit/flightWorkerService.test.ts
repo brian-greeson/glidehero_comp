@@ -1066,6 +1066,55 @@ describe('FlightWorkerService', () => {
     expect(worker.cleanupAbandoned).toHaveBeenCalledOnce();
   });
 
+  it('resets and reactivates a durable processing flight when its Valkey job is missing', async () => {
+    const member = {
+      id: '00000000-0000-4000-8000-000000000101',
+      flightId: '00000000-0000-4000-8000-000000000102',
+      startedAt: new Date('2026-07-20T12:00:00Z'),
+      uploadJobId: 'missing-job',
+      userId: job.userId,
+      batchId: '00000000-0000-4000-8000-000000000103',
+      importId: null,
+      kind: 'regular' as const,
+      flightStatus: 'processing' as const,
+      processingToken: 'durable-token',
+      claimedAt: new Date('2026-07-20T12:01:00Z'),
+      failureReason: null,
+    };
+    const uploadWorkflow = {
+      listProcessingMembers: vi.fn(async () => [member]),
+      resetOrphanedProcessingMember: vi.fn(async () => true),
+      claimNextRegular: vi.fn(async () => member),
+      expireAbandonedWorkflows: vi.fn(async () => []),
+    };
+    const queue = {
+      getJob: vi.fn(async () => null),
+      activateJob: vi.fn(async () => true),
+    };
+    const valkey = {
+      set: vi.fn(async () => 'OK'),
+      invokeScript: vi.fn(async () => 1),
+    };
+    const worker = createFlightWorkerService({} as never, valkey as never, queue as never, { process: vi.fn() }, {
+      s3Client: { send: vi.fn() } as never,
+      bucketName: 'flights',
+      consumerName: 'worker-1',
+      uploadWorkflow: uploadWorkflow as never,
+    });
+    worker.retryAcknowledgedDeletions = vi.fn(async () => undefined);
+    worker.cleanupAbandoned = vi.fn(async () => undefined);
+
+    await expect(worker.runCleanupMaintenance()).resolves.toBe(true);
+    expect(uploadWorkflow.resetOrphanedProcessingMember).toHaveBeenCalledWith({
+      kind: 'regular',
+      memberId: member.id,
+      flightId: member.flightId,
+      processingToken: member.processingToken,
+    });
+    expect(uploadWorkflow.claimNextRegular).toHaveBeenCalledWith(member.userId);
+    expect(queue.activateJob).toHaveBeenCalledWith(member.uploadJobId, member.id);
+  });
+
   it('continues cleanup categories when one discovery query fails', async () => {
     const removal = { ...job, status: 'uploading' as const };
     const queue = {
