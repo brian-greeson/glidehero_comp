@@ -34,15 +34,15 @@ export function initializeFlightUploads(documentRef = document, windowRef = glob
   const uploadList = documentRef.querySelector('[data-upload-list]');
   const uploadFailures = documentRef.querySelector('[data-upload-failures]');
   const uploadProgressState = documentRef.querySelector('[data-upload-progress-state]');
+  const uploadMessage = documentRef.querySelector('[data-upload-message]');
   const processingState = documentRef.querySelector('[data-processing-state]');
   const processingMessage = documentRef.querySelector('[data-processing-message]');
   const overall = documentRef.querySelector('[data-upload-overall]');
   const progressBar = documentRef.querySelector('[data-flight-progress-bar]');
-  const bulkTrigger = documentRef.querySelector('[data-upload-bulk-trigger]');
-  const bulkPanel = documentRef.querySelector('[data-upload-bulk-panel]');
+  const dropzone = documentRef.querySelector('[data-upload-dropzone]');
   const bulkInput = documentRef.querySelector('[data-upload-bulk-input]');
   const bulkCancel = documentRef.querySelector('[data-upload-bulk-cancel]');
-  if (!windowRef || !uploadTrigger || !uploadDialog || !uploadList || !uploadFailures || !uploadProgressState || !processingState || !processingMessage || !overall || !progressBar) return;
+  if (!windowRef || !uploadTrigger || !uploadDialog || !uploadList || !uploadFailures || !uploadProgressState || !uploadMessage || !processingState || !processingMessage || !overall || !progressBar) return;
   const inputs = [...documentRef.querySelectorAll('[data-upload-more-input]')];
 
   const pending = [];
@@ -74,7 +74,10 @@ export function initializeFlightUploads(documentRef = document, windowRef = glob
   }
 
   function updateOverall() {
-    overall.textContent = `${settled}/${selected}`;
+    overall.textContent = `${settled} of ${selected} ${selected === 1 ? 'file' : 'files'} uploaded`;
+    if (selected > 0) {
+      uploadMessage.textContent = `Uploading ${selected} IGC ${selected === 1 ? 'file' : 'files'}.`;
+    }
     progressBar.max = Math.max(selected, 1);
     progressBar.value = settled;
     const localUploadsActive = selected > settled;
@@ -320,9 +323,6 @@ export function initializeFlightUploads(documentRef = document, windowRef = glob
       try {
         const extracted = await extractIgcFilesFromZip(file, { maxEntryBytes: MAX_FILE_BYTES });
         prepared.push(...extracted.files);
-        if (extracted.skippedEntries > 0) {
-          messages.push(`${file.name}: skipped ${extracted.skippedEntries} non-IGC ${extracted.skippedEntries === 1 ? 'file' : 'files'}.`);
-        }
       } catch (error) {
         messages.push(`${file.name}: ${error instanceof Error ? error.message : 'The ZIP archive could not be opened.'}`);
       }
@@ -332,7 +332,6 @@ export function initializeFlightUploads(documentRef = document, windowRef = glob
   }
 
   uploadTrigger.addEventListener('click', openUploadDialog);
-  bulkTrigger?.addEventListener('click', () => { if (bulkPanel) bulkPanel.hidden = !bulkPanel.hidden; });
   bulkCancel?.addEventListener('click', async () => {
     if (!activeBulkWorkflow) return;
     const workflow = activeBulkWorkflow;
@@ -358,9 +357,7 @@ export function initializeFlightUploads(documentRef = document, windowRef = glob
     if (event.target === uploadDialog) closeUploadDialog();
   });
 
-  for (const input of inputs) input.addEventListener('change', () => {
-    const files = [...input.files];
-    input.value = '';
+  function handleRegularFiles(files) {
     if (!files.length) return;
     if (!uploadDialog.open) openUploadDialog();
     void prepareFiles(files, 'regular').then(async ({ prepared, messages }) => {
@@ -369,6 +366,27 @@ export function initializeFlightUploads(documentRef = document, windowRef = glob
       await initialProgress;
       await addFiles(prepared, 'regular');
     });
+  }
+
+  for (const input of inputs) input.addEventListener('change', () => {
+    const files = [...input.files];
+    input.value = '';
+    handleRegularFiles(files);
+  });
+
+  dropzone?.addEventListener('dragenter', (event) => {
+    event.preventDefault();
+    dropzone.classList.add('is-dragging');
+  });
+  dropzone?.addEventListener('dragover', (event) => {
+    event.preventDefault();
+    dropzone.classList.add('is-dragging');
+  });
+  dropzone?.addEventListener('dragleave', () => dropzone.classList.remove('is-dragging'));
+  dropzone?.addEventListener('drop', (event) => {
+    event.preventDefault();
+    dropzone.classList.remove('is-dragging');
+    handleRegularFiles([...(event.dataTransfer?.files || [])]);
   });
 
   bulkInput?.addEventListener('change', () => {

@@ -13,7 +13,7 @@ function element() {
     disabled: false,
     textContent: '',
     className: '',
-    classList: { add: vi.fn() },
+    classList: { add: vi.fn(), remove: vi.fn() },
     setAttribute(name, value) { attributes.set(name, value); if (name === 'hidden') this.hidden = true; },
     getAttribute(name) { return attributes.get(name) ?? null; },
     addEventListener(type, listener) { listeners.set(type, listener); },
@@ -44,9 +44,11 @@ function uploadHarness(initialTotal, fetchImplementation) {
     ['[data-upload-trigger]', element()], ['[data-upload-close]', element()],
     ['[data-upload-dialog]', element()], ['[data-upload-list]', element()], ['[data-upload-overall]', element()],
     ['[data-upload-failures]', element()], ['[data-upload-progress-state]', element()],
+    ['[data-upload-message]', element()],
     ['[data-processing-state]', element()], ['[data-processing-message]', element()],
     ['[data-flight-progress-bar]', element()],
-    ['[data-upload-bulk-trigger]', element()], ['[data-upload-bulk-panel]', element()], ['[data-upload-bulk-input]', bulkInput],
+    ['[data-upload-dropzone]', element()],
+    ['[data-upload-bulk-input]', bulkInput],
     ['[data-upload-bulk-cancel]', element()],
   ]);
   selectors.get('[data-upload-failures]').hidden = true;
@@ -127,7 +129,7 @@ describe('flight upload progress UI', () => {
   //   harness.selectors.get('[data-upload-trigger]').dispatch('click');
 
   //   expect(harness.selectors.get('[data-upload-dialog]').open).toBe(true);
-  //   await vi.waitFor(() => expect(harness.selectors.get('[data-flight-progress-count]').textContent).toBe('1/4'));
+  //   await vi.waitFor(() => expect(harness.selectors.get('[data-flight-progress-count]').textContent).toBe('1 of 4 files uploaded'));
   //   expect(harness.uploadMoreInput.files).toBeUndefined();
   //   expect(harness.selectors.get('[data-flight-progress-bar]').max).toBe(4);
   //   expect(harness.selectors.get('[data-flight-progress-bar]').value).toBe(1);
@@ -217,7 +219,7 @@ describe('flight upload active-file capacity', () => {
     expect(fetch).not.toHaveBeenCalledWith('/v1/igc-uploads/intents', expect.anything());
 
     harness.timers.shift()();
-    await vi.waitFor(() => expect(harness.selectors.get('[data-upload-overall]').textContent).toBe('0/1'));
+    await vi.waitFor(() => expect(harness.selectors.get('[data-upload-overall]').textContent).toBe('0 of 1 file uploaded'));
     await vi.waitFor(() => expect(fetch).toHaveBeenCalledWith('/v1/igc-uploads/intents', expect.objectContaining({ method: 'POST' })));
     expect(progressAttempts).toBe(2);
   });
@@ -231,7 +233,7 @@ describe('flight upload active-file capacity', () => {
 
     harness.select(harness.uploadInput, files(700, 'initial-race'));
     resolveProgress({ ok: true, json: async () => ({ total: 300, finished: 0, queued: 300, processing: 0, failed: 0 }) });
-    await vi.waitFor(() => expect(harness.selectors.get('[data-upload-overall]').textContent).toBe('0/700'));
+    await vi.waitFor(() => expect(harness.selectors.get('[data-upload-overall]').textContent).toBe('0 of 700 files uploaded'));
     harness.select(harness.uploadMoreInput, files(1, 'over-limit'));
     await vi.waitFor(() => expect(harness.windowRef.alert).toHaveBeenCalledWith('You can have at most 1000 active flight uploads.'));
   });
@@ -246,7 +248,7 @@ describe('flight upload active-file capacity', () => {
     await vi.waitFor(() => expect(harness.timers).toHaveLength(1));
     harness.select(harness.uploadMoreInput, files(400, 'more'));
 
-    await vi.waitFor(() => expect(harness.selectors.get('[data-upload-overall]').textContent).toBe('0/1000'));
+    await vi.waitFor(() => expect(harness.selectors.get('[data-upload-overall]').textContent).toBe('0 of 1000 files uploaded'));
     expect(harness.windowRef.alert).not.toHaveBeenCalled();
   });
 
@@ -256,7 +258,7 @@ describe('flight upload active-file capacity', () => {
     harness.select(harness.uploadInput, files(700));
     harness.select(harness.uploadMoreInput, files(1, 'over-limit'));
 
-    await vi.waitFor(() => expect(harness.selectors.get('[data-upload-overall]').textContent).toBe('0/700'));
+    await vi.waitFor(() => expect(harness.selectors.get('[data-upload-overall]').textContent).toBe('0 of 700 files uploaded'));
     expect(harness.windowRef.alert).toHaveBeenCalledWith('You can have at most 1000 active flight uploads.');
   });
 
@@ -269,11 +271,11 @@ describe('flight upload active-file capacity', () => {
     harness.timers.shift()();
     await vi.waitFor(() => expect(harness.timers).toHaveLength(1));
     harness.xhr.instances[0].succeed();
-    await vi.waitFor(() => expect(harness.selectors.get('[data-upload-overall]').textContent).toBe('1/600'));
+    await vi.waitFor(() => expect(harness.selectors.get('[data-upload-overall]').textContent).toBe('1 of 600 files uploaded'));
     harness.select(harness.uploadMoreInput, files(50, 'remaining'));
     harness.select(harness.uploadMoreInput, files(1, 'external-over-limit'));
 
-    await vi.waitFor(() => expect(harness.selectors.get('[data-upload-overall]').textContent).toBe('1/650'));
+    await vi.waitFor(() => expect(harness.selectors.get('[data-upload-overall]').textContent).toBe('1 of 650 files uploaded'));
     expect(harness.windowRef.alert).toHaveBeenCalledTimes(1);
   });
 
@@ -286,14 +288,14 @@ describe('flight upload active-file capacity', () => {
     await vi.waitFor(() => expect(harness.timers).toHaveLength(1));
 
     harness.xhr.instances[0].fail();
-    await vi.waitFor(() => expect(harness.selectors.get('[data-upload-overall]').textContent).toBe('1/600'));
+    await vi.waitFor(() => expect(harness.selectors.get('[data-upload-overall]').textContent).toBe('1 of 600 files uploaded'));
     harness.setProgressTotal(353);
     harness.timers.shift()();
     await vi.waitFor(() => expect(harness.timers).toHaveLength(1));
     harness.select(harness.uploadMoreInput, files(51, 'remaining'));
     harness.select(harness.uploadMoreInput, files(1, 'over-limit'));
 
-    await vi.waitFor(() => expect(harness.selectors.get('[data-upload-overall]').textContent).toBe('1/651'));
+    await vi.waitFor(() => expect(harness.selectors.get('[data-upload-overall]').textContent).toBe('1 of 651 files uploaded'));
     expect(harness.windowRef.alert).toHaveBeenCalledTimes(1);
   });
 
@@ -307,10 +309,10 @@ describe('flight upload active-file capacity', () => {
       return fallback(url, options);
     });
     harness.select(harness.uploadInput, files(2, 'rejected'));
-    await vi.waitFor(() => expect(harness.selectors.get('[data-upload-overall]').textContent).toBe('1/2'));
+    await vi.waitFor(() => expect(harness.selectors.get('[data-upload-overall]').textContent).toBe('1 of 2 files uploaded'));
     harness.select(harness.uploadMoreInput, files(1, 'replacement'));
 
-    await vi.waitFor(() => expect(harness.selectors.get('[data-upload-overall]').textContent).toBe('1/3'));
+    await vi.waitFor(() => expect(harness.selectors.get('[data-upload-overall]').textContent).toBe('1 of 3 files uploaded'));
     expect(harness.windowRef.alert).not.toHaveBeenCalled();
   });
 
@@ -320,10 +322,10 @@ describe('flight upload active-file capacity', () => {
     harness.select(harness.uploadInput, files(2, 'cancelled'));
     await vi.waitFor(() => expect(harness.xhr.instances).toHaveLength(2));
     harness.xhr.instances[0].fail();
-    await vi.waitFor(() => expect(harness.selectors.get('[data-upload-overall]').textContent).toBe('1/2'));
+    await vi.waitFor(() => expect(harness.selectors.get('[data-upload-overall]').textContent).toBe('1 of 2 files uploaded'));
     harness.select(harness.uploadMoreInput, files(1, 'replacement'));
 
-    await vi.waitFor(() => expect(harness.selectors.get('[data-upload-overall]').textContent).toBe('1/3'));
+    await vi.waitFor(() => expect(harness.selectors.get('[data-upload-overall]').textContent).toBe('1 of 3 files uploaded'));
     expect(harness.windowRef.alert).not.toHaveBeenCalled();
   });
 
@@ -335,7 +337,7 @@ describe('flight upload active-file capacity', () => {
     harness.select(harness.uploadInput, files(2, 'lost-cancel'));
     await vi.waitFor(() => expect(harness.xhr.instances).toHaveLength(2));
     harness.xhr.instances[0].fail();
-    await vi.waitFor(() => expect(harness.selectors.get('[data-upload-overall]').textContent).toBe('1/2'));
+    await vi.waitFor(() => expect(harness.selectors.get('[data-upload-overall]').textContent).toBe('1 of 2 files uploaded'));
     harness.select(harness.uploadMoreInput, files(1, 'must-reject'));
 
     await vi.waitFor(() => expect(harness.windowRef.alert).toHaveBeenCalledWith('You can have at most 1000 active flight uploads.'));
@@ -349,7 +351,7 @@ describe('flight upload active-file capacity', () => {
     harness.select(harness.uploadInput, files(2, 'failed-cancel'));
     await vi.waitFor(() => expect(harness.xhr.instances).toHaveLength(2));
     harness.xhr.instances[0].fail();
-    await vi.waitFor(() => expect(harness.selectors.get('[data-upload-overall]').textContent).toBe('1/2'));
+    await vi.waitFor(() => expect(harness.selectors.get('[data-upload-overall]').textContent).toBe('1 of 2 files uploaded'));
     harness.select(harness.uploadMoreInput, files(1, 'must-reject'));
 
     await vi.waitFor(() => expect(harness.windowRef.alert).toHaveBeenCalledWith('You can have at most 1000 active flight uploads.'));
@@ -362,7 +364,7 @@ describe('flight upload active-file capacity', () => {
     harness.select(harness.uploadMoreInput, files(4, 'second'));
     harness.select(harness.uploadMoreInput, files(1, 'too-many'));
 
-    await vi.waitFor(() => expect(harness.selectors.get('[data-upload-overall]').textContent).toBe('0/10'));
+    await vi.waitFor(() => expect(harness.selectors.get('[data-upload-overall]').textContent).toBe('0 of 10 files uploaded'));
     expect(harness.windowRef.alert).toHaveBeenCalledTimes(1);
     expect(harness.windowRef.alert).toHaveBeenCalledWith('You can have at most 1000 active flight uploads.');
   });
@@ -373,7 +375,7 @@ describe('flight upload active-file capacity', () => {
   //   harness.select(harness.uploadInput, files(1, 'last-slot'));
   //   await vi.waitFor(() => expect(harness.xhr.instances).toHaveLength(1));
   //   harness.xhr.instances[0].succeed();
-  //   await vi.waitFor(() => expect(harness.selectors.get('[data-upload-overall]').textContent).toBe('1/1'));
+  //   await vi.waitFor(() => expect(harness.selectors.get('[data-upload-overall]').textContent).toBe('1 of 1 file uploaded'));
 
   //   harness.setProgressTotal(0);
   //   harness.timers.find((timer) => timer.delay === 10_000)();
@@ -390,7 +392,7 @@ describe('flight upload active-file capacity', () => {
     harness.select(harness.uploadInput, files(1, 'first'));
     await vi.waitFor(() => expect(harness.xhr.instances).toHaveLength(1));
     harness.xhr.instances[0].succeed();
-    await vi.waitFor(() => expect(harness.selectors.get('[data-upload-overall]').textContent).toBe('1/1'));
+    await vi.waitFor(() => expect(harness.selectors.get('[data-upload-overall]').textContent).toBe('1 of 1 file uploaded'));
     expect(harness.selectors.get('[data-upload-dialog]').open).toBe(true);
     expect(harness.selectors.get('[data-processing-message]').textContent).toBe(
       'Upload successful, this dialog will close in 3 seconds.',
@@ -413,7 +415,7 @@ describe('flight upload active-file capacity', () => {
 
     harness.select(harness.uploadInput, files(2, 'batch'));
     await vi.waitFor(() => expect(harness.xhr.instances).toHaveLength(2));
-    expect(harness.selectors.get('[data-upload-overall]').textContent).toBe('0/2');
+    expect(harness.selectors.get('[data-upload-overall]').textContent).toBe('0 of 2 files uploaded');
     expect(bar.max).toBe(2);
     expect(bar.value).toBe(0);
     expect(uploadState.hidden).toBe(false);
@@ -421,12 +423,12 @@ describe('flight upload active-file capacity', () => {
     expect(harness.selectors.get('[data-upload-list]').append).not.toHaveBeenCalled();
 
     harness.xhr.instances[0].succeed();
-    await vi.waitFor(() => expect(harness.selectors.get('[data-upload-overall]').textContent).toBe('1/2'));
+    await vi.waitFor(() => expect(harness.selectors.get('[data-upload-overall]').textContent).toBe('1 of 2 files uploaded'));
     expect(bar.value).toBe(1);
     expect(uploadState.hidden).toBe(false);
 
     harness.xhr.instances[1].succeed();
-    await vi.waitFor(() => expect(harness.selectors.get('[data-upload-overall]').textContent).toBe('2/2'));
+    await vi.waitFor(() => expect(harness.selectors.get('[data-upload-overall]').textContent).toBe('2 of 2 files uploaded'));
     expect(bar.value).toBe(2);
     expect(uploadState.hidden).toBe(true);
     expect(processingState.hidden).toBe(false);
@@ -458,7 +460,7 @@ describe('flight upload active-file capacity', () => {
     await vi.waitFor(() => expect(harness.xhr.instances).toHaveLength(1));
     expect(harness.selectors.get('[data-upload-progress-state]').hidden).toBe(false);
     expect(harness.selectors.get('[data-processing-state]').hidden).toBe(true);
-    expect(harness.selectors.get('[data-upload-overall]').textContent).toBe('0/1');
+    expect(harness.selectors.get('[data-upload-overall]').textContent).toBe('0 of 1 file uploaded');
   });
 
   it('lists only failed browser uploads below the aggregate status', async () => {
@@ -471,7 +473,7 @@ describe('flight upload active-file capacity', () => {
     harness.xhr.instances[0].succeed();
     harness.xhr.instances[1].fail();
 
-    await vi.waitFor(() => expect(harness.selectors.get('[data-upload-overall]').textContent).toBe('2/2'));
+    await vi.waitFor(() => expect(harness.selectors.get('[data-upload-overall]').textContent).toBe('2 of 2 files uploaded'));
     expect(failedList.append).toHaveBeenCalledOnce();
     expect(failedList.append.mock.calls[0][0].textContent).toBe('mixed-1.igc: Object upload failed.');
     expect(failures.hidden).toBe(false);
@@ -486,7 +488,7 @@ describe('flight upload active-file capacity', () => {
     await vi.waitFor(() => expect(harness.xhr.instances).toHaveLength(1));
     harness.xhr.instances[0].fail();
 
-    await vi.waitFor(() => expect(harness.selectors.get('[data-upload-overall]').textContent).toBe('1/1'));
+    await vi.waitFor(() => expect(harness.selectors.get('[data-upload-overall]').textContent).toBe('1 of 1 file uploaded'));
     expect(harness.selectors.get('[data-upload-dialog]').open).toBe(true);
     expect(harness.timers.some((timer) => timer.delay === 3_000)).toBe(false);
     expect(harness.windowRef.location.assign).not.toHaveBeenCalled();
@@ -504,6 +506,11 @@ describe('flight upload modes', () => {
 
     expect(template).toContain('data-upload-more-input type="file" multiple');
     expect(template).not.toContain('accept=');
+    expect(template).toContain('data-upload-dropzone');
+    expect(template).toContain('<p class="flight-upload-bulk-help">Upload a ZIP of older IGC files.');
+    expect(template).toContain('<label class="flight-upload-action flight-upload-action--secondary">Bulk historical upload<input data-upload-bulk-input type="file" aria-label="Bulk historical upload"></label>');
+    expect(template).not.toContain('data-upload-bulk-trigger');
+    expect(template).not.toContain('data-upload-bulk-panel hidden');
     expect(template).toContain('Upload successful, this dialog will close in 3 seconds.');
     expect(template).not.toContain('flight-processing-spinner');
   });
@@ -540,14 +547,33 @@ describe('flight upload modes', () => {
     await vi.waitFor(() => expect(fetch).toHaveBeenCalledWith('/v1/flight-upload-batches/batch-1/seal', expect.objectContaining({ method: 'POST' })));
   });
 
-  it('expands one bulk ZIP, sends history IDs, and seals without redirecting', async () => {
+  it('accepts regular IGC files dropped onto the recent-flight upload area', async () => {
+    const harness = uploadHarness(0);
+    const dropzone = harness.selectors.get('[data-upload-dropzone]');
+    const droppedFiles = files(2, 'dropped');
+
+    const dragEvent = dropzone.dispatch('dragover');
+    expect(dragEvent.preventDefault).toHaveBeenCalledOnce();
+    expect(dropzone.classList.add).toHaveBeenCalledWith('is-dragging');
+
+    const dropEvent = dropzone.dispatch('drop', { dataTransfer: { files: droppedFiles } });
+    expect(dropEvent.preventDefault).toHaveBeenCalledOnce();
+    expect(dropzone.classList.remove).toHaveBeenCalledWith('is-dragging');
+    await vi.waitFor(() => expect(harness.xhr.instances).toHaveLength(2));
+  });
+
+  it('accepts one bulk ZIP, sends history IDs, and seals without redirecting', async () => {
     const harness = uploadHarness(0);
     const archive = createZipFile([
       { name: 'first.igc', contents: 'first flight', compression: 'stored' },
       { name: 'second.IGC', contents: 'second flight', compression: 'deflated' },
+      { name: '__MACOSX/._first.igc', contents: 'metadata', compression: 'deflated' },
+      { name: 'notes.txt', contents: 'not a flight' },
     ]);
     harness.select(harness.bulkInput, [archive]);
     await vi.waitFor(() => expect(harness.xhr.instances).toHaveLength(2));
+    expect(harness.windowRef.alert).not.toHaveBeenCalled();
+    expect(harness.selectors.get('[data-upload-message]').textContent).toBe('Uploading 2 IGC files.');
     expect(fetch).toHaveBeenCalledWith('/v1/flight-history-imports', expect.objectContaining({ method: 'POST' }));
     const intentBodies = fetch.mock.calls.filter(([url]) => String(url) === '/v1/igc-uploads/intents').map(([, options]) => JSON.parse(options.body));
     expect(intentBodies.every((body) => body.historyImportId === 'history-1')).toBe(true);

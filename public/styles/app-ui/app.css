@@ -33,32 +33,68 @@ a { color: inherit; }
 .app-account__menu a, .app-account__menu button { display: flex; width: 100%; min-height: 44px; align-items: center; gap: .65rem; padding: .65rem .75rem; border: 0; border-radius: .55rem; color: inherit; background: transparent; font-weight: 700; text-decoration: none; cursor: pointer; }
 .app-account__menu a:hover, .app-account__menu button:hover { background: var(--app-surface-soft); }
 .app-account__menu form { margin: 0; }
-.flight-upload-dialog { width: 100vw; max-width: none; height: 100vh; max-height: none; padding: 0; border: 0; color: var(--app-ink); background: rgb(3 20 38 / 78%); }
-.flight-upload-dialog::backdrop { background: rgb(3 20 38 / 78%); }
-.flight-upload-panel { display: flex; width: min(760px, calc(100% - 2rem)); max-height: calc(100vh - 2rem); flex-direction: column; gap: 1rem; padding: 1.5rem; margin: 1rem auto; border-radius: 1rem; background: var(--app-surface); box-shadow: 0 20px 60px rgb(0 0 0 / 35%); }
-.flight-upload-panel > header { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
-.flight-upload-eyebrow { margin: 0 0 .25rem; color: var(--app-blue); font-size: .68rem; font-weight: 850; letter-spacing: .08em; text-transform: uppercase; }
-.flight-upload-panel h2 { margin: 0; font-size: 1.25rem; }
-.flight-upload-description { max-width: 38rem; margin: .35rem 0 0; color: var(--app-muted); font-size: .8rem; }
-.flight-upload-close { display: inline-grid; width: 2.25rem; height: 2.25rem; padding: 0; border: 0; border-radius: 999px; place-items: center; color: var(--app-ink); background: var(--app-surface-soft); font-size: 1.5rem; line-height: 1; cursor: pointer; }
-.flight-upload-status { padding: .85rem; border-radius: .65rem; background: var(--app-surface-soft); }
-.flight-upload-progress { display: grid; gap: .55rem; }
-.flight-upload-progress[hidden] { display: none; }
-.flight-upload-progress > div { display: flex; justify-content: space-between; gap: 1rem; }
-.flight-upload-progress [data-upload-overall] { flex: 0 0 auto; font-variant-numeric: tabular-nums; }
-.flight-upload-progress progress { width: 100%; accent-color: var(--app-blue); }
-.flight-processing-state { display: flex; align-items: center; gap: .75rem; }
-.flight-processing-state[hidden] { display: none; }
+.flight-upload-dialog { width: 100vw; max-width: none; height: 100vh; max-height: none; padding: 0; border: 0; color: var(--app-ink); background: rgb(3 20 38 / 82%); }
+.flight-upload-dialog[open] { display: grid; overflow: hidden; place-items: center; }
+.flight-upload-dialog::backdrop { background: rgb(3 20 38 / 82%); }
+.flight-upload-panel { display: flex; width: min(760px, calc(100% - 2rem)); max-height: calc(100svh - 2rem); flex-direction: column; padding: 0; overflow: hidden; margin: 1rem auto; border: 1px solid rgb(15 35 62 / 8%); border-radius: 1rem; background: #fff; box-shadow: 0 24px 72px rgb(0 0 0 / 42%); }
+.flight-upload-panel > header { display: flex; flex: 0 0 auto; align-items: flex-start; justify-content: space-between; gap: 1rem; padding: 1.85rem 2.5rem 1.35rem; }
+.flight-upload-eyebrow { margin: 0 0 .5rem; color: var(--app-blue); font-size: .7rem; font-weight: 850; letter-spacing: .14em; text-transform: uppercase; }
+.flight-upload-panel h2 { margin: 0; font-size: 1.85rem; line-height: 1.1; }
+.flight-upload-description { max-width: 38rem; margin: .55rem 0 0; color: var(--app-muted); font-size: .9rem; line-height: 1.45; }
+.flight-upload-description strong { color: var(--app-blue); }
+.flight-upload-close { display: inline-grid; width: 2.5rem; height: 2.5rem; flex: 0 0 2.5rem; padding: 0; border: 1px solid var(--app-border); border-radius: 999px; place-items: center; color: var(--app-ink); background: #fff; font-size: 1.65rem; line-height: 1; cursor: pointer; }
+.flight-upload-content { display: grid; min-height: 0; gap: 1.25rem; padding: 0 2.5rem 1.5rem; overflow-y: auto; }
+.flight-upload-recent { display: grid; gap: 1rem; padding: 1.25rem; border: 1px solid #bfdcff; border-radius: .8rem; background: linear-gradient(135deg, #f2f8ff, #eef7ff); }
+.flight-upload-option-heading { display: flex; align-items: center; gap: 1rem; }
+.flight-upload-option-heading h3, .flight-upload-history h3 { margin: 0; font-size: 1rem; line-height: 1.25; }
+.flight-upload-option-heading p, .flight-upload-history p { margin: .25rem 0 0; color: var(--app-muted); font-size: .78rem; line-height: 1.4; }
+.flight-upload-file-badge { display: grid; width: 62px; height: 62px; flex: 0 0 62px; place-items: center; align-content: center; border: 3px solid #d5e7ff; border-radius: 50%; color: var(--app-ink); background: #fff; }
+.flight-upload-file-badge .app-icon { width: 1.9rem; height: 1.9rem; }
+.flight-upload-file-badge small { margin-top: -.05rem; font-size: .58rem; font-weight: 850; }
+.flight-upload-file-badge--zip { border-color: #e5e5e5; }
+.flight-upload-picker { display: grid; gap: .75rem; cursor: pointer; }
+.flight-upload-dropzone.is-dragging .flight-upload-drop-target { border-color: var(--app-blue); background: #fff; box-shadow: 0 0 0 3px rgb(8 105 247 / 10%); }
+.flight-upload-drop-target { display: flex; min-height: 96px; align-items: center; justify-content: center; gap: 1rem; padding: 1rem; border: 1px dashed #9bbce8; border-radius: .65rem; color: var(--app-muted); background: rgb(255 255 255 / 72%); text-align: left; transition: border-color .15s ease, box-shadow .15s ease, background .15s ease; }
+.flight-upload-drop-target > .app-icon { width: 2.4rem; height: 2.4rem; }
+.flight-upload-drop-target span { display: grid; gap: .2rem; }
+.flight-upload-drop-target strong { color: var(--app-muted); font-size: .86rem; }
+.flight-upload-drop-target small { font-size: .72rem; }
+.flight-upload-browse-mobile { display: none; }
+.flight-upload-primary-action { display: inline-flex; width: 100%; min-height: 50px; align-items: center; justify-content: center; gap: .65rem; border-radius: .65rem; color: #fff; background: var(--app-blue); box-shadow: 0 7px 16px rgb(8 105 247 / 18%); font-size: .95rem; font-weight: 800; }
+.flight-upload-primary-action .app-icon { font-size: 1.15rem; }
+.flight-upload-security { display: flex; align-items: center; gap: .55rem; margin: 0; color: var(--app-muted); font-size: .68rem; line-height: 1.45; }
+.flight-upload-security .app-icon { color: var(--app-blue); font-size: 1rem; }
+.flight-upload-security strong { color: var(--app-ink); }
+.flight-upload-divider { display: flex; align-items: center; gap: 1.15rem; color: var(--app-muted); font-size: .76rem; font-weight: 750; text-align: center; }
+.flight-upload-divider::before, .flight-upload-divider::after { height: 1px; flex: 1 1 auto; background: var(--app-border); content: ''; }
+.flight-upload-divider span { flex: 0 0 auto; }
+.flight-upload-history { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 1rem; padding: 1rem 1.15rem; border: 1px solid var(--app-border); border-radius: .75rem; background: #fff; }
+.flight-upload-history-copy { min-width: 0; }
+.flight-upload-bulk-help { max-width: 25rem; }
+.flight-upload-history-actions { display: grid; justify-items: end; gap: .45rem; }
+.flight-upload-action, .flight-upload-cancel { display: inline-flex; min-height: 42px; align-items: center; justify-content: center; padding: .55rem .85rem; border: 1px solid var(--app-blue); border-radius: .6rem; color: var(--app-blue); background: #fff; font-size: .76rem; font-weight: 750; text-decoration: none; cursor: pointer; white-space: nowrap; }
+.flight-upload-action--secondary { min-height: 40px; padding: .5rem .8rem; }
+.flight-upload-cancel { border-color: #f0bbbb; color: #a32121; background: #fff5f5; }
+.flight-upload-cancel[hidden] { display: none; }
+.flight-upload-panel input[type='file'] { position: absolute; width: 1px; height: 1px; overflow: hidden; opacity: 0; pointer-events: none; }
 .flight-upload-failures { min-height: 0; overflow: auto; }
 .flight-upload-failures[hidden] { display: none; }
 .flight-upload-failures h3 { margin: 0 0 .45rem; color: #a32121; font-size: .78rem; }
 .flight-upload-failures ul { display: grid; gap: .35rem; padding: 0; margin: 0; list-style: none; }
 .flight-upload-failures li { padding: .55rem .7rem; border-radius: .55rem; color: #8b1d1d; background: #fff0f0; font-size: .75rem; overflow-wrap: anywhere; }
-.flight-upload-panel footer { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: .75rem; }
-.flight-upload-action { display: inline-flex; min-height: 42px; align-items: center; justify-content: center; padding: .6rem .9rem; border: 1px solid var(--app-border); border-radius: .6rem; color: var(--app-blue); background: #fff; font-weight: 750; text-decoration: none; cursor: pointer; }
-.flight-upload-panel footer input { position: absolute; width: 1px; height: 1px; opacity: 0; }
-.flight-upload-bulk-help { flex: 1 1 100%; margin: 0; color: var(--app-muted); font-size: .78rem; }
-.flight-upload-bulk-help[hidden] { display: none; }
+.flight-upload-status { display: grid; flex: 0 0 auto; gap: .75rem; padding: 1rem 2.5rem 1.1rem; border-top: 1px solid var(--app-border); background: #fff; }
+.flight-upload-progress { display: grid; gap: .55rem; }
+.flight-upload-progress[hidden] { display: none; }
+.flight-upload-progress > div { display: flex; justify-content: space-between; gap: 1rem; }
+.flight-upload-progress > div strong { font-size: .8rem; }
+.flight-upload-progress [data-upload-overall] { flex: 0 0 auto; color: var(--app-muted); font-size: .72rem; font-variant-numeric: tabular-nums; }
+.flight-upload-progress progress { width: 100%; height: 8px; overflow: hidden; appearance: none; border: 0; border-radius: 999px; background: #e7e9ec; accent-color: var(--app-blue); }
+.flight-upload-progress progress::-webkit-progress-bar { border-radius: 999px; background: #e7e9ec; }
+.flight-upload-progress progress::-webkit-progress-value { border-radius: 999px; background: var(--app-blue); }
+.flight-upload-progress progress::-moz-progress-bar { border-radius: 999px; background: var(--app-blue); }
+.flight-upload-progress [data-upload-message] { margin: 0; color: var(--app-muted); font-size: .7rem; text-align: center; }
+.flight-processing-state { display: flex; min-height: 42px; align-items: center; justify-content: center; color: var(--app-muted); text-align: center; }
+.flight-processing-state[hidden] { display: none; }
 .mobile-navigation { display: none; }
 .content-page { position: relative; z-index: 2; width: min(calc(100% - 3rem), 1340px); margin: -1.8rem auto 0; padding-bottom: 2rem; }
 .mountain-band { height: 150px; background: #f8fbfe url('/images/app-ui/mountains-premium-banner.png') 54% center / cover no-repeat; }
@@ -107,5 +143,38 @@ a { color: inherit; }
   .metric__icon { width: 34px; height: 34px; font-size: .95rem; }.metric strong { font-size: 1.05rem; }.metric span { font-size: .62rem; }.metric small { display: none; }
   .app-footer { min-height: 54px; flex-direction: column; justify-content: center; gap: .35rem; padding: .65rem 1rem calc(.65rem + var(--app-mobile-nav-height)); text-align: center; }
 }
-@media (max-width: 390px) { .app-upload-trigger { padding-inline: .6rem; }.app-upload-trigger .app-icon { display: none; }.metric__icon { width: 30px; height: 30px; }.metric { gap: .25rem; }.metric strong { font-size: .95rem; }.flight-upload-panel { width: calc(100% - 1rem); max-height: calc(100vh - 1rem); padding: 1rem; margin: .5rem auto; }.flight-upload-progress > div { align-items: flex-start; }.flight-upload-progress strong, .flight-processing-state strong { font-size: .8rem; line-height: 1.4; } }
+@media (max-width: 600px) {
+  .flight-upload-panel { width: calc(100% - 2rem); max-height: calc(100svh - 2rem); margin: 1rem; border-radius: 1.15rem; }
+  .flight-upload-panel > header { padding: 1.35rem 1.5rem 1.1rem; }
+  .flight-upload-eyebrow { margin-bottom: .55rem; font-size: .68rem; }
+  .flight-upload-panel h2 { font-size: 1.75rem; }
+  .flight-upload-description { margin-top: .65rem; font-size: .9rem; }
+  .flight-upload-close { width: 2.4rem; height: 2.4rem; flex-basis: 2.4rem; }
+  .flight-upload-content { gap: 1rem; padding: 0 1.5rem 1.15rem; }
+  .flight-upload-recent { gap: .85rem; padding: 1rem; }
+  .flight-upload-option-heading { gap: .85rem; }
+  .flight-upload-option-heading h3, .flight-upload-history h3 { font-size: .95rem; }
+  .flight-upload-file-badge { width: 58px; height: 58px; flex-basis: 58px; }
+  .flight-upload-drop-target { min-height: 94px; gap: .75rem; padding: .8rem; }
+  .flight-upload-drop-target > .app-icon { width: 2.15rem; height: 2.15rem; }
+  .flight-upload-drop-target strong { font-size: .78rem; }
+  .flight-upload-browse-desktop { display: none; }
+  .flight-upload-browse-mobile { display: block; }
+  .flight-upload-primary-action { min-height: 48px; font-size: .9rem; }
+  .flight-upload-security { align-items: flex-start; font-size: .66rem; }
+  .flight-upload-divider { gap: .75rem; font-size: .7rem; }
+  .flight-upload-history { grid-template-columns: 48px minmax(0, 1fr) auto; gap: .45rem; padding: .75rem; }
+  .flight-upload-history .flight-upload-file-badge { width: 48px; height: 48px; flex-basis: 48px; }
+  .flight-upload-history .flight-upload-file-badge .app-icon { width: 1.55rem; height: 1.55rem; }
+  .flight-upload-history h3 { font-size: .76rem; }
+  .flight-upload-history p { margin-top: .16rem; font-size: .61rem; line-height: 1.3; }
+  .flight-upload-bulk-limit { display: none; }
+  .flight-upload-history-actions { grid-column: auto; justify-items: end; }
+  .flight-upload-action--secondary { min-height: 36px; padding: .3rem .25rem; font-size: .5rem; }
+  .flight-upload-cancel { padding: .42rem .55rem; font-size: .6rem; white-space: normal; }
+  .flight-upload-status { padding: .95rem 1.5rem 1rem; }
+  .flight-upload-progress > div { align-items: flex-start; }
+  .flight-processing-state strong { font-size: .78rem; line-height: 1.4; }
+}
+@media (max-width: 390px) { .app-upload-trigger { padding-inline: .6rem; }.app-upload-trigger .app-icon { display: none; }.metric__icon { width: 30px; height: 30px; }.metric { gap: .25rem; }.metric strong { font-size: .95rem; } }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; } }

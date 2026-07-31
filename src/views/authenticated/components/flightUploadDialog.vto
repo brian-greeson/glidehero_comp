@@ -4,29 +4,59 @@
       <div>
         <p class="flight-upload-eyebrow">Flight upload</p>
         <h2 id="flight-upload-title">Upload flights</h2>
-        <p class="flight-upload-description">Regular uploads must have launched within the last 30 days, based on the launch location's local calendar.</p>
+        <p class="flight-upload-description">Upload IGC files from flights launched <strong>within the last 30 days.</strong></p>
       </div>
       <button type="button" class="flight-upload-close" data-upload-close
         aria-label="Close upload status">&times;</button>
     </header>
-    <div class="flight-upload-status">
-      <div class="flight-upload-progress" data-upload-progress-state>
-        <div><strong>Keep this page open until all files finish uploading.</strong><span data-upload-overall>0/0</span>
+    <div class="flight-upload-content">
+      <section class="flight-upload-recent" aria-labelledby="recent-flight-upload-title">
+        <header class="flight-upload-option-heading">
+          <span class="flight-upload-file-badge">{{ include "authenticated/components/icon.vto" { name: "file" } }}<small>.IGC</small></span>
+          <div><h3 id="recent-flight-upload-title">Recent flight upload</h3><p>Use this for your normal uploads.</p></div>
+        </header>
+        <div class="flight-upload-dropzone" data-upload-dropzone>
+          <label class="flight-upload-picker">
+            <span class="flight-upload-drop-target">
+              {{ include "authenticated/components/icon.vto" { name: "upload-cloud" } }}
+              <span><strong>Drag &amp; drop IGC files here</strong><small class="flight-upload-browse-desktop">or click to browse your computer</small><small class="flight-upload-browse-mobile">or tap to browse your device</small></span>
+            </span>
+            <span class="flight-upload-primary-action">{{ include "authenticated/components/icon.vto" { name: "folder" } }}Select IGC files</span>
+            <input data-upload-more-input type="file" multiple data-upload-regular-input aria-label="Select IGC files">
+          </label>
         </div>
+        <p class="flight-upload-security">{{ include "authenticated/components/icon.vto" { name: "shield" } }}<span><strong>Secure.</strong> Your files are private and only used to update your flights.</span></p>
+      </section>
+
+      <div class="flight-upload-divider"><span>Need to import your older history?</span></div>
+
+      <section class="flight-upload-history" aria-labelledby="historical-flight-upload-title">
+        <span class="flight-upload-file-badge flight-upload-file-badge--zip">{{ include "authenticated/components/icon.vto" { name: "archive" } }}<small>.ZIP</small></span>
+        <div class="flight-upload-history-copy">
+          <h3 id="historical-flight-upload-title">Import older flight history</h3>
+          <p>Optional for onboarding.</p>
+          <p class="flight-upload-bulk-help">Upload a ZIP of older IGC files. Historical imports may take longer. <span class="flight-upload-bulk-limit">Only one bulk import can run at a time.</span></p>
+        </div>
+        <div class="flight-upload-history-actions">
+          <label class="flight-upload-action flight-upload-action--secondary">Bulk historical upload<input data-upload-bulk-input type="file" aria-label="Bulk historical upload"></label>
+          <button type="button" class="flight-upload-cancel" data-upload-bulk-cancel hidden>Cancel historical upload</button>
+        </div>
+      </section>
+
+      <section class="flight-upload-failures" data-upload-failures hidden>
+        <h3>Failed uploads</h3>
+        <ul data-upload-list></ul>
+      </section>
+    </div>
+    <footer class="flight-upload-status">
+      <div class="flight-upload-progress" data-upload-progress-state>
+        <div><strong>Upload progress</strong><span data-upload-overall>0 of 0 files uploaded</span></div>
         <progress max="1" value="0" data-flight-progress-bar></progress>
+        <p data-upload-message>No files uploading yet</p>
       </div>
       <div class="flight-processing-state" data-processing-state hidden>
         <strong data-processing-message>Upload successful, this dialog will close in 3 seconds.</strong>
       </div>
-    </div>
-    <section class="flight-upload-failures" data-upload-failures hidden>
-      <h3>Failed uploads</h3>
-      <ul data-upload-list></ul>
-    </section>
-    <footer>
-      <label class="flight-upload-action">Choose regular flights<input data-upload-more-input type="file" multiple data-upload-regular-input></label>
-      <button type="button" class="flight-upload-action" data-upload-bulk-trigger>Bulk historical flight upload</button>
-      <p class="flight-upload-bulk-help" data-upload-bulk-panel hidden>Choose one ZIP containing IGC files of any age. This may take a while; only one bulk update can run at a time.<br><label>Choose ZIP<input data-upload-bulk-input type="file"></label> <button type="button" data-upload-bulk-cancel hidden>Cancel historical upload</button></p>
     </footer>
   </section>
 </dialog>
