@@ -20,6 +20,13 @@
         {{ include "authenticated/components/icon.vto" { name: "chevron-down" } }}
       </button>
       <div class="app-account__menu" id="app-account-menu" data-account-menu hidden>
+        {{ if typeof gettingStarted !== 'undefined' && gettingStarted }}
+          {{ if gettingStarted.dismissed }}
+            <form method="post" action="/onboarding/restore" data-onboarding-restore-form><button type="submit">{{ include "authenticated/components/icon.vto" { name: "star" } }}Restore getting started</button></form>
+          {{ else }}
+            <a href="/activity">{{ include "authenticated/components/icon.vto" { name: "star" } }}Getting started</a>
+          {{ /if }}
+        {{ /if }}
         <a href="{{ donateUrl }}">{{ include "authenticated/components/icon.vto" { name: "heart" } }}Donate</a>
         {{ if user.isAdmin }}<a href="{{ adminUrl }}">{{ include "authenticated/components/icon.vto" { name: "shield" } }}Admin</a>{{ /if }}
         <form method="post" action="{{ logoutUrl }}"><button type="submit">{{ include "authenticated/components/icon.vto" { name: "logout" } }}Log out</button></form>

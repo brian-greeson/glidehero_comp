@@ -24,6 +24,7 @@ import { withServer } from '../support/http.js';
 import type { FlightDetailService, FlightDetailSummary } from '../../src/services/flightDetailService.js';
 import type { CellFlightTrackResult, CellFlightTrackService } from '../../src/services/cellFlightTrackService.js';
 import type { MapReplayService } from '../../src/services/mapReplayService.js';
+import type { OnboardingService } from '../../src/services/onboardingService.js';
 
 const viewportStats = {
   claimedCellCount: 2,
@@ -163,6 +164,13 @@ function dependencies() {
     regenerateFlightActivity: vi.fn(async () => 'completed' as const),
     toggleLike: vi.fn(async () => ({ reacted: true, totalCount: 1 })),
   };
+  const onboarding: OnboardingService = {
+    initializeInTransaction: vi.fn(async () => undefined),
+    getState: vi.fn(async () => null),
+    dismiss: vi.fn(async () => true),
+    restore: vi.fn(async () => true),
+    markPersonalMapViewed: vi.fn(async () => true),
+  };
   const gridClaim: GridClaimService = {
     getViewportStats: vi.fn(async () => viewportStats),
     process: vi.fn(async () => ({
@@ -229,6 +237,7 @@ function dependencies() {
     profiles,
     follow,
     activity,
+    onboarding,
     gridClaim,
     mapGrid,
     mapReplay,
@@ -246,6 +255,7 @@ function dependencies() {
     profiles,
     follow,
     activity,
+    onboarding,
     gridClaim,
     mapGrid,
     mapReplay,
@@ -1034,7 +1044,7 @@ describe('webRouter', () => {
         }),
       });
       expect(response.status).toBe(303);
-      expect(response.headers.get('location')).toBe('/personal');
+      expect(response.headers.get('location')).toBe('/activity?onboardingStep=first-flight');
       expect(response.headers.get('set-cookie')).toContain(
         'glidehero_session=new-token; Max-Age=604800; Path=/; HttpOnly; SameSite=Lax',
       );
@@ -1463,6 +1473,54 @@ describe('webRouter', () => {
         scope: 'yours',
       });
       expect(base.activity.getStatistics).not.toHaveBeenCalled();
+    });
+  });
+
+  it('renders and updates durable onboarding state only for authenticated users', async () => {
+    const base = dependencies();
+    vi.mocked(base.onboarding.getState).mockResolvedValue({
+      dismissed: false,
+      completeCount: 1,
+      totalCount: 6,
+      coreComplete: false,
+      allComplete: false,
+      shouldPoll: false,
+      firstFlightId: null,
+      firstFlightStatus: 'not-started',
+      historyStatus: 'not-started',
+      steps: { profile: true, 'first-flight': false, 'personal-map': false, 'follow-pilots': false, glider: false, history: false },
+    });
+    await withServer(base.app, async (baseUrl) => {
+      expect((await fetch(`${baseUrl}/v1/onboarding/status`)).status).toBe(401);
+
+      const headers = { cookie: 'glidehero_session=valid-token' };
+      const activityResponse = await fetch(`${baseUrl}/activity?onboardingStep=history&onboardingDismissed=1`, { headers });
+      expect(activityResponse.status).toBe(200);
+      expect(base.renderAuthenticatedPage).toHaveBeenLastCalledWith(expect.objectContaining({
+        onboarding: expect.objectContaining({
+          completeCount: 1,
+          selectedStep: expect.objectContaining({ key: 'history', uploadMode: 'history' }),
+        }),
+        onboardingDismissedNotice: false,
+      }));
+
+      const status = await fetch(`${baseUrl}/v1/onboarding/status`, { headers });
+      expect(status.status).toBe(200);
+      expect(await status.json()).toEqual({ onboarding: expect.objectContaining({ completeCount: 1, firstFlightComplete: false }) });
+
+      const dismissed = await fetch(`${baseUrl}/onboarding/dismiss`, { method: 'POST', headers: { ...headers, accept: 'application/json' } });
+      expect(dismissed.status).toBe(200);
+      expect(await dismissed.json()).toEqual({ dismissed: true });
+      expect(base.onboarding.dismiss).toHaveBeenCalledWith(user.userId);
+
+      const restored = await fetch(`${baseUrl}/onboarding/restore`, { method: 'POST', redirect: 'manual', headers });
+      expect(restored.status).toBe(303);
+      expect(restored.headers.get('location')).toBe('/activity');
+      expect(base.onboarding.restore).toHaveBeenCalledWith(user.userId);
+
+      const mapViewed = await fetch(`${baseUrl}/onboarding/personal-map-viewed`, { method: 'POST', headers });
+      expect(mapViewed.status).toBe(204);
+      expect(base.onboarding.markPersonalMapViewed).toHaveBeenCalledWith(user.userId);
     });
   });
 

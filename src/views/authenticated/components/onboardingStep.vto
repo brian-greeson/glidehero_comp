@@ -1,0 +1,9 @@
+<div class="onboarding-step{{ if step.complete }} is-complete{{ /if }}" data-onboarding-step>
+  <span class="onboarding-step__state">{{ if step.complete }}{{ include "authenticated/components/icon.vto" { name: "check" } }}{{ else }}{{ step.key === 'first-flight' ? '2' : step.key === 'personal-map' ? '3' : '•' }}{{ /if }}</span>
+  <a class="onboarding-step__copy" href="/activity?onboardingStep={{ step.key }}"><strong>{{ step.label }}</strong><small>{{ step.description }}</small></a>
+  {{ if step.uploadMode }}
+    <button type="button" data-upload-trigger data-upload-mode="{{ step.uploadMode }}" aria-controls="flight-upload-dialog">{{ step.actionLabel }}</button>
+  {{ else }}
+    <a class="onboarding-step__action" href="{{ step.href }}">{{ step.actionLabel }}</a>
+  {{ /if }}
+</div>

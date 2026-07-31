@@ -129,6 +129,11 @@ export function initializePersonalDashboard({
         map, mapElement, documentRef, fetchImpl, navigatorRef, storage,
       });
       mapReady = true;
+      void fetchImpl('/onboarding/personal-map-viewed', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { accept: 'application/json' },
+      }).catch(() => {});
       replayController = initializeMapReplayController({ documentRef, map, fetchImpl, month: period.month, color: mapElement.dataset.territoryColor });
       if (map.getBounds) await statsRequest.run(map.getBounds());
     });

@@ -105,6 +105,9 @@ export function initializeProfileLists(documentRef = document) {
     showEditor();
     void hydrateCurrentSizes();
   });
+  if (new URLSearchParams(globalThis.location?.search ?? '').get('editGlider') === '1') {
+    showEditor();
+  }
   cancel?.addEventListener('click', () => {
     invalidateSearch();
     form.hidden = true;

@@ -339,6 +339,7 @@ describe('Personal dashboard controller', () => {
     expect(fetchImpl).not.toHaveBeenCalled();
     await harness.load();
     expect(fetchImpl.mock.calls.map(([url]) => url)).toEqual([
+      '/onboarding/personal-map-viewed',
       '/v1/personal-stats?month=2026-07&west=-106&south=39&east=-104&north=41',
     ]);
     expect(harness.map.addSource).toHaveBeenCalledWith('personal-territory', {
@@ -350,8 +351,8 @@ describe('Personal dashboard controller', () => {
     expect(claimedArea.textContent).toBe('1 km²');
 
     harness.move({ west: -105, east: -103 });
-    await vi.waitFor(() => expect(fetchImpl).toHaveBeenCalledTimes(2));
-    expect(fetchImpl.mock.calls[1]?.[0]).toContain('west=-105');
+    await vi.waitFor(() => expect(fetchImpl).toHaveBeenCalledTimes(3));
+    expect(fetchImpl.mock.calls[2]?.[0]).toContain('west=-105');
   });
 
   it('selects a Personal cell and preserves it while changing the period in place', async () => {

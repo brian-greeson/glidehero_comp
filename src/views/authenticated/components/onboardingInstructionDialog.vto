@@ -1,0 +1,17 @@
+<dialog class="onboarding-instructions" data-onboarding-dialog aria-labelledby="onboarding-instruction-title">
+  <section>
+    <button type="button" class="onboarding-instructions__close" data-onboarding-dialog-close aria-label="Close instructions">&times;</button>
+    <span class="onboarding-instructions__icon">{{ include "authenticated/components/icon.vto" { name: step.key === 'history' ? 'archive' : step.key === 'follow-pilots' ? 'people' : step.key === 'glider' ? 'flight' : step.key === 'personal-map' ? 'map' : step.key === 'profile' ? 'profile' : 'upload-cloud' } }}</span>
+    <h2 id="onboarding-instruction-title">{{ step.label }}</h2>
+    <p>{{ step.description }}</p>
+    <ol>
+      {{ for item of step.instructions }}<li><span>{{ item.number }}</span><div><strong>{{ item.title }}</strong><p>{{ item.detail }}</p></div></li>{{ /for }}
+    </ol>
+    {{ if step.uploadMode }}
+      <button class="onboarding-instructions__primary" type="button" data-upload-trigger data-upload-mode="{{ step.uploadMode }}" aria-controls="flight-upload-dialog">{{ step.actionLabel }}</button>
+    {{ else }}
+      <a class="onboarding-instructions__primary" href="{{ step.href }}">{{ step.actionLabel }}</a>
+    {{ /if }}
+    <a class="onboarding-instructions__later" href="/activity">Not now</a>
+  </section>
+</dialog>

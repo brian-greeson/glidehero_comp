@@ -8,6 +8,7 @@
           <a href="{{ if typeof activityScopeLinks !== 'undefined' }}{{ activityScopeLinks.following }}{{ else }}/activity?scope=following{{ /if }}" aria-current="{{ if activityScope === 'following' }}page{{ else }}false{{ /if }}">Following</a>
           <a href="{{ if typeof activityScopeLinks !== 'undefined' }}{{ activityScopeLinks.yours }}{{ else }}/activity?scope=yours{{ /if }}" aria-current="{{ if activityScope === 'yours' }}page{{ else }}false{{ /if }}">My activity</a>
         </nav>
+        {{ if typeof onboarding !== 'undefined' && onboarding && !onboarding.dismissed && !onboarding.allComplete }}{{ include "authenticated/components/onboardingCard.vto" { onboarding } }}{{ /if }}
         {{ include "authenticated/components/sectionHeading.vto" { title: "Recent Activity" } }}
         <div class="activity-feed" data-activity-feed>
           {{ for event of events }}{{ include "authenticated/components/activityCard.vto" { event } }}{{ /for }}
@@ -15,7 +16,12 @@
             <a class="activity-load-more" data-activity-load-more data-fragment-href="{{ activityLoadMoreEndpoint }}" href="{{ activityLoadMoreHref }}">Load more activity</a>
             <p class="activity-load-more-status" data-activity-load-more-status aria-live="polite"></p>
           {{ /if }}
-          {{ if events.length === 0 }}<p class="activity-empty-feed" data-activity-empty>Nothing to show yet.</p>{{ /if }}
+          {{ if events.length === 0 }}
+            <div class="activity-empty-feed" data-activity-empty>
+              {{ if activityScope === 'following' }}<strong>Follow pilots to see their achievements and recent flights.</strong><a href="#activity-pilot-query">Find pilots</a>
+              {{ else }}<strong>Your completed recent flights and achievements will appear here.</strong><button type="button" data-upload-trigger data-upload-mode="recent">Upload a flight</button>{{ /if }}
+            </div>
+          {{ /if }}
         </div>
       </section>
       <aside class="activity-rail">
@@ -51,4 +57,7 @@
       </aside>
     </div>
   </section>
+  {{ if typeof onboardingDismissedNotice !== 'undefined' && onboardingDismissedNotice }}
+    <aside class="onboarding-hidden-notice" data-onboarding-hidden-notice role="status"><div><strong>Getting started hidden</strong><span>You can restore it any time from the account menu.</span></div><form method="post" action="/onboarding/restore" data-onboarding-restore-form><button type="submit">Undo</button></form><button type="button" data-onboarding-notice-close aria-label="Close">&times;</button></aside>
+  {{ /if }}
 {{ /layout }}

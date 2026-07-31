@@ -4,6 +4,72 @@ import { describe, expect, it, vi } from 'vitest';
 import { initializeActivityUi } from '../../public/scripts/app-ui/activity.js';
 
 describe('refreshed Activity interactions', () => {
+  it('clears the selected onboarding step when instructions close', () => {
+    const dialogListeners = new Map<string, () => void>();
+    const closeListeners = new Map<string, () => void>();
+    const dialog: any = {
+      open: false,
+      showModal() { this.open = true; },
+      close() { this.open = false; dialogListeners.get('close')?.(); },
+      addEventListener(name: string, listener: () => void) { dialogListeners.set(name, listener); },
+    };
+    const close: any = { addEventListener(name: string, listener: () => void) { closeListeners.set(name, listener); } };
+    const replaceState = vi.fn();
+    vi.stubGlobal('window', {
+      location: { href: 'https://glidehero.test/activity?scope=yours&onboardingStep=history' },
+      history: { replaceState },
+    });
+    initializeActivityUi({
+      querySelector(selector: string) {
+        if (selector === '[data-onboarding-dialog]') return dialog;
+        if (selector === '[data-onboarding-dialog-close]') return close;
+        return null;
+      },
+      querySelectorAll: () => [],
+    } as any, vi.fn() as any);
+
+    expect(dialog.open).toBe(true);
+    closeListeners.get('click')?.();
+
+    expect(dialog.open).toBe(false);
+    expect(replaceState).toHaveBeenCalledWith(null, '', '/activity?scope=yours');
+    vi.unstubAllGlobals();
+  });
+
+  it('does not reopen an old first-flight result when only history progress changes', async () => {
+    const timers: Array<() => Promise<void>> = [];
+    const assign = vi.fn();
+    const reload = vi.fn();
+    const card: any = {
+      dataset: { poll: 'true', statusKey: '3:completed:processing', firstFlightComplete: 'true' },
+      isConnected: false,
+      querySelector: () => null,
+      addEventListener: vi.fn(),
+    };
+    vi.stubGlobal('window', {
+      setTimeout(callback: () => Promise<void>) { timers.push(callback); },
+      location: { assign, reload },
+    });
+    const fetchImpl = vi.fn(async () => ({
+      ok: true,
+      json: async () => ({ onboarding: {
+        statusKey: '4:completed:completed',
+        steps: [{ key: 'first-flight', complete: true, href: '/flights/first-flight-id' }],
+      } }),
+    }));
+    initializeActivityUi({
+      querySelector: (selector: string) => selector === '[data-onboarding-card]' ? card : null,
+      querySelectorAll: () => [],
+    } as any, fetchImpl as any);
+
+    expect(timers).toHaveLength(1);
+    await timers[0]!();
+
+    expect(assign).not.toHaveBeenCalled();
+    expect(reload).toHaveBeenCalledOnce();
+    vi.unstubAllGlobals();
+  });
+
   it('updates a Like button from the JSON response', async () => {
     const listeners = new Map<string, (event: any) => void>();
     const button = {

@@ -1,5 +1,83 @@
 /** Progressive enhancement for the refreshed Activity page. */
 export function initializeActivityUi(documentRef = document, fetchImpl = fetch) {
+  const onboardingCard = documentRef.querySelector('[data-onboarding-card]');
+  const onboardingDialog = documentRef.querySelector('[data-onboarding-dialog]');
+  const onboardingClose = documentRef.querySelector('[data-onboarding-dialog-close]');
+  if (onboardingDialog?.showModal && !onboardingDialog.open) onboardingDialog.showModal();
+  const clearInstructionLocation = () => {
+    const locationRef = globalThis.window?.location;
+    const historyRef = globalThis.window?.history;
+    if (!locationRef?.href || !historyRef?.replaceState) return;
+    const url = new URL(locationRef.href);
+    if (!url.searchParams.has('onboardingStep')) return;
+    url.searchParams.delete('onboardingStep');
+    historyRef.replaceState(null, '', `${url.pathname}${url.search}${url.hash}`);
+  };
+  const closeInstructions = () => {
+    if (onboardingDialog?.open) onboardingDialog.close();
+    clearInstructionLocation();
+  };
+  onboardingClose?.addEventListener('click', closeInstructions);
+  onboardingDialog?.addEventListener('click', (event) => {
+    if (event.target === onboardingDialog || event.target?.closest?.('[data-upload-trigger]')) closeInstructions();
+  });
+  onboardingDialog?.addEventListener('close', clearInstructionLocation);
+  for (const link of documentRef.querySelectorAll?.('a[href="#activity-pilot-query"]') ?? []) {
+    link.addEventListener('click', () => documentRef.querySelector('#activity-pilot-query')?.focus?.());
+  }
+
+  const collapse = onboardingCard?.querySelector?.('[data-onboarding-collapse]');
+  const onboardingBody = onboardingCard?.querySelector?.('[data-onboarding-body]');
+  collapse?.addEventListener('click', () => {
+    const expanded = collapse.getAttribute('aria-expanded') !== 'true';
+    collapse.setAttribute('aria-expanded', String(expanded));
+    onboardingBody.hidden = !expanded;
+  });
+  onboardingCard?.addEventListener('click', (event) => {
+    const row = event.target?.closest?.('[data-onboarding-step]');
+    if (!row || event.target?.closest?.('a, button')) return;
+    row.querySelector?.('.onboarding-step__copy')?.click?.();
+  });
+
+  const postAndNavigate = async (form, destination) => {
+    const response = await fetchImpl(form.action, { method: 'POST', headers: { Accept: 'application/json' } });
+    if (!response.ok) throw new Error('Onboarding request failed.');
+    globalThis.window?.location?.assign?.(destination);
+  };
+  const dismissForm = onboardingCard?.querySelector?.('[data-onboarding-dismiss-form]');
+  dismissForm?.addEventListener('submit', (event) => {
+    event.preventDefault();
+    void postAndNavigate(dismissForm, '/activity?onboardingDismissed=1').catch(() => dismissForm.submit());
+  });
+  for (const restoreForm of documentRef.querySelectorAll?.('[data-onboarding-restore-form]') ?? []) {
+    restoreForm.addEventListener('submit', (event) => {
+      event.preventDefault();
+      void postAndNavigate(restoreForm, '/activity').catch(() => restoreForm.submit());
+    });
+  }
+  documentRef.querySelector('[data-onboarding-notice-close]')?.addEventListener('click', (event) => {
+    event.target.closest('[data-onboarding-hidden-notice]')?.remove();
+  });
+
+  if (onboardingCard?.dataset.poll === 'true') {
+    const statusKey = onboardingCard.dataset.statusKey;
+    const firstFlightWasComplete = onboardingCard.dataset.firstFlightComplete === 'true';
+    const pollOnboarding = async () => {
+      try {
+        const response = await fetchImpl('/v1/onboarding/status', { headers: { Accept: 'application/json' } });
+        const result = await response.json();
+        if (response.ok && result.onboarding?.statusKey !== statusKey) {
+          const firstFlight = result.onboarding?.steps?.find?.((step) => step.key === 'first-flight');
+          if (!firstFlightWasComplete && firstFlight?.complete && firstFlight.href?.startsWith('/flights/')) globalThis.window?.location?.assign?.(firstFlight.href);
+          else globalThis.window?.location?.reload?.();
+          return;
+        }
+      } catch { /* The next page visit will reconcile progress. */ }
+      if (onboardingCard.isConnected !== false) globalThis.window?.setTimeout?.(pollOnboarding, 5_000);
+    };
+    globalThis.window?.setTimeout?.(pollOnboarding, 5_000);
+  }
+
   const statistics = documentRef.querySelector('[data-activity-stats]');
   if (statistics) {
     statistics.addEventListener('click', (event) => {

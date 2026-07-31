@@ -72,6 +72,7 @@ export type AuthenticatedShellModel = {
   adminUrl: string;
   logoutUrl: string;
   showFooter: boolean;
+  gettingStarted?: { dismissed: boolean };
 };
 
 /**
@@ -146,6 +147,30 @@ export type ActivityStatisticsView = {
   daily: ActivityPeriodStatisticsView;
 };
 
+export type OnboardingStepView = {
+  key: 'profile' | 'first-flight' | 'personal-map' | 'follow-pilots' | 'glider' | 'history';
+  label: string;
+  description: string;
+  complete: boolean;
+  actionLabel: string;
+  href: string;
+  uploadMode?: 'recent' | 'history';
+  instructions: Array<{ number: number; title: string; detail: string }>;
+};
+
+export type OnboardingView = {
+  dismissed: boolean;
+  completeCount: number;
+  totalCount: number;
+  coreComplete: boolean;
+  allComplete: boolean;
+  shouldPoll: boolean;
+  statusKey: string;
+  firstFlightComplete: boolean;
+  steps: OnboardingStepView[];
+  selectedStep?: OnboardingStepView;
+};
+
 export type ActivityPageModel = AuthenticatedShellModel & {
   page: 'activity';
   events: ActivityEventView[];
@@ -157,6 +182,8 @@ export type ActivityPageModel = AuthenticatedShellModel & {
   activityScope?: 'following' | 'yours';
   activityLoadMoreHref?: string;
   activityLoadMoreEndpoint?: string;
+  onboarding?: OnboardingView;
+  onboardingDismissedNotice?: boolean;
 };
 
 export type AchievementsPageModel = AuthenticatedShellModel & {

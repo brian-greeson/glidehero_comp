@@ -10,7 +10,7 @@
         aria-label="Close upload status">&times;</button>
     </header>
     <div class="flight-upload-content">
-      <section class="flight-upload-recent" aria-labelledby="recent-flight-upload-title">
+      <section class="flight-upload-recent" data-upload-recent-section aria-labelledby="recent-flight-upload-title">
         <header class="flight-upload-option-heading">
           <span class="flight-upload-file-badge">{{ include "authenticated/components/icon.vto" { name: "file" } }}<small>.IGC</small></span>
           <div><h3 id="recent-flight-upload-title">Recent flight upload</h3><p>Use this for your normal uploads.</p></div>
@@ -33,8 +33,8 @@
         <span class="flight-upload-file-badge flight-upload-file-badge--zip">{{ include "authenticated/components/icon.vto" { name: "archive" } }}<small>.ZIP</small></span>
         <div class="flight-upload-history-copy">
           <h3 id="historical-flight-upload-title">Import older flight history</h3>
-          <p>Optional for onboarding.</p>
-          <p class="flight-upload-bulk-help">Upload a ZIP of older IGC files. Historical imports may take longer. <span class="flight-upload-bulk-limit">Only one bulk import can run at a time.</span></p>
+          <p>Reveal your full Personal Map and achievement history.</p>
+          <p class="flight-upload-bulk-help">Upload a ZIP of older IGC files. Flights are evaluated oldest to newest using their recorded dates, regardless of file order. They update your map and achievements, but do not appear in Activity. <span class="flight-upload-bulk-limit">Only one history import can run at a time.</span></p>
         </div>
         <div class="flight-upload-history-actions">
           <label class="flight-upload-action flight-upload-action--secondary">Bulk historical upload<input data-upload-bulk-input type="file" aria-label="Bulk historical upload"></label>

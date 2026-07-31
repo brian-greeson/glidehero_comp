@@ -1,6 +1,8 @@
 import { createHash } from 'node:crypto';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { createAuthService } from '../../src/services/authService.js';
+import { createOnboardingService } from '../../src/services/onboardingService.js';
+import { bulkImports, flights, igcFiles, regularUploadBatches, regularUploadMembers } from '../../src/db/schema.js';
 import { resetAndMigrateTestDatabase } from './database.js';
 
 let database: Awaited<ReturnType<typeof resetAndMigrateTestDatabase>>;
@@ -18,6 +20,59 @@ afterAll(async () => {
 });
 
 describe('authService', () => {
+  it('enrolls new accounts in optional onboarding and persists dismissal and map progress', async () => {
+    const onboarding = createOnboardingService(database.db);
+    const auth = createAuthService(database.db, { sessionTtlSeconds: 604800 }, undefined, onboarding);
+    const result = await auth.signup({ email: 'onboarding@example.com', password: 'correct horse battery staple' });
+
+    await expect(onboarding.getState(result.user.userId)).resolves.toMatchObject({
+      dismissed: false,
+      completeCount: 1,
+      steps: { profile: true, 'first-flight': false, 'personal-map': false },
+    });
+    await onboarding.markPersonalMapViewed(result.user.userId);
+    await onboarding.dismiss(result.user.userId);
+    await expect(onboarding.getState(result.user.userId)).resolves.toMatchObject({
+      dismissed: true,
+      completeCount: 2,
+      steps: { 'personal-map': true },
+    });
+    await onboarding.restore(result.user.userId);
+    await expect(onboarding.getState(result.user.userId)).resolves.toMatchObject({ dismissed: false });
+  });
+
+  it('keeps historical imports separate from the first recent-flight milestone', async () => {
+    const onboarding = createOnboardingService(database.db);
+    const auth = createAuthService(database.db, { sessionTtlSeconds: 604800 }, undefined, onboarding);
+    const result = await auth.signup({ email: 'upload-kinds@example.com', password: 'correct horse battery staple' });
+    const [historicalFile] = await database.db.insert(igcFiles).values({
+      userId: result.user.userId, originalFilename: 'historical.igc', contentType: 'application/octet-stream', byteSize: 1, bucketKey: 'onboarding/historical.igc',
+    }).returning({ id: igcFiles.id });
+    const [historicalFlight] = await database.db.insert(flights).values({
+      userId: result.user.userId, igcFileId: historicalFile!.id, contentHash: 'historical-onboarding', processingStatus: 'completed',
+      startedAt: new Date('2025-01-01T12:00:00Z'), processedAt: new Date('2026-07-31T12:00:00Z'),
+    }).returning({ id: flights.id });
+    await database.db.insert(bulkImports).values({ userId: result.user.userId, phase: 'completed' });
+
+    await expect(onboarding.getState(result.user.userId)).resolves.toMatchObject({
+      firstFlightId: null,
+      firstFlightStatus: 'not-started',
+      historyStatus: 'completed',
+      steps: { 'first-flight': false, history: true },
+    });
+
+    const [batch] = await database.db.insert(regularUploadBatches).values({ userId: result.user.userId, status: 'sealed' }).returning({ id: regularUploadBatches.id });
+    await database.db.insert(regularUploadMembers).values({
+      batchId: batch!.id, userId: result.user.userId, flightId: historicalFlight!.id,
+      startedAt: new Date('2025-01-01T12:00:00Z'), status: 'completed',
+    });
+    await expect(onboarding.getState(result.user.userId)).resolves.toMatchObject({
+      firstFlightId: historicalFlight!.id,
+      firstFlightStatus: 'completed',
+      steps: { 'first-flight': true, history: true },
+    });
+  });
+
   it('creates a normalized account, credential, profile, and session atomically', async () => {
     const auth = createAuthService(database.db, { sessionTtlSeconds: 604800 });
     const result = await auth.signup({

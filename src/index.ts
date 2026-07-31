@@ -49,6 +49,7 @@ import { createUserHistoryRebuildService } from './services/userHistoryRebuildSe
 import { createFlightDetailService } from './services/flightDetailService.js';
 import { createMapReplayService } from './services/mapReplayService.js';
 import { createCellFlightTrackService } from './services/cellFlightTrackService.js';
+import { createOnboardingService } from './services/onboardingService.js';
 
 const config = parseConfig(process.env);
 const { db } = createDatabase(config.databaseUrl);
@@ -78,7 +79,8 @@ const flightProcessingControl = createFlightProcessingControlService(valkey);
 const arenaLeadership = createArenaLeadershipReconciliationService(db, { cellSize: config.gridClaimCellSize });
 const userAchievementProgress = createUserAchievementProgressService(db, { cellSize: config.gridClaimCellSize });
 const userArenaProgress = createUserArenaProgressService(db, { cellSize: config.gridClaimCellSize });
-const auth = createAuthService(db, { sessionTtlSeconds: config.sessionTtlSeconds }, userAchievementProgress);
+const onboarding = createOnboardingService(db);
+const auth = createAuthService(db, { sessionTtlSeconds: config.sessionTtlSeconds }, userAchievementProgress, onboarding);
 const gridClaim = createGridClaimService(db, { cellSize: config.gridClaimCellSize }, undefined, undefined, arenaLeadership, userAchievementProgress, userArenaProgress);
 const adminAreas = createAdminAreaService(db, { cellSize: config.gridClaimCellSize }, arenaLeadership, userArenaProgress, userAchievementProgress);
 const arenas = createArenaService(db, { cellSize: config.gridClaimCellSize });
@@ -155,6 +157,7 @@ const webMiddleware = [
     profiles,
     follow,
     activity,
+    onboarding,
     flightDetail,
     mapReplay,
     gridClaim,

@@ -4,6 +4,7 @@ import type { Database } from '../db/client.js';
 import { appSessions, profiles, userPasswords, users } from '../db/schema.js';
 import { hashPassword, verifyPassword } from './passwordService.js';
 import type { UserAchievementProgressService } from './userAchievementProgressService.js';
+import type { OnboardingService } from './onboardingService.js';
 
 export type AuthenticatedUser = {
   userId: string;
@@ -58,6 +59,7 @@ export function createAuthService(
   database: Database,
   options: { sessionTtlSeconds: number },
   userAchievementProgress?: Pick<UserAchievementProgressService, 'initializeInTransaction'>,
+  onboarding?: Pick<OnboardingService, 'initializeInTransaction'>,
 ): AuthService {
   const expiresAt = () => new Date(Date.now() + options.sessionTtlSeconds * 1000);
 
@@ -84,6 +86,7 @@ export function createAuthService(
           if (userAchievementProgress) {
             await userAchievementProgress.initializeInTransaction(tx, user.id);
           }
+          if (onboarding) await onboarding.initializeInTransaction(tx, user.id);
 
           const [session] = await tx
             .insert(appSessions)

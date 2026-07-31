@@ -151,6 +151,20 @@ export const flights = pgTable(
   ],
 );
 
+/** Durable progress through the optional, new-account onboarding experience. */
+export const userOnboardingState = pgTable('user_onboarding_state', {
+  userId: uuid('user_id').primaryKey().references(() => users.id, { onDelete: 'cascade' }),
+  firstFlightId: uuid('first_flight_id').references(() => flights.id, { onDelete: 'set null' }),
+  firstFlightCompletedAt: timestamp('first_flight_completed_at', { withTimezone: true, mode: 'date' }),
+  personalMapViewedAt: timestamp('personal_map_viewed_at', { withTimezone: true, mode: 'date' }),
+  followedThreePilotsAt: timestamp('followed_three_pilots_at', { withTimezone: true, mode: 'date' }),
+  gliderAddedAt: timestamp('glider_added_at', { withTimezone: true, mode: 'date' }),
+  historyImportCompletedAt: timestamp('history_import_completed_at', { withTimezone: true, mode: 'date' }),
+  dismissedAt: timestamp('dismissed_at', { withTimezone: true, mode: 'date' }),
+  completedAt: timestamp('completed_at', { withTimezone: true, mode: 'date' }),
+  ...timestamps,
+});
+
 export const regularUploadBatches = pgTable('regular_upload_batches', {
   id: uuid('id').primaryKey().defaultRandom(),
   userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),

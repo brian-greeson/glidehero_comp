@@ -28,7 +28,9 @@ async function jsonRequest(url, options = {}) {
 }
 
 export function initializeFlightUploads(documentRef = document, windowRef = globalThis.window) {
-  const uploadTrigger = documentRef.querySelector('[data-upload-trigger]');
+  const primaryUploadTrigger = documentRef.querySelector('[data-upload-trigger]');
+  const uploadTriggers = [primaryUploadTrigger, ...documentRef.querySelectorAll('[data-upload-trigger][data-upload-mode]')]
+    .filter((trigger, index, all) => trigger && all.indexOf(trigger) === index && (trigger === primaryUploadTrigger || trigger.dataset?.uploadMode));
   const uploadDialog = documentRef.querySelector('[data-upload-dialog]');
   const uploadClose = documentRef.querySelector('[data-upload-close]');
   const uploadList = documentRef.querySelector('[data-upload-list]');
@@ -42,7 +44,7 @@ export function initializeFlightUploads(documentRef = document, windowRef = glob
   const dropzone = documentRef.querySelector('[data-upload-dropzone]');
   const bulkInput = documentRef.querySelector('[data-upload-bulk-input]');
   const bulkCancel = documentRef.querySelector('[data-upload-bulk-cancel]');
-  if (!windowRef || !uploadTrigger || !uploadDialog || !uploadList || !uploadFailures || !uploadProgressState || !uploadMessage || !processingState || !processingMessage || !overall || !progressBar) return;
+  if (!windowRef || uploadTriggers.length === 0 || !uploadDialog || !uploadList || !uploadFailures || !uploadProgressState || !uploadMessage || !processingState || !processingMessage || !overall || !progressBar) return;
   const inputs = [...documentRef.querySelectorAll('[data-upload-more-input]')];
 
   const pending = [];
@@ -70,7 +72,9 @@ export function initializeFlightUploads(documentRef = document, windowRef = glob
 
   function updateUploadTrigger() {
     const localWorkActive = selected > settled || currentReservations.size > 0;
-    uploadTrigger.textContent = localWorkActive || serverTotal > serverFinished ? 'Upload Status' : 'Upload';
+    for (const trigger of uploadTriggers) {
+      if (!trigger.dataset?.uploadMode) trigger.textContent = localWorkActive || serverTotal > serverFinished ? 'Upload Status' : 'Upload';
+    }
   }
 
   function updateOverall() {
@@ -291,7 +295,9 @@ export function initializeFlightUploads(documentRef = document, windowRef = glob
     if (requestId === progressRequestId && uploadDialog.open) scheduleProgressPoll();
   }
 
-  function openUploadDialog() {
+  function openUploadDialog(mode = 'recent') {
+    if (uploadDialog.dataset) uploadDialog.dataset.uploadMode = mode;
+    else uploadDialog.setAttribute?.('data-upload-mode', mode);
     if (!uploadDialog.open) uploadDialog.showModal();
     void refreshProgress();
   }
@@ -331,7 +337,9 @@ export function initializeFlightUploads(documentRef = document, windowRef = glob
     return { prepared, messages };
   }
 
-  uploadTrigger.addEventListener('click', openUploadDialog);
+  for (const trigger of uploadTriggers) {
+    trigger.addEventListener('click', () => openUploadDialog(trigger.dataset?.uploadMode || 'recent'));
+  }
   bulkCancel?.addEventListener('click', async () => {
     if (!activeBulkWorkflow) return;
     const workflow = activeBulkWorkflow;

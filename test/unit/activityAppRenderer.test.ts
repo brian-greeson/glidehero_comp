@@ -1,8 +1,31 @@
 import { describe, expect, it } from 'vitest';
 import { createAuthenticatedShellModel } from '../../src/views/authenticated/adapters/shellModel.js';
 import { createAuthenticatedPageRenderer } from '../../src/views/authenticated/renderer.js';
+import { createOnboardingView } from '../../src/views/authenticated/adapters/onboardingView.js';
 
 describe('Activity page rendering', () => {
+  it('renders the onboarding checklist, focused instructions, and reversible account action', async () => {
+    const shell = createAuthenticatedShellModel({ page: 'activity', user: { displayName: 'New Pilot' } });
+    const onboarding = createOnboardingView({
+      dismissed: false, completeCount: 1, totalCount: 6, coreComplete: false, allComplete: false, shouldPoll: false,
+      firstFlightId: null, firstFlightStatus: 'not-started', historyStatus: 'not-started',
+      steps: { profile: true, 'first-flight': false, 'personal-map': false, 'follow-pilots': false, glider: false, history: false },
+    }, 'first-flight');
+    const emptyPeriod = { flightCount: '0', mostAccomplishments: null, mostCells: null, greatestFivePointDistance: null };
+    const html = await createAuthenticatedPageRenderer()({
+      ...shell, gettingStarted: { dismissed: false }, page: 'activity', events: [], activityStats: { monthly: emptyPeriod, daily: emptyPeriod }, onboarding,
+      activitySearch: '', activityPilotResults: [], activityReturnTo: '/activity', activityScope: 'following',
+      activityScopeLinks: { following: '/activity?scope=following', yours: '/activity?scope=yours' },
+      activityLoadMoreHref: '', activityLoadMoreEndpoint: '',
+    });
+
+    expect(html).toContain('data-onboarding-card');
+    expect(html).toContain('1 of 6 complete');
+    expect(html).toContain('data-onboarding-dialog');
+    expect(html).toContain('data-upload-mode="recent"');
+    expect(html).toContain('Getting started</a>');
+  });
+
   it('renders Monthly by default, a hidden Daily panel, winner links, and no All filter', async () => {
     const shell = createAuthenticatedShellModel({
       page: 'activity',

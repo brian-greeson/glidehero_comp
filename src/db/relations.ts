@@ -18,6 +18,7 @@ export const relations = defineRelations(schema, (r) => ({
     followers: r.many.pilotFollows({ from: r.users.id, to: r.pilotFollows.followedUserId }),
     activities: r.many.activities({ from: r.users.id, to: r.activities.actorUserId }),
     activityReactions: r.many.activityReactions({ from: r.users.id, to: r.activityReactions.reactorUserId }),
+    onboarding: r.one.userOnboardingState({ from: r.users.id, to: r.userOnboardingState.userId }),
   },
   userPasswords: {
     user: r.one.users({ from: r.userPasswords.userId, to: r.users.id }),
@@ -45,6 +46,10 @@ export const relations = defineRelations(schema, (r) => ({
     personalGridClaims: r.many.personalGridClaims({ from: r.flights.id, to: r.personalGridClaims.claimFlight }),
     competitionGridClaims: r.many.competitionGridClaims({ from: r.flights.id, to: r.competitionGridClaims.claimFlight }),
     activity: r.one.activities({ from: r.flights.id, to: r.activities.sourceFlightId }),
+  },
+  userOnboardingState: {
+    user: r.one.users({ from: r.userOnboardingState.userId, to: r.users.id }),
+    firstFlight: r.one.flights({ from: r.userOnboardingState.firstFlightId, to: r.flights.id }),
   },
   activities: {
     actor: r.one.users({ from: r.activities.actorUserId, to: r.users.id }),

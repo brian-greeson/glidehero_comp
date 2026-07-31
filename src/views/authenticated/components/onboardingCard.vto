@@ -1,0 +1,19 @@
+<section class="onboarding-card{{ if onboarding.coreComplete }} is-collapsed{{ /if }}" data-onboarding-card data-status-key="{{ onboarding.statusKey }}" data-first-flight-complete="{{ onboarding.firstFlightComplete }}" data-poll="{{ onboarding.shouldPoll }}" aria-labelledby="onboarding-card-title">
+  <header class="onboarding-card__header">
+    <span class="onboarding-card__star">{{ include "authenticated/components/icon.vto" { name: "star" } }}</span>
+    <div><h2 id="onboarding-card-title">Getting started</h2><p>Complete the essentials, then explore more ways to use GlideHero.</p></div>
+    <span class="onboarding-card__count">{{ onboarding.completeCount }} of {{ onboarding.totalCount }} complete</span>
+    <button type="button" class="onboarding-card__collapse" data-onboarding-collapse aria-expanded="{{ if onboarding.coreComplete }}false{{ else }}true{{ /if }}" aria-label="Toggle getting started checklist">{{ include "authenticated/components/icon.vto" { name: "chevron-down" } }}</button>
+    <form method="post" action="/onboarding/dismiss" data-onboarding-dismiss-form><button type="submit" aria-label="Hide getting started">&times;</button></form>
+  </header>
+  <div class="onboarding-card__body" data-onboarding-body{{ if onboarding.coreComplete }} hidden{{ /if }}>
+    <div class="onboarding-card__group">
+      <h3>Core setup</h3>
+      {{ for step of onboarding.steps.slice(0, 3) }}{{ include "authenticated/components/onboardingStep.vto" { step } }}{{ /for }}
+    </div>
+    <div class="onboarding-card__group onboarding-card__group--more">
+      <h3>More ways to use GlideHero</h3>
+      {{ for step of onboarding.steps.slice(3) }}{{ include "authenticated/components/onboardingStep.vto" { step } }}{{ /for }}
+    </div>
+  </div>
+</section>

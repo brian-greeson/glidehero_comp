@@ -69,6 +69,8 @@ a { color: inherit; }
 .flight-upload-divider::before, .flight-upload-divider::after { height: 1px; flex: 1 1 auto; background: var(--app-border); content: ''; }
 .flight-upload-divider span { flex: 0 0 auto; }
 .flight-upload-history { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 1rem; padding: 1rem 1.15rem; border: 1px solid var(--app-border); border-radius: .75rem; background: #fff; }
+.flight-upload-dialog[data-upload-mode='history'] .flight-upload-history { border-color: var(--app-blue); background: linear-gradient(135deg, #f2f8ff, #eef7ff); box-shadow: 0 0 0 3px rgb(8 105 247 / 8%); }
+.flight-upload-dialog[data-upload-mode='history'] .flight-upload-recent { border-color: var(--app-border); background: #fff; }
 .flight-upload-history-copy { min-width: 0; }
 .flight-upload-bulk-help { max-width: 25rem; }
 .flight-upload-history-actions { display: grid; justify-items: end; gap: .45rem; }

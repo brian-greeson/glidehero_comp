@@ -44,6 +44,8 @@ import type { FlightDetailService } from '../services/flightDetailService.js';
 import { createFlightMapPayload, createFlightPageView } from '../views/authenticated/adapters/flightDetailView.js';
 import type { CellFlightTrackService } from '../services/cellFlightTrackService.js';
 import type { MapReplayService } from '../services/mapReplayService.js';
+import type { OnboardingService, OnboardingStepKey } from '../services/onboardingService.js';
+import { createOnboardingView } from '../views/authenticated/adapters/onboardingView.js';
 
 const email = z.string().trim().toLowerCase().pipe(z.email());
 const password = z.string().min(3).max(128);
@@ -64,10 +66,13 @@ const competitionMonthValue = z.string().refine((value) => {
 const competitionMonthSchema = z.object({ month: competitionMonthValue.optional(), scope: z.literal('following').optional() }).strict();
 const personalPeriodSchema = z.object({ month: competitionMonthValue.optional() }).strict();
 const pilotUserIdSchema = z.string().uuid();
+const onboardingStepSchema = z.enum(['profile', 'first-flight', 'personal-map', 'follow-pilots', 'glider', 'history']);
 const activityQuerySchema = z.object({
   q: z.string().max(100).optional(),
   before: z.string().min(1).optional(),
   scope: z.enum(['following', 'yours']).optional(),
+  onboardingStep: onboardingStepSchema.optional(),
+  onboardingDismissed: z.literal('1').optional(),
 }).strict();
 const emptyActivityStatistics: ActivityStatistics = {
   daily: {
@@ -217,6 +222,7 @@ export function createWebRouter(dependencies: {
   flightDetail?: FlightDetailService;
   cellFlightTracks?: CellFlightTrackService;
   mapReplay?: MapReplayService;
+  onboarding?: OnboardingService;
 }) {
   const router = Router();
   const territoryTileSettings = dependencies.territoryTileSettings ?? createTerritoryTileSettingsService();
@@ -1114,12 +1120,15 @@ export function createWebRouter(dependencies: {
     const query = parsed.data.q?.trim() ?? '';
     const scope = parsed.data.scope ?? 'following';
     try {
-      const [activityFeed, activityStatistics] = await Promise.all([
+      const [activityFeed, activityStatistics, onboardingState] = await Promise.all([
         dependencies.activity
           ? dependencies.activity.listFeed({ viewerUserId: currentUser.userId, limit: 20, before: parsed.data.before, q: query, scope })
           : Promise.resolve({ items: [], nextCursor: null }),
         !fragment && dependencies.activity
           ? dependencies.activity.getStatistics({ viewerUserId: currentUser.userId, q: query, scope })
+          : Promise.resolve(null),
+        !fragment && dependencies.onboarding
+          ? dependencies.onboarding.getState(currentUser.userId)
           : Promise.resolve(null),
       ]);
       const activityParams = new URLSearchParams();
@@ -1152,8 +1161,12 @@ export function createWebRouter(dependencies: {
         return;
       }
       const shell = authenticatedShell('activity', currentUser);
+      const onboarding = onboardingState
+        ? createOnboardingView(onboardingState, parsed.data.onboardingStep as OnboardingStepKey | undefined)
+        : undefined;
       await renderAuthenticated(res, dependencies.renderAuthenticatedPage, 200, {
         ...shell,
+        gettingStarted: onboarding && !onboarding.allComplete ? { dismissed: onboarding.dismissed } : undefined,
         page: 'activity',
         events: activityFeedToViews(activityFeed.items, { thumbnailUrls }),
         activityStats: activityStatsToView(activityStatistics ?? emptyActivityStatistics),
@@ -1164,6 +1177,8 @@ export function createWebRouter(dependencies: {
         activityScope: scope,
         activityLoadMoreHref,
         activityLoadMoreEndpoint,
+        onboarding,
+        onboardingDismissedNotice: Boolean(onboarding?.dismissed && parsed.data.onboardingDismissed === '1'),
       });
     } catch (error) {
       if (error instanceof ActivityCursorError) {
@@ -1177,6 +1192,62 @@ export function createWebRouter(dependencies: {
   router.get('/activity/feed', (req, res, next) => activityFeedRequest(req, res, next, true));
 
   router.get('/activity', (req, res, next) => activityFeedRequest(req, res, next, false));
+
+  router.get('/v1/onboarding/status', async (req, res, next) => {
+    const currentUser = res.locals.currentUser;
+    if (!currentUser) {
+      next(new AppError(401, 'unauthorized', 'Sign in before viewing onboarding.'));
+      return;
+    }
+    if (!dependencies.onboarding) {
+      res.status(404).json({ error: { code: 'not_found', message: 'Onboarding is not available.' } });
+      return;
+    }
+    try {
+      const state = await dependencies.onboarding.getState(currentUser.userId);
+      res.status(200).json(state ? { onboarding: createOnboardingView(state) } : { onboarding: null });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.post('/onboarding/dismiss', async (req, res, next) => {
+    const currentUser = res.locals.currentUser;
+    if (!currentUser || !dependencies.onboarding) {
+      next(new AppError(401, 'unauthorized', 'Sign in before updating onboarding.'));
+      return;
+    }
+    try {
+      await dependencies.onboarding.dismiss(currentUser.userId);
+      if (req.get('accept')?.includes('application/json')) res.status(200).json({ dismissed: true });
+      else res.redirect(303, '/activity?onboardingDismissed=1');
+    } catch (error) { next(error); }
+  });
+
+  router.post('/onboarding/restore', async (req, res, next) => {
+    const currentUser = res.locals.currentUser;
+    if (!currentUser || !dependencies.onboarding) {
+      next(new AppError(401, 'unauthorized', 'Sign in before updating onboarding.'));
+      return;
+    }
+    try {
+      await dependencies.onboarding.restore(currentUser.userId);
+      if (req.get('accept')?.includes('application/json')) res.status(200).json({ dismissed: false });
+      else res.redirect(303, '/activity');
+    } catch (error) { next(error); }
+  });
+
+  router.post('/onboarding/personal-map-viewed', async (req, res, next) => {
+    const currentUser = res.locals.currentUser;
+    if (!currentUser || !dependencies.onboarding) {
+      next(new AppError(401, 'unauthorized', 'Sign in before updating onboarding.'));
+      return;
+    }
+    try {
+      await dependencies.onboarding.markPersonalMapViewed(currentUser.userId);
+      res.status(204).end();
+    } catch (error) { next(error); }
+  });
 
   router.post('/activities/:activityId/like', async (req, res, next) => {
     const wantsJson = req.get('accept')?.toLowerCase().includes('application/json') ?? false;
@@ -1499,7 +1570,7 @@ export function createWebRouter(dependencies: {
         displayName: parsed.data.displayName || undefined,
       });
       res.setHeader('set-cookie', dependencies.cookie.set(session.token));
-      res.redirect(303, '/personal');
+      res.redirect(303, '/activity?onboardingStep=first-flight');
     } catch (error) {
       if (error instanceof AuthFailure && error.code === 'duplicate_email') {
         await render(res, dependencies.renderPage, 409, {
