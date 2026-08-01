@@ -170,6 +170,7 @@ function dependencies() {
     dismiss: vi.fn(async () => true),
     restore: vi.fn(async () => true),
     markPersonalMapViewed: vi.fn(async () => true),
+    markCompetitiveMapViewed: vi.fn(async () => true),
   };
   const gridClaim: GridClaimService = {
     getViewportStats: vi.fn(async () => viewportStats),
@@ -895,7 +896,7 @@ describe('webRouter', () => {
   });
 
   it('renders map pages as current-month by default and keeps all time explicit', async () => {
-    const { app, renderAuthenticatedPage } = dependencies();
+    const { app, onboarding, renderAuthenticatedPage } = dependencies();
     await withServer(app, async (baseUrl) => {
       const headers = { cookie: 'glidehero_session=valid-token' };
 
@@ -918,6 +919,7 @@ describe('webRouter', () => {
       }));
 
       expect((await fetch(`${baseUrl}/following?month=2026-07`, { headers })).status).toBe(200);
+      expect(onboarding.markCompetitiveMapViewed).toHaveBeenCalledWith(user.userId);
       expect(renderAuthenticatedPage).toHaveBeenLastCalledWith(expect.objectContaining({
         mode: 'following',
         period: 'current-month',
@@ -1481,14 +1483,14 @@ describe('webRouter', () => {
     vi.mocked(base.onboarding.getState).mockResolvedValue({
       dismissed: false,
       completeCount: 1,
-      totalCount: 6,
+      totalCount: 7,
       coreComplete: false,
       allComplete: false,
       shouldPoll: false,
       firstFlightId: null,
       firstFlightStatus: 'not-started',
       historyStatus: 'not-started',
-      steps: { profile: true, 'first-flight': false, 'personal-map': false, 'follow-pilots': false, glider: false, history: false },
+      steps: { profile: true, 'first-flight': false, 'personal-map': false, 'follow-pilots': false, 'competitive-map': false, glider: false, history: false },
     });
     await withServer(base.app, async (baseUrl) => {
       expect((await fetch(`${baseUrl}/v1/onboarding/status`)).status).toBe(401);

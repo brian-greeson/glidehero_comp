@@ -66,7 +66,7 @@ const competitionMonthValue = z.string().refine((value) => {
 const competitionMonthSchema = z.object({ month: competitionMonthValue.optional(), scope: z.literal('following').optional() }).strict();
 const personalPeriodSchema = z.object({ month: competitionMonthValue.optional() }).strict();
 const pilotUserIdSchema = z.string().uuid();
-const onboardingStepSchema = z.enum(['profile', 'first-flight', 'personal-map', 'follow-pilots', 'glider', 'history']);
+const onboardingStepSchema = z.enum(['profile', 'first-flight', 'personal-map', 'follow-pilots', 'competitive-map', 'glider', 'history']);
 const activityQuerySchema = z.object({
   q: z.string().max(100).optional(),
   before: z.string().min(1).optional(),
@@ -953,6 +953,7 @@ export function createWebRouter(dependencies: {
     }
     try {
       const selection = mapPagePeriod(req.query);
+      await dependencies.onboarding?.markCompetitiveMapViewed(currentUser.userId);
       const mapHref = `/following${selection.suffix}`;
       await renderAuthenticated(res, dependencies.renderAuthenticatedPage, 200, productionMap(currentUser, {
         mode: 'following', period: selection.period, location: 'Following', mapHref,

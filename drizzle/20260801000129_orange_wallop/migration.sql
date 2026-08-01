@@ -1,0 +1,1 @@
+ALTER TABLE "user_onboarding_state" ADD COLUMN "competitive_map_viewed_at" timestamp with time zone;

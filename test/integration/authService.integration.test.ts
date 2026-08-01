@@ -31,11 +31,12 @@ describe('authService', () => {
       steps: { profile: true, 'first-flight': false, 'personal-map': false },
     });
     await onboarding.markPersonalMapViewed(result.user.userId);
+    await onboarding.markCompetitiveMapViewed(result.user.userId);
     await onboarding.dismiss(result.user.userId);
     await expect(onboarding.getState(result.user.userId)).resolves.toMatchObject({
       dismissed: true,
-      completeCount: 2,
-      steps: { 'personal-map': true },
+      completeCount: 3,
+      steps: { 'personal-map': true, 'competitive-map': true },
     });
     await onboarding.restore(result.user.userId);
     await expect(onboarding.getState(result.user.userId)).resolves.toMatchObject({ dismissed: false });

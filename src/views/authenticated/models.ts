@@ -148,7 +148,7 @@ export type ActivityStatisticsView = {
 };
 
 export type OnboardingStepView = {
-  key: 'profile' | 'first-flight' | 'personal-map' | 'follow-pilots' | 'glider' | 'history';
+  key: 'profile' | 'first-flight' | 'personal-map' | 'follow-pilots' | 'competitive-map' | 'glider' | 'history';
   label: string;
   description: string;
   complete: boolean;

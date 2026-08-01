@@ -11,12 +11,12 @@ import {
 
 type OnboardingTransaction = Parameters<Parameters<Database['transaction']>[0]>[0];
 
-export type OnboardingStepKey = 'profile' | 'first-flight' | 'personal-map' | 'follow-pilots' | 'glider' | 'history';
+export type OnboardingStepKey = 'profile' | 'first-flight' | 'personal-map' | 'follow-pilots' | 'competitive-map' | 'glider' | 'history';
 
 export type OnboardingState = {
   dismissed: boolean;
   completeCount: number;
-  totalCount: 6;
+  totalCount: 7;
   coreComplete: boolean;
   allComplete: boolean;
   shouldPoll: boolean;
@@ -32,6 +32,7 @@ export interface OnboardingService {
   dismiss(userId: string): Promise<boolean>;
   restore(userId: string): Promise<boolean>;
   markPersonalMapViewed(userId: string): Promise<boolean>;
+  markCompetitiveMapViewed(userId: string): Promise<boolean>;
 }
 
 export function createOnboardingService(database: Database): OnboardingService {
@@ -90,11 +91,12 @@ export function createOnboardingService(database: Database): OnboardingService {
         'first-flight': Boolean(reconciled.firstFlightCompletedAt),
         'personal-map': Boolean(stored.personalMapViewedAt),
         'follow-pilots': Boolean(reconciled.followedThreePilotsAt),
+        'competitive-map': Boolean(stored.competitiveMapViewedAt),
         glider: Boolean(reconciled.gliderAddedAt),
         history: Boolean(reconciled.historyImportCompletedAt),
       } satisfies Record<OnboardingStepKey, boolean>;
       const completeCount = Object.values(steps).filter(Boolean).length;
-      const allComplete = completeCount === 6;
+      const allComplete = completeCount === 7;
       const completedAt = stored.completedAt ?? (allComplete ? now : null);
 
       if (
@@ -127,7 +129,7 @@ export function createOnboardingService(database: Database): OnboardingService {
       return {
         dismissed: Boolean(stored.dismissedAt),
         completeCount,
-        totalCount: 6,
+        totalCount: 7,
         coreComplete: steps.profile && steps['first-flight'] && steps['personal-map'],
         allComplete,
         shouldPoll: firstFlightStatus === 'processing' || ['preparing', 'processing', 'replaying'].includes(historyStatus),
@@ -157,6 +159,14 @@ export function createOnboardingService(database: Database): OnboardingService {
     async markPersonalMapViewed(userId) {
       const rows = await database.update(userOnboardingState)
         .set({ personalMapViewedAt: sql`COALESCE(${userOnboardingState.personalMapViewedAt}, now())`, updatedAt: new Date() })
+        .where(eq(userOnboardingState.userId, userId))
+        .returning({ userId: userOnboardingState.userId });
+      return rows.length > 0;
+    },
+
+    async markCompetitiveMapViewed(userId) {
+      const rows = await database.update(userOnboardingState)
+        .set({ competitiveMapViewedAt: sql`COALESCE(${userOnboardingState.competitiveMapViewedAt}, now())`, updatedAt: new Date() })
         .where(eq(userOnboardingState.userId, userId))
         .returning({ userId: userOnboardingState.userId });
       return rows.length > 0;

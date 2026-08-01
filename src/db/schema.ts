@@ -157,6 +157,7 @@ export const userOnboardingState = pgTable('user_onboarding_state', {
   firstFlightId: uuid('first_flight_id').references(() => flights.id, { onDelete: 'set null' }),
   firstFlightCompletedAt: timestamp('first_flight_completed_at', { withTimezone: true, mode: 'date' }),
   personalMapViewedAt: timestamp('personal_map_viewed_at', { withTimezone: true, mode: 'date' }),
+  competitiveMapViewedAt: timestamp('competitive_map_viewed_at', { withTimezone: true, mode: 'date' }),
   followedThreePilotsAt: timestamp('followed_three_pilots_at', { withTimezone: true, mode: 'date' }),
   gliderAddedAt: timestamp('glider_added_at', { withTimezone: true, mode: 'date' }),
   historyImportCompletedAt: timestamp('history_import_completed_at', { withTimezone: true, mode: 'date' }),

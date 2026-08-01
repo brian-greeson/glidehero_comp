@@ -31,6 +31,14 @@ const definitions: Record<OnboardingStepKey, Omit<OnboardingStepView, 'complete'
       { number: 2, title: 'Follow three pilots', detail: 'Their recent flights and achievements will appear in your Following feed.' },
     ],
   },
+  'competitive-map': {
+    key: 'competitive-map', label: 'Explore the Competitive Map', description: 'Join a fun monthly contest with the group you created.', actionLabel: 'Open Competitive Map', href: '/following',
+    instructions: [
+      { number: 1, title: 'Create your group', detail: 'The pilots you follow become the group you compete with.' },
+      { number: 2, title: 'Compete for one month', detail: 'Each month is a new, month-long contest between you and your group.' },
+      { number: 3, title: 'Follow the contest', detail: 'Open the Competitive Map to see everyone’s cells and compare progress throughout the month.' },
+    ],
+  },
   glider: {
     key: 'glider', label: 'Add your glider', description: 'Add your glider so it appears in the community.', actionLabel: 'Add glider', href: '/profile?editGlider=1',
     instructions: [
