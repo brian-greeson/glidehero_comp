@@ -11,6 +11,7 @@
     "db:push": "drizzle-kit push",
     "dev": "tsx watch --env-file=.env src/index.ts",
     "dev:worker": "tsx watch --env-file=.env src/worker.ts",
+    "prod:worker": "tsx --env-file=.env.production src/worker.ts",
     "start": "node dist/src/index.js",
     "worker": "node dist/src/worker.js",
     "test": "vitest run test/unit",
