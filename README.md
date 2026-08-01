@@ -132,6 +132,8 @@ variable at development or production data.
 - [`docs/flight-upload-deployment.md`](docs/flight-upload-deployment.md)
   describes upload infrastructure, production rollout, and data-maintenance
   procedures.
+- [`docs/thermal-data.md`](docs/thermal-data.md) describes Thermal.kk raster
+  caching, the dedicated processing worker, and admin crawl jobs.
 
 ## Production
 

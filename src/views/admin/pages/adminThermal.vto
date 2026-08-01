@@ -1,0 +1,39 @@
+{{ layout "admin/layouts/adminThermalLayout.vto" }}
+  {{ include "admin/components/adminNav.vto" { activeAdminPage: "thermal" } }}
+  <main class="admin-thermal" data-admin-thermal>
+    <section class="admin-thermal__controls">
+      <div><p class="admin-eyebrow">Historical lift data</p><h1>Thermal Data</h1><p>Draw a bounded area to cache and process its native zoom-12 tiles.</p></div>
+      {{ if success }}<p class="admin-thermal__notice">Crawl job created.</p>{{ /if }}
+      {{ if error }}<p class="admin-thermal__error">{{ error }}</p>{{ /if }}
+      <form method="post" action="/admin/thermal/jobs" data-thermal-job-form>
+        <label>Job name<input name="name" maxlength="80" required placeholder="Front Range"></label>
+        <input type="hidden" name="geometry" data-thermal-geometry>
+        <p data-thermal-selection-status>Draw one polygon on the map.</p>
+        <button type="submit" disabled data-thermal-submit>Start crawl</button>
+      </form>
+      <section><h2>Recent jobs</h2>
+        <div class="admin-thermal__jobs">
+          {{ if jobs.length === 0 }}<p>No thermal crawl jobs yet.</p>{{ /if }}
+          {{ for job of jobs }}
+            <article>
+              <div><strong>{{ job.name }}</strong><span>{{ job.status }}</span></div>
+              <p>{{ job.cachedTiles }} cached · {{ job.pendingTiles }} pending · {{ job.processingTiles }} processing · {{ job.failedTiles }} failed · {{ job.totalTiles }} total</p>
+              {{ if job.status === 'running' }}<form method="post" action="/admin/thermal/jobs/{{ job.id }}/status"><input type="hidden" name="status" value="paused"><button type="submit">Pause</button></form>{{ /if }}
+              {{ if job.status === 'running' && job.failedTiles > 0 }}<form method="post" action="/admin/thermal/jobs/{{ job.id }}/status"><input type="hidden" name="status" value="running"><button type="submit">Retry failed</button></form>{{ /if }}
+              {{ if job.status === 'paused' || job.status === 'failed' }}<form method="post" action="/admin/thermal/jobs/{{ job.id }}/status"><input type="hidden" name="status" value="running"><button type="submit">Resume</button></form>{{ /if }}
+              {{ if job.status !== 'complete' && job.status !== 'cancelled' }}<form method="post" action="/admin/thermal/jobs/{{ job.id }}/status"><input type="hidden" name="status" value="cancelled"><button type="submit" class="secondary">Cancel</button></form>{{ /if }}
+            </article>
+          {{ /for }}
+        </div>
+      </section>
+    </section>
+    <section class="admin-thermal__map-stage" aria-label="Thermal crawl target map">
+      <div class="admin-thermal__map-tools" role="toolbar" aria-label="Thermal crawl drawing tools">
+        <button type="button" data-thermal-draw>Draw area</button>
+        <button type="button" data-thermal-finish disabled>Finish</button>
+        <button type="button" data-thermal-clear disabled>Clear</button>
+      </div>
+      <div data-thermal-map data-map-style-url="{{ mapTilerStyleUrl }}"></div>
+    </section>
+  </main>
+{{ /layout }}

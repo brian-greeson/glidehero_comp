@@ -11,7 +11,7 @@
     <link rel="stylesheet" href="/styles/app-ui/flight-thumbnails.css">
     {{ if page === 'map' || page === 'flight' }}<link rel="stylesheet" href="/styles/app-ui/replay.css">{{ /if }}
     <link rel="stylesheet" href="{{ pageStylesheet }}">
-    {{ if page === 'map' || page === 'flight' }}<link rel="stylesheet" href="https://unpkg.com/maplibre-gl@5.16.0/dist/maplibre-gl.css">{{ /if }}
+    {{ if page === 'map' || page === 'plan' || page === 'flight' }}<link rel="stylesheet" href="https://unpkg.com/maplibre-gl@5.16.0/dist/maplibre-gl.css">{{ /if }}
     <title>{{ title }}</title>
   </head>
   <body class="app-ui-body app-ui-body--{{ page }}">
@@ -25,7 +25,7 @@
       {{ include "authenticated/components/flightUploadDialog.vto" }}
       {{ if page === 'activity' && typeof onboarding !== 'undefined' && onboarding && onboarding.selectedStep }}{{ include "authenticated/components/onboardingInstructionDialog.vto" { step: onboarding.selectedStep } }}{{ /if }}
     </div>
-    {{ if page === 'map' || page === 'flight' }}<script src="https://unpkg.com/maplibre-gl@5.16.0/dist/maplibre-gl.js"></script>{{ /if }}
+    {{ if page === 'map' || page === 'plan' || page === 'flight' }}<script src="https://unpkg.com/maplibre-gl@5.16.0/dist/maplibre-gl.js"></script>{{ /if }}
     <script type="module" src="/scripts/app-ui/app.js"></script>
     {{ if pageScript }}<script type="module" src="{{ pageScript }}"></script>{{ /if }}
   </body>

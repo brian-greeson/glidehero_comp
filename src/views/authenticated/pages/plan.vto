@@ -1,0 +1,37 @@
+{{ layout "authenticated/layouts/appLayout.vto" }}
+  <section class="plan-page" data-plan-page>
+    <aside class="plan-panel" aria-label="Flight plan controls">
+      <div>
+        <p class="plan-eyebrow">Thermal-guided planning</p>
+        <h1>Plan your next flight</h1>
+        <p class="plan-intro">Click the map to place fixed route points. GlideHero will favor historical thermal activity without exceeding your allowance.</p>
+      </div>
+      <label class="plan-slider">
+        <span><strong>Allowed deviation</strong><output data-plan-deviation-output>{{ defaultDeviationPercent }}%</output></span>
+        <input type="range" min="0" max="100" step="1" value="{{ defaultDeviationPercent }}" data-plan-deviation aria-describedby="plan-deviation-help">
+        <small id="plan-deviation-help">Maximum extra distance allowed for each leg.</small>
+      </label>
+      <div class="plan-actions">
+        <button type="button" data-plan-undo disabled>Undo point</button>
+        <button type="button" data-plan-delete disabled>Delete selected</button>
+        <button type="button" data-plan-reset disabled>Reset</button>
+      </div>
+      <label class="plan-thermal-toggle"><input type="checkbox" data-plan-thermal-toggle checked> Show historical thermal activity</label>
+      <dl class="plan-summary">
+        <div><dt>Direct distance</dt><dd data-plan-direct-distance>—</dd></div>
+        <div><dt>Thermal route</dt><dd data-plan-route-distance>—</dd></div>
+        <div><dt>Actual deviation</dt><dd data-plan-actual-deviation>—</dd></div>
+        <div><dt>Direct cells</dt><dd data-plan-direct-cells>0</dd></div>
+        <div><dt>Enclosed cells</dt><dd data-plan-enclosed-cells>0</dd></div>
+        <div><dt>New Personal cells</dt><dd data-plan-new-cells>0</dd></div>
+      </dl>
+      <p class="plan-status" data-plan-status role="status">Place at least two points to calculate a route.</p>
+      <p class="plan-attribution">Historical thermal activity: <a href="https://thermal.kk7.ch/">thermal.kk7.ch</a> · <a href="https://creativecommons.org/licenses/by-nc-sa/4.0/">CC BY-NC-SA 4.0</a></p>
+    </aside>
+    <section class="plan-map-stage" aria-label="Flight planning map">
+      <div class="plan-map" data-plan-map
+        data-map-style-url="{{ mapStyleUrl }}"
+        data-thermal-tile-url="{{ thermalTileUrl }}"></div>
+    </section>
+  </section>
+{{ /layout }}

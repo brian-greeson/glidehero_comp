@@ -25,6 +25,8 @@ import type { FlightDetailService, FlightDetailSummary } from '../../src/service
 import type { CellFlightTrackResult, CellFlightTrackService } from '../../src/services/cellFlightTrackService.js';
 import type { MapReplayService } from '../../src/services/mapReplayService.js';
 import type { OnboardingService } from '../../src/services/onboardingService.js';
+import type { PlanService } from '../../src/services/planService.js';
+import type { ThermalRasterCacheService } from '../../src/services/thermalRasterCacheService.js';
 
 const viewportStats = {
   claimedCellCount: 2,
@@ -232,6 +234,16 @@ function dependencies() {
   const arenaProgress = arenaProgressService();
   const mapGrid = mapGridService();
   const mapReplay: MapReplayService = { getReplay: vi.fn(async () => ({ flights: [] })) };
+  const plans: PlanService = { route: vi.fn(async (input) => ({
+    anchors: input.anchors, route: input.anchors,
+    legs: [{ directDistanceMeters: 1_000, maximumDistanceMeters: 1_200, routeDistanceMeters: 1_000 }],
+    directDistanceMeters: 1_000, routeDistanceMeters: 1_000, actualDeviationPercent: 0,
+    thermalCoverage: 'unavailable' as const, claims: { direct: [], enclosed: [], newPersonal: [] },
+  })) };
+  const thermalRasters: ThermalRasterCacheService = {
+    get: vi.fn(async () => ({ body: Buffer.from('png'), contentType: 'image/png' as const, bucketKey: 'thermal_tiles/tile.png', cache: 'hit' as const })),
+    cache: vi.fn(async () => null),
+  };
   const router = createWebRouter({
     auth,
     cookie,
@@ -242,6 +254,8 @@ function dependencies() {
     gridClaim,
     mapGrid,
     mapReplay,
+    plans,
+    thermalRasters,
     coverage,
     territoryTiles,
     cellFlightTracks,
@@ -260,6 +274,8 @@ function dependencies() {
     gridClaim,
     mapGrid,
     mapReplay,
+    plans,
+    thermalRasters,
     coverage,
     territoryTiles,
     cellFlightTracks,
@@ -274,6 +290,48 @@ function dependencies() {
 }
 
 describe('webRouter', () => {
+  it('serves the authenticated Plan page, cached raster tiles, and route calculations', async () => {
+    const base = dependencies();
+    await withServer(base.app, async (baseUrl) => {
+      const anonymous = await fetch(`${baseUrl}/plan`, { redirect: 'manual' });
+      expect(anonymous.status).toBe(302);
+      const headers = { cookie: 'glidehero_session=valid-token' };
+      expect((await fetch(`${baseUrl}/plan`, { headers })).status).toBe(200);
+      expect(base.renderAuthenticatedPage).toHaveBeenCalledWith(expect.objectContaining({
+        page: 'plan', thermalTileUrl: '/v1/thermal/tiles/{z}/{x}/{y}.png', defaultDeviationPercent: 20,
+      }));
+
+      const tile = await fetch(`${baseUrl}/v1/thermal/tiles/12/2144/2717.png`, { headers });
+      expect(tile.status).toBe(200);
+      expect(tile.headers.get('x-glidehero-thermal-cache')).toBe('hit');
+      expect(base.thermalRasters.get).toHaveBeenCalledWith({ zoom: 12, x: 2144, tmsY: 1378 });
+
+      const invalidTile = await fetch(`${baseUrl}/v1/thermal/tiles/13/0/0.png`, { headers });
+      expect(invalidTile.status).toBe(400);
+      expect(base.thermalRasters.get).toHaveBeenCalledTimes(1);
+
+      const route = await fetch(`${baseUrl}/v1/plan/route`, {
+        method: 'POST', headers: { ...headers, 'content-type': 'application/json' },
+        body: JSON.stringify({
+          anchors: [{ latitude: 39, longitude: -105 }, { latitude: 39.1, longitude: -104.9 }],
+          maximumDeviationPercent: 20,
+        }),
+      });
+      expect(route.status).toBe(200);
+      expect(base.plans.route).toHaveBeenCalledWith(expect.objectContaining({ userId: user.userId, maximumDeviationPercent: 20 }));
+
+      vi.mocked(base.plans.route).mockRejectedValueOnce(new RangeError('Each planned leg must be 1,000 km or shorter.'));
+      const oversizedRoute = await fetch(`${baseUrl}/v1/plan/route`, {
+        method: 'POST', headers: { ...headers, 'content-type': 'application/json' },
+        body: JSON.stringify({
+          anchors: [{ latitude: 39, longitude: -105 }, { latitude: 39.1, longitude: -104.9 }],
+          maximumDeviationPercent: 20,
+        }),
+      });
+      expect(oversizedRoute.status).toBe(422);
+    });
+  });
+
   it('returns typo-tolerant combined make/model glider search results only to authenticated pilots', async () => {
     const base = dependencies();
     await withServer(base.app, async (baseUrl) => {

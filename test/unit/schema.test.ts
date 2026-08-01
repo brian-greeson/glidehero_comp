@@ -1,6 +1,29 @@
 import { getTableConfig } from 'drizzle-orm/pg-core';
 import { describe, expect, it } from 'vitest';
-import { arenaCurrentLeaders, arenaLeadershipEvents, arenaLeadershipStates, arenas, flights, gliderModels, launches, profiles, userArenaProgress } from '../../src/db/schema.js';
+import { arenaCurrentLeaders, arenaLeadershipEvents, arenaLeadershipStates, arenas, flights, gliderModels, launches, profiles, thermalAreas, thermalCrawlJobTiles, thermalCrawlJobs, thermalRasterTiles, userArenaProgress } from '../../src/db/schema.js';
+
+describe('thermal planning schema', () => {
+  it('separates cached rasters, crawl work, and PostGIS activity areas', () => {
+    const rasters = getTableConfig(thermalRasterTiles);
+    expect(rasters.columns.map((column) => column.name)).toEqual(expect.arrayContaining([
+      'source_layer_key', 'zoom', 'tile_x', 'tms_y', 'bucket_key', 'checksum', 'processing_status', 'processing_version',
+    ]));
+    expect(rasters.uniqueConstraints.map((constraint) => constraint.name)).toContain('thermal_raster_tiles_source_coordinates_unique');
+    expect(rasters.indexes.map((index) => index.config.name)).toContain('thermal_raster_tiles_processing_queue_idx');
+
+    const areas = getTableConfig(thermalAreas);
+    expect(areas.columns.map((column) => column.name)).toEqual(expect.arrayContaining([
+      'raster_tile_id', 'activity_band', 'relative_score', 'geometry', 'area_square_meters', 'processing_version',
+    ]));
+    expect(areas.indexes.map((index) => index.config.name)).toContain('thermal_areas_geometry_idx');
+    expect(areas.indexes.map((index) => index.config.name)).toContain('thermal_areas_geography_idx');
+
+    expect(getTableConfig(thermalCrawlJobs).columns.map((column) => column.name)).toContain('target_geometry');
+    expect(getTableConfig(thermalCrawlJobTiles).columns.map((column) => column.name)).toEqual(expect.arrayContaining([
+      'job_id', 'zoom', 'tile_x', 'tms_y', 'status', 'lease_owner', 'lease_expires_at',
+    ]));
+  });
+});
 
 describe('glider schema', () => {
   it('normalizes catalog identity while keeping only the simple hours counter on profiles', () => {

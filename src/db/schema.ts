@@ -9,6 +9,10 @@ const geometryMultiPolygon6933 = customType<{ data: string; driverData: string }
   dataType: () => 'geometry(MultiPolygon,6933)',
 });
 
+const geometryMultiPolygon4326 = customType<{ data: string; driverData: string }>({
+  dataType: () => 'geometry(MultiPolygon,4326)',
+});
+
 const timestamps = {
   createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
@@ -596,6 +600,122 @@ export const competitionGridClaims = pgTable(
       table.claimTimestamp,
     ),
     index('competition_grid_claims_claim_flight_idx').on(table.claimFlight),
+  ],
+);
+
+export const thermalTileProcessingStatus = pgEnum('thermal_tile_processing_status', [
+  'pending',
+  'processing',
+  'complete',
+  'empty',
+  'failed',
+]);
+
+export const thermalActivityBand = pgEnum('thermal_activity_band', ['dark_blue', 'cyan', 'yellow_orange', 'red']);
+export const thermalCrawlJobStatus = pgEnum('thermal_crawl_job_status', ['pending', 'running', 'paused', 'complete', 'cancelled', 'failed']);
+export const thermalCrawlTileStatus = pgEnum('thermal_crawl_tile_status', ['pending', 'processing', 'cached', 'empty', 'failed']);
+
+/** Cached Thermal.kk raster tiles. Only native zoom-12 tiles are vectorized. */
+export const thermalRasterTiles = pgTable(
+  'thermal_raster_tiles',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    sourceLayerKey: text('source_layer_key').notNull().default('thermals_all_all'),
+    zoom: integer('zoom').notNull(),
+    tileX: integer('tile_x').notNull(),
+    tmsY: integer('tms_y').notNull(),
+    bucketKey: text('bucket_key').notNull(),
+    checksum: text('checksum').notNull(),
+    byteSize: integer('byte_size').notNull(),
+    contentType: text('content_type').notNull().default('image/png'),
+    processingStatus: thermalTileProcessingStatus('processing_status'),
+    processingVersion: integer('processing_version').notNull().default(1),
+    leaseOwner: text('lease_owner'),
+    leaseExpiresAt: timestamp('lease_expires_at', { withTimezone: true, mode: 'date' }),
+    processingAttempts: integer('processing_attempts').notNull().default(0),
+    lastProcessingError: text('last_processing_error'),
+    cachedAt: timestamp('cached_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
+    processedAt: timestamp('processed_at', { withTimezone: true, mode: 'date' }),
+    ...timestamps,
+  },
+  (table) => [
+    unique('thermal_raster_tiles_source_coordinates_unique').on(table.sourceLayerKey, table.zoom, table.tileX, table.tmsY),
+    uniqueIndex('thermal_raster_tiles_bucket_key_idx').on(table.bucketKey),
+    index('thermal_raster_tiles_processing_queue_idx').on(table.processingStatus, table.leaseExpiresAt, table.cachedAt),
+    check('thermal_raster_tiles_zoom_supported', sql`${table.zoom} >= 0 AND ${table.zoom} <= 12`),
+    check('thermal_raster_tiles_coordinates_nonnegative', sql`${table.tileX} >= 0 AND ${table.tmsY} >= 0`),
+    check('thermal_raster_tiles_byte_size_positive', sql`${table.byteSize} > 0`),
+    check('thermal_raster_tiles_attempts_nonnegative', sql`${table.processingAttempts} >= 0`),
+    check(
+      'thermal_raster_tiles_processing_zoom',
+      sql`(${table.zoom} = 12 AND ${table.processingStatus} IS NOT NULL) OR (${table.zoom} <> 12 AND ${table.processingStatus} IS NULL)`,
+    ),
+  ],
+);
+
+/** Tile-local, versioned lift areas derived from cached zoom-12 rasters. */
+export const thermalAreas = pgTable(
+  'thermal_areas',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    rasterTileId: uuid('raster_tile_id').notNull().references(() => thermalRasterTiles.id, { onDelete: 'cascade' }),
+    componentIndex: integer('component_index').notNull(),
+    activityBand: thermalActivityBand('activity_band').notNull(),
+    relativeScore: doublePrecision('relative_score').notNull(),
+    geometry: geometryMultiPolygon4326('geometry').notNull(),
+    areaSquareMeters: doublePrecision('area_square_meters').notNull(),
+    rasterChecksum: text('raster_checksum').notNull(),
+    processingVersion: integer('processing_version').notNull(),
+    generatedAt: timestamp('generated_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
+  },
+  (table) => [
+    unique('thermal_areas_tile_version_component_unique').on(table.rasterTileId, table.processingVersion, table.activityBand, table.componentIndex),
+    index('thermal_areas_geometry_idx').using('gist', table.geometry),
+    index('thermal_areas_geography_idx').using('gist', sql`(${table.geometry}::geography)`),
+    index('thermal_areas_score_idx').on(table.relativeScore),
+    index('thermal_areas_tile_idx').on(table.rasterTileId),
+    check('thermal_areas_component_nonnegative', sql`${table.componentIndex} >= 0`),
+    check('thermal_areas_score_range', sql`${table.relativeScore} > 0 AND ${table.relativeScore} <= 1`),
+    check('thermal_areas_area_positive', sql`${table.areaSquareMeters} > 0`),
+  ],
+);
+
+export const thermalCrawlJobs = pgTable(
+  'thermal_crawl_jobs',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    name: text('name').notNull(),
+    sourceLayerKey: text('source_layer_key').notNull().default('thermals_all_all'),
+    targetGeometry: geometryMultiPolygon4326('target_geometry').notNull(),
+    status: thermalCrawlJobStatus('status').notNull().default('pending'),
+    createdBy: uuid('created_by').notNull().references(() => users.id, { onDelete: 'restrict' }),
+    lastError: text('last_error'),
+    ...timestamps,
+  },
+  (table) => [index('thermal_crawl_jobs_status_created_idx').on(table.status, table.createdAt)],
+);
+
+export const thermalCrawlJobTiles = pgTable(
+  'thermal_crawl_job_tiles',
+  {
+    jobId: uuid('job_id').notNull().references(() => thermalCrawlJobs.id, { onDelete: 'cascade' }),
+    zoom: integer('zoom').notNull().default(12),
+    tileX: integer('tile_x').notNull(),
+    tmsY: integer('tms_y').notNull(),
+    status: thermalCrawlTileStatus('status').notNull().default('pending'),
+    rasterTileId: uuid('raster_tile_id').references(() => thermalRasterTiles.id, { onDelete: 'set null' }),
+    leaseOwner: text('lease_owner'),
+    leaseExpiresAt: timestamp('lease_expires_at', { withTimezone: true, mode: 'date' }),
+    attemptCount: integer('attempt_count').notNull().default(0),
+    lastError: text('last_error'),
+    updatedAt: timestamp('updated_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.jobId, table.zoom, table.tileX, table.tmsY] }),
+    index('thermal_crawl_job_tiles_queue_idx').on(table.status, table.jobId, table.tileX, table.tmsY),
+    check('thermal_crawl_job_tiles_zoom_12', sql`${table.zoom} = 12`),
+    check('thermal_crawl_job_tiles_coordinates_nonnegative', sql`${table.tileX} >= 0 AND ${table.tmsY} >= 0`),
+    check('thermal_crawl_job_tiles_attempts_nonnegative', sql`${table.attemptCount} >= 0`),
   ],
 );
 

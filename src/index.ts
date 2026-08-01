@@ -26,6 +26,7 @@ import {
   createAdminFlightProcessingPageRenderer,
   createAdminMapSettingsPageRenderer,
   createAdminPageRenderer,
+  createAdminThermalPageRenderer,
   createAdminUserPageRenderer,
 } from './views/admin/renderer.js';
 import { createAuthenticatedActivityFeedRenderer, createAuthenticatedPageRenderer } from './views/authenticated/renderer.js';
@@ -50,11 +51,24 @@ import { createFlightDetailService } from './services/flightDetailService.js';
 import { createMapReplayService } from './services/mapReplayService.js';
 import { createCellFlightTrackService } from './services/cellFlightTrackService.js';
 import { createOnboardingService } from './services/onboardingService.js';
+import { createThermalKkClient } from './resources/thermalKkClient.js';
+import { createThermalRasterCacheService } from './services/thermalRasterCacheService.js';
+import { createPlanService } from './services/planService.js';
+import { createThermalCrawlService } from './services/thermalCrawlService.js';
+import { createAdminThermalRouter } from './web/adminThermalRouter.js';
 
 const config = parseConfig(process.env);
 const { db } = createDatabase(config.databaseUrl);
 const donations = createDonationService(db);
 const s3Client = createBucketClient(config);
+const thermalKk = createThermalKkClient({ sourceHostname: config.thermalKkSourceHostname });
+const thermalRasters = createThermalRasterCacheService(db, thermalKk, {
+  s3Client,
+  bucketName: config.bucket.bucketName,
+  bucketFolder: config.bucket.bucketFolder,
+});
+const plans = createPlanService(db, { cellSize: config.gridClaimCellSize });
+const thermalCrawl = createThermalCrawlService(db);
 const thumbnails = createFlightThumbnailService({
   mapTilerCredentials: config.mapTilerCredentials,
   bucketName: config.bucket.bucketName,
@@ -148,6 +162,11 @@ const webMiddleware = [
     historyRebuild: userHistoryRebuild,
     renderPage: createAdminUserPageRenderer(),
   }),
+  createAdminThermalRouter({
+    adminEmails: config.adminEmails,
+    crawl: thermalCrawl,
+    renderPage: createAdminThermalPageRenderer({ mapTilerApiKey: config.mapTilerApiKey }),
+  }),
   createWebRouter({
     auth,
     cookie,
@@ -158,6 +177,8 @@ const webMiddleware = [
     follow,
     activity,
     onboarding,
+    plans,
+    thermalRasters,
     flightDetail,
     mapReplay,
     gridClaim,

@@ -27,6 +27,7 @@ const envSchema = z.object({
   MAPTILER_CREDENTIALS: z.string().min(1),
   KOFI_VERIFICATION_TOKEN: z.string().min(1),
   ADMIN_EMAILS: z.string().optional(),
+  THERMAL_KK_SOURCE_HOSTNAME: z.string().trim().min(1).default('glidehero.com'),
 });
 
 export type AppConfig = {
@@ -42,6 +43,7 @@ export type AppConfig = {
   gridClaimCellSize: number;
   kofiVerificationToken: string;
   adminEmails: string[];
+  thermalKkSourceHostname: string;
   bucket: {
     bucketSecret: string;
     bucketId: string;
@@ -73,6 +75,7 @@ export function parseConfig(env: NodeJS.ProcessEnv): AppConfig {
           .filter(Boolean),
       ),
     ],
+    thermalKkSourceHostname: parsed.THERMAL_KK_SOURCE_HOSTNAME,
     bucket: {
       bucketSecret: parsed.BUCKET_SECRET,
       bucketId: parsed.BUCKET_ID,

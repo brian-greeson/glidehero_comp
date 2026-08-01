@@ -1,0 +1,22 @@
+.admin-thermal { display: grid; grid-template-columns: minmax(320px, 420px) 1fr; height: calc(100vh - 72px); }
+.admin-thermal__controls { overflow-y: auto; padding: 1.25rem; border-right: 1px solid #d7e0e8; }
+.admin-thermal__controls h1 { margin: 0; }
+.admin-thermal__controls form { display: grid; gap: .6rem; }
+.admin-thermal__controls label { display: grid; gap: .3rem; font-weight: 700; }
+.admin-thermal__controls input { padding: .65rem; border: 1px solid #aab9c5; border-radius: .45rem; }
+.admin-thermal__controls button { width: fit-content; padding: .55rem .8rem; }
+.admin-thermal__controls button:disabled { cursor: not-allowed; opacity: .45; }
+.admin-thermal__notice { padding: .7rem; background: #dcfce7; }
+.admin-thermal__error { padding: .7rem; color: #991b1b; background: #fee2e2; }
+.admin-thermal__jobs { display: grid; gap: .65rem; }
+.admin-thermal__jobs article { padding: .8rem; border: 1px solid #d7e0e8; border-radius: .55rem; }
+.admin-thermal__jobs article > div { display: flex; justify-content: space-between; gap: .75rem; }
+.admin-thermal__jobs article p { color: #526575; font-size: .82rem; }
+.admin-thermal__jobs article form { display: inline-block; margin-right: .4rem; }
+.admin-thermal__map-stage { position: relative; height: 100%; min-height: 480px; }
+[data-thermal-map] { height: 100%; min-height: 480px; }
+.admin-thermal__map-tools { position: absolute; z-index: 2; top: .75rem; left: .75rem; display: flex; gap: .35rem; padding: .35rem; border-radius: .55rem; background: rgb(255 255 255 / 94%); box-shadow: 0 2px 9px rgb(0 0 0 / 18%); }
+.admin-thermal__map-tools button { width: auto; min-height: 38px; padding: .45rem .7rem; border-radius: .4rem; }
+.admin-thermal__map-tools button[aria-pressed='true'] { color: #fff; background: #1769aa; }
+.admin-thermal__map-tools button:disabled { cursor: not-allowed; opacity: .45; }
+@media (max-width: 780px) { .admin-thermal { grid-template-columns: 1fr; height: auto; } .admin-thermal__map-stage { height: 55vh; } }

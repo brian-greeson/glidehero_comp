@@ -6,6 +6,7 @@ import type { AuthenticatedUser } from '../../services/authService.js';
 import type { AdminUserDetail, AdminUserSummary } from '../../services/adminUserService.js';
 import type { NPointSolverState } from '../../services/flightProcessingControlService.js';
 import type { WorkerControlState, WorkerLiveState } from '../../services/workerControlService.js';
+import type { ThermalCrawlSummary } from '../../services/thermalCrawlService.js';
 
 export type AdminWorkerStatus = {
   workerId: string;
@@ -41,6 +42,13 @@ export type AdminFlightProcessingPageRenderer = (model: {
 
 export type AdminAreaPageRenderer = (model: {
   currentUser: AuthenticatedUser;
+}) => Promise<string>;
+
+export type AdminThermalPageRenderer = (model: {
+  currentUser: AuthenticatedUser;
+  jobs: ThermalCrawlSummary[];
+  success?: boolean;
+  error?: string;
 }) => Promise<string>;
 
 export type AdminMapSettingsPageRenderer = (model: {
@@ -152,6 +160,18 @@ export function createAdminAreaPageRenderer(options: { mapTilerApiKey: string })
   return async (model) => (
     await environment.run('admin/pages/adminAreas.vto', {
       mapTilerStyleUrl: `https://api.maptiler.com/maps/outdoor-v2/style.json?key=${options.mapTilerApiKey}`,
+      ...model,
+    })
+  ).content;
+}
+
+export function createAdminThermalPageRenderer(options: { mapTilerApiKey: string }): AdminThermalPageRenderer {
+  const environment = createEnvironment();
+  return async (model) => (
+    await environment.run('admin/pages/adminThermal.vto', {
+      mapTilerStyleUrl: `https://api.maptiler.com/maps/outdoor-v2/style.json?key=${options.mapTilerApiKey}`,
+      success: false,
+      error: undefined,
       ...model,
     })
   ).content;

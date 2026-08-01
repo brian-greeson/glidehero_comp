@@ -1,4 +1,4 @@
-export type AuthenticatedPage = 'map' | 'activity' | 'achievements' | 'profile' | 'flight';
+export type AuthenticatedPage = 'map' | 'plan' | 'activity' | 'achievements' | 'profile' | 'flight';
 
 export type AuthenticatedUserView = {
   displayName: string;
@@ -9,7 +9,7 @@ export type AuthenticatedUserView = {
 export type NavigationItemView = {
   page: AuthenticatedPage;
   label: string;
-  icon: 'map' | 'activity' | 'trophy' | 'profile';
+  icon: 'map' | 'plan' | 'activity' | 'trophy' | 'profile';
   href: string;
 };
 
@@ -114,6 +114,13 @@ export type MapPageModel = AuthenticatedShellModel & {
   arenaSourceId?: number;
   focusArenaSourceId?: number;
   mapEmptyState?: string;
+};
+
+export type PlanPageModel = AuthenticatedShellModel & {
+  page: 'plan';
+  mapStyleUrl: string;
+  thermalTileUrl: string;
+  defaultDeviationPercent: number;
 };
 
 export type ActivityEventView = {
@@ -275,4 +282,4 @@ export type FlightPageModel = AuthenticatedShellModel & {
   };
 };
 
-export type AuthenticatedPageModel = MapPageModel | ActivityPageModel | AchievementsPageModel | ProfilePageModel | FlightPageModel;
+export type AuthenticatedPageModel = MapPageModel | PlanPageModel | ActivityPageModel | AchievementsPageModel | ProfilePageModel | FlightPageModel;

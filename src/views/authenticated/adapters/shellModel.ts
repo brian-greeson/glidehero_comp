@@ -6,6 +6,7 @@ const DEFAULT_LOGOUT_URL = '/logout';
 
 const pageLabels: Record<AuthenticatedPage, string> = {
   map: 'Map',
+  plan: 'Plan',
   activity: 'Activity',
   achievements: 'Achievements',
   profile: 'Profile',
@@ -23,6 +24,7 @@ export function initialsForDisplayName(displayName: string): string {
 function navigationFor(mapHref: string): NavigationItemView[] {
   return [
     { page: 'map', label: 'Map', icon: 'map', href: mapHref },
+    { page: 'plan', label: 'Plan', icon: 'plan', href: '/plan' },
     { page: 'activity', label: 'Activity', icon: 'activity', href: '/activity' },
     { page: 'achievements', label: 'Achievements', icon: 'trophy', href: '/achievements' },
     { page: 'profile', label: 'Profile', icon: 'profile', href: '/profile' },
@@ -46,6 +48,6 @@ export function createAuthenticatedShellModel(input: AuthenticatedShellInput): A
     donateUrl: input.donateUrl ?? DEFAULT_DONATE_URL,
     adminUrl: input.adminUrl ?? DEFAULT_ADMIN_URL,
     logoutUrl: input.logoutUrl ?? DEFAULT_LOGOUT_URL,
-    showFooter: input.showFooter ?? input.page !== 'map',
+    showFooter: input.showFooter ?? (input.page !== 'map' && input.page !== 'plan'),
   };
 }

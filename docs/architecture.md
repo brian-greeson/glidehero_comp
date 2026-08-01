@@ -13,11 +13,13 @@ Drizzle provides database access, and Vento renders HTML. Private S3-compatible
 object storage holds uploaded flight files and generated images. Valkey provides
 transient upload state and the background work queue.
 
-The two application processes are:
+The application processes are:
 
 - A web process that serves HTML and data endpoints, authenticates users, and
   accepts upload intents.
 - A worker process that consumes queued flights and performs durable processing.
+- An optional thermal worker that fills targeted raster-cache jobs and converts
+  cached native tiles into queryable PostGIS lift areas.
 
 A typical web request follows this path:
 
@@ -77,6 +79,21 @@ the executable entry point small.
 
 The web and worker processes share durable state and configuration, but they do
 not share in-memory state.
+
+### Thermal data process
+
+`src/thermalWorker.ts` is the composition root for the independently operated
+thermal worker. The web process serves cached raster tiles and records native
+zoom-12 tiles as pending. The thermal worker claims short database leases,
+vectorizes those rasters, and writes versioned relative-activity areas to
+PostGIS. It also fills admin-targeted crawl jobs when no cached raster is
+waiting for processing.
+
+Raster objects live beneath
+`<BUCKET_FOLDER>/thermal_tiles/thermals_all_all/{z}/{x}/{tms-y}.png`. PostgreSQL
+stores cache metadata, crawl progress, processing ownership, and vector areas;
+object storage remains the source of the raster bytes. See
+`docs/thermal-data.md` for operating details.
 
 ## Configuration
 

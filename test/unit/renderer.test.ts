@@ -8,6 +8,7 @@ import {
   createAdminFlightProcessingPageRenderer,
   createAdminMapSettingsPageRenderer,
   createAdminPageRenderer,
+  createAdminThermalPageRenderer,
   createAdminUserPageRenderer,
 } from '../../src/views/admin/renderer.js';
 
@@ -95,6 +96,21 @@ describe('Vento page renderer', () => {
   it('renders admin area, map settings, and user management templates', async () => {
     const area = await createAdminAreaPageRenderer({ mapTilerApiKey: 'maptiler-test-key' })({ currentUser: user });
     expect(area).toContain('data-admin-area-editor');
+
+    const thermal = await createAdminThermalPageRenderer({ mapTilerApiKey: 'maptiler-test-key' })({
+      currentUser: user,
+      jobs: [{
+        id: '00000000-0000-4000-8000-000000000030', name: 'Front Range', status: 'running',
+        totalTiles: 12, pendingTiles: 5, processingTiles: 1, cachedTiles: 6, emptyTiles: 0, failedTiles: 0,
+        createdAt: new Date('2026-08-01T00:00:00Z'), updatedAt: new Date('2026-08-01T00:00:00Z'),
+      }],
+    });
+    expect(thermal).toContain('<h1>Thermal Data</h1>');
+    expect(thermal).toContain('Front Range');
+    expect(thermal).toContain('data-thermal-map');
+    expect(thermal).toContain('data-thermal-draw');
+    expect(thermal).toContain('>Draw area</button>');
+    expect(thermal).not.toContain('mapbox-gl-draw');
 
     const settings = await createAdminMapSettingsPageRenderer()({
       currentUser: user,

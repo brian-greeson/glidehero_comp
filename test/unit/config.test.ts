@@ -27,6 +27,7 @@ describe('parseConfig', () => {
       gridClaimCellSize: 500,
       kofiVerificationToken: 'kofi-test-token',
       adminEmails: [],
+      thermalKkSourceHostname: 'glidehero.com',
       bucket: {
         bucketSecret: 'secret',
         bucketId: 'id',

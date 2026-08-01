@@ -1,0 +1,1 @@
+CREATE INDEX "thermal_areas_geography_idx" ON "thermal_areas" USING gist (("geometry"::geography));

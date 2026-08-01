@@ -11,6 +11,7 @@ export type AuthenticatedActivityFeedRenderer = (model: {
 
 const templates: Record<AuthenticatedPage, string> = {
   map: 'authenticated/pages/map.vto',
+  plan: 'authenticated/pages/plan.vto',
   activity: 'authenticated/pages/activity.vto',
   achievements: 'authenticated/pages/achievements.vto',
   profile: 'authenticated/pages/profile.vto',
@@ -29,6 +30,8 @@ export function createAuthenticatedPageRenderer(): AuthenticatedPageRenderer {
       pageStylesheet: `/styles/app-ui/${model.page}.css`,
       pageScript: model.page === 'map'
         ? '/scripts/app-ui/map.js'
+        : model.page === 'plan'
+          ? '/scripts/app-ui/plan.js'
         : model.page === 'activity'
           ? '/scripts/app-ui/activity.js'
           : model.page === 'profile'

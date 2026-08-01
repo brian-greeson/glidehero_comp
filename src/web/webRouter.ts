@@ -46,6 +46,9 @@ import type { CellFlightTrackService } from '../services/cellFlightTrackService.
 import type { MapReplayService } from '../services/mapReplayService.js';
 import type { OnboardingService, OnboardingStepKey } from '../services/onboardingService.js';
 import { createOnboardingView } from '../views/authenticated/adapters/onboardingView.js';
+import type { PlanService } from '../services/planService.js';
+import type { ThermalRasterCacheService } from '../services/thermalRasterCacheService.js';
+import { THERMAL_NATIVE_ZOOM, xyzYToTmsY } from '../domain/thermal/thermalTiles.js';
 
 const email = z.string().trim().toLowerCase().pipe(z.email());
 const password = z.string().min(3).max(128);
@@ -66,6 +69,14 @@ const competitionMonthValue = z.string().refine((value) => {
 const competitionMonthSchema = z.object({ month: competitionMonthValue.optional(), scope: z.literal('following').optional() }).strict();
 const personalPeriodSchema = z.object({ month: competitionMonthValue.optional() }).strict();
 const pilotUserIdSchema = z.string().uuid();
+const thermalTileCoordinateSchema = z.coerce.number().int().nonnegative();
+const planRouteSchema = z.object({
+  anchors: z.array(z.object({
+    latitude: z.number().finite().min(-85).max(85),
+    longitude: z.number().finite().min(-180).max(180),
+  }).strict()).min(2).max(24),
+  maximumDeviationPercent: z.number().finite().min(0).max(100),
+}).strict();
 const onboardingStepSchema = z.enum(['profile', 'first-flight', 'personal-map', 'follow-pilots', 'competitive-map', 'glider', 'history']);
 const activityQuerySchema = z.object({
   q: z.string().max(100).optional(),
@@ -223,6 +234,8 @@ export function createWebRouter(dependencies: {
   cellFlightTracks?: CellFlightTrackService;
   mapReplay?: MapReplayService;
   onboarding?: OnboardingService;
+  plans?: PlanService;
+  thermalRasters?: ThermalRasterCacheService;
 }) {
   const router = Router();
   const territoryTileSettings = dependencies.territoryTileSettings ?? createTerritoryTileSettingsService();
@@ -361,7 +374,7 @@ export function createWebRouter(dependencies: {
     return Boolean(currentUser && isAdmin(currentUser.email));
   }
 
-  function authenticatedShell(page: 'map' | 'activity' | 'achievements' | 'profile' | 'flight', currentUser: AuthenticatedUser, options: { mapHref?: string; showFooter?: boolean } = {}) {
+  function authenticatedShell(page: 'map' | 'plan' | 'activity' | 'achievements' | 'profile' | 'flight', currentUser: AuthenticatedUser, options: { mapHref?: string; showFooter?: boolean } = {}) {
     return createAuthenticatedShellModel({
       page,
       user: currentUser,
@@ -980,6 +993,62 @@ export function createWebRouter(dependencies: {
         mode: 'personal', period: selection.period, location: null, mapHref,
       }));
     } catch (error) {
+      next(error);
+    }
+  });
+
+  router.get('/plan', async (_req, res) => {
+    const currentUser = res.locals.currentUser;
+    if (!currentUser) {
+      res.redirect(302, '/');
+      return;
+    }
+    await renderAuthenticated(res, dependencies.renderAuthenticatedPage, 200, {
+      ...authenticatedShell('plan', currentUser, { showFooter: false }),
+      page: 'plan',
+      mapStyleUrl: dependencies.mapTilerStyleUrl ?? '',
+      thermalTileUrl: '/v1/thermal/tiles/{z}/{x}/{y}.png',
+      defaultDeviationPercent: 20,
+    });
+  });
+
+  router.get('/v1/thermal/tiles/:z/:x/:y.png', async (req, res, next) => {
+    if (!res.locals.currentUser) return next(new AppError(401, 'unauthorized', 'Sign in before viewing thermal tiles.'));
+    if (!dependencies.thermalRasters) throw new Error('Thermal raster cache is not configured.');
+    const zoom = thermalTileCoordinateSchema.safeParse(req.params.z);
+    const x = thermalTileCoordinateSchema.safeParse(req.params.x);
+    const xyzY = thermalTileCoordinateSchema.safeParse(req.params.y);
+    if (!zoom.success || !x.success || !xyzY.success) return next(new AppError(400, 'invalid_request', 'Thermal tile coordinates are invalid.'));
+    const tileWidth = 2 ** zoom.data;
+    if (zoom.data > THERMAL_NATIVE_ZOOM || x.data >= tileWidth || xyzY.data >= tileWidth) {
+      return next(new AppError(400, 'invalid_request', 'Thermal tile coordinates are invalid.'));
+    }
+    try {
+      const tile = await dependencies.thermalRasters.get({ zoom: zoom.data, x: x.data, tmsY: xyzYToTmsY(zoom.data, xyzY.data) });
+      if (!tile) {
+        res.status(404).set('Cache-Control', 'private, max-age=300').end();
+        return;
+      }
+      res.status(200)
+        .type(tile.contentType)
+        .set('Cache-Control', 'private, max-age=86400')
+        .set('X-GlideHero-Thermal-Cache', tile.cache)
+        .send(tile.body);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.post('/v1/plan/route', async (req, res, next) => {
+    const currentUser = res.locals.currentUser;
+    if (!currentUser) return next(new AppError(401, 'unauthorized', 'Sign in before planning a flight.'));
+    if (!dependencies.plans) throw new Error('Flight planning is not configured.');
+    const parsed = planRouteSchema.safeParse(req.body);
+    if (!parsed.success) return next(new AppError(422, 'invalid_request', 'Provide 2–24 valid route points and a deviation from 0–100%.'));
+    try {
+      res.status(200).json(await dependencies.plans.route({ userId: currentUser.userId, ...parsed.data }));
+    } catch (error) {
+      if (error instanceof RangeError) return next(new AppError(422, 'invalid_request', error.message));
       next(error);
     }
   });
