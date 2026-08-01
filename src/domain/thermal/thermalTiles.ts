@@ -18,11 +18,9 @@ export function assertThermalTileCoordinate(input: ThermalTileCoordinate): void 
   if (!Number.isInteger(input.tmsY) || input.tmsY < 0 || input.tmsY >= width) throw new RangeError('Thermal tile Y is outside the selected zoom.');
 }
 
-export function thermalRasterObjectKey(bucketFolder: string, input: ThermalTileCoordinate, sourceLayerKey = THERMAL_SOURCE_LAYER): string {
+export function thermalRasterObjectKey(input: ThermalTileCoordinate): string {
   assertThermalTileCoordinate(input);
-  const prefix = bucketFolder.replace(/^\/+|\/+$/g, '');
-  if (!prefix) throw new RangeError('Thermal tile bucket folder is required.');
-  return `${prefix}/thermal_tiles/${sourceLayerKey}/${input.zoom}/${input.x}/${input.tmsY}.png`;
+  return `${input.zoom}/${input.x}/${input.tmsY}.png`;
 }
 
 export function isPng(buffer: Uint8Array): boolean {

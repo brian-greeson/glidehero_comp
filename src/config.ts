@@ -17,6 +17,7 @@ const envSchema = z.object({
   BUCKET_SECRET: z.string(),
   BUCKET_ID: z.string(),
   BUCKET_NAME: z.string(),
+  BUCKET_TILES_NAME: z.string().trim().min(1),
   BUCKET_URL: z.string(),
   BUCKET_FOLDER: z
     .string()
@@ -48,6 +49,7 @@ export type AppConfig = {
     bucketSecret: string;
     bucketId: string;
     bucketName: string;
+    thermalBucketName: string;
     bucketURL: string;
     bucketFolder: string;
   };
@@ -80,6 +82,7 @@ export function parseConfig(env: NodeJS.ProcessEnv): AppConfig {
       bucketSecret: parsed.BUCKET_SECRET,
       bucketId: parsed.BUCKET_ID,
       bucketName: parsed.BUCKET_NAME,
+      thermalBucketName: parsed.BUCKET_TILES_NAME,
       bucketURL: parsed.BUCKET_URL,
       bucketFolder: parsed.BUCKET_FOLDER,
     },

@@ -13,11 +13,11 @@ const { values } = parseArgs({ options: { once: { type: 'boolean', default: fals
 const config = parseConfig(process.env);
 const { db, pool } = createDatabase(config.databaseUrl);
 const s3Client = createBucketClient(config);
-const processing = createThermalProcessingService(db, { s3Client, bucketName: config.bucket.bucketName });
+const processing = createThermalProcessingService(db, { s3Client, bucketName: config.bucket.thermalBucketName });
 const rasterCache = createThermalRasterCacheService(
   db,
   createThermalKkClient({ sourceHostname: config.thermalKkSourceHostname }),
-  { s3Client, bucketName: config.bucket.bucketName, bucketFolder: config.bucket.bucketFolder },
+  { s3Client, bucketName: config.bucket.thermalBucketName },
 );
 const crawl = createThermalCrawlService(db);
 const workerId = `${hostname()}:${process.pid}`;

@@ -89,8 +89,9 @@ vectorizes those rasters, and writes versioned relative-activity areas to
 PostGIS. It also fills admin-targeted crawl jobs when no cached raster is
 waiting for processing.
 
-Raster objects live beneath
-`<BUCKET_FOLDER>/thermal_tiles/thermals_all_all/{z}/{x}/{tms-y}.png`. PostgreSQL
+Raster objects live at
+`{z}/{x}/{tms-y}.png` in the `BUCKET_TILES_NAME` bucket.
+Thermal storage does not use `BUCKET_FOLDER`. PostgreSQL
 stores cache metadata, crawl progress, processing ownership, and vector areas;
 object storage remains the source of the raster bytes. See
 `docs/thermal-data.md` for operating details.

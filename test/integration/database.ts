@@ -56,6 +56,7 @@ export async function resetAndMigrateTestDatabase(): Promise<ReturnType<typeof t
           BUCKET_SECRET: 'test-secret',
           BUCKET_ID: 'test-id',
           BUCKET_NAME: 'glidehero-test-files',
+          BUCKET_TILES_NAME: 'glidehero-test-thermal-tiles',
           BUCKET_URL: 'https://s3.example.test',
           BUCKET_FOLDER: 'glidehero-test',
           MAPTILER_API_KEY: 'maptiler-test-key',

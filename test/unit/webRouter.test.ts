@@ -241,7 +241,7 @@ function dependencies() {
     thermalCoverage: 'unavailable' as const, claims: { direct: [], enclosed: [], newPersonal: [] },
   })) };
   const thermalRasters: ThermalRasterCacheService = {
-    get: vi.fn(async () => ({ body: Buffer.from('png'), contentType: 'image/png' as const, bucketKey: 'thermal_tiles/tile.png', cache: 'hit' as const })),
+    get: vi.fn(async () => ({ body: Buffer.from('png'), contentType: 'image/png' as const, bucketKey: '12/2144/1378.png', cache: 'hit' as const })),
     cache: vi.fn(async () => null),
   };
   const router = createWebRouter({

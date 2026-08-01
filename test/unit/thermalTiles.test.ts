@@ -2,9 +2,9 @@ import { describe, expect, it } from 'vitest';
 import { assertThermalTileCoordinate, isPng, thermalRasterObjectKey, xyzYToTmsY } from '../../src/domain/thermal/thermalTiles.js';
 
 describe('thermal tile domain', () => {
-  it('uses the dedicated thermal_tiles bucket prefix and upstream TMS coordinates', () => {
-    expect(thermalRasterObjectKey('glidehero-production', { zoom: 12, x: 2144, tmsY: 1378 }))
-      .toBe('glidehero-production/thermal_tiles/thermals_all_all/12/2144/1378.png');
+  it('stores zoom directories directly at the thermal bucket root', () => {
+    expect(thermalRasterObjectKey({ zoom: 12, x: 2144, tmsY: 1378 }))
+      .toBe('12/2144/1378.png');
     expect(xyzYToTmsY(12, 2717)).toBe(1378);
   });
 

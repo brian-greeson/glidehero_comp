@@ -64,8 +64,7 @@ const s3Client = createBucketClient(config);
 const thermalKk = createThermalKkClient({ sourceHostname: config.thermalKkSourceHostname });
 const thermalRasters = createThermalRasterCacheService(db, thermalKk, {
   s3Client,
-  bucketName: config.bucket.bucketName,
-  bucketFolder: config.bucket.bucketFolder,
+  bucketName: config.bucket.thermalBucketName,
 });
 const plans = createPlanService(db, { cellSize: config.gridClaimCellSize });
 const thermalCrawl = createThermalCrawlService(db);

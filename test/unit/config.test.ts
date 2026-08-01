@@ -9,6 +9,7 @@ describe('parseConfig', () => {
       BUCKET_SECRET: 'secret',
       BUCKET_ID: 'id',
       BUCKET_NAME: 'glidehero-files',
+      BUCKET_TILES_NAME: 'glidehero-thermal-tiles',
       BUCKET_URL: 'https://s3.example.test',
       BUCKET_FOLDER: '/glidehero-dev/',
       MAPTILER_API_KEY: 'maptiler-test-key',
@@ -32,6 +33,7 @@ describe('parseConfig', () => {
         bucketSecret: 'secret',
         bucketId: 'id',
         bucketName: 'glidehero-files',
+        thermalBucketName: 'glidehero-thermal-tiles',
         bucketURL: 'https://s3.example.test',
         bucketFolder: 'glidehero-dev',
       },
@@ -42,6 +44,21 @@ describe('parseConfig', () => {
     expect(() => parseConfig({})).toThrow();
   });
 
+  it('requires a dedicated thermal tile bucket', () => {
+    expect(() => parseConfig({
+      DATABASE_URL: 'postgres://localhost/glidehero',
+      VALKEY_URL: 'redis://localhost:6379',
+      BUCKET_SECRET: 'secret',
+      BUCKET_ID: 'id',
+      BUCKET_NAME: 'glidehero-files',
+      BUCKET_URL: 'https://s3.example.test',
+      BUCKET_FOLDER: 'glidehero-dev',
+      MAPTILER_API_KEY: 'maptiler-test-key',
+      MAPTILER_CREDENTIALS: 'maptiler-test-key_00112233445566778899aabbccddeeff',
+      KOFI_VERIFICATION_TOKEN: 'kofi-test-token',
+    })).toThrow();
+  });
+
   it('requires a MapTiler API key and credentials', () => {
     expect(() => parseConfig({
       DATABASE_URL: 'postgres://localhost/glidehero',
@@ -49,6 +66,7 @@ describe('parseConfig', () => {
       BUCKET_SECRET: 'secret',
       BUCKET_ID: 'id',
       BUCKET_NAME: 'glidehero-files',
+      BUCKET_TILES_NAME: 'glidehero-thermal-tiles',
       BUCKET_URL: 'https://s3.example.test',
       BUCKET_FOLDER: 'glidehero-dev',
       KOFI_VERIFICATION_TOKEN: 'kofi-test-token',
@@ -62,6 +80,7 @@ describe('parseConfig', () => {
       BUCKET_SECRET: 'secret',
       BUCKET_ID: 'id',
       BUCKET_NAME: 'glidehero-files',
+      BUCKET_TILES_NAME: 'glidehero-thermal-tiles',
       BUCKET_URL: 'https://s3.example.test',
       BUCKET_FOLDER: 'glidehero-dev',
       MAPTILER_API_KEY: 'maptiler-test-key',
@@ -76,6 +95,7 @@ describe('parseConfig', () => {
       BUCKET_SECRET: 'secret',
       BUCKET_ID: 'id',
       BUCKET_NAME: 'glidehero-files',
+      BUCKET_TILES_NAME: 'glidehero-thermal-tiles',
       BUCKET_URL: 'https://s3.example.test',
       BUCKET_FOLDER: 'glidehero-dev',
       MAPTILER_API_KEY: 'maptiler-test-key',
@@ -96,6 +116,7 @@ describe('parseConfig', () => {
         BUCKET_SECRET: 'secret',
         BUCKET_ID: 'id',
         BUCKET_NAME: 'glidehero-files',
+        BUCKET_TILES_NAME: 'glidehero-thermal-tiles',
         BUCKET_URL: 'https://s3.example.test',
         BUCKET_FOLDER: 'glidehero-production',
         MAPTILER_API_KEY: 'maptiler-test-key',
@@ -112,6 +133,7 @@ describe('parseConfig', () => {
       BUCKET_SECRET: 'secret',
       BUCKET_ID: 'id',
       BUCKET_NAME: 'glidehero-files',
+      BUCKET_TILES_NAME: 'glidehero-thermal-tiles',
       BUCKET_URL: 'https://s3.example.test',
       BUCKET_FOLDER: 'glidehero-dev',
       MAPTILER_API_KEY: 'maptiler-test-key',

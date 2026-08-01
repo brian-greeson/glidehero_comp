@@ -48,7 +48,6 @@ export function createThermalRasterCacheService(
   options: {
     s3Client: Pick<S3, 'send'>;
     bucketName: string;
-    bucketFolder: string;
   },
 ): ThermalRasterCacheService {
   const inFlightFills = new Map<string, Promise<ThermalRasterTileResult | null>>();
@@ -134,7 +133,7 @@ export function createThermalRasterCacheService(
 
   async function cache(input: ThermalTileCoordinate): Promise<ThermalRasterTileResult | null> {
     assertThermalTileCoordinate(input);
-    const bucketKey = thermalRasterObjectKey(options.bucketFolder, input);
+    const bucketKey = thermalRasterObjectKey(input);
     const existing = inFlightFills.get(bucketKey);
     if (existing) return existing;
     const fill = (async () => {
@@ -162,7 +161,7 @@ export function createThermalRasterCacheService(
     cache,
     async get(input) {
       assertThermalTileCoordinate(input);
-      const bucketKey = thermalRasterObjectKey(options.bucketFolder, input);
+      const bucketKey = thermalRasterObjectKey(input);
       const cached = await read(bucketKey);
       if (cached) {
         await record(input, bucketKey, cached, false);

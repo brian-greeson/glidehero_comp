@@ -6,12 +6,16 @@ layer. It is historical activity data, not a weather forecast or safety aid.
 ## Cache-aside delivery
 
 Authenticated map requests use GlideHero's tile endpoint. Each request first
-looks for the raster in the configured private Space. A miss is fetched from
-Thermal.kk, returned to the user, and stored at:
+looks for the raster in the private Space named by `BUCKET_TILES_NAME`. A miss
+is fetched from Thermal.kk, returned to the user, and stored at:
 
 ```text
-<BUCKET_FOLDER>/thermal_tiles/thermals_all_all/{z}/{x}/{tms-y}.png
+{z}/{x}/{tms-y}.png
 ```
+
+Thermal keys are rooted directly in their dedicated bucket. They do not use
+the shared `BUCKET_FOLDER` prefix, a source-layer folder, or an additional
+`thermal_tiles` folder.
 
 MapLibre requests XYZ coordinates; Thermal.kk and the object key use TMS Y
 coordinates. Keep that conversion at the HTTP boundary.
@@ -21,9 +25,11 @@ cached for display but are not vectorized.
 
 ## Dedicated worker
 
-The thermal worker uses the same PostgreSQL and Spaces settings as the web
-process. When the dedicated machine keeps those settings in `.env.production`,
-run it with:
+The thermal worker uses the same PostgreSQL connection, Spaces endpoint, and
+Spaces credentials as the web process. Thermal raster reads and writes use the
+dedicated `BUCKET_TILES_NAME` bucket; flight uploads and thumbnails continue to
+use `BUCKET_NAME`. When the dedicated machine keeps those settings in
+`.env.production`, run it with:
 
 ```bash
 npm run prod:thermal-worker
