@@ -1,0 +1,22 @@
+<div class="flight-table-scroll" data-flight-table>
+  <table class="flight-table">
+    <thead><tr>
+      <th scope="col">Flight</th>
+      <th scope="col" aria-sort="descending"><button type="button" data-flight-sort="launch" data-sort-direction="desc">Launch Time <span aria-hidden="true">↓</span></button></th>
+      <th scope="col" aria-sort="none"><button type="button" data-flight-sort="distance" data-sort-direction="desc">5-Point Distance <span aria-hidden="true">↕</span></button></th>
+      <th scope="col" aria-sort="none"><button type="button" data-flight-sort="duration" data-sort-direction="desc">Duration <span aria-hidden="true">↕</span></button></th>
+      <th scope="col"><span class="visually-hidden">View flight</span></th>
+    </tr></thead>
+    <tbody data-flight-table-body>
+      {{ for flight of flights }}
+        <tr data-flight-row data-launch="{{ if flight.launchTimestamp !== null }}{{ flight.launchTimestamp }}{{ else }}-1{{ /if }}" data-distance="{{ if flight.distanceMeters !== null }}{{ flight.distanceMeters }}{{ else }}-1{{ /if }}" data-duration="{{ if flight.durationSeconds !== null }}{{ flight.durationSeconds }}{{ else }}-1{{ /if }}">
+          <td class="flight-table__flight">{{ include "authenticated/components/flightMapPreview.vto" { flight } }}<span>Completed flight</span></td>
+          <td data-label="Launch Time"><span>{{ flight.date }}</span><small>{{ flight.time }}</small></td>
+          <td data-label="5-Point Distance">{{ flight.distance }}</td>
+          <td data-label="Duration">{{ flight.duration }}</td>
+          <td><a class="flight-table__link" href="{{ flight.href }}" aria-label="View flight from {{ flight.date }}">{{ include "authenticated/components/icon.vto" { name: "chevron-right" } }}</a></td>
+        </tr>
+      {{ /for }}
+    </tbody>
+  </table>
+</div>

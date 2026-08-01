@@ -54,13 +54,19 @@ function productionProfile(overrides: Partial<ProductionFixture> = {}): Producti
     recentFlights: [0, 1, 2, 3].map((index) => ({
       flightId: `production-flight-${index}`,
       flightDate: `Jun ${index + 1}, 2026`,
+      launchTime: '10:00 AM',
+      launchTimestamp: Date.UTC(2026, 5, index + 1, 10),
       distance: `${index + 1}.0 km`,
+      distanceMeters: (index + 1) * 1_000,
       duration: '1h',
+      durationSeconds: 3_600,
       directCellCount: index,
       enclosedCellCount: 0,
       totalCellCount: index,
       newPersonalCellCount: index,
     })),
+    personalRecords: [],
+    recentAchievements: [],
     currentArenaLeaderships: [0, 1, 2, 3].map((index) => ({
       arenaId: `arena-${index}`,
       arenaName: `Production Arena ${index}`,
@@ -80,7 +86,15 @@ describe('production Profile and Achievements rendering', () => {
   const render = createAuthenticatedPageRenderer();
 
   it('renders a populated public profile with real counts, follow state, and disclosure rows', async () => {
-    const profile = productionProfile();
+    const baseProfile = productionProfile();
+    const profile = productionProfile({
+      recentAchievements: baseProfile.achievements.slice(0, 3),
+      personalRecords: [
+        { key: 'five_point_distance', label: 'Best 5-Point Distance', flightId: 'production-flight-3', flightDate: 'Jun 4, 2026', value: '4.0 km' },
+        { key: 'duration', label: 'Longest Duration', flightId: 'production-flight-2', flightDate: 'Jun 3, 2026', value: '1h' },
+        { key: 'gps_altitude', label: 'Highest GPS Altitude', flightId: 'production-flight-1', flightDate: 'Jun 2, 2026', value: '2,500 m' },
+      ],
+    });
     const shell = createAuthenticatedShellModel({
       page: 'profile',
       user: { displayName: 'Viewer' },
@@ -98,13 +112,18 @@ describe('production Profile and Achievements rendering', () => {
     });
 
     expect(html).toContain('Production Pilot');
-    expect(html).toMatch(/Followers<\/dt><dd>3<\/dd>/);
-    expect(html).toMatch(/Following<\/dt><dd>2<\/dd>/);
+    expect(html).not.toContain('Followers');
+    expect(html).not.toContain('Following');
     expect(html).toContain('action="/pilots/00000000-0000-4000-8000-000000000099/follow"');
     expect(html).toContain('value="/pilots/00000000-0000-4000-8000-000000000099"');
     expect(html).toContain('Show all');
     expect(html).toContain('Production Arena 3');
     expect(html).toContain('Jun 4, 2026');
+    expect(html.match(/data-flight-row/g)).toHaveLength(3);
+    expect(html).toContain('Best 5-Point Distance');
+    expect(html).toContain('Highest GPS Altitude');
+    expect(html).toContain('Production Achievement 2');
+    expect(html).toContain('aria-sort="descending"');
     expect(html).not.toContain('Personal Map Preview');
     expect(html).not.toContain('Ozone');
     expect(html).not.toContain('Alex Summit');
@@ -130,8 +149,8 @@ describe('production Profile and Achievements rendering', () => {
       ...pilotProfileToView(profile, { isCurrent: false, isFollowed: true, currentPath: '/pilots/empty' }),
     });
 
-    expect(html).toMatch(/Followers<\/dt><dd>0<\/dd>/);
-    expect(html).toMatch(/Following<\/dt><dd>0<\/dd>/);
+    expect(html).not.toContain('Followers');
+    expect(html).not.toContain('Following');
     expect(html).toContain('action="/pilots/00000000-0000-4000-8000-000000000099/unfollow"');
     expect(html).toContain('No current Arena titles yet.');
     expect(html).toContain('No completed flights yet.');

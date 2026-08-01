@@ -32,12 +32,21 @@ export function parseIgcFlight(source: string): ParsedIgcFlight {
   if (points.length < 2) throw new IgcParseError('insufficient_fixes');
   const first = points[0]!;
   const last = points.at(-1)!;
+  let minGpsAltitudeMeters = first.gpsAltitudeMeters;
+  let maxGpsAltitudeMeters = first.gpsAltitudeMeters;
+  for (const point of points.slice(1)) {
+    minGpsAltitudeMeters = Math.min(minGpsAltitudeMeters, point.gpsAltitudeMeters);
+    maxGpsAltitudeMeters = Math.max(maxGpsAltitudeMeters, point.gpsAltitudeMeters);
+  }
   return {
     points,
     startedAt: first.recordedAt,
     endedAt: last.recordedAt,
     durationSeconds: (last.recordedAt.getTime() - first.recordedAt.getTime()) / 1000,
     distanceMeters: totalDistanceMeters(points),
+    launchGpsAltitudeMeters: first.gpsAltitudeMeters,
+    minGpsAltitudeMeters,
+    maxGpsAltitudeMeters,
     launchLatitude: first.latitude,
     launchLongitude: first.longitude,
   };

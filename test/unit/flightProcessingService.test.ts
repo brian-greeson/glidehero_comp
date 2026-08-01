@@ -252,6 +252,9 @@ describe('FlightProcessingService', () => {
     expect(flightUpdates).toEqual([
       expect.objectContaining({
         durationSeconds: 5,
+        launchGpsAltitudeMeters: 1_234,
+        minGpsAltitudeMeters: 1_234,
+        maxGpsAltitudeMeters: 1_237,
         launchLatitude: 40,
         launchLongitude: -105,
         launchTimezone: 'America/Denver',

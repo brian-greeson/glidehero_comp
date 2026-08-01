@@ -1,6 +1,7 @@
 import type { PilotProfileSummary } from '../../../services/profileService.js';
 import { initialsForDisplayName } from './shellModel.js';
 import type { FlightThumbnailUrls } from '../../../services/flightThumbnailDeliveryService.js';
+import { earnedAchievementToView } from './achievementView.js';
 
 const avatarColors = ['#1769aa', '#ff6b24', '#17b7ca', '#43a52c', '#7441b6'] as const;
 
@@ -52,7 +53,7 @@ export function pilotProfileToView(summary: PilotProfileSummary, options: Profil
 
   const metrics = [
     { label: 'Unique Cells', value: formatCount(summary.lifetimeUniqueCellCount), detail: 'All Time', icon: 'map', tone: 'green' as const },
-    { label: 'Flights Uploaded', value: formatCount(summary.completedFlightCount), detail: 'All Time', icon: 'flight', tone: 'purple' as const },
+    { label: 'Completed Flights', value: formatCount(summary.completedFlightCount), detail: 'All Time', icon: 'flight', tone: 'purple' as const },
     { label: 'Achievements Earned', value: formatCount(summary.achievementCount), detail: 'All Time', icon: 'trophy', tone: 'orange' as const },
   ];
 
@@ -66,15 +67,29 @@ export function pilotProfileToView(summary: PilotProfileSummary, options: Profil
     isInitiallyVisible: index < 3,
   }));
 
-  const flights = summary.recentFlights.map((flight, index) => ({
+  const flights = summary.recentFlights.slice(0, 3).map((flight) => ({
     id: flight.flightId,
     href: `/flights/${flight.flightId}`,
     date: flight.flightDate || 'Date unavailable',
+    time: flight.launchTime || 'Time unavailable',
+    launchTimestamp: flight.launchTimestamp,
     distance: flight.distance || '—',
-    cells: formatCount(flight.totalCellCount),
+    distanceMeters: flight.distanceMeters,
+    duration: flight.duration || '—',
+    durationSeconds: flight.durationSeconds,
     thumbnail: options.thumbnailUrls?.get(flight.flightId),
-    isInitiallyVisible: index < 3,
   }));
+
+  const personalRecords = summary.personalRecords.map((record) => ({
+    key: record.key,
+    label: record.label,
+    value: record.value,
+    date: record.flightDate,
+    href: `/flights/${record.flightId}`,
+    icon: record.key === 'five_point_distance' ? 'flight' as const : record.key === 'duration' ? 'calendar' as const : 'mountain' as const,
+  }));
+
+  const recentAchievements = summary.recentAchievements.slice(0, 3).map(earnedAchievementToView);
 
   const glider = summary.glider ? {
     modelId: summary.glider.modelId,
@@ -92,6 +107,8 @@ export function pilotProfileToView(summary: PilotProfileSummary, options: Profil
     metrics,
     titles,
     flights,
+    personalRecords,
+    recentAchievements,
     profileIsCurrent: options.isCurrent ?? false,
     profileIsFollowed: options.isFollowed ?? false,
     currentPath: options.currentPath ?? `/pilots/${summary.userId}`,

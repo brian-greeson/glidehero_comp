@@ -627,7 +627,7 @@ export function createFlightUploadQueueService(
             }
             const [file] = await tx.insert(igcFiles).values({ userId: job.userId, originalFilename: job.originalFilename, contentType: job.contentType, byteSize: job.byteSize, bucketKey: job.bucketKey }).returning({ id: igcFiles.id });
             if (!file) throw new Error('Unable to create IGC file');
-            const [flight] = await tx.insert(flights).values({ userId: job.userId, igcFileId: file.id, contentHash, processingStatus: 'pending', startedAt: parsed.startedAt, endedAt: parsed.endedAt, durationSeconds: Math.round(parsed.durationSeconds), distanceMeters: parsed.distanceMeters, launchLatitude: parsed.launchLatitude, launchLongitude: parsed.launchLongitude, launchTimezone }).returning({ id: flights.id });
+            const [flight] = await tx.insert(flights).values({ userId: job.userId, igcFileId: file.id, contentHash, processingStatus: 'pending', startedAt: parsed.startedAt, endedAt: parsed.endedAt, durationSeconds: Math.round(parsed.durationSeconds), distanceMeters: parsed.distanceMeters, launchGpsAltitudeMeters: parsed.launchGpsAltitudeMeters, minGpsAltitudeMeters: parsed.minGpsAltitudeMeters, maxGpsAltitudeMeters: parsed.maxGpsAltitudeMeters, launchLatitude: parsed.launchLatitude, launchLongitude: parsed.launchLongitude, launchTimezone }).returning({ id: flights.id });
             if (!flight) throw new Error('Unable to create flight');
             const [member] = job.batchId
               ? await tx.insert(regularUploadMembers).values({

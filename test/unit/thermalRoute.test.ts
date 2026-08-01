@@ -117,6 +117,32 @@ describe('thermal-guided route domain', () => {
       .toBeGreaterThan(weightedThermalDistanceMeters([diagonalStart, diagonalEnd], routingField, scores) + 300);
   });
 
+  it('finds a long thermal corridor instead of staying direct on a long leg', () => {
+    const longStart = { latitude: 39.75, longitude: -105.35 };
+    const longEnd = { latitude: 40.15, longitude: -105.25 };
+    const routingField = createThermalRoutingField({
+      start: longStart,
+      end: longEnd,
+      maximumDeviationPercent: 100,
+    });
+    const scores = scoresFor(routingField, (sample) => {
+      const inFoothillCorridor = Math.abs(sample.longitude + 105.28) < 0.006
+        && sample.latitude > 39.82
+        && sample.latitude < 40.08;
+      return inFoothillCorridor ? 0.85 : 0;
+    });
+
+    const result = thermalGuidedLeg({ field: routingField, relativeScores: scores });
+    const corridorPoints = result.points.filter((point) => Math.abs(point.longitude + 105.28) < 0.012);
+    expect(result.points[0]).toEqual(longStart);
+    expect(result.points.at(-1)).toEqual(longEnd);
+    expect(corridorPoints.length).toBeGreaterThanOrEqual(2);
+    expect(result.points.length).toBeLessThanOrEqual(8);
+    expect(result.routeDistanceMeters).toBeLessThanOrEqual(result.maximumDistanceMeters);
+    expect(weightedThermalDistanceMeters(result.points, routingField, scores))
+      .toBeGreaterThan(weightedThermalDistanceMeters([longStart, longEnd], routingField, scores) + 5_000);
+  });
+
   it('uses the direct route when thermal improvement is not meaningful', () => {
     const routingField = field();
     const scores = scoresFor(routingField, (sample) => (

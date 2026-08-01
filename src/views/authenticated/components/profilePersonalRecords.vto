@@ -1,0 +1,7 @@
+<section class="profile-card profile-card--records">
+  <header class="section-heading"><div>{{ include "authenticated/components/icon.vto" { name: "trophy" } }}<h2>Personal Records</h2></div></header>
+  <div class="profile-card__desktop-content">
+    {{ if personalRecords.length }}<ul>{{ for record of personalRecords }}<li><span class="profile-record-icon profile-record-icon--{{ record.key }}">{{ include "authenticated/components/icon.vto" { name: record.icon } }}</span><div><strong>{{ record.label }}</strong><span>{{ record.date }}</span></div><a href="{{ record.href }}"><strong>{{ record.value }}</strong><span class="visually-hidden">View record flight</span>{{ include "authenticated/components/icon.vto" { name: "chevron-right" } }}</a></li>{{ /for }}</ul>
+    {{ else }}<p class="profile-empty">No personal record flights yet.</p>{{ /if }}
+  </div>
+</section>

@@ -16,12 +16,13 @@
           </form>
         {{ /if }}
       </div>
-      <dl class="profile-social"><div><dt>Followers</dt><dd>{{ if profile.followers === "0" }}0{{ else }}{{ profile.followers }}{{ /if }}</dd></div><div><dt>Following</dt><dd>{{ if profile.following === "0" }}0{{ else }}{{ profile.following }}{{ /if }}</dd></div></dl>
     </header>
     {{ include "authenticated/components/metricStrip.vto" { metrics, label: "Pilot statistics", compact: true } }}
     <div class="profile-grid">
-      {{ include "authenticated/components/profileTitles.vto" { titles } }}
       {{ include "authenticated/components/profileFlights.vto" { flights } }}
+      {{ include "authenticated/components/profilePersonalRecords.vto" { personalRecords } }}
+      {{ include "authenticated/components/profileRecentAchievements.vto" { recentAchievements } }}
+      {{ include "authenticated/components/profileTitles.vto" { titles } }}
       {{ include "authenticated/components/gliderInformation.vto" { glider, gliderIsCurrent } }}
     </div>
   </section>

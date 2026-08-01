@@ -42,6 +42,8 @@ export type PilotProfileSummary = {
   followerCount?: number;
   followingCount?: number;
   recentFlights: PilotRecentFlight[];
+  personalRecords: PilotPersonalRecord[];
+  recentAchievements: PilotAchievement[];
   currentArenaLeaderships: PilotArenaLeadership[];
   glider?: GliderProfile | null;
 };
@@ -125,12 +127,24 @@ export type PilotAchievement = {
 export type PilotRecentFlight = {
   flightId: string;
   flightDate: string;
+  launchTime: string;
+  launchTimestamp: number | null;
   distance: string;
+  distanceMeters: number | null;
   duration: string;
+  durationSeconds: number | null;
   directCellCount: number;
   enclosedCellCount: number;
   totalCellCount: number;
   newPersonalCellCount: number;
+};
+
+export type PilotPersonalRecord = {
+  key: 'five_point_distance' | 'duration' | 'gps_altitude';
+  label: string;
+  flightId: string;
+  flightDate: string;
+  value: string;
 };
 
 export class TerritoryColorValidationError extends Error {
@@ -193,9 +207,17 @@ type StoredRecentFlight = {
   startedAt: Date | string | null;
   distanceMeters: number | string | null;
   durationSeconds: number | string | null;
+  launchTimezone: string | null;
   directCellCount: number | string;
   enclosedCellCount: number | string;
   newPersonalCellCount: number | string;
+};
+
+type StoredRecordFlight = {
+  flightId: string;
+  startedAt: Date | string | null;
+  launchTimezone: string | null;
+  value: number | string;
 };
 
 type StoredArenaLeadership = {
@@ -234,6 +256,34 @@ function displayDate(value: Date | string | null): string {
   if (Number.isNaN(date.getTime())) return '—';
   return new Intl.DateTimeFormat('en-US', {
     year: 'numeric', month: 'short', day: 'numeric', timeZone: 'UTC',
+  }).format(date);
+}
+
+function safeTimeZone(value: string | null): string {
+  if (!value) return 'UTC';
+  try {
+    new Intl.DateTimeFormat('en-US', { timeZone: value }).format(new Date());
+    return value;
+  } catch {
+    return 'UTC';
+  }
+}
+
+function displayFlightDate(value: Date | string | null, timeZone: string | null): string {
+  if (!value) return '—';
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return '—';
+  return new Intl.DateTimeFormat('en-US', {
+    year: 'numeric', month: 'short', day: 'numeric', timeZone: safeTimeZone(timeZone),
+  }).format(date);
+}
+
+function displayFlightTime(value: Date | string | null, timeZone: string | null): string {
+  if (!value) return '—';
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return '—';
+  return new Intl.DateTimeFormat('en-US', {
+    hour: 'numeric', minute: '2-digit', timeZone: safeTimeZone(timeZone),
   }).format(date);
 }
 
@@ -295,6 +345,11 @@ function displayDuration(value: number | string | null): string {
   if (hours > 0) return `${hours}h ${String(minutes).padStart(2, '0')}m`;
   if (minutes > 0) return `${minutes}m ${String(seconds).padStart(2, '0')}s`;
   return `${seconds}s`;
+}
+
+function displayAltitude(value: number | string | null): string {
+  if (value == null) return '—';
+  return `${new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 }).format(Number(value))} m`;
 }
 
 function detailsObject(value: unknown): Record<string, unknown> {
@@ -467,6 +522,34 @@ function achievementDisplay(row: StoredAchievement): PilotAchievement {
     description: 'A progression achievement earned during a flight.',
     badgeLabel: 'Award',
   };
+}
+
+async function loadPilotAchievementRows(
+  database: Database,
+  userId: string,
+  limit?: number,
+): Promise<Array<StoredAchievement & { totalCount: number | string }>> {
+  const limitSql = limit === undefined ? sql`` : sql`LIMIT ${limit}`;
+  const result = await database.execute<StoredAchievement & { totalCount: number | string }>(sql`
+    WITH displayable AS (
+      SELECT earned.id::text AS id, earned.achievement_type AS "achievementType", earned.achievement_key AS "achievementKey",
+        earned.source_flight_id AS "sourceFlightId", earned.earned_at AS "earnedAt", earned.details,
+        false AS "isRecordEvent", NULL::integer AS value
+      FROM achievements earned WHERE earned.user_id = ${userId}
+      UNION ALL
+      SELECT ('record-event:' || event.id::text) AS id, 'record' AS "achievementType", record.record_key AS "achievementKey",
+        event.source_flight_id AS "sourceFlightId", event.earned_at AS "earnedAt", event.details,
+        true AS "isRecordEvent", event.value
+      FROM achievement_record_events event
+      INNER JOIN achievement_records record ON record.id = event.record_id
+      WHERE event.user_id = ${userId}
+    )
+    SELECT displayable.*, COUNT(*) OVER()::integer AS "totalCount"
+    FROM displayable
+    ORDER BY displayable."earnedAt" DESC, displayable.id DESC
+    ${limitSql}
+  `);
+  return result.rows;
 }
 
 function countProgressCard(input: {
@@ -786,24 +869,70 @@ export function createProfileService(database: Database, options: { cellSize: nu
       if (!row) return null;
       const lifetimeUniqueCellCount = Number(row.lifetimeUniqueCellCount);
       const nextMilestone = nextUniqueCellMilestone(lifetimeUniqueCellCount);
-      const [recentFlightRows, currentArenaLeadershipRows] = await Promise.all([
+      const [recentFlightRows, fivePointRecordRows, durationRecordRows, altitudeRecordRows, recentAchievementRows, currentArenaLeadershipRows] = await Promise.all([
         database.execute<StoredRecentFlight>(sql`
           SELECT
             progress.flight_id AS "flightId",
             flights.started_at AS "startedAt",
-            flights.distance_meters AS "distanceMeters",
+            flights.launch_timezone AS "launchTimezone",
+            scores.five_point_distance_meters AS "distanceMeters",
             flights.duration_seconds AS "durationSeconds",
             progress.direct_cell_count AS "directCellCount",
             progress.enclosed_cell_count AS "enclosedCellCount",
             progress.new_personal_cell_count AS "newPersonalCellCount"
           FROM flight_progress progress
           INNER JOIN flights ON flights.flight_id = progress.flight_id
+          LEFT JOIN flight_scores scores ON scores.flight_id = flights.flight_id
           WHERE progress.user_id = ${userId}
           ORDER BY flights.started_at DESC NULLS LAST, progress.evaluated_at DESC, progress.flight_id DESC
-          LIMIT 20
+          LIMIT 3
         `),
+        database.execute<StoredRecordFlight>(sql`
+          SELECT flights.flight_id AS "flightId", flights.started_at AS "startedAt",
+            flights.launch_timezone AS "launchTimezone", scores.five_point_distance_meters AS value
+          FROM flights INNER JOIN flight_scores scores ON scores.flight_id = flights.flight_id
+          WHERE flights.user_id = ${userId} AND flights.processing_status = 'completed'
+            AND scores.five_point_distance_meters IS NOT NULL
+          ORDER BY scores.five_point_distance_meters DESC, flights.started_at DESC NULLS LAST, flights.flight_id DESC
+          LIMIT 1
+        `),
+        database.execute<StoredRecordFlight>(sql`
+          SELECT flights.flight_id AS "flightId", flights.started_at AS "startedAt",
+            flights.launch_timezone AS "launchTimezone", flights.duration_seconds AS value
+          FROM flights
+          WHERE flights.user_id = ${userId} AND flights.processing_status = 'completed'
+            AND flights.duration_seconds IS NOT NULL
+          ORDER BY flights.duration_seconds DESC, flights.started_at DESC NULLS LAST, flights.flight_id DESC
+          LIMIT 1
+        `),
+        database.execute<StoredRecordFlight>(sql`
+          SELECT flights.flight_id AS "flightId", flights.started_at AS "startedAt",
+            flights.launch_timezone AS "launchTimezone", flights.max_gps_altitude_meters AS value
+          FROM flights
+          WHERE flights.user_id = ${userId} AND flights.processing_status = 'completed'
+            AND flights.max_gps_altitude_meters IS NOT NULL
+          ORDER BY flights.max_gps_altitude_meters DESC, flights.started_at DESC NULLS LAST, flights.flight_id DESC
+          LIMIT 1
+        `),
+        loadPilotAchievementRows(database, userId, 3),
         loadCurrentArenaLeaderships(database, options, userId),
       ]);
+      const personalRecords: PilotPersonalRecord[] = [];
+      const fivePointRecord = fivePointRecordRows.rows[0];
+      if (fivePointRecord) personalRecords.push({
+        key: 'five_point_distance', label: 'Best 5-Point Distance', flightId: fivePointRecord.flightId,
+        flightDate: displayFlightDate(fivePointRecord.startedAt, fivePointRecord.launchTimezone), value: displayDistance(fivePointRecord.value),
+      });
+      const durationRecord = durationRecordRows.rows[0];
+      if (durationRecord) personalRecords.push({
+        key: 'duration', label: 'Longest Duration', flightId: durationRecord.flightId,
+        flightDate: displayFlightDate(durationRecord.startedAt, durationRecord.launchTimezone), value: displayDuration(durationRecord.value),
+      });
+      const altitudeRecord = altitudeRecordRows.rows[0];
+      if (altitudeRecord) personalRecords.push({
+        key: 'gps_altitude', label: 'Highest GPS Altitude', flightId: altitudeRecord.flightId,
+        flightDate: displayFlightDate(altitudeRecord.startedAt, altitudeRecord.launchTimezone), value: displayAltitude(altitudeRecord.value),
+      });
       return {
         userId: row.userId,
         displayName: row.displayName,
@@ -825,15 +954,21 @@ export function createProfileService(database: Database, options: { cellSize: nu
           const enclosedCellCount = Number(flight.enclosedCellCount);
           return {
             flightId: flight.flightId,
-            flightDate: displayDate(flight.startedAt),
+            flightDate: displayFlightDate(flight.startedAt, flight.launchTimezone),
+            launchTime: displayFlightTime(flight.startedAt, flight.launchTimezone),
+            launchTimestamp: flight.startedAt ? new Date(flight.startedAt).getTime() : null,
             distance: displayDistance(flight.distanceMeters),
+            distanceMeters: numberOrNull(flight.distanceMeters),
             duration: displayDuration(flight.durationSeconds),
+            durationSeconds: numberOrNull(flight.durationSeconds),
             directCellCount,
             enclosedCellCount,
             totalCellCount: directCellCount + enclosedCellCount,
             newPersonalCellCount: Number(flight.newPersonalCellCount),
           };
         }),
+        personalRecords,
+        recentAchievements: recentAchievementRows.map(achievementDisplay),
         currentArenaLeaderships: currentArenaLeadershipRows.rows.map((leadership) => ({
           arenaId: leadership.arenaId,
           arenaName: leadership.arenaName,
@@ -930,30 +1065,13 @@ export function createProfileService(database: Database, options: { cellSize: nu
       `);
       const row = identity.rows[0];
       if (!row) return null;
-      const achievementRows = await database.execute<StoredAchievement & { totalCount: number | string }>(sql`
-        WITH displayable AS (
-          SELECT earned.id::text AS id, earned.achievement_type AS "achievementType", earned.achievement_key AS "achievementKey",
-            earned.source_flight_id AS "sourceFlightId", earned.earned_at AS "earnedAt", earned.details,
-            false AS "isRecordEvent", NULL::integer AS value
-          FROM achievements earned WHERE earned.user_id = ${userId}
-          UNION ALL
-          SELECT ('record-event:' || event.id::text) AS id, 'record' AS "achievementType", record.record_key AS "achievementKey",
-            event.source_flight_id AS "sourceFlightId", event.earned_at AS "earnedAt", event.details,
-            true AS "isRecordEvent", event.value
-          FROM achievement_record_events event
-          INNER JOIN achievement_records record ON record.id = event.record_id
-          WHERE event.user_id = ${userId}
-        )
-        SELECT displayable.*, COUNT(*) OVER()::integer AS "totalCount"
-        FROM displayable
-        ORDER BY displayable."earnedAt" DESC, displayable.id DESC
-      `);
+      const achievementRows = await loadPilotAchievementRows(database, userId);
       const achievementProgress = await loadProjectionAchievementProgress(database, progressService, options, row.displayName, userId);
       return {
         userId: row.userId,
         displayName: row.displayName,
-        achievementCount: Number(achievementRows.rows[0]?.totalCount ?? 0),
-        achievements: achievementRows.rows.map(achievementDisplay),
+        achievementCount: Number(achievementRows[0]?.totalCount ?? 0),
+        achievements: achievementRows.map(achievementDisplay),
         achievementProgress,
       };
     },

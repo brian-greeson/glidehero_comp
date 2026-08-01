@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 // @ts-expect-error Browser assets remain JavaScript.
-import { initializeAccountMenu, initializeSegmentedControls } from '../../public/scripts/app-ui/app.js';
+import { initializeAccountMenu, initializeSegmentedControls, sortFlightRows } from '../../public/scripts/app-ui/app.js';
 // @ts-expect-error Browser assets remain JavaScript.
 import { initializeMapSheet } from '../../public/scripts/app-ui/map.js';
 
@@ -31,6 +31,15 @@ function node() {
 }
 
 describe('refreshed app UI interactions', () => {
+  it('sorts reusable flight rows numerically with newest-launch tie breaking', () => {
+    const rows = [
+      { dataset: { launch: '2', distance: '100', duration: '60' } },
+      { dataset: { launch: '3', distance: '200', duration: '30' } },
+      { dataset: { launch: '1', distance: '200', duration: '90' } },
+    ];
+    expect(sortFlightRows(rows, 'distance', 'desc').map((row: (typeof rows)[number]) => row.dataset.launch)).toEqual(['3', '1', '2']);
+    expect(sortFlightRows(rows, 'duration', 'asc').map((row: (typeof rows)[number]) => row.dataset.duration)).toEqual(['30', '60', '90']);
+  });
   it('opens and dismisses the account menu with Escape', () => {
     const root: any = node();
     const trigger = node();

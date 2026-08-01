@@ -1,5 +1,5 @@
 <section class="profile-card profile-card--titles">
-  <header class="section-heading"><div>{{ include "authenticated/components/icon.vto" { name: "crown" } }}<h2>Current Titles</h2></div>{{ if titles.length > 3 }}<button type="button" class="profile-list-toggle" data-profile-list-toggle="titles" aria-expanded="false">Show all</button>{{ /if }}</header>
+  <header class="section-heading"><div>{{ include "authenticated/components/icon.vto" { name: "crown" } }}<h2>Arena Titles</h2></div>{{ if titles.length > 3 }}<button type="button" class="profile-list-toggle" data-profile-list-toggle="titles" aria-expanded="false">Show all</button>{{ /if }}</header>
   <div class="profile-card__desktop-content">
     {{ if titles.length }}
       <ul data-profile-list="titles">{{ for title of titles }}<li data-profile-list-item="{{ if typeof title.isInitiallyVisible !== 'undefined' && !title.isInitiallyVisible }}extra{{ else }}visible{{ /if }}"><span class="title-icon title-icon--{{ title.tone }}">{{ include "authenticated/components/icon.vto" { name: title.icon } }}</span><div><strong>{{ title.name }}</strong><span>{{ title.detail }}</span></div>{{ if title.since }}<time>{{ title.since }}</time>{{ /if }}</li>{{ /for }}</ul>

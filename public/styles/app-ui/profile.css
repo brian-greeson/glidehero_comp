@@ -13,3 +13,69 @@
   .profile-grid { display: flex; flex-direction: column; gap: .65rem; }.glider-card { order: -1; }.profile-card { padding: .4rem .75rem; }.profile-card .section-heading { min-height: 52px; }.profile-card .section-heading h2 { font-size: .72rem; }.profile-card__desktop-content { display: none !important; }.profile-card.is-expanded .profile-card__desktop-content { display: block !important; padding-bottom: .6rem; }.profile-card .section-heading { cursor: pointer; }.profile-card .section-heading::after { color: var(--app-muted); content: '›'; font-size: 1.2rem; }.profile-card.is-expanded .section-heading::after { transform: rotate(90deg); }.profile-list-toggle { margin-left: auto; }.glider-card .section-heading { cursor: default; }.glider-card .section-heading::after { content: none; }.glider-card__image { max-height: 150px; }.glider-card__results { max-height: min(220px, 35vh); }
 }
 @media (max-width: 390px) { .profile-page > .metric-strip .metric__icon { width: 30px; height: 30px; }.profile-name { flex-wrap: wrap; } }
+
+/* Reusable flight table and profile record cards. */
+.profile-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.profile-card--flights { grid-column: 1 / -1; }
+.profile-identity-card { grid-template-columns: auto minmax(0, 1fr); min-height: 180px; }
+.profile-identity-card > .initials-avatar { width: 128px; height: 128px; font-size: 2rem; }
+.flight-table-scroll { overflow-x: auto; }
+.flight-table { width: 100%; border-collapse: collapse; }
+.flight-table th { padding: .55rem .6rem; border-bottom: 1px solid var(--app-border); color: var(--app-muted); font-size: .58rem; font-weight: 750; text-align: left; white-space: nowrap; }
+.flight-table th button { padding: 0; border: 0; color: inherit; background: transparent; font: inherit; cursor: pointer; }
+.flight-table th[aria-sort]:not([aria-sort="none"]) button { color: var(--app-blue); }
+.flight-table td { padding: .55rem .6rem; border-bottom: 1px solid var(--app-border); font-size: .68rem; vertical-align: middle; white-space: nowrap; }
+.flight-table tbody tr:last-child td { border-bottom: 0; }
+.flight-table__flight { display: flex; align-items: center; min-width: 220px; gap: .65rem; font-weight: 750; }
+.flight-table__flight .flight-thumbnail-link { width: 110px; flex: 0 0 110px; }
+.flight-table td small { display: block; margin-top: .12rem; color: var(--app-muted); font-size: .56rem; }
+.flight-table__link { display: inline-flex; color: var(--app-muted); }
+.flight-table__link .app-icon { width: 1rem; }
+.profile-card--records li { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: .7rem; padding: .45rem 0; }
+.profile-record-icon { display: grid; width: 38px; height: 38px; place-items: center; border-radius: 50%; color: var(--app-blue); background: #edf6ff; }
+.profile-record-icon--duration { color: var(--app-orange); background: #fff3eb; }
+.profile-record-icon--gps_altitude { color: var(--app-purple); background: #f4efff; }
+.profile-card--records li > a { display: flex; align-items: center; gap: .4rem; color: var(--app-text); text-align: right; text-decoration: none; }
+.profile-card--records li > a > strong { font-size: .82rem; }
+.profile-card--records li > a .app-icon { width: 1rem; color: var(--app-muted); }
+.profile-recent-achievements { display: grid; }
+.profile-card--achievements .section-heading > a { color: var(--app-blue); font-size: .65rem; font-weight: 750; text-decoration: none; }
+.profile-card--achievements .earned-achievement-card { display: grid; grid-template-columns: 54px 1fr; align-items: center; gap: .65rem; min-height: 68px; padding: .45rem 0; border-top: 1px solid var(--app-border); }
+.profile-card--achievements .achievement-badge { width: 50px; height: 54px; }
+.profile-card--achievements .achievement-badge__label { font-size: .55rem; }
+.profile-card--achievements .earned-achievement-card h3 { margin: 0 0 .15rem; font-size: .72rem; }
+.profile-card--achievements .earned-achievement-card p { display: none; }
+.profile-card--achievements .achievement-card__type { color: var(--app-muted); font-size: .52rem; font-weight: 750; text-transform: uppercase; }
+.profile-card--achievements .earned-achievement-card small { display: flex; align-items: center; gap: .2rem; margin-top: .25rem; color: var(--app-muted); font-size: .56rem; }
+.profile-card--achievements .earned-achievement-card small .app-icon { width: .75rem; color: var(--app-green); }
+
+@media (max-width: 900px) {
+  .profile-identity-card { grid-template-columns: auto minmax(0, 1fr); min-height: 94px; justify-items: stretch; gap: .75rem; padding: .65rem 1rem; text-align: left; }
+  .profile-identity-card > .initials-avatar { width: 76px; height: 76px; margin-top: -32px; font-size: 1.35rem; }
+  .profile-name { justify-content: flex-start; }
+  .profile-name h1 { font-size: 1.25rem; }
+  .profile-follow-form { margin-top: .45rem; }
+  .glider-card { order: initial; }
+  .glider-card .section-heading { cursor: pointer; }
+  .glider-card .section-heading::after { content: '›'; }
+  .glider-card.is-expanded .section-heading::after { transform: rotate(90deg); }
+  .profile-card--flights .profile-card__desktop-content { display: block !important; padding-bottom: .6rem; }
+  .profile-card--flights .section-heading { cursor: default; }
+  .profile-card--flights .section-heading::after { content: none; }
+  .flight-table-scroll { overflow: visible; }
+  .flight-table thead { display: block; }
+  .flight-table thead tr { display: flex; gap: .35rem; padding: .2rem 0 .5rem; }
+  .flight-table thead th { display: none; padding: 0; border: 0; }
+  .flight-table thead th[aria-sort] { display: block; }
+  .flight-table thead th button { min-height: 32px; padding: .35rem .65rem; border: 1px solid var(--app-border); border-radius: 999px; }
+  .flight-table thead th[aria-sort]:not([aria-sort="none"]) button { border-color: var(--app-blue); background: #edf6ff; }
+  .flight-table, .flight-table tbody { display: block; }
+  .flight-table tbody tr { display: grid; grid-template-columns: 82px minmax(0, 1fr) auto; gap: .2rem .6rem; margin-bottom: .45rem; padding: .4rem; border: 1px solid var(--app-border); border-radius: .55rem; }
+  .flight-table td { display: block; padding: 0; border: 0; white-space: normal; }
+  .flight-table__flight { grid-row: 1 / 4; min-width: 0; }
+  .flight-table__flight .flight-thumbnail-link { width: 82px; flex-basis: 82px; }
+  .flight-table__flight > span { display: none; }
+  .flight-table td[data-label="Launch Time"] { grid-column: 2; font-weight: 750; }
+  .flight-table td[data-label="5-Point Distance"], .flight-table td[data-label="Duration"] { display: inline-block; grid-column: 2; color: var(--app-muted); font-size: .6rem; }
+  .flight-table td:last-child { grid-column: 3; grid-row: 1 / 4; align-self: center; }
+}

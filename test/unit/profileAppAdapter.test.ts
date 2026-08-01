@@ -22,14 +22,20 @@ const summary: PilotProfileSummary = {
     {
       flightId: 'flight-1',
       flightDate: 'Jun 5, 2026',
+      launchTime: '10:00 AM',
+      launchTimestamp: Date.UTC(2026, 5, 5, 10),
       distance: '12.0 km',
+      distanceMeters: 12_000,
       duration: '1h',
+      durationSeconds: 3_600,
       directCellCount: 0,
       enclosedCellCount: 0,
       totalCellCount: 0,
       newPersonalCellCount: 0,
     },
   ],
+  personalRecords: [],
+  recentAchievements: [],
   currentArenaLeaderships: [{
     arenaId: 'arena-1',
     arenaName: 'Colorado',
@@ -52,7 +58,9 @@ describe('refreshed profile adapter', () => {
     expect(view.profile).not.toHaveProperty('bio');
     expect(view.metrics.map((metric) => metric.value)).toEqual(['0', '2', '0']);
     expect(view.titles[0]).toMatchObject({ name: 'Colorado', detail: 'Top cell holder · 0 cells', isInitiallyVisible: true });
-    expect(view.flights[0]).toMatchObject({ id: 'flight-1', href: '/flights/flight-1', cells: '0', isInitiallyVisible: true });
+    expect(view.flights[0]).toMatchObject({
+      id: 'flight-1', href: '/flights/flight-1', distanceMeters: 12_000, durationSeconds: 3_600,
+    });
     expect(view.profileIsFollowed).toBe(true);
     expect(view.glider).toBeNull();
     expect(view.gliderEditor).toMatchObject({ hours: '0', error: '', isOpen: false });

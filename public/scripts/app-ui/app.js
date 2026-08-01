@@ -53,6 +53,7 @@ export function initializeActivityFilters(documentRef = document) {
 
 export function initializeProfileDisclosures(documentRef = document) {
   for (const card of documentRef.querySelectorAll('.profile-card')) {
+    if (card.hasAttribute?.('data-profile-always-open')) continue;
     const heading = card.querySelector('.section-heading');
     if (!heading) continue;
     heading.setAttribute('role', 'button');
@@ -92,6 +93,42 @@ export function initializeFlightThumbnailFallback(documentRef = document) {
   }
 }
 
+export function sortFlightRows(rows, key, direction) {
+  const multiplier = direction === 'asc' ? 1 : -1;
+  return [...rows].sort((left, right) => {
+    const difference = Number(left.dataset[key] ?? -1) - Number(right.dataset[key] ?? -1);
+    if (difference !== 0) return difference * multiplier;
+    return String(left.dataset.launch ?? '').localeCompare(String(right.dataset.launch ?? '')) * -1;
+  });
+}
+
+export function initializeFlightTables(documentRef = document) {
+  for (const table of documentRef.querySelectorAll('[data-flight-table]')) {
+    const body = table.querySelector('[data-flight-table-body]');
+    if (!body) continue;
+    const buttons = [...table.querySelectorAll('[data-flight-sort]')];
+    for (const button of buttons) {
+      button.addEventListener('click', () => {
+        const key = button.dataset.flightSort;
+        if (!key) return;
+        const header = button.closest('th');
+        const currentlyActive = header?.getAttribute('aria-sort') !== 'none';
+        const direction = currentlyActive && button.dataset.sortDirection === 'desc' ? 'asc' : 'desc';
+        button.dataset.sortDirection = direction;
+        const rows = [...body.querySelectorAll('[data-flight-row]')];
+        for (const row of sortFlightRows(rows, key, direction)) body.append(row);
+        for (const option of buttons) {
+          const optionHeader = option.closest('th');
+          const active = option === button;
+          optionHeader?.setAttribute('aria-sort', active ? (direction === 'asc' ? 'ascending' : 'descending') : 'none');
+          const indicator = option.querySelector('span');
+          if (indicator) indicator.textContent = active ? (direction === 'asc' ? '↑' : '↓') : '↕';
+        }
+      });
+    }
+  }
+}
+
 export function initializeAppUi(documentRef = document) {
   initializeAccountMenu(documentRef);
   initializeFlightUploads(documentRef, globalThis.window);
@@ -99,6 +136,7 @@ export function initializeAppUi(documentRef = document) {
   initializeActivityFilters(documentRef);
   initializeProfileDisclosures(documentRef);
   initializeFlightThumbnailFallback(documentRef);
+  initializeFlightTables(documentRef);
   if (documentRef.querySelector?.('[data-app-page="flight"]')) initializeMapSheet({ documentRef });
 }
 

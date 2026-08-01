@@ -1,6 +1,7 @@
 {{ if glider || gliderIsCurrent }}
-<section class="profile-card glider-card{{ if gliderEditor.isOpen }} glider-card--editing{{ /if }}" data-glider-card>
+<section class="profile-card glider-card{{ if gliderEditor.isOpen }} glider-card--editing is-expanded{{ /if }}" data-glider-card>
   <header class="section-heading"><div><h2>Glider Information</h2></div>{{ if gliderIsCurrent }}<button type="button" class="profile-list-toggle" data-glider-edit>{{ if glider }}Edit{{ else }}Add your glider{{ /if }}</button>{{ /if }}</header>
+  <div class="profile-card__desktop-content glider-card__content">
   {{ if glider }}
     <div class="glider-card__display" data-glider-display>
       <img src="/images/profile/glider-default.png" alt="" class="glider-card__image">
@@ -30,5 +31,6 @@
     <div class="glider-card__actions"><button type="submit">Save glider</button><button type="button" data-glider-cancel>Cancel</button></div>
   </form>
   {{ /if }}
+  </div>
 </section>
 {{ /if }}

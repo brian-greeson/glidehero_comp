@@ -1,0 +1,7 @@
+<section class="profile-card profile-card--achievements">
+  <header class="section-heading"><div>{{ include "authenticated/components/icon.vto" { name: "trophy" } }}<h2>Recently Earned</h2></div><a href="/achievements">View all</a></header>
+  <div class="profile-card__desktop-content">
+    {{ if recentAchievements.length }}<div class="profile-recent-achievements">{{ for achievement of recentAchievements }}{{ include "authenticated/components/earnedAchievementCard.vto" { achievement } }}{{ /for }}</div>
+    {{ else }}<p class="profile-empty">No achievements earned yet.</p>{{ /if }}
+  </div>
+</section>

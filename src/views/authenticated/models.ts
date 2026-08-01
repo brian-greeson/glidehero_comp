@@ -63,6 +63,28 @@ export type FlightView = {
   href?: string;
 };
 
+export type FlightTableRowView = {
+  id: string;
+  href: string;
+  date: string;
+  time: string;
+  launchTimestamp: number | null;
+  distance: string;
+  distanceMeters: number | null;
+  duration: string;
+  durationSeconds: number | null;
+  thumbnail?: { wideUrl: string; squareUrl: string };
+};
+
+export type PersonalRecordView = {
+  key: 'five_point_distance' | 'duration' | 'gps_altitude';
+  label: string;
+  value: string;
+  date: string;
+  href: string;
+  icon: 'flight' | 'calendar' | 'mountain';
+};
+
 export type AuthenticatedShellModel = {
   page: AuthenticatedPage;
   title: string;
@@ -227,7 +249,9 @@ export type ProfilePageModel = AuthenticatedShellModel & {
   };
   metrics: MetricView[];
   titles: ProfileTitleView[];
-  flights: FlightView[];
+  flights: FlightTableRowView[];
+  personalRecords: PersonalRecordView[];
+  recentAchievements: AchievementView[];
   glider: {
     modelId: string;
     manufacturer: string;

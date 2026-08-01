@@ -34,7 +34,7 @@ function progressTone(input: Pick<AchievementProgressCard, 'key' | 'achievementT
 
 type AchievementCardView = AchievementView & { typeLabel: string };
 
-function earnedView(achievement: PilotAchievement): AchievementCardView {
+export function earnedAchievementToView(achievement: PilotAchievement): AchievementCardView {
   return {
     key: achievement.id,
     artworkKey: resolveAchievementArtworkKey(achievement),
@@ -94,7 +94,7 @@ export function createAchievementsPageModel(
     const category = achievement.achievementCategory ?? achievement.achievementType;
     const isInitiallyVisible = !visibleCategories.has(category);
     visibleCategories.add(category);
-    return { ...earnedView(achievement), isInitiallyVisible };
+    return { ...earnedAchievementToView(achievement), isInitiallyVisible };
   });
   const inProgress = profile.achievementProgress.map(progressView);
   return {

@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { asc } from 'drizzle-orm';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { achievementRecordEvents, achievementRecords, achievements, flights, flightProgress, gliderModels, igcFiles, personalGridClaims, pilotFollows, profiles as profileRows } from '../../src/db/schema.js';
+import { achievementRecordEvents, achievementRecords, achievements, flights, flightProgress, flightScores, gliderModels, igcFiles, personalGridClaims, pilotFollows, profiles as profileRows } from '../../src/db/schema.js';
 import { createAuthService } from '../../src/services/authService.js';
 import { createProfileService, normalizeTerritoryColor } from '../../src/services/profileService.js';
 import { createUserAchievementProgressService } from '../../src/services/userAchievementProgressService.js';
@@ -225,12 +225,20 @@ describe('profileService', () => {
         startedAt: new Date(`2026-07-${19 + index}T12:00:00Z`),
         distanceMeters: index === 1 ? 1_500 : 2_500,
         durationSeconds: index === 1 ? 3_661 : 125,
+        launchGpsAltitudeMeters: index === 1 ? 1_200 : 2_100,
+        minGpsAltitudeMeters: index === 1 ? 1_100 : 2_000,
+        maxGpsAltitudeMeters: index === 1 ? 1_500 : 2_600,
       }).returning({ id: flights.id });
       if (!flight) throw new Error('Flight insert returned no row.');
       return flight.id;
     };
     const firstFlight = await createFlight(1);
     const secondFlight = await createFlight(2);
+
+    await database.db.insert(flightScores).values([
+      { flightId: firstFlight, totalDistanceMeters: 1_500, totalDistanceCalcVersion: 1, totalDistanceMetadata: {}, fivePointDistanceMeters: 1_500, fivePointDistanceCalcVersion: 1, fivePointDistanceMetadata: { points: [] } },
+      { flightId: secondFlight, totalDistanceMeters: 2_500, totalDistanceCalcVersion: 1, totalDistanceMetadata: {}, fivePointDistanceMeters: 2_500, fivePointDistanceCalcVersion: 1, fivePointDistanceMetadata: { points: [] } },
+    ]);
 
     await database.db.insert(personalGridClaims).values([
       { claimUser: pilot.user.userId, claimFlight: firstFlight, x: 1, y: 2, claimTimestamp: new Date() },
@@ -290,8 +298,12 @@ describe('profileService', () => {
         expect.objectContaining({
           flightId: secondFlight,
           flightDate: 'Jul 21, 2026',
+          launchTime: '12:00 PM',
+          launchTimestamp: Date.parse('2026-07-21T12:00:00Z'),
           distance: '2.5 km',
+          distanceMeters: 2_500,
           duration: '2m 05s',
+          durationSeconds: 125,
           directCellCount: 6,
           enclosedCellCount: 2,
           totalCellCount: 8,
@@ -300,13 +312,27 @@ describe('profileService', () => {
         expect.objectContaining({
           flightId: firstFlight,
           flightDate: 'Jul 20, 2026',
+          launchTime: '12:00 PM',
+          launchTimestamp: Date.parse('2026-07-20T12:00:00Z'),
           distance: '1.5 km',
+          distanceMeters: 1_500,
           duration: '1h 01m',
+          durationSeconds: 3_661,
           directCellCount: 4,
           enclosedCellCount: 1,
           totalCellCount: 5,
           newPersonalCellCount: 5,
         }),
+      ],
+      personalRecords: [
+        { key: 'five_point_distance', label: 'Best 5-Point Distance', flightId: secondFlight, flightDate: 'Jul 21, 2026', value: '2.5 km' },
+        { key: 'duration', label: 'Longest Duration', flightId: firstFlight, flightDate: 'Jul 20, 2026', value: '1h 01m' },
+        { key: 'gps_altitude', label: 'Highest GPS Altitude', flightId: secondFlight, flightDate: 'Jul 21, 2026', value: '2,600 m' },
+      ],
+      recentAchievements: [
+        expect.objectContaining({ title: '10 Unique Cells' }),
+        expect.objectContaining({ title: 'New Flight Cell Record' }),
+        expect.objectContaining({ title: 'New Enclosed Cell Record' }),
       ],
       currentArenaLeaderships: [],
     });
@@ -338,6 +364,8 @@ describe('profileService', () => {
       followerCount: 0,
       followingCount: 0,
       glider: null,
+      personalRecords: [],
+      recentAchievements: [],
       recentFlights: [],
       currentArenaLeaderships: [],
     });
@@ -547,7 +575,7 @@ describe('profileService', () => {
       ]);
   });
 
-  it('returns the full achievement history and limits recent flights to 20', async () => {
+  it('returns the full achievement history and limits recent flights to 3', async () => {
     const auth = createAuthService(database.db, { sessionTtlSeconds: 604800 });
     const pilot = await auth.signup({
       email: 'history-limits@example.com',
@@ -599,7 +627,7 @@ describe('profileService', () => {
     const profile = await profiles.getPilotProfile(pilot.user.userId);
     const achievementsProfile = await profiles.getPilotAchievements(pilot.user.userId);
     expect(achievementsProfile?.achievements).toHaveLength(55);
-    expect(profile?.recentFlights).toHaveLength(20);
+    expect(profile?.recentFlights).toHaveLength(3);
     expect(achievementsProfile?.achievements[0]?.title).toBe('55 Unique Cells');
     expect(profile?.recentFlights[0]?.flightId).toBe(flightIds[24]);
   });

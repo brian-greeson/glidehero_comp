@@ -13,6 +13,9 @@ export type ParsedIgcFlight = {
   endedAt: Date;
   durationSeconds: number;
   distanceMeters: number;
+  launchGpsAltitudeMeters: number;
+  minGpsAltitudeMeters: number;
+  maxGpsAltitudeMeters: number;
   launchLatitude: number;
   launchLongitude: number;
 };

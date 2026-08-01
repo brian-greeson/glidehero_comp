@@ -34,6 +34,9 @@ describe('parseIgcFlight', () => {
     expect(flight.points[1]?.recordedAt.toISOString()).toBe('2026-07-13T00:00:02.000Z');
     expect(flight.launchLatitude).toBe(40);
     expect(flight.launchLongitude).toBe(-105);
+    expect(flight.launchGpsAltitudeMeters).toBe(1234);
+    expect(flight.minGpsAltitudeMeters).toBe(1234);
+    expect(flight.maxGpsAltitudeMeters).toBe(1235);
     expect(flight.durationSeconds).toBe(4);
     expect(flight.distanceMeters).toBeGreaterThan(135);
     expect(flight.distanceMeters).toBeLessThan(145);

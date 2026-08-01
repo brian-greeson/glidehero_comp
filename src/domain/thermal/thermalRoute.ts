@@ -22,9 +22,10 @@ const TARGET_SAMPLE_SPACING_METERS = 200;
 const MINIMUM_PROGRESS_LAYERS = 8;
 const MAXIMUM_PROGRESS_LAYERS = 120;
 const MAXIMUM_LATERAL_COLUMNS_PER_SIDE = 15;
-const MAXIMUM_HEADING_CHANGE_RADIANS = (65 * Math.PI) / 180;
+const MAXIMUM_SEARCH_HEADING_CHANGE_RADIANS = (65 * Math.PI) / 180;
+const MAXIMUM_OUTPUT_HEADING_CHANGE_RADIANS = (75 * Math.PI) / 180;
 const CORNER_CUT_THRESHOLD_RADIANS = (35 * Math.PI) / 180;
-const HEADING_BIN_RADIANS = (15 * Math.PI) / 180;
+const HEADING_BIN_RADIANS = (5 * Math.PI) / 180;
 
 function radians(value: number): number {
   return (value * Math.PI) / 180;
@@ -115,7 +116,7 @@ export function createThermalRoutingField(input: {
       progressSpacingMeters,
       Math.min(
         maximumLateralOffset / MAXIMUM_LATERAL_COLUMNS_PER_SIDE,
-        progressSpacingMeters * Math.tan(MAXIMUM_HEADING_CHANGE_RADIANS),
+        progressSpacingMeters * Math.tan(MAXIMUM_SEARCH_HEADING_CHANGE_RADIANS) * 0.9,
       ),
     )
     : progressSpacingMeters;
@@ -173,13 +174,18 @@ type SearchState = {
   turnBurden: number;
   bendCount: number;
   reversalCount: number;
-  lastTurnSign: number;
+  lastLateralTravelSign: number;
 };
 
 function compareStates(left: SearchState, right: SearchState, thermalClosenessMeters: number): number {
-  // Repeated changes in turn direction are zigzags, not a tradeable thermal benefit.
-  if (left.reversalCount !== right.reversalCount) return left.reversalCount - right.reversalCount;
-  const thermalDifference = right.thermalMeters - left.thermalMeters;
+  // One corridor may require an approach, a traverse, and an exit. More than
+  // two lateral travel reversals is a zigzag, not a tradeable thermal benefit.
+  const leftZigzagExcess = Math.max(0, left.reversalCount - 2);
+  const rightZigzagExcess = Math.max(0, right.reversalCount - 2);
+  if (leftZigzagExcess !== rightZigzagExcess) return leftZigzagExcess - rightZigzagExcess;
+  const leftEfficientThermal = left.thermalMeters - (Math.max(0, left.distanceMeters - left.node.progressMeters) * 0.25);
+  const rightEfficientThermal = right.thermalMeters - (Math.max(0, right.distanceMeters - right.node.progressMeters) * 0.25);
+  const thermalDifference = rightEfficientThermal - leftEfficientThermal;
   if (Math.abs(thermalDifference) > thermalClosenessMeters) return thermalDifference;
   if (left.bendCount !== right.bendCount) return left.bendCount - right.bendCount;
   if (left.turnBurden !== right.turnBurden) return left.turnBurden - right.turnBurden;
@@ -201,7 +207,13 @@ function retainHeadingDiversity(candidates: SearchState[], thermalClosenessMeter
     retained.push(states[0]!);
     const shortest = [...states].sort((left, right) => left.distanceMeters - right.distanceMeters)[0]!;
     if (shortest !== states[0]) retained.push(shortest);
-    const strongestThermal = [...states].sort((left, right) => right.thermalMeters - left.thermalMeters)[0]!;
+    const strongestThermal = [...states].sort((left, right) => {
+      const thermalDifference = right.thermalMeters - left.thermalMeters;
+      if (Math.abs(thermalDifference) > thermalClosenessMeters) return thermalDifference;
+      return (left.distanceMeters - right.distanceMeters)
+        || (left.reversalCount - right.reversalCount)
+        || (left.turnBurden - right.turnBurden);
+    })[0]!;
     if (strongestThermal !== states[0] && strongestThermal !== shortest) retained.push(strongestThermal);
   }
   return retained;
@@ -209,6 +221,37 @@ function retainHeadingDiversity(candidates: SearchState[], thermalClosenessMeter
 
 function sampleScore(scores: ReadonlyMap<number, number>, sampleIndex: number): number {
   return Math.max(0, Math.min(1, scores.get(sampleIndex) ?? 0));
+}
+
+function lateralSampleScore(
+  field: ThermalRoutingField,
+  scores: ReadonlyMap<number, number>,
+  layerIndex: number,
+  lateralOffsetMeters: number,
+): number {
+  const sample = field.layers[layerIndex]!.reduce((closest, candidate) => (
+    Math.abs(candidate.lateralOffsetMeters - lateralOffsetMeters) < Math.abs(closest.lateralOffsetMeters - lateralOffsetMeters)
+      ? candidate
+      : closest
+  ));
+  return sampleScore(scores, sample.sampleIndex);
+}
+
+function edgeThermalDistanceMeters(
+  field: ThermalRoutingField,
+  scores: ReadonlyMap<number, number>,
+  from: ThermalRouteSample,
+  to: ThermalRouteSample,
+  distanceMeters: number,
+): number {
+  const fractions = [0.125, 0.375, 0.625, 0.875];
+  const averageScore = fractions.reduce((total, fraction) => {
+    const layerIndex = fraction < 0.5 ? from.layerIndex : to.layerIndex;
+    const lateralOffset = from.lateralOffsetMeters
+      + ((to.lateralOffsetMeters - from.lateralOffsetMeters) * fraction);
+    return total + lateralSampleScore(field, scores, layerIndex, lateralOffset);
+  }, 0) / fractions.length;
+  return distanceMeters * averageScore;
 }
 
 function closestSample(field: ThermalRoutingField, point: RoutePoint): ThermalRouteSample {
@@ -272,7 +315,7 @@ function isForwardSmoothRoute(points: readonly RoutePoint[], field: ThermalRouti
   }
   const headings = routeHeadings(points, field);
   for (let index = 1; index < headings.length; index += 1) {
-    if (Math.abs(normalizeAngle(headings[index]! - headings[index - 1]!)) > MAXIMUM_HEADING_CHANGE_RADIANS) return false;
+    if (Math.abs(normalizeAngle(headings[index]! - headings[index - 1]!)) > MAXIMUM_OUTPUT_HEADING_CHANGE_RADIANS) return false;
   }
   return true;
 }
@@ -310,19 +353,157 @@ function cutCorners(
   minimumThermalMeters: number,
 ): RoutePoint[] {
   let points = [...input];
-  for (let index = 1; index < points.length - 1; index += 1) {
+  // Round only the sharpest corner on each pass. This avoids turning a simple
+  // enter-follow-exit corridor into a staircase while still giving a hard
+  // transition enough room to become a few short, flyable straight segments.
+  while (points.length < 8) {
     const headings = routeHeadings(points, field);
-    const change = Math.abs(normalizeAngle(headings[index]! - headings[index - 1]!));
-    if (change < CORNER_CUT_THRESHOLD_RADIANS) continue;
-    const before = interpolate(points[index - 1]!, points[index]!, 0.72);
-    const after = interpolate(points[index]!, points[index + 1]!, 0.28);
+    let sharpest: { index: number; change: number } | null = null;
+    for (let index = 1; index < points.length - 1; index += 1) {
+      const change = Math.abs(normalizeAngle(headings[index]! - headings[index - 1]!));
+      if (change >= CORNER_CUT_THRESHOLD_RADIANS && (!sharpest || change > sharpest.change)) {
+        sharpest = { index, change };
+      }
+    }
+    if (!sharpest) break;
+    const index = sharpest.index;
+    const before = interpolate(points[index - 1]!, points[index]!, 0.55);
+    const after = interpolate(points[index]!, points[index + 1]!, 0.45);
     const trial = [...points.slice(0, index), before, after, ...points.slice(index + 1)];
-    if (routeDistanceMeters(trial) > field.maximumDistanceMeters + 0.01 || !isForwardSmoothRoute(trial, field)) continue;
-    if (weightedThermalDistanceMeters(trial, field, scores) + 0.01 < minimumThermalMeters) continue;
+    if (routeDistanceMeters(trial) > field.maximumDistanceMeters + 0.01) break;
+    if (weightedThermalDistanceMeters(trial, field, scores) + 0.01 < minimumThermalMeters) break;
     points = trial;
-    index += 1;
+    if (isForwardSmoothRoute(points, field)) break;
   }
   return points;
+}
+
+function simplifyCenterline(points: RoutePoint[], field: ThermalRoutingField): RoutePoint[] {
+  if (points.length <= 2) return points;
+  const frame = routeFrame(field.start, field.end);
+  const local = (point: RoutePoint): { x: number; y: number } => ({
+    x: (point.longitude - field.start.longitude) * frame.metersPerLongitudeDegree,
+    y: (point.latitude - field.start.latitude) * frame.metersPerLatitudeDegree,
+  });
+  const toleranceMeters = Math.max(300, field.sampleSpacingMeters * 3);
+  const simplify = (input: RoutePoint[]): RoutePoint[] => {
+    if (input.length <= 2) return input;
+    const from = local(input[0]!);
+    const to = local(input.at(-1)!);
+    const segmentX = to.x - from.x;
+    const segmentY = to.y - from.y;
+    const segmentLengthSquared = (segmentX ** 2) + (segmentY ** 2);
+    let farthestIndex = -1;
+    let farthestDistance = 0;
+    for (let index = 1; index < input.length - 1; index += 1) {
+      const point = local(input[index]!);
+      const ratio = segmentLengthSquared > 0
+        ? Math.max(0, Math.min(1, (((point.x - from.x) * segmentX) + ((point.y - from.y) * segmentY)) / segmentLengthSquared))
+        : 0;
+      const distance = Math.hypot(point.x - (from.x + (segmentX * ratio)), point.y - (from.y + (segmentY * ratio)));
+      if (distance > farthestDistance) {
+        farthestDistance = distance;
+        farthestIndex = index;
+      }
+    }
+    if (farthestIndex < 0 || farthestDistance <= toleranceMeters) return [input[0]!, input.at(-1)!];
+    const left = simplify(input.slice(0, farthestIndex + 1));
+    const right = simplify(input.slice(farthestIndex));
+    return [...left.slice(0, -1), ...right];
+  };
+  return simplify(points);
+}
+
+function corridorRouteCandidates(
+  field: ThermalRoutingField,
+  scores: ReadonlyMap<number, number>,
+): RoutePoint[][] {
+  const active = field.samples
+    .filter((sample) => sampleScore(scores, sample.sampleIndex) > 0)
+    .sort((left, right) => left.progressMeters - right.progressMeters || left.lateralOffsetMeters - right.lateralOffsetMeters);
+  if (active.length < 2) return [];
+  const parent = active.map((_, index) => index);
+  const find = (index: number): number => {
+    let current = index;
+    while (parent[current] !== current) {
+      parent[current] = parent[parent[current]!]!;
+      current = parent[current]!;
+    }
+    return current;
+  };
+  const union = (left: number, right: number): void => {
+    const leftRoot = find(left);
+    const rightRoot = find(right);
+    if (leftRoot !== rightRoot) parent[rightRoot] = leftRoot;
+  };
+  const maximumGapMeters = Math.max(800, field.sampleSpacingMeters * 5.1);
+  for (let left = 0; left < active.length; left += 1) {
+    for (let right = left + 1; right < active.length; right += 1) {
+      const progressGap = active[right]!.progressMeters - active[left]!.progressMeters;
+      if (progressGap > maximumGapMeters) break;
+      const lateralGap = Math.abs(active[right]!.lateralOffsetMeters - active[left]!.lateralOffsetMeters);
+      const maximumLateralGap = Math.max(field.sampleSpacingMeters * 2, progressGap * 0.75);
+      if (lateralGap <= maximumLateralGap) union(left, right);
+    }
+  }
+
+  const components = new Map<number, ThermalRouteSample[]>();
+  active.forEach((sample, index) => {
+    const root = find(index);
+    const component = components.get(root) ?? [];
+    component.push(sample);
+    components.set(root, component);
+  });
+
+  const routes: RoutePoint[][] = [];
+  for (const component of components.values()) {
+    const progressSpan = component.at(-1)!.progressMeters - component[0]!.progressMeters;
+    if (component.length < 3 || progressSpan < Math.max(400, field.sampleSpacingMeters * 2)) continue;
+    const byLayer = new Map<number, ThermalRouteSample[]>();
+    for (const sample of component) {
+      const layer = byLayer.get(sample.layerIndex) ?? [];
+      layer.push(sample);
+      byLayer.set(sample.layerIndex, layer);
+    }
+    const centerline = [...byLayer.entries()]
+      .sort(([left], [right]) => left - right)
+      .map(([, layer]) => {
+        const totalWeight = layer.reduce((total, sample) => total + sampleScore(scores, sample.sampleIndex), 0);
+        return {
+          latitude: layer.reduce((total, sample) => total + (sample.latitude * sampleScore(scores, sample.sampleIndex)), 0) / totalWeight,
+          longitude: layer.reduce((total, sample) => total + (sample.longitude * sampleScore(scores, sample.sampleIndex)), 0) / totalWeight,
+        };
+      });
+    routes.push([field.start, ...simplifyCenterline(centerline, field), field.end]);
+  }
+  return routes;
+}
+
+function finalizedRoute(
+  rawPoints: RoutePoint[],
+  field: ThermalRoutingField,
+  scores: ReadonlyMap<number, number>,
+  directThermalMeters: number,
+): { points: RoutePoint[]; thermalMeters: number; distanceMeters: number } | null {
+  const rawThermalMeters = weightedThermalDistanceMeters(rawPoints, field, scores);
+  const rawDistanceMeters = routeDistanceMeters(rawPoints);
+  const extraDistanceMeters = Math.max(0, rawDistanceMeters - field.directDistanceMeters);
+  const meaningfulImprovementMeters = Math.max(75, field.directDistanceMeters * 0.01, extraDistanceMeters * 0.25);
+  if (rawThermalMeters < directThermalMeters + meaningfulImprovementMeters) return null;
+  const minimumThermalMeters = rawThermalMeters - Math.max(100, rawThermalMeters * 0.15);
+  const simplified = simplifyRoute(rawPoints, field, scores, minimumThermalMeters);
+  const roundedThermalFloor = Math.max(
+    directThermalMeters + meaningfulImprovementMeters,
+    rawThermalMeters - Math.max(200, rawThermalMeters * 0.5),
+  );
+  const rounded = cutCorners(simplified, field, scores, roundedThermalFloor);
+  const distanceMeters = routeDistanceMeters(rounded);
+  if (distanceMeters > field.maximumDistanceMeters + 0.01 || !isForwardSmoothRoute(rounded, field)) return null;
+  return {
+    points: rounded,
+    thermalMeters: weightedThermalDistanceMeters(rounded, field, scores),
+    distanceMeters,
+  };
 }
 
 /** Find a simple forward route through favorable lift without exceeding the strict per-leg distance ceiling. */
@@ -341,6 +522,26 @@ export function thermalGuidedLeg(input: {
     };
   }
 
+  const directThermalMeters = weightedThermalDistanceMeters(directPoints, field, input.relativeScores);
+  const corridorRoutes = corridorRouteCandidates(field, input.relativeScores)
+    .map((points) => finalizedRoute(points, field, input.relativeScores, directThermalMeters))
+    .filter((route): route is NonNullable<typeof route> => route !== null)
+    .sort((left, right) => {
+      const leftUtility = left.thermalMeters - (Math.max(0, left.distanceMeters - field.directDistanceMeters) * 0.25);
+      const rightUtility = right.thermalMeters - (Math.max(0, right.distanceMeters - field.directDistanceMeters) * 0.25);
+      if (Math.abs(rightUtility - leftUtility) > Math.max(40, field.directDistanceMeters * 0.005)) return rightUtility - leftUtility;
+      if (left.points.length !== right.points.length) return left.points.length - right.points.length;
+      return left.distanceMeters - right.distanceMeters;
+    });
+  if (corridorRoutes[0]) {
+    return {
+      points: corridorRoutes[0].points,
+      directDistanceMeters: field.directDistanceMeters,
+      maximumDistanceMeters: field.maximumDistanceMeters,
+      routeDistanceMeters: corridorRoutes[0].distanceMeters,
+    };
+  }
+
   const first = field.layers[0]![0]!;
   let states: SearchState[] = [{
     node: first,
@@ -351,7 +552,7 @@ export function thermalGuidedLeg(input: {
     turnBurden: 0,
     bendCount: 0,
     reversalCount: 0,
-    lastTurnSign: 0,
+    lastLateralTravelSign: 0,
   }];
   const thermalClosenessMeters = Math.max(40, field.directDistanceMeters * 0.005);
 
@@ -365,23 +566,27 @@ export function thermalGuidedLeg(input: {
         const lateralDelta = node.lateralOffsetMeters - state.node.lateralOffsetMeters;
         const headingRadians = Math.atan2(lateralDelta, progressDelta);
         const headingChange = normalizeAngle(headingRadians - state.headingRadians);
-        if (Math.abs(headingChange) > MAXIMUM_HEADING_CHANGE_RADIANS) continue;
+        if (Math.abs(headingChange) > MAXIMUM_SEARCH_HEADING_CHANGE_RADIANS) continue;
         const distance = routeDistanceMeters([state.node, node]);
         const distanceMeters = state.distanceMeters + distance;
         if (distanceMeters > field.maximumDistanceMeters + 0.01) continue;
-        const turnSign = Math.abs(headingChange) > radians(5) ? Math.sign(headingChange) : state.lastTurnSign;
-        const reversal = state.lastTurnSign !== 0 && turnSign !== 0 && turnSign !== state.lastTurnSign ? 1 : 0;
+        const lateralTravelSign = Math.abs(headingRadians) > radians(5)
+          ? Math.sign(headingRadians)
+          : state.lastLateralTravelSign;
+        const reversal = state.lastLateralTravelSign !== 0
+          && lateralTravelSign !== 0
+          && lateralTravelSign !== state.lastLateralTravelSign ? 1 : 0;
         candidates.push({
           node,
           path: [...state.path, node],
           distanceMeters,
           thermalMeters: state.thermalMeters
-            + (distance * ((sampleScore(input.relativeScores, state.node.sampleIndex) + sampleScore(input.relativeScores, node.sampleIndex)) / 2)),
+            + edgeThermalDistanceMeters(field, input.relativeScores, state.node, node, distance),
           headingRadians,
           turnBurden: state.turnBurden + Math.abs(headingChange),
           bendCount: state.bendCount + (Math.abs(headingChange) > radians(5) ? 1 : 0),
           reversalCount: state.reversalCount + reversal,
-          lastTurnSign: turnSign,
+          lastLateralTravelSign: lateralTravelSign,
         });
       }
       nextStates.push(...retainHeadingDiversity(candidates, thermalClosenessMeters));
@@ -392,24 +597,16 @@ export function thermalGuidedLeg(input: {
 
   const completed = states.filter((state) => state.node.layerIndex === field.layers.length - 1);
   completed.sort((left, right) => compareStates(left, right, thermalClosenessMeters));
-  const directThermalMeters = weightedThermalDistanceMeters(directPoints, field, input.relativeScores);
 
   for (const state of completed) {
     const rawPoints: RoutePoint[] = state.path.map(({ latitude, longitude }) => ({ latitude, longitude }));
-    const rawThermalMeters = weightedThermalDistanceMeters(rawPoints, field, input.relativeScores);
-    const extraDistanceMeters = Math.max(0, routeDistanceMeters(rawPoints) - field.directDistanceMeters);
-    const meaningfulImprovementMeters = Math.max(75, field.directDistanceMeters * 0.01, extraDistanceMeters * 0.35);
-    if (rawThermalMeters < directThermalMeters + meaningfulImprovementMeters) continue;
-    const minimumThermalMeters = rawThermalMeters - Math.max(50, rawThermalMeters * 0.03);
-    const simplified = simplifyRoute(rawPoints, field, input.relativeScores, minimumThermalMeters);
-    const rounded = cutCorners(simplified, field, input.relativeScores, minimumThermalMeters);
-    const routeDistance = routeDistanceMeters(rounded);
-    if (routeDistance <= field.maximumDistanceMeters + 0.01 && isForwardSmoothRoute(rounded, field)) {
+    const finalized = finalizedRoute(rawPoints, field, input.relativeScores, directThermalMeters);
+    if (finalized) {
       return {
-        points: rounded,
+        points: finalized.points,
         directDistanceMeters: field.directDistanceMeters,
         maximumDistanceMeters: field.maximumDistanceMeters,
-        routeDistanceMeters: routeDistance,
+        routeDistanceMeters: finalized.distanceMeters,
       };
     }
   }

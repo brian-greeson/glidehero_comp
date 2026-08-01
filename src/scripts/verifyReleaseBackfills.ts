@@ -64,6 +64,37 @@ async function checkFlightProgress(database: Database): Promise<ReleaseBackfillS
   return summarizeReleaseBackfillSpotCheck('flight-progress', result.rows);
 }
 
+export async function checkFlightAltitudes(database: Database): Promise<ReleaseBackfillSpotCheck> {
+  const result = await database.execute<SampleRow>(sql`
+    WITH sample AS (
+      SELECT flight.flight_id AS id
+      FROM flights flight
+      WHERE flight.processing_status = 'completed'
+        AND EXISTS (SELECT 1 FROM track_points point WHERE point.flight_id = flight.flight_id)
+      ORDER BY COALESCE(flight.processed_at, flight.created_at), flight.flight_id
+      LIMIT ${SAMPLE_SIZE}
+    )
+    SELECT sample.id,
+      flight.launch_gps_altitude_meters = first_point.gps_altitude_meters
+      AND flight.min_gps_altitude_meters = altitude.minimum
+      AND flight.max_gps_altitude_meters = altitude.maximum AS "artifactPresent"
+    FROM sample
+    INNER JOIN flights flight ON flight.flight_id = sample.id
+    INNER JOIN LATERAL (
+      SELECT point.gps_altitude_meters
+      FROM track_points point WHERE point.flight_id = sample.id
+      ORDER BY point.sequence_number LIMIT 1
+    ) first_point ON true
+    INNER JOIN LATERAL (
+      SELECT MIN(point.gps_altitude_meters)::integer AS minimum,
+        MAX(point.gps_altitude_meters)::integer AS maximum
+      FROM track_points point WHERE point.flight_id = sample.id
+    ) altitude ON true
+    ORDER BY sample.id
+  `);
+  return summarizeReleaseBackfillSpotCheck('flight-altitudes', result.rows);
+}
+
 async function checkArenaAchievements(database: Database): Promise<ReleaseBackfillSpotCheck> {
   const result = await database.execute<SampleRow>(sql`
     WITH first_qualifying_flight AS (
@@ -295,6 +326,7 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
     const s3Client = createBucketClient(config);
     const checks: ReleaseBackfillSpotCheck[] = [];
     checks.push(await runCheck('flight-progress', () => checkFlightProgress(db)));
+    checks.push(await runCheck('flight-altitudes', () => checkFlightAltitudes(db)));
     checks.push(await runCheck('flight-thumbnails', () => checkFlightThumbnails(
       db,
       s3Client,

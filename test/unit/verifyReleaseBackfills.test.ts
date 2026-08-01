@@ -1,11 +1,21 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
+  checkFlightAltitudes,
   checkUserAchievementProgress,
   printReleaseBackfillSpotCheck,
   summarizeReleaseBackfillSpotCheck,
 } from '../../src/scripts/verifyReleaseBackfills.js';
 
 describe('release backfill spot checks', () => {
+  it('reports missing flight altitude metrics from the read-only sample', async () => {
+    const database = { execute: vi.fn(async () => ({ rows: [
+      { id: 'complete', artifactPresent: true },
+      { id: 'missing', artifactPresent: false },
+    ] })) };
+    await expect(checkFlightAltitudes(database as never)).resolves.toEqual({
+      name: 'flight-altitudes', status: 'FAIL', sampled: 2, present: 1, missingIds: ['missing'],
+    });
+  });
   it('passes when every sampled artifact is present', () => {
     expect(summarizeReleaseBackfillSpotCheck('example', [
       { id: 'one', artifactPresent: true },

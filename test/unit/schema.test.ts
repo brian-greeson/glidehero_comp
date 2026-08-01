@@ -51,6 +51,9 @@ describe('glider schema', () => {
 
     const flight = getTableConfig(flights);
     const flightColumnNames = flight.columns.map((column) => column.name);
+    expect(flightColumnNames).toEqual(expect.arrayContaining([
+      'launch_gps_altitude_meters', 'min_gps_altitude_meters', 'max_gps_altitude_meters',
+    ]));
     expect(flightColumnNames).not.toContain('glider_hours_credited_seconds');
     expect(flightColumnNames).not.toContain('glider_hours_generation');
   });
