@@ -23,7 +23,10 @@
   </section>
   <section class="map-control-group map-location">
     <h2>Location</h2>
-    <button type="button" class="map-location__trigger" data-map-location-trigger aria-controls="arena-search-input">{{ include "authenticated/components/icon.vto" { name: "pin" } }}<span>{{ location }}</span>{{ include "authenticated/components/icon.vto" { name: "chevron-down" } }}</button>
+    <div class="map-location__control">
+      <button type="button" class="map-location__trigger" data-map-location-trigger aria-controls="arena-search-input" aria-label="{{ if location }}Change location from {{ location }}{{ else }}Select a location{{ /if }}">{{ include "authenticated/components/icon.vto" { name: "pin" } }}<span>{{ if location }}{{ location }}{{ /if }}</span>{{ include "authenticated/components/icon.vto" { name: "chevron-down" } }}</button>
+      {{ if location && typeof locationClearHref !== 'undefined' }}<a class="map-location__clear" href="{{ locationClearHref }}" aria-label="Clear location {{ location }}">×</a>{{ /if }}
+    </div>
   </section>
   {{ if mode === 'personal' || metrics.length }}
     <section class="map-control-group map-stats">

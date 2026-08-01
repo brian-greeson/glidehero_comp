@@ -887,6 +887,8 @@ describe('webRouter', () => {
       expect(response.status).toBe(200);
       expect(renderAuthenticatedPage).toHaveBeenLastCalledWith(expect.objectContaining({
         mode: 'following',
+        location: arena.name,
+        locationClearHref: '/following?month=2026-07',
         mapModeHrefs: expect.objectContaining({
           following: '/arena/us/boulder-745?month=2026-07&view=following',
           competitive: '/arena/us/boulder-745?month=2026-07',
@@ -903,6 +905,7 @@ describe('webRouter', () => {
       expect((await fetch(`${baseUrl}/personal`, { headers })).status).toBe(200);
       expect(renderAuthenticatedPage).toHaveBeenLastCalledWith(expect.objectContaining({
         mode: 'personal',
+        location: null,
         period: 'current-month',
         navigation: expect.arrayContaining([
           expect.objectContaining({ page: 'map', href: '/personal' }),
@@ -912,6 +915,7 @@ describe('webRouter', () => {
       expect((await fetch(`${baseUrl}/global?period=all-time`, { headers })).status).toBe(200);
       expect(renderAuthenticatedPage).toHaveBeenLastCalledWith(expect.objectContaining({
         mode: 'competitive',
+        location: null,
         period: 'all-time',
         mapModeHrefs: expect.objectContaining({
           following: '/following?period=all-time',
@@ -922,6 +926,7 @@ describe('webRouter', () => {
       expect(onboarding.markCompetitiveMapViewed).toHaveBeenCalledWith(user.userId);
       expect(renderAuthenticatedPage).toHaveBeenLastCalledWith(expect.objectContaining({
         mode: 'following',
+        location: null,
         period: 'current-month',
         navigation: expect.arrayContaining([
           expect.objectContaining({ page: 'map', href: '/following?month=2026-07' }),

@@ -3,7 +3,8 @@ import type { MapPageModel } from '../models.js';
 export type ProductionMapInput = {
   mode: MapPageModel['mode'];
   period: MapPageModel['period'];
-  location: string;
+  location: string | null;
+  locationClearHref?: string;
   mapHref: string;
   currentUserId: string;
   territoryColor: string;
@@ -26,6 +27,7 @@ export function createMapPageModel(
     mode: input.mode,
     period: input.period,
     location: input.location,
+    ...(input.locationClearHref ? { locationClearHref: input.locationClearHref } : {}),
     metrics: [],
     leaderboard: [],
     currentUserId: input.currentUserId,

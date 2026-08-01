@@ -38,7 +38,7 @@ describe('refreshed map UI controls', () => {
       page: 'map' as const,
       mode,
       period: 'current-month' as const,
-      location: 'Global',
+      location: null,
       metrics: [],
       leaderboard: [],
     });
@@ -97,7 +97,7 @@ describe('refreshed map UI controls', () => {
       page: 'map' as const,
       mode: 'personal',
       period: 'current-month' as const,
-      location: 'Global',
+      location: null,
       metrics: [],
       leaderboard: [],
     });
@@ -142,7 +142,7 @@ describe('refreshed map UI controls', () => {
       page: 'map' as const,
       mode: 'competitive',
       period: 'current-month' as const,
-      location: 'Global Map',
+      location: null,
       metrics: [],
       leaderboard: [],
     });
@@ -154,11 +154,32 @@ describe('refreshed map UI controls', () => {
     expect(html).toContain('data-competition-period-option="all-time" aria-pressed="false"');
     expect(html).toContain('data-competition-month-nav="previous" aria-label="Previous month">‹</button>');
     expect(html).toContain('class="map-desktop-replay"');
+    expect(html).toContain('aria-label="Select a location"');
+    expect(html).not.toContain('Global Map');
+    expect(html).not.toContain('map-location__clear');
     expect(html.match(/data-map-replay-sync/g)).toHaveLength(2);
     expect(html).toContain('aria-label="Synchronize flight starts" aria-pressed="false" disabled');
     expect(html).toContain('aria-label="Viewport Leaderboard"');
     expect(html).toContain('class="map-leaderboard__scope">Viewport </span>Leaderboard');
     expect(html).not.toContain('<h2>Your Stats</h2>');
+  });
+
+  it('shows a selected location with a clear link', async () => {
+    const render = createAuthenticatedPageRenderer();
+    const html = await render({
+      ...createAuthenticatedShellModel({ page: 'map' as const, user: { displayName: 'Pilot' }, mapHref: '/arena/us/boulder-745?month=2026-07&view=following' }),
+      page: 'map' as const,
+      mode: 'following',
+      period: 'current-month' as const,
+      location: 'Boulder',
+      locationClearHref: '/following?month=2026-07',
+      metrics: [],
+      leaderboard: [],
+    });
+
+    expect(html).toContain('<span>Boulder</span>');
+    expect(html).toContain('class="map-location__clear" href="/following?month=2026-07"');
+    expect(html).toContain('aria-label="Clear location Boulder">×</a>');
   });
 
   it('offers All Time in the desktop Personal sidebar as well as mobile', async () => {
@@ -168,7 +189,7 @@ describe('refreshed map UI controls', () => {
       page: 'map' as const,
       mode: 'personal',
       period: 'current-month' as const,
-      location: 'Personal Map',
+      location: null,
       metrics: [],
       leaderboard: [],
     });

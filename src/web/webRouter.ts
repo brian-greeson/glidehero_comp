@@ -378,6 +378,9 @@ export function createWebRouter(dependencies: {
     const personalMapUrl = new URL('/personal', currentMapUrl);
     const followingMapUrl = new URL(isArenaMap ? input.mapHref : '/following', currentMapUrl);
     const competitiveMapUrl = new URL(isArenaMap ? input.mapHref : '/global', currentMapUrl);
+    const clearLocationUrl = new URL(input.mode === 'following' ? '/following' : input.mode === 'personal' ? '/personal' : '/global', currentMapUrl);
+    clearLocationUrl.search = currentMapUrl.search;
+    clearLocationUrl.searchParams.delete('view');
     if (!isArenaMap) {
       personalMapUrl.search = currentMapUrl.search;
       followingMapUrl.search = currentMapUrl.search;
@@ -395,6 +398,7 @@ export function createWebRouter(dependencies: {
           following: `${followingMapUrl.pathname}${followingMapUrl.search}`,
           competitive: `${competitiveMapUrl.pathname}${competitiveMapUrl.search}`,
         },
+        ...(isArenaMap ? { locationClearHref: `${clearLocationUrl.pathname}${clearLocationUrl.search}` } : {}),
         currentUserId: currentUser.userId,
         territoryColor: normalizeTerritoryColor(currentUser.territoryColor) ?? '#1769AA',
         mapStyleUrl: dependencies.mapTilerStyleUrl,
@@ -938,7 +942,7 @@ export function createWebRouter(dependencies: {
       const selection = mapPagePeriod(req.query);
       const mapHref = `/global${selection.suffix}`;
       await renderAuthenticated(res, dependencies.renderAuthenticatedPage, 200, productionMap(currentUser, {
-        mode: 'competitive', period: selection.period, location: 'Global Map', mapHref,
+        mode: 'competitive', period: selection.period, location: null, mapHref,
       }));
     } catch (error) {
       next(error);
@@ -956,7 +960,7 @@ export function createWebRouter(dependencies: {
       await dependencies.onboarding?.markCompetitiveMapViewed(currentUser.userId);
       const mapHref = `/following${selection.suffix}`;
       await renderAuthenticated(res, dependencies.renderAuthenticatedPage, 200, productionMap(currentUser, {
-        mode: 'following', period: selection.period, location: 'Following', mapHref,
+        mode: 'following', period: selection.period, location: null, mapHref,
       }));
     } catch (error) {
       next(error);
@@ -973,7 +977,7 @@ export function createWebRouter(dependencies: {
       const selection = mapPagePeriod(req.query);
       const mapHref = `/personal${selection.suffix}`;
       await renderAuthenticated(res, dependencies.renderAuthenticatedPage, 200, productionMap(currentUser, {
-        mode: 'personal', period: selection.period, location: 'Personal Map', mapHref,
+        mode: 'personal', period: selection.period, location: null, mapHref,
       }));
     } catch (error) {
       next(error);

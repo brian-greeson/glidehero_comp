@@ -97,7 +97,8 @@ export type MapPageModel = AuthenticatedShellModel & {
   page: 'map';
   mode: 'personal' | 'following' | 'competitive';
   period: 'all-time' | 'current-month';
-  location: string;
+  location: string | null;
+  locationClearHref?: string;
   metrics: MetricView[];
   leaderboard: Array<{ rank: number; pilot: PilotView; cells: string; isCurrent: boolean }>;
   mapModeHrefs?: {

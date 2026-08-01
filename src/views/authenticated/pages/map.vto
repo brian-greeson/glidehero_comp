@@ -1,7 +1,7 @@
 {{ layout "authenticated/layouts/appLayout.vto" }}
   <section class="map-page" data-map-page
     {{ if mode === 'personal' }}data-dashboard data-dashboard-mode="personal"{{ else }}data-competition-coverage="{{ if typeof arenaSourceId !== 'undefined' && arenaSourceId }}arena{{ else }}global{{ /if }}"{{ /if }}>
-    {{ include "authenticated/components/mapSidebar.vto" { mode, period, location, metrics, leaderboard } }}
+    {{ include "authenticated/components/mapSidebar.vto" { mode, period, location, locationClearHref: typeof locationClearHref !== 'undefined' ? locationClearHref : undefined, metrics, leaderboard } }}
     <section class="map-stage" aria-label="Territory map">
       <div class="map-canvas" data-map-canvas {{ if mode === 'personal' }}data-dashboard-map{{ else }}data-territory-map{{ /if }}
         data-map-style-url="{{ if typeof mapStyleUrl !== 'undefined' }}{{ mapStyleUrl }}{{ /if }}"
