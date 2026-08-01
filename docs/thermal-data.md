@@ -63,3 +63,14 @@ Vectorization stores four relative bands derived from the source colors:
 
 These are relative historical bands. They deliberately have no probability,
 hover, tap, or hotspot-click behavior in the Plan UI.
+
+## Route guidance
+
+Each fixed user-to-user leg is evaluated independently. The service samples a
+bounded field inside that leg's strict distance allowance and scores the field
+against the processed PostGIS thermal areas. A forward-only search favors
+weighted distance through continuous activity, rejects zigzagging and
+backtracking, and then simplifies the result into a small number of straight
+segments. Stronger activity bands contribute more, nearby areas may form one
+corridor across a small gap, and an insignificant improvement falls back to the
+direct leg.

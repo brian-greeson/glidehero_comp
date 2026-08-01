@@ -1,10 +1,11 @@
 import { sql } from 'drizzle-orm';
 import type { Database } from '../db/client.js';
 import {
+  createThermalRoutingField,
   routeDistanceMeters,
   thermalGuidedLeg,
   type RoutePoint,
-  type ThermalRouteCandidate,
+  type ThermalRoutingField,
 } from '../domain/thermal/thermalRoute.js';
 
 export type PlanCell = { x: number; y: number; geometry: { type: 'Polygon'; coordinates: number[][][] } };
@@ -27,7 +28,7 @@ export interface PlanService {
   route(input: { userId: string; anchors: RoutePoint[]; maximumDeviationPercent: number }): Promise<PlanRouteResult>;
 }
 
-type StoredCandidate = ThermalRouteCandidate;
+type StoredSampleScore = { sampleIndex: number; relativeScore: number };
 type StoredCell = { x: number; y: number; source: 'direct' | 'enclosed'; isNewPersonal: boolean; geometry: PlanCell['geometry'] };
 const MAXIMUM_LEG_DISTANCE_METERS = 1_000_000;
 const MAXIMUM_PLAN_DISTANCE_METERS = 5_000_000;
@@ -38,37 +39,36 @@ function assertPoint(point: RoutePoint): void {
 }
 
 export function createPlanService(database: Database, options: { cellSize: number }): PlanService {
-  async function candidates(start: RoutePoint, end: RoutePoint, maximumDeviationPercent: number): Promise<StoredCandidate[]> {
-    if (maximumDeviationPercent <= 0) return [];
-    const direct = routeDistanceMeters([start, end]);
-    const searchDistance = Math.max(500, (direct * maximumDeviationPercent) / 200);
-    const result = await database.execute<StoredCandidate>(sql`
-      WITH route AS (
-        SELECT ST_SetSRID(ST_MakeLine(
-          ST_MakePoint(${start.longitude}, ${start.latitude}),
-          ST_MakePoint(${end.longitude}, ${end.latitude})
-        ), 4326) AS geometry
+  async function thermalScores(field: ThermalRoutingField): Promise<ReadonlyMap<number, number>> {
+    const samples = field.samples.map((sample) => ({
+      sampleIndex: sample.sampleIndex,
+      latitude: sample.latitude,
+      longitude: sample.longitude,
+    }));
+    const result = await database.execute<StoredSampleScore>(sql`
+      WITH samples AS (
+        SELECT "sampleIndex" AS sample_index, latitude, longitude
+        FROM jsonb_to_recordset(${JSON.stringify(samples)}::jsonb)
+          AS sample("sampleIndex" integer, latitude double precision, longitude double precision)
       )
       SELECT
-        ST_Y(ST_PointOnSurface(area.geometry)) AS latitude,
-        ST_X(ST_PointOnSurface(area.geometry)) AS longitude,
-        area.relative_score AS "relativeScore",
-        area.area_square_meters AS "areaSquareMeters"
-      FROM thermal_areas area
-      JOIN thermal_raster_tiles tile ON tile.id = area.raster_tile_id
-      CROSS JOIN route
-      WHERE tile.processing_status = 'complete'
-        AND area.processing_version = tile.processing_version
-        AND ST_DWithin(area.geometry::geography, route.geometry::geography, ${searchDistance})
-      ORDER BY area.relative_score DESC, area.area_square_meters DESC
-      LIMIT 80
+        sample.sample_index AS "sampleIndex",
+        COALESCE(activity.relative_score, 0)::double precision AS "relativeScore"
+      FROM samples sample
+      CROSS JOIN LATERAL (
+        SELECT ST_SetSRID(ST_MakePoint(sample.longitude, sample.latitude), 4326) AS geometry
+      ) point
+      LEFT JOIN LATERAL (
+        SELECT MAX(area.relative_score) AS relative_score
+        FROM thermal_areas area
+        JOIN thermal_raster_tiles tile ON tile.id = area.raster_tile_id
+        WHERE tile.processing_status = 'complete'
+          AND area.processing_version = tile.processing_version
+          AND ST_Covers(area.geometry, point.geometry)
+      ) activity ON TRUE
+      ORDER BY sample.sample_index
     `);
-    return result.rows.map((row) => ({
-      latitude: Number(row.latitude),
-      longitude: Number(row.longitude),
-      relativeScore: Number(row.relativeScore),
-      areaSquareMeters: Number(row.areaSquareMeters),
-    }));
+    return new Map(result.rows.map((row) => [Number(row.sampleIndex), Number(row.relativeScore)]));
   }
 
   async function claims(userId: string, points: RoutePoint[]): Promise<PlanRouteResult['claims']> {
@@ -179,9 +179,10 @@ export function createPlanService(database: Database, options: { cellSize: numbe
       for (let index = 1; index < input.anchors.length; index += 1) {
         const start = input.anchors[index - 1]!;
         const end = input.anchors[index]!;
-        const available = await candidates(start, end, input.maximumDeviationPercent);
-        candidateCount += available.length;
-        const leg = thermalGuidedLeg({ start, end, maximumDeviationPercent: input.maximumDeviationPercent, candidates: available });
+        const field = createThermalRoutingField({ start, end, maximumDeviationPercent: input.maximumDeviationPercent });
+        const scores = input.maximumDeviationPercent > 0 ? await thermalScores(field) : new Map<number, number>();
+        candidateCount += [...scores.values()].filter((score) => score > 0).length;
+        const leg = thermalGuidedLeg({ field, relativeScores: scores });
         route.push(...(route.length ? leg.points.slice(1) : leg.points));
         legs.push({
           directDistanceMeters: leg.directDistanceMeters,
