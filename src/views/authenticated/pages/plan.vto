@@ -1,7 +1,12 @@
 {{ layout "authenticated/layouts/appLayout.vto" }}
   <section class="plan-page" data-plan-page>
+    <section class="plan-map-stage" aria-label="Flight planning map">
+      <div class="plan-map" data-plan-map
+        data-map-style-url="{{ mapStyleUrl }}"
+        data-thermal-tile-url="{{ thermalTileUrl }}"></div>
+    </section>
     <aside class="plan-panel" aria-label="Flight plan controls">
-      <div>
+      <div class="plan-heading">
         <p class="plan-eyebrow">Thermal-guided planning</p>
         <h1>Plan your next flight</h1>
         <p class="plan-intro">Click the map to place fixed route points. GlideHero will favor historical thermal activity according to your routing priority.</p>
@@ -15,30 +20,48 @@
         </div>
         <small id="plan-priority-help">Choose how strongly the optimized route trades distance for historical thermal activity.</small>
       </fieldset>
-      <div class="plan-actions">
-        <button type="button" data-plan-undo disabled>Undo point</button>
-        <button type="button" data-plan-delete disabled>Delete selected</button>
-        <button type="button" data-plan-reset disabled>Reset</button>
+      <div class="plan-bottom-controls">
+        <div class="plan-mode-row">
+          <label class="plan-priority-mobile">
+            <span class="plan-priority-icon" aria-hidden="true">{{ include "authenticated/components/icon.vto" { name: "sliders" } }}</span>
+            <select data-plan-priority-mobile aria-label="Routing priority">
+              <option value="shorter" {{ if defaultRoutingPriority === 'shorter' }}selected{{ /if }}>Shorter</option>
+              <option value="balanced" {{ if defaultRoutingPriority === 'balanced' }}selected{{ /if }}>Balanced</option>
+              <option value="thermal" {{ if defaultRoutingPriority === 'thermal' }}selected{{ /if }}>More thermal</option>
+            </select>
+          </label>
+          <p class="plan-status-mobile" data-plan-status-mobile role="status">Place 2 points</p>
+        </div>
+        <div class="plan-action-bar">
+          <div class="plan-actions">
+            <button type="button" data-plan-undo disabled aria-label="Undo point"><span class="plan-action-icon" aria-hidden="true">{{ include "authenticated/components/icon.vto" { name: "undo" } }}</span><span>Undo</span></button>
+            <button type="button" data-plan-delete disabled aria-label="Delete selected point"><span class="plan-action-icon" aria-hidden="true">{{ include "authenticated/components/icon.vto" { name: "trash" } }}</span><span>Delete</span></button>
+            <button type="button" data-plan-reset disabled aria-label="Reset route"><span class="plan-action-icon" aria-hidden="true">{{ include "authenticated/components/icon.vto" { name: "reset" } }}</span><span>Reset</span></button>
+          </div>
+          <button class="plan-export-trigger" type="button" data-plan-export-open aria-controls="plan-export-dialog" disabled><span aria-hidden="true">{{ include "authenticated/components/icon.vto" { name: "download" } }}</span>Export</button>
+        </div>
       </div>
-      <label class="plan-thermal-toggle"><input type="checkbox" data-plan-thermal-toggle checked> Show historical thermal activity</label>
-      <dl class="plan-summary">
-        <div><dt>Direct distance</dt><dd data-plan-direct-distance>—</dd></div>
-        <div><dt>Optimized route</dt><dd data-plan-route-distance>—</dd></div>
-        <div><dt>Extra distance</dt><dd data-plan-extra-distance>—</dd></div>
-        <div><dt>Maximum route</dt><dd data-plan-maximum-distance>—</dd></div>
-        <div><dt>Direct cells</dt><dd data-plan-direct-cells>0</dd></div>
-        <div><dt>Enclosed cells</dt><dd data-plan-enclosed-cells>0</dd></div>
-        <div><dt>New Personal cells</dt><dd data-plan-new-cells>0</dd></div>
-      </dl>
-      <button class="plan-export-trigger" type="button" data-plan-export-open aria-controls="plan-export-dialog" disabled>Export</button>
+      <div class="plan-map-tools">
+        <button class="plan-fit-route" type="button" data-plan-fit-route disabled aria-label="Fit route on map">{{ include "authenticated/components/icon.vto" { name: "target" } }}</button>
+        <label class="plan-thermal-toggle"><input type="checkbox" data-plan-thermal-toggle checked><span class="plan-thermal-icon" aria-hidden="true">{{ include "authenticated/components/icon.vto" { name: "thermal" } }}</span><span class="plan-thermal-label">Show historical thermal activity</span></label>
+      </div>
+      <section class="plan-metrics" data-plan-metrics aria-label="Route metrics">
+        <button class="plan-metrics-toggle" type="button" data-plan-metrics-toggle aria-expanded="true" aria-controls="plan-metrics-details">
+          <span><small>Optimized route</small><strong data-plan-route-distance>—</strong></span>
+          <span class="plan-metrics-chevron" aria-hidden="true"></span>
+        </button>
+        <dl class="plan-summary" id="plan-metrics-details">
+          <div><dt>Direct distance</dt><dd data-plan-direct-distance>—</dd></div>
+          <div><dt>Extra distance</dt><dd data-plan-extra-distance>—</dd></div>
+          <div><dt>Maximum route</dt><dd data-plan-maximum-distance>—</dd></div>
+          <div><dt>Direct cells</dt><dd data-plan-direct-cells>0</dd></div>
+          <div><dt>Enclosed cells</dt><dd data-plan-enclosed-cells>0</dd></div>
+          <div><dt>New Personal cells</dt><dd data-plan-new-cells>0</dd></div>
+        </dl>
+      </section>
       <p class="plan-status" data-plan-status role="status">Place at least two points to calculate a route.</p>
       <p class="plan-attribution">Historical thermal activity: <a href="https://thermal.kk7.ch/">thermal.kk7.ch</a> · <a href="https://creativecommons.org/licenses/by-nc-sa/4.0/">CC BY-NC-SA 4.0</a></p>
     </aside>
-    <section class="plan-map-stage" aria-label="Flight planning map">
-      <div class="plan-map" data-plan-map
-        data-map-style-url="{{ mapStyleUrl }}"
-        data-thermal-tile-url="{{ thermalTileUrl }}"></div>
-    </section>
   </section>
   {{ include "authenticated/components/planExportDialog.vto" }}
 {{ /layout }}

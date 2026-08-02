@@ -34,6 +34,16 @@ function formatDistance(meters) {
   return `${(meters / 1000).toFixed(meters >= 100_000 ? 0 : 1)} km`;
 }
 
+export function routeBounds(points) {
+  if (!points?.length) return null;
+  const longitudes = points.map((point) => point.longitude);
+  const latitudes = points.map((point) => point.latitude);
+  return [
+    [Math.min(...longitudes), Math.min(...latitudes)],
+    [Math.max(...longitudes), Math.max(...latitudes)],
+  ];
+}
+
 export async function requestPlanExport({ fetchImpl, result, variant, format, prefix }) {
   if (!result?.exportToken) throw new Error('Calculate a route before exporting.');
   const response = await fetchImpl('/v1/plan/export', {
@@ -51,16 +61,21 @@ export function initializePlanPage({
   documentRef = document,
   maplibre = globalThis.window?.maplibregl,
   fetchImpl = globalThis.fetch?.bind(globalThis),
+  windowRef = globalThis.window,
 } = {}) {
   const root = documentRef.querySelector('[data-plan-page]');
   const mapNode = documentRef.querySelector('[data-plan-map]');
   if (!root || !mapNode || !maplibre || !fetchImpl) return null;
   const priorities = [...documentRef.querySelectorAll('[data-plan-priority]')];
+  const mobilePriority = documentRef.querySelector('[data-plan-priority-mobile]');
   const status = documentRef.querySelector('[data-plan-status]');
+  const mobileStatus = documentRef.querySelector('[data-plan-status-mobile]');
   const undo = documentRef.querySelector('[data-plan-undo]');
   const deleteSelected = documentRef.querySelector('[data-plan-delete]');
   const reset = documentRef.querySelector('[data-plan-reset]');
   const thermalToggle = documentRef.querySelector('[data-plan-thermal-toggle]');
+  const fitRoute = documentRef.querySelector('[data-plan-fit-route]');
+  const metricsToggle = documentRef.querySelector('[data-plan-metrics-toggle]');
   const exportOpen = documentRef.querySelector('[data-plan-export-open]');
   const exportDialog = documentRef.querySelector('[data-plan-export-dialog]');
   const exportForm = documentRef.querySelector('[data-plan-export-form]');
@@ -85,6 +100,11 @@ export function initializePlanPage({
     maxPitch: 0,
   });
   map.addControl(new maplibre.NavigationControl(), 'top-right');
+  const collapseMobileAttribution = () => {
+    if (!windowRef?.matchMedia?.('(max-width: 760px)')?.matches) return;
+    mapNode.querySelector?.('.maplibregl-ctrl-attrib')?.removeAttribute?.('open');
+  };
+  collapseMobileAttribution();
   const anchors = [];
   let selectedIndex = -1;
   let draggingIndex = -1;
@@ -94,11 +114,17 @@ export function initializePlanPage({
   let lastResult = null;
 
   function selectedPriority() {
-    return priorities.find((input) => input.checked)?.value ?? 'balanced';
+    return priorities.find((input) => input.checked)?.value ?? mobilePriority?.value ?? 'balanced';
   }
 
-  function setStatus(message) {
+  function synchronizePriority(value) {
+    priorities.forEach((priority) => { priority.checked = priority.value === value; });
+    if (mobilePriority) mobilePriority.value = value;
+  }
+
+  function setStatus(message, mobileMessage = message) {
     if (status) status.textContent = message;
+    if (mobileStatus) mobileStatus.textContent = mobileMessage;
   }
 
   function setSource(name, data) {
@@ -109,6 +135,7 @@ export function initializePlanPage({
     if (undo) undo.disabled = anchors.length === 0;
     if (reset) reset.disabled = anchors.length === 0;
     if (deleteSelected) deleteSelected.disabled = selectedIndex < 0;
+    if (fitRoute) fitRoute.disabled = anchors.length === 0;
     if (exportOpen) exportOpen.disabled = !lastResult;
     setSource('plan-anchors', anchorFeatures(anchors, selectedIndex));
     setSource('plan-direct', lineFeature(anchors));
@@ -135,11 +162,11 @@ export function initializePlanPage({
     requestController?.abort();
     if (anchors.length < 2) {
       clearResult();
-      setStatus('Place at least two points to calculate a route.');
+      setStatus('Place at least two points to calculate a route.', 'Place 2 points');
       return;
     }
     requestController = new AbortController();
-    setStatus('Calculating thermal-guided route…');
+    setStatus('Calculating thermal-guided route…', 'Calculating…');
     try {
       const response = await fetchImpl('/v1/plan/route', {
         method: 'POST',
@@ -163,13 +190,16 @@ export function initializePlanPage({
       values.enclosedCells.textContent = String(result.claims.enclosed.length);
       values.newCells.textContent = String(result.claims.newPersonal.length);
       if (exportOpen) exportOpen.disabled = false;
-      setStatus(result.thermalCoverage === 'available'
-        ? 'Route calculated using available historical thermal areas.'
-        : 'No processed thermal areas are available here yet; showing the direct route.');
+      setStatus(
+        result.thermalCoverage === 'available'
+          ? 'Route calculated using available historical thermal areas.'
+          : 'No processed thermal areas are available here yet; showing the direct route.',
+        result.thermalCoverage === 'available' ? 'Route ready' : 'Direct route',
+      );
     } catch (error) {
       if (error?.name === 'AbortError' || sequence !== requestSequence) return;
       setSource('plan-route', lineFeature(anchors));
-      setStatus('Thermal routing is temporarily unavailable; showing the direct route.');
+      setStatus('Thermal routing is temporarily unavailable; showing the direct route.', 'Try again');
     }
   }
 
@@ -187,6 +217,7 @@ export function initializePlanPage({
   }
 
   map.on('load', () => {
+    collapseMobileAttribution();
     map.addSource('thermal-history', {
       type: 'raster',
       tiles: [mapNode.dataset.thermalTileUrl],
@@ -256,9 +287,15 @@ export function initializePlanPage({
   });
 
   priorities.forEach((priority) => priority.addEventListener('change', () => {
+    synchronizePriority(priority.value);
     clearResult();
     scheduleCalculation();
   }));
+  mobilePriority?.addEventListener('change', () => {
+    synchronizePriority(mobilePriority.value);
+    clearResult();
+    scheduleCalculation();
+  });
   undo?.addEventListener('click', () => {
     anchors.pop();
     selectedIndex = Math.min(selectedIndex, anchors.length - 1);
@@ -277,6 +314,29 @@ export function initializePlanPage({
   });
   thermalToggle?.addEventListener('change', () => {
     if (map.getLayer('thermal-history')) map.setLayoutProperty('thermal-history', 'visibility', thermalToggle.checked ? 'visible' : 'none');
+    if (mobileStatus) mobileStatus.textContent = thermalToggle.checked ? 'Thermals visible' : 'Thermals hidden';
+  });
+  fitRoute?.addEventListener('click', () => {
+    const bounds = routeBounds(lastResult?.route?.length ? lastResult.route : anchors);
+    if (bounds) map.fitBounds(bounds, { padding: 64, maxZoom: 11, duration: 500 });
+  });
+  const mobileBreakpoint = windowRef?.matchMedia?.('(max-width: 760px)');
+  const synchronizeMetrics = () => {
+    const isMobile = mobileBreakpoint?.matches === true;
+    metricsToggle?.setAttribute('aria-expanded', String(!isMobile));
+    metricsToggle?.setAttribute('tabindex', isMobile ? '0' : '-1');
+  };
+  const resizeMap = () => windowRef?.requestAnimationFrame?.(() => map.resize?.());
+  const breakpointChanged = () => {
+    synchronizeMetrics();
+    resizeMap();
+  };
+  synchronizeMetrics();
+  mobileBreakpoint?.addEventListener?.('change', breakpointChanged);
+  metricsToggle?.addEventListener('click', () => {
+    if (!mobileBreakpoint?.matches) return;
+    const expanded = metricsToggle.getAttribute('aria-expanded') === 'true';
+    metricsToggle.setAttribute('aria-expanded', String(!expanded));
   });
   exportOpen?.addEventListener('click', () => {
     if (lastResult && exportDialog?.showModal && !exportDialog.open) exportDialog.showModal();

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 // @ts-expect-error Browser assets remain JavaScript.
-import { initializePlanPage, requestPlanExport } from '../../public/scripts/app-ui/plan.js';
+import { initializePlanPage, requestPlanExport, routeBounds } from '../../public/scripts/app-ui/plan.js';
 
 const result = {
   exportToken: '00000000-0000-4000-8000-000000000099',
@@ -9,6 +9,14 @@ const result = {
 };
 
 describe('Plan export controller', () => {
+  it('calculates map bounds around every point in a route', () => {
+    expect(routeBounds([
+      { latitude: 40, longitude: -104 },
+      { latitude: 39, longitude: -105 },
+      { latitude: 39.5, longitude: -103.5 },
+    ])).toEqual([[-105, 39], [-103.5, 40]]);
+    expect(routeBounds([])).toBeNull();
+  });
   it('requests a server-authorized export without resubmitting route coordinates', async () => {
     const fetchImpl = vi.fn(async (_input: string, _init?: RequestInit) => new Response('task', {
       status: 200,
@@ -38,6 +46,7 @@ describe('Plan export controller', () => {
     const source = { setData: vi.fn() };
     const map = {
       addControl: vi.fn(), getSource: vi.fn(() => source), getLayer: vi.fn(), setLayoutProperty: vi.fn(),
+      fitBounds: vi.fn(), resize: vi.fn(),
       getCanvas: vi.fn(() => ({ style: {} })), dragPan: { disable: vi.fn(), enable: vi.fn() },
       on: vi.fn((event: string, layerOrHandler: string | ((event?: unknown) => void), handler?: (event?: unknown) => void) => {
         handlers.set(handler ? `${event}:${layerOrHandler}` : event, handler ?? layerOrHandler as (event?: unknown) => void);
@@ -49,11 +58,18 @@ describe('Plan export controller', () => {
       controls.set(selector, value);
       return value;
     };
+    const mobilePriority = { value: 'balanced', addEventListener: vi.fn() };
+    const priorities = ['shorter', 'balanced', 'thermal'].map((value) => ({
+      value, checked: value === 'balanced',
+      addEventListener: vi.fn(),
+    }));
     const nodes = new Map<string, unknown>([
       ['[data-plan-page]', {}],
       ['[data-plan-map]', { dataset: { mapStyleUrl: 'style', thermalTileUrl: 'tiles' } }],
+      ['[data-plan-priority-mobile]', mobilePriority],
       ...[
-        '[data-plan-status]', '[data-plan-undo]', '[data-plan-delete]', '[data-plan-reset]',
+        '[data-plan-status]', '[data-plan-status-mobile]', '[data-plan-undo]', '[data-plan-delete]', '[data-plan-reset]',
+        '[data-plan-fit-route]',
         '[data-plan-direct-distance]', '[data-plan-route-distance]', '[data-plan-extra-distance]',
         '[data-plan-maximum-distance]', '[data-plan-direct-cells]', '[data-plan-enclosed-cells]',
         '[data-plan-new-cells]', '[data-plan-export-open]',
@@ -61,7 +77,7 @@ describe('Plan export controller', () => {
     ]);
     const documentRef = {
       querySelector: (selector: string) => nodes.get(selector) ?? null,
-      querySelectorAll: () => [],
+      querySelectorAll: (selector: string) => selector === '[data-plan-priority]' ? priorities : [],
     };
     const fetchImpl = vi.fn(async () => new Response(JSON.stringify({
       ...result,
@@ -74,6 +90,19 @@ describe('Plan export controller', () => {
       maplibre: { Map: class { constructor() { return map; } }, NavigationControl: class {} },
     });
     controller.anchors.push(...result.anchors);
+    await controller.calculate();
+    expect(controls.get('[data-plan-export-open]')?.disabled).toBe(false);
+    expect(controls.get('[data-plan-status-mobile]')?.textContent).toBe('Direct route');
+
+    const fitHandler = controls.get('[data-plan-fit-route]')?.addEventListener.mock.calls.find(([event]) => event === 'click')?.[1];
+    fitHandler?.();
+    expect(map.fitBounds).toHaveBeenCalledWith([[-105, 39], [-104, 40]], { padding: 64, maxZoom: 11, duration: 500 });
+
+    mobilePriority.value = 'thermal';
+    const mobilePriorityHandler = mobilePriority.addEventListener.mock.calls.find(([event]) => event === 'change')?.[1];
+    mobilePriorityHandler?.();
+    expect(priorities.find((priority) => priority.checked)?.value).toBe('thermal');
+    expect(controls.get('[data-plan-export-open]')?.disabled).toBe(true);
     await controller.calculate();
     expect(controls.get('[data-plan-export-open]')?.disabled).toBe(false);
 

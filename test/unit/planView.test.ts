@@ -14,6 +14,9 @@ describe('Plan page', () => {
     });
     expect(html).toContain('Plan your next flight');
     expect(html).toContain('Routing priority');
+    expect(html).toContain('data-plan-priority-mobile');
+    expect(html).toContain('data-plan-metrics');
+    expect(html).toContain('data-plan-fit-route');
     expect(html).toContain('value="balanced"');
     expect(html).toContain('Main turnpoints');
     expect(html).toContain('Optimized track');
@@ -23,6 +26,7 @@ describe('Plan page', () => {
     expect(html).toContain('/v1/thermal/tiles/{z}/{x}/{y}.png');
     expect(html).toContain('/scripts/app-ui/plan.js');
     expect(html).not.toContain('probability');
+    expect(html.match(/data-plan-route-distance/g)).toHaveLength(1);
   });
 
   it('uses a five-column mobile navigation', async () => {
