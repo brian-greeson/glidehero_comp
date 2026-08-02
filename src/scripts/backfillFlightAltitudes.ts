@@ -119,6 +119,7 @@ export async function runFlightAltitudeBackfill(
     mode: options.apply ? 'apply' : 'dry-run', inspected: 0, changed: 0, skipped: 0, written: 0, failed: 0,
   };
   let cursor: string | undefined;
+  let batchNum = 0;
   while (true) {
     const batch = await listFlights(cursor, batchSize);
     if (!batch.length) break;
@@ -148,6 +149,9 @@ export async function runFlightAltitudeBackfill(
         logger.error(`Unable to backfill GPS altitude metrics for flight ${flight.id}.`);
       }
     }
+
+    logger.log(`Completed batch ${batchNum}`);
+    batchNum++;
     cursor = batch.at(-1)!.id;
   }
   return summary;

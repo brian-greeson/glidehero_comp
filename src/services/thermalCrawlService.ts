@@ -127,12 +127,12 @@ export function createThermalCrawlService(database: Database): ThermalCrawlServi
         const tileCount = await transaction.execute<{ count: number }>(sql`
           WITH inserted AS (
             INSERT INTO thermal_crawl_job_tiles (job_id, zoom, tile_x, tms_y, status, updated_at)
-            SELECT ${jobId}, ${THERMAL_NATIVE_ZOOM}, x, (${maximum} - xyz_y), 'pending', NOW()
-            FROM generate_series(${xMin}, ${xMax}) x
-            CROSS JOIN generate_series(${xyzYMin}, ${xyzYMax}) xyz_y
+            SELECT ${jobId}, ${THERMAL_NATIVE_ZOOM}::integer, x, (${maximum}::integer - xyz_y), 'pending', NOW()
+            FROM generate_series(${xMin}::integer, ${xMax}::integer) x
+            CROSS JOIN generate_series(${xyzYMin}::integer, ${xyzYMax}::integer) xyz_y
             CROSS JOIN thermal_crawl_jobs job
             WHERE job.id = ${jobId}
-              AND ST_Intersects(job.target_geometry, ST_Transform(ST_TileEnvelope(${THERMAL_NATIVE_ZOOM}, x, xyz_y), 4326))
+              AND ST_Intersects(job.target_geometry, ST_Transform(ST_TileEnvelope(${THERMAL_NATIVE_ZOOM}::integer, x, xyz_y), 4326))
             RETURNING 1
           )
           SELECT COUNT(*)::integer AS count FROM inserted

@@ -44,7 +44,8 @@ export function createAdminThermalRouter(dependencies: {
       await dependencies.crawl.create({ name: parsed.data.name, geometry: polygon(parsed.data.geometry), userId: res.locals.currentUser!.userId });
       res.redirect(303, '/admin/thermal?created=1');
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unable to create crawl job.';
+      if (!(error instanceof RangeError)) console.error(error);
+      const message = error instanceof RangeError ? error.message : 'Unable to create crawl job.';
       res.redirect(303, `/admin/thermal?error=${encodeURIComponent(message)}`);
     }
   });
