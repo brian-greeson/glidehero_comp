@@ -51,6 +51,8 @@ async function insertFlight(userId: string, processingStatus: 'processing' | 'co
     startedAt,
     endedAt,
     durationSeconds: 600,
+    launchGpsAltitudeMeters: 1_000,
+    minGpsAltitudeMeters: 900,
     maxGpsAltitudeMeters: 1_600,
     launchTimezone: 'America/Denver',
     launchLatitude: 0.0045,
@@ -128,6 +130,8 @@ describe('flightDetailService', () => {
       endedAt: flight.endedAt,
       launchTimezone: 'America/Denver',
       durationSeconds: 600,
+      launchGpsAltitudeMeters: 1_000,
+      minGpsAltitudeMeters: 900,
       maxGpsAltitudeMeters: 1_600,
       progress: {
         directCellCount: 8,

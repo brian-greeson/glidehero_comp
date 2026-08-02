@@ -41,7 +41,8 @@ import type { FlightThumbnailDeliveryService } from '../services/flightThumbnail
 import { WORKER_STATUS_TTL_SECONDS, type WorkerControlService } from '../services/workerControlService.js';
 import type { FlightProcessingControlService } from '../services/flightProcessingControlService.js';
 import type { FlightDetailService } from '../services/flightDetailService.js';
-import { createFlightMapPayload, createFlightPageView } from '../views/authenticated/adapters/flightDetailView.js';
+import { createFlightMapPayload, createFlightPageView, createPublicFlightPageView } from '../views/authenticated/adapters/flightDetailView.js';
+import type { PublicFlightPageRenderer } from '../views/publicFlight/renderer.js';
 import type { CellFlightTrackService } from '../services/cellFlightTrackService.js';
 import type { MapReplayService } from '../services/mapReplayService.js';
 import type { OnboardingService, OnboardingStepKey } from '../services/onboardingService.js';
@@ -209,6 +210,10 @@ async function renderAuthenticated(res: Response, renderPage: AuthenticatedPageR
   res.status(status).type('html').send(await renderPage(model));
 }
 
+async function renderPublicFlight(res: Response, renderPage: PublicFlightPageRenderer, status: number, model: Parameters<PublicFlightPageRenderer>[0]) {
+  res.status(status).type('html').send(await renderPage(model));
+}
+
 export function createWebRouter(dependencies: {
   auth: AuthService;
   cookie: SessionCookie;
@@ -227,6 +232,7 @@ export function createWebRouter(dependencies: {
   renderPage: PageRenderer;
   renderAuthenticatedPage: AuthenticatedPageRenderer;
   renderAuthenticatedActivityFeed: AuthenticatedActivityFeedRenderer;
+  renderPublicFlightPage?: PublicFlightPageRenderer;
   mapTilerStyleUrl?: string;
   adminEmails?: readonly string[];
   adminFlights?: AdminFlightService;
@@ -1085,10 +1091,6 @@ export function createWebRouter(dependencies: {
 
   router.get('/flights/:flightId', async (req, res, next) => {
     const currentUser = res.locals.currentUser;
-    if (!currentUser) {
-      res.redirect(302, '/');
-      return;
-    }
     const parsedFlightId = pilotUserIdSchema.safeParse(req.params.flightId);
     if (!parsedFlightId.success) {
       next();
@@ -1101,12 +1103,24 @@ export function createWebRouter(dependencies: {
         next();
         return;
       }
-      const shell = authenticatedShell('flight', currentUser, { showFooter: false });
-      await renderAuthenticated(res, dependencies.renderAuthenticatedPage, 200, {
-        ...shell,
+      if (currentUser) {
+        const shell = authenticatedShell('flight', currentUser, { showFooter: false });
+        await renderAuthenticated(res, dependencies.renderAuthenticatedPage, 200, {
+          ...shell,
+          page: 'flight',
+          flight: {
+            ...createFlightPageView(summary),
+            mapStyleUrl: dependencies.mapTilerStyleUrl,
+          },
+        });
+        return;
+      }
+      if (!dependencies.renderPublicFlightPage) throw new Error('Public flight detail renderer is not configured.');
+      await renderPublicFlight(res, dependencies.renderPublicFlightPage, 200, {
         page: 'flight',
+        title: `${summary.ownerDisplayName} flight · GlideHero`,
         flight: {
-          ...createFlightPageView(summary),
+          ...createPublicFlightPageView(summary),
           mapStyleUrl: dependencies.mapTilerStyleUrl,
         },
       });
@@ -1116,11 +1130,6 @@ export function createWebRouter(dependencies: {
   });
 
   router.get('/v1/flights/:flightId/map', async (req, res, next) => {
-    const currentUser = res.locals.currentUser;
-    if (!currentUser) {
-      next(new AppError(401, 'unauthorized', 'Sign in before viewing a flight map.'));
-      return;
-    }
     const parsedFlightId = pilotUserIdSchema.safeParse(req.params.flightId);
     if (!parsedFlightId.success) {
       next();

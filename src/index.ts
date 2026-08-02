@@ -30,6 +30,7 @@ import {
   createAdminUserPageRenderer,
 } from './views/admin/renderer.js';
 import { createAuthenticatedActivityFeedRenderer, createAuthenticatedPageRenderer } from './views/authenticated/renderer.js';
+import { createPublicFlightPageRenderer } from './views/publicFlight/renderer.js';
 import { createAdminAreaRouter } from './web/adminAreaRouter.js';
 import { createAdminUserRouter } from './web/adminUserRouter.js';
 import { createCurrentUserMiddleware } from './web/currentUserMiddleware.js';
@@ -197,6 +198,7 @@ const webMiddleware = [
     }),
     renderAuthenticatedPage: createAuthenticatedPageRenderer(),
     renderAuthenticatedActivityFeed: createAuthenticatedActivityFeedRenderer(),
+    renderPublicFlightPage: createPublicFlightPageRenderer(),
     mapTilerStyleUrl: `https://api.maptiler.com/maps/outdoor-v2/style.json?key=${config.mapTilerApiKey}`,
     adminEmails: config.adminEmails,
     adminFlights,

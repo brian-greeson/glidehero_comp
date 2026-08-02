@@ -28,6 +28,7 @@ import type { OnboardingService } from '../../src/services/onboardingService.js'
 import type { PlanService } from '../../src/services/planService.js';
 import type { PlanExportService } from '../../src/services/planExportService.js';
 import type { ThermalRasterCacheService } from '../../src/services/thermalRasterCacheService.js';
+import type { PublicFlightPageRenderer } from '../../src/views/publicFlight/renderer.js';
 
 const viewportStats = {
   claimedCellCount: 2,
@@ -131,6 +132,7 @@ function dependencies() {
   );
   const renderAuthenticatedPage = vi.fn(async () => '<html><body>App page</body></html>');
   const renderAuthenticatedActivityFeed = vi.fn(async () => '<div data-activity-feed>App feed</div>');
+  const renderPublicFlightPage: PublicFlightPageRenderer = vi.fn(async () => '<html><body>Public flight page</body></html>');
   const middleware = createCurrentUserMiddleware(auth, cookie);
   const profiles: ProfileService = {
     updateTerritoryColor: vi.fn(async () => undefined),
@@ -275,6 +277,7 @@ function dependencies() {
     renderPage,
     renderAuthenticatedPage,
     renderAuthenticatedActivityFeed,
+    renderPublicFlightPage,
   });
   return {
     auth,
@@ -296,6 +299,7 @@ function dependencies() {
     renderPage,
     renderAuthenticatedPage,
     renderAuthenticatedActivityFeed,
+    renderPublicFlightPage,
     cookie,
     app: createApp({ webMiddleware: [middleware, router] }),
   };
@@ -384,7 +388,7 @@ describe('webRouter', () => {
     });
   });
 
-  it('serves completed flight detail HTML and map JSON to any authenticated pilot', async () => {
+  it('serves completed flight detail HTML and map JSON to guests and authenticated pilots', async () => {
     const base = dependencies();
     const flightId = '00000000-0000-4000-8000-000000000020';
     const points = [
@@ -400,6 +404,8 @@ describe('webRouter', () => {
       endedAt: new Date('2026-07-23T15:00:00.000Z'),
       launchTimezone: 'America/Denver',
       durationSeconds: 3_600,
+      launchGpsAltitudeMeters: 1_500,
+      minGpsAltitudeMeters: 1_425,
       maxGpsAltitudeMeters: 1_600,
       launchLatitude: 40,
       launchLongitude: -105,
@@ -439,15 +445,27 @@ describe('webRouter', () => {
       renderPage: base.renderPage,
       renderAuthenticatedPage: base.renderAuthenticatedPage,
       renderAuthenticatedActivityFeed: base.renderAuthenticatedActivityFeed,
+      renderPublicFlightPage: base.renderPublicFlightPage,
       mapTilerStyleUrl: 'https://maps.example/style.json',
     });
     const app = createApp({ webMiddleware: [createCurrentUserMiddleware(base.auth, base.cookie), router] });
 
     await withServer(app, async (baseUrl) => {
-      const anonymousPage = await fetch(`${baseUrl}/flights/${flightId}`, { redirect: 'manual' });
-      expect(anonymousPage.status).toBe(302);
+      const anonymousPage = await fetch(`${baseUrl}/flights/${flightId}`);
+      expect(anonymousPage.status).toBe(200);
+      expect(base.renderPublicFlightPage).toHaveBeenCalledWith(expect.objectContaining({
+        page: 'flight',
+        title: 'Cloud Dancer flight · GlideHero',
+        flight: expect.objectContaining({
+          id: flightId,
+          defaultDistance: 'fivePoint',
+          mapStyleUrl: 'https://maps.example/style.json',
+          pilot: expect.not.objectContaining({ href: expect.anything() }),
+        }),
+      }));
       const anonymousMap = await fetch(`${baseUrl}/v1/flights/${flightId}/map`);
-      expect(anonymousMap.status).toBe(401);
+      expect(anonymousMap.status).toBe(200);
+      expect(anonymousMap.headers.get('cache-control')).toBe('private, max-age=60');
 
       const headers = { cookie: 'glidehero_session=valid-token' };
       expect((await fetch(`${baseUrl}/flights/not-a-uuid`, { headers })).status).toBe(404);
@@ -474,9 +492,7 @@ describe('webRouter', () => {
 
     vi.mocked(flightDetail.getSummary).mockResolvedValueOnce(null);
     await withServer(app, async (baseUrl) => {
-      const missing = await fetch(`${baseUrl}/flights/${flightId}`, {
-        headers: { cookie: 'glidehero_session=valid-token' },
-      });
+      const missing = await fetch(`${baseUrl}/flights/${flightId}`);
       expect(missing.status).toBe(404);
     });
   });

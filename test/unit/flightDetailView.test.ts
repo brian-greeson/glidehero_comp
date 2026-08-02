@@ -1,9 +1,10 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import type { FlightDetailMapData, FlightDetailSummary } from '../../src/services/flightDetailService.js';
-import { createFlightMapPayload, createFlightPageView } from '../../src/views/authenticated/adapters/flightDetailView.js';
+import { createFlightMapPayload, createFlightPageView, createPublicFlightPageView } from '../../src/views/authenticated/adapters/flightDetailView.js';
 import { createAuthenticatedShellModel } from '../../src/views/authenticated/adapters/shellModel.js';
 import { createAuthenticatedPageRenderer } from '../../src/views/authenticated/renderer.js';
+import { createPublicFlightPageRenderer } from '../../src/views/publicFlight/renderer.js';
 
 const flightId = '00000000-0000-4000-8000-000000000020';
 const ownerId = '00000000-0000-4000-8000-000000000003';
@@ -20,6 +21,8 @@ const summary: FlightDetailSummary = {
   endedAt: new Date('2026-07-23T15:02:03.000Z'),
   launchTimezone: 'America/Denver',
   durationSeconds: 3_723,
+  launchGpsAltitudeMeters: 1_500,
+  minGpsAltitudeMeters: 1_425,
   maxGpsAltitudeMeters: 1_600,
   launchLatitude: 40,
   launchLongitude: -105,
@@ -67,6 +70,8 @@ describe('flight detail view', () => {
       time: '8:00 AM',
       timezone: 'MDT',
       duration: '1h 02m',
+      launchAltitude: '1,500 m',
+      minAltitude: '1,425 m',
       maxAltitude: '1,600 m',
       fivePointDistance: '10.01 km',
       directCells: '8',
@@ -88,11 +93,15 @@ describe('flight detail view', () => {
     const unavailable = createFlightPageView({
       ...summary,
       durationSeconds: null,
+      launchGpsAltitudeMeters: null,
+      minGpsAltitudeMeters: null,
       maxGpsAltitudeMeters: null,
       scores: summary.scores ? { ...summary.scores, fivePoint: null } : null,
     });
     expect(unavailable).toMatchObject({
       duration: '—',
+      launchAltitude: '—',
+      minAltitude: '—',
       maxAltitude: '—',
       fivePointDistance: '—',
     });
@@ -178,6 +187,9 @@ describe('flight detail view', () => {
     expect(html).toContain(`data-map-data-url="/v1/flights/${flightId}/map"`);
     expect(html).toContain('data-default-distance="fivePoint"');
     expect(html).toContain('<h2 id="flight-stats-heading">Stats</h2>');
+    expect(html).toContain('Launch GPS altitude · 1,500 m');
+    expect(html).toContain('<dt>Min GPS altitude</dt><dd>1,425 m</dd>');
+    expect(html).toContain('<dt>Max GPS altitude</dt><dd>1,600 m</dd>');
     expect(html).toContain('<dt>Max altitude</dt><dd>1,600 m</dd>');
     expect(html).toContain('<dt>Duration</dt><dd>1h 02m</dd>');
     expect(html).toContain('<dt>5-point distance</dt><dd>10.01 km</dd>');
@@ -199,6 +211,29 @@ describe('flight detail view', () => {
     expect(emptyHtml).toContain('No achievements or other accomplishments from this flight.');
   });
 
+  it('renders the complete flight for guests without signed-in-only links or controls', async () => {
+    const flight = createPublicFlightPageView(summary);
+    const html = await createPublicFlightPageRenderer()({
+      page: 'flight',
+      title: 'Cloud Dancer flight · GlideHero',
+      flight: { ...flight, mapStyleUrl: 'https://maps.example/style.json' },
+    });
+
+    expect(flight.pilot.href).toBeUndefined();
+    expect(flight.achievements[0]?.href).toBeUndefined();
+    expect(html).toContain('<title>Cloud Dancer flight · GlideHero</title>');
+    expect(html).toContain('<meta name="robots" content="noindex, nofollow">');
+    expect(html).toContain('Join or sign in');
+    expect(html).toContain('data-flight-detail-map');
+    expect(html).toContain(`data-map-data-url="/v1/flights/${flightId}/map"`);
+    expect(html).toContain('25 Unique Cells');
+    expect(html).not.toContain('data-upload-trigger');
+    expect(html).not.toContain('data-app-account');
+    expect(html).not.toContain('class="mobile-navigation"');
+    expect(html).not.toContain('/scripts/app-ui/app.js');
+    expect(html).not.toContain(`href="/pilots/${ownerId}"`);
+  });
+
   it('keeps the MapLibre container absolutely sized to the full flight stage', () => {
     const css = readFileSync('public/styles/app-ui/flight.css', 'utf8');
     expect(css).toContain(
@@ -206,7 +241,7 @@ describe('flight detail view', () => {
     );
     expect(css).toContain('--flight-sheet-collapsed-height: min(132px, 15svh);');
     expect(css).toContain('height: var(--flight-sheet-collapsed-height);');
-    expect(css).toContain('var(--app-mobile-nav-height) + var(--flight-sheet-collapsed-height)');
+    expect(css).toContain('var(--flight-bottom-nav-height) + var(--flight-sheet-collapsed-height)');
     expect(css).toContain('.flight-detail-panel .mobile-map-sheet__content { display: none; }');
     expect(css).toContain('.flight-detail-panel.mobile-map-sheet.is-expanded .mobile-map-sheet__content { display: block;');
   });

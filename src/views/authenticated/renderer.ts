@@ -27,6 +27,7 @@ export function createAuthenticatedPageRenderer(): AuthenticatedPageRenderer {
 
   return async (model) => (
     await environment.run(templates[model.page], {
+      isGuest: false,
       pageStylesheet: `/styles/app-ui/${model.page}.css`,
       pageScript: model.page === 'map'
         ? '/scripts/app-ui/map.js'

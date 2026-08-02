@@ -83,6 +83,8 @@ export function createFlightPageView(summary: FlightDetailSummary): FlightPageMo
     },
     ...launch,
     duration: duration(summary.durationSeconds),
+    launchAltitude: altitude(summary.launchGpsAltitudeMeters),
+    minAltitude: altitude(summary.minGpsAltitudeMeters),
     maxAltitude: altitude(summary.maxGpsAltitudeMeters),
     fivePointDistance: distances.find(({ key }) => key === 'fivePoint')?.value ?? '—',
     directCells: progress ? String(progress.directCellCount) : '—',
@@ -102,6 +104,22 @@ export function createFlightPageView(summary: FlightDetailSummary): FlightPageMo
       tone: accomplishment.tone,
       href: accomplishment.arenaPath,
     })),
+  };
+}
+
+/** Remove links to signed-in-only surfaces while retaining public flight content. */
+export function createPublicFlightPageView(summary: FlightDetailSummary): FlightPageModel['flight'] {
+  const view = createFlightPageView(summary);
+  const pilot = { ...view.pilot };
+  delete pilot.href;
+  return {
+    ...view,
+    pilot,
+    achievements: view.achievements.map((achievement) => {
+      const publicAchievement = { ...achievement };
+      delete publicAchievement.href;
+      return publicAchievement;
+    }),
   };
 }
 

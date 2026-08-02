@@ -19,6 +19,9 @@ a { color: inherit; }
 .desktop-navigation__item:hover, .desktop-navigation__item.is-active { color: var(--app-cyan); }
 .desktop-navigation__item.is-active::after { opacity: 1; transform: scaleX(1); }
 .app-header__actions { display: flex; align-items: center; justify-self: end; gap: .7rem; }
+.app-header--public-flight { grid-template-columns: 1fr auto; }
+.public-flight-header__action { display: inline-flex; min-height: 44px; align-items: center; justify-content: center; justify-self: end; padding: .65rem 1rem; border: 1px solid rgb(255 255 255 / 42%); border-radius: 999px; color: #fff; background: rgb(255 255 255 / 10%); font-size: .82rem; font-weight: 800; text-decoration: none; }
+.public-flight-header__action:hover { color: var(--app-navy-950); background: var(--app-cyan); }
 .app-upload-trigger { display: inline-flex; min-height: 44px; align-items: center; justify-content: center; gap: .45rem; padding: .65rem 1rem; border: 1px solid rgb(255 255 255 / 28%); border-radius: 999px; color: #fff; background: rgb(255 255 255 / 10%); font-weight: 800; cursor: pointer; }
 .app-upload-trigger:hover { color: var(--app-navy-950); background: var(--app-cyan); }
 .app-upload-trigger .app-icon { font-size: 1.05rem; }
@@ -133,6 +136,7 @@ a { color: inherit; }
   .app-header { position: sticky; top: 0; height: var(--app-mobile-header-height); grid-template-columns: 1fr auto; padding: 0 .85rem; }
   .app-brand img { width: 54px; height: 54px; }.app-brand__wordmark, .desktop-navigation { display: none; }
   .app-header__actions { gap: .4rem; }.app-upload-trigger { min-height: 40px; padding: .5rem .7rem; font-size: .78rem; }
+  .public-flight-header__action { min-height: 40px; padding: .5rem .75rem; font-size: .72rem; }
   .initials-avatar--header { width: 40px; height: 40px; font-size: .85rem; }
   .app-ui-main { min-height: calc(100svh - var(--app-mobile-header-height) - var(--app-mobile-nav-height)); padding-bottom: var(--app-mobile-nav-height); }
   .mobile-navigation { position: fixed; z-index: 40; right: 0; bottom: 0; left: 0; display: grid; grid-template-columns: repeat(5, 1fr); height: calc(var(--app-mobile-nav-height) + env(safe-area-inset-bottom)); padding: .45rem .25rem max(.45rem, env(safe-area-inset-bottom)); color: #fff; background: var(--app-navy-950); box-shadow: 0 -5px 22px rgb(3 20 38 / 16%); }

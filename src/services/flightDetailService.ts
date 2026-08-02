@@ -23,6 +23,8 @@ export type FlightDetailSummary = {
   endedAt: Date | null;
   launchTimezone: string | null;
   durationSeconds: number | null;
+  launchGpsAltitudeMeters: number | null;
+  minGpsAltitudeMeters: number | null;
   maxGpsAltitudeMeters: number | null;
   launchLatitude: number | null;
   launchLongitude: number | null;
@@ -125,6 +127,8 @@ export function createFlightDetailService(
           endedAt: flights.endedAt,
           launchTimezone: flights.launchTimezone,
           durationSeconds: flights.durationSeconds,
+          launchGpsAltitudeMeters: flights.launchGpsAltitudeMeters,
+          minGpsAltitudeMeters: flights.minGpsAltitudeMeters,
           maxGpsAltitudeMeters: flights.maxGpsAltitudeMeters,
           launchLatitude: flights.launchLatitude,
           launchLongitude: flights.launchLongitude,
@@ -167,6 +171,8 @@ export function createFlightDetailService(
         endedAt: row.endedAt,
         launchTimezone: row.launchTimezone,
         durationSeconds: row.durationSeconds,
+        launchGpsAltitudeMeters: row.launchGpsAltitudeMeters,
+        minGpsAltitudeMeters: row.minGpsAltitudeMeters,
         maxGpsAltitudeMeters: row.maxGpsAltitudeMeters,
         launchLatitude: row.launchLatitude,
         launchLongitude: row.launchLongitude,

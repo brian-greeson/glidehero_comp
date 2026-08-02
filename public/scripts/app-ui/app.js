@@ -1,5 +1,4 @@
 import { initializeFlightUploads } from '../flightUploads.js';
-import { initializeMapSheet } from './mapSheet.js';
 
 export function initializeAccountMenu(documentRef = document) {
   const root = documentRef.querySelector('[data-app-account]');
@@ -137,7 +136,6 @@ export function initializeAppUi(documentRef = document) {
   initializeProfileDisclosures(documentRef);
   initializeFlightThumbnailFallback(documentRef);
   initializeFlightTables(documentRef);
-  if (documentRef.querySelector?.('[data-app-page="flight"]')) initializeMapSheet({ documentRef });
 }
 
 if (typeof document !== 'undefined') initializeAppUi(document);

@@ -293,6 +293,8 @@ export type FlightPageModel = AuthenticatedShellModel & {
     time: string;
     timezone: string;
     duration: string;
+    launchAltitude: string;
+    minAltitude: string;
     maxAltitude: string;
     fivePointDistance: string;
     directCells: string;
