@@ -26,6 +26,7 @@ import type { CellFlightTrackResult, CellFlightTrackService } from '../../src/se
 import type { MapReplayService } from '../../src/services/mapReplayService.js';
 import type { OnboardingService } from '../../src/services/onboardingService.js';
 import type { PlanService } from '../../src/services/planService.js';
+import type { PlanExportService } from '../../src/services/planExportService.js';
 import type { ThermalRasterCacheService } from '../../src/services/thermalRasterCacheService.js';
 
 const viewportStats = {
@@ -239,9 +240,16 @@ function dependencies() {
   const plans: PlanService = { route: vi.fn(async (input) => ({
     anchors: input.anchors, route: input.anchors,
     legs: [{ directDistanceMeters: 1_000, maximumDistanceMeters: 1_200, routeDistanceMeters: 1_000 }],
-    directDistanceMeters: 1_000, routeDistanceMeters: 1_000, actualDeviationPercent: 0,
+    directDistanceMeters: 1_000, maximumRouteDistanceMeters: 1_200, routeDistanceMeters: 1_000,
+    actualExtraDistanceMeters: 0, actualDeviationPercent: 0, routingPriority: input.routingPriority,
     thermalCoverage: 'unavailable' as const, claims: { direct: [], enclosed: [], newPersonal: [] },
   })) };
+  const planExports: PlanExportService = {
+    authorize: vi.fn(async () => '00000000-0000-4000-8000-000000000099'),
+    export: vi.fn(async (input) => ({
+      body: 'exported-task', contentType: `application/x-${input.format}`, filename: `glidehero-${input.variant}.${input.format}`,
+    })),
+  };
   const thermalRasters: ThermalRasterCacheService = {
     get: vi.fn(async () => ({ body: Buffer.from('png'), contentType: 'image/png' as const, bucketKey: '12/2144/1378.png', cache: 'hit' as const })),
     cache: vi.fn(async () => null),
@@ -257,6 +265,7 @@ function dependencies() {
     mapGrid,
     mapReplay,
     plans,
+    planExports,
     thermalRasters,
     coverage,
     territoryTiles,
@@ -277,6 +286,7 @@ function dependencies() {
     mapGrid,
     mapReplay,
     plans,
+    planExports,
     thermalRasters,
     coverage,
     territoryTiles,
@@ -300,7 +310,7 @@ describe('webRouter', () => {
       const headers = { cookie: 'glidehero_session=valid-token' };
       expect((await fetch(`${baseUrl}/plan`, { headers })).status).toBe(200);
       expect(base.renderAuthenticatedPage).toHaveBeenCalledWith(expect.objectContaining({
-        page: 'plan', thermalTileUrl: '/v1/thermal/tiles/{z}/{x}/{y}.png', defaultDeviationPercent: 20,
+        page: 'plan', thermalTileUrl: '/v1/thermal/tiles/{z}/{x}/{y}.png', defaultRoutingPriority: 'balanced',
       }));
 
       const tile = await fetch(`${baseUrl}/v1/thermal/tiles/12/2144/2717.png`, { headers });
@@ -316,18 +326,42 @@ describe('webRouter', () => {
         method: 'POST', headers: { ...headers, 'content-type': 'application/json' },
         body: JSON.stringify({
           anchors: [{ latitude: 39, longitude: -105 }, { latitude: 39.1, longitude: -104.9 }],
-          maximumDeviationPercent: 20,
+          routingPriority: 'balanced',
         }),
       });
       expect(route.status).toBe(200);
-      expect(base.plans.route).toHaveBeenCalledWith(expect.objectContaining({ userId: user.userId, maximumDeviationPercent: 20 }));
+      expect(base.plans.route).toHaveBeenCalledWith(expect.objectContaining({ userId: user.userId, routingPriority: 'balanced' }));
+      const routeBody = await route.json() as { exportToken: string };
+      expect(routeBody.exportToken).toBe('00000000-0000-4000-8000-000000000099');
+
+      const exported = await fetch(`${baseUrl}/v1/plan/export`, {
+        method: 'POST', headers: { ...headers, 'content-type': 'application/json' },
+        body: JSON.stringify({
+          variant: 'optimized-track', format: 'xctsk', prefix: 'GH',
+          exportToken: '00000000-0000-4000-8000-000000000099',
+        }),
+      });
+      expect(exported.status).toBe(200);
+      expect(exported.headers.get('content-disposition')).toContain('glidehero-optimized-track.xctsk');
+      expect(await exported.text()).toBe('exported-task');
+      expect(base.planExports.export).toHaveBeenCalledWith(expect.objectContaining({ userId: user.userId, variant: 'optimized-track', format: 'xctsk' }));
+
+      const unsupportedExport = await fetch(`${baseUrl}/v1/plan/export`, {
+        method: 'POST', headers: { ...headers, 'content-type': 'application/json' },
+        body: JSON.stringify({
+          variant: 'main-turnpoints', format: 'gpx', prefix: 'GH',
+          exportToken: '00000000-0000-4000-8000-000000000099',
+        }),
+      });
+      expect(unsupportedExport.status).toBe(422);
+      expect(base.planExports.export).toHaveBeenCalledOnce();
 
       vi.mocked(base.plans.route).mockRejectedValueOnce(new RangeError('Each planned leg must be 1,000 km or shorter.'));
       const oversizedRoute = await fetch(`${baseUrl}/v1/plan/route`, {
         method: 'POST', headers: { ...headers, 'content-type': 'application/json' },
         body: JSON.stringify({
           anchors: [{ latitude: 39, longitude: -105 }, { latitude: 39.1, longitude: -104.9 }],
-          maximumDeviationPercent: 20,
+          routingPriority: 'balanced',
         }),
       });
       expect(oversizedRoute.status).toBe(422);

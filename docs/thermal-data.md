@@ -74,3 +74,27 @@ backtracking, and then simplifies the result into a small number of straight
 segments. Stronger activity bands contribute more, nearby areas may form one
 corridor across a small gap, and an insignificant improvement falls back to the
 direct leg.
+
+The Plan page exposes routing priorities rather than a percentage-deviation
+slider. Shorter, Balanced, and More thermal each define both a strict detour
+ceiling and the relative cost assigned to extra distance. The result continues
+to show the direct, optimized, extra, and maximum permitted distances.
+
+Sampling retains approximately 200-meter progress and lateral resolution for
+legs through 100 km so narrow activity corridors do not disappear on long
+legs. Longer and multi-leg plans share a roughly 500-progress-segment sampling
+budget so one request cannot multiply that worst-case workload across every
+leg. The route search returns immediately when the scored field contains no
+thermal activity.
+
+## Task export
+
+Authenticated pilots can export either their fixed main turnpoints or the
+complete optimized route. Supported formats are SeeYou CUP, XCSoar TSK,
+GPSDump FormatGEO WPT, and XCTrack XCTSK. Export points are enriched with
+MapTiler terrain elevation immediately before download; unavailable elevation
+data fails the export instead of writing fabricated altitudes. The route
+response issues a 15-minute Valkey-backed export token tied to the signed-in
+pilot, so browsers never resubmit or choose arbitrary export coordinates.
+Actual downloads are limited to ten per pilot per minute before any MapTiler
+request is made.

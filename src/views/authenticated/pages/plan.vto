@@ -4,13 +4,17 @@
       <div>
         <p class="plan-eyebrow">Thermal-guided planning</p>
         <h1>Plan your next flight</h1>
-        <p class="plan-intro">Click the map to place fixed route points. GlideHero will favor historical thermal activity without exceeding your allowance.</p>
+        <p class="plan-intro">Click the map to place fixed route points. GlideHero will favor historical thermal activity according to your routing priority.</p>
       </div>
-      <label class="plan-slider">
-        <span><strong>Allowed deviation</strong><output data-plan-deviation-output>{{ defaultDeviationPercent }}%</output></span>
-        <input type="range" min="0" max="100" step="1" value="{{ defaultDeviationPercent }}" data-plan-deviation aria-describedby="plan-deviation-help">
-        <small id="plan-deviation-help">Maximum extra distance allowed for each leg.</small>
-      </label>
+      <fieldset class="plan-priority">
+        <legend>Routing priority</legend>
+        <div role="radiogroup" aria-describedby="plan-priority-help">
+          <label><input type="radio" name="routing-priority" value="shorter" data-plan-priority {{ if defaultRoutingPriority === 'shorter' }}checked{{ /if }}><span>Shorter</span></label>
+          <label><input type="radio" name="routing-priority" value="balanced" data-plan-priority {{ if defaultRoutingPriority === 'balanced' }}checked{{ /if }}><span>Balanced</span></label>
+          <label><input type="radio" name="routing-priority" value="thermal" data-plan-priority {{ if defaultRoutingPriority === 'thermal' }}checked{{ /if }}><span>More thermal</span></label>
+        </div>
+        <small id="plan-priority-help">Choose how strongly the optimized route trades distance for historical thermal activity.</small>
+      </fieldset>
       <div class="plan-actions">
         <button type="button" data-plan-undo disabled>Undo point</button>
         <button type="button" data-plan-delete disabled>Delete selected</button>
@@ -19,12 +23,14 @@
       <label class="plan-thermal-toggle"><input type="checkbox" data-plan-thermal-toggle checked> Show historical thermal activity</label>
       <dl class="plan-summary">
         <div><dt>Direct distance</dt><dd data-plan-direct-distance>—</dd></div>
-        <div><dt>Thermal route</dt><dd data-plan-route-distance>—</dd></div>
-        <div><dt>Actual deviation</dt><dd data-plan-actual-deviation>—</dd></div>
+        <div><dt>Optimized route</dt><dd data-plan-route-distance>—</dd></div>
+        <div><dt>Extra distance</dt><dd data-plan-extra-distance>—</dd></div>
+        <div><dt>Maximum route</dt><dd data-plan-maximum-distance>—</dd></div>
         <div><dt>Direct cells</dt><dd data-plan-direct-cells>0</dd></div>
         <div><dt>Enclosed cells</dt><dd data-plan-enclosed-cells>0</dd></div>
         <div><dt>New Personal cells</dt><dd data-plan-new-cells>0</dd></div>
       </dl>
+      <button class="plan-export-trigger" type="button" data-plan-export-open aria-controls="plan-export-dialog" disabled>Export</button>
       <p class="plan-status" data-plan-status role="status">Place at least two points to calculate a route.</p>
       <p class="plan-attribution">Historical thermal activity: <a href="https://thermal.kk7.ch/">thermal.kk7.ch</a> · <a href="https://creativecommons.org/licenses/by-nc-sa/4.0/">CC BY-NC-SA 4.0</a></p>
     </aside>
@@ -34,4 +40,5 @@
         data-thermal-tile-url="{{ thermalTileUrl }}"></div>
     </section>
   </section>
+  {{ include "authenticated/components/planExportDialog.vto" }}
 {{ /layout }}

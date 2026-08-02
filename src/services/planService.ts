@@ -2,9 +2,11 @@ import { sql } from 'drizzle-orm';
 import type { Database } from '../db/client.js';
 import {
   createThermalRoutingField,
+  planSampleSpacingMeters,
   routeDistanceMeters,
   thermalGuidedLeg,
   type RoutePoint,
+  type RoutingPriority,
   type ThermalRoutingField,
 } from '../domain/thermal/thermalRoute.js';
 
@@ -14,8 +16,11 @@ export type PlanRouteResult = {
   route: RoutePoint[];
   legs: Array<{ directDistanceMeters: number; maximumDistanceMeters: number; routeDistanceMeters: number }>;
   directDistanceMeters: number;
+  maximumRouteDistanceMeters: number;
   routeDistanceMeters: number;
+  actualExtraDistanceMeters: number;
   actualDeviationPercent: number;
+  routingPriority: RoutingPriority;
   thermalCoverage: 'available' | 'unavailable';
   claims: {
     direct: PlanCell[];
@@ -25,7 +30,7 @@ export type PlanRouteResult = {
 };
 
 export interface PlanService {
-  route(input: { userId: string; anchors: RoutePoint[]; maximumDeviationPercent: number }): Promise<PlanRouteResult>;
+  route(input: { userId: string; anchors: RoutePoint[]; routingPriority: RoutingPriority }): Promise<PlanRouteResult>;
 }
 
 type StoredSampleScore = { sampleIndex: number; relativeScore: number };
@@ -160,9 +165,7 @@ export function createPlanService(database: Database, options: { cellSize: numbe
   return {
     async route(input) {
       if (!input.userId.trim()) throw new RangeError('Plan user is required.');
-      if (!Number.isFinite(input.maximumDeviationPercent) || input.maximumDeviationPercent < 0 || input.maximumDeviationPercent > 100) {
-        throw new RangeError('Maximum route deviation must be between 0 and 100 percent.');
-      }
+      if (!['shorter', 'balanced', 'thermal'].includes(input.routingPriority)) throw new RangeError('Routing priority is invalid.');
       if (input.anchors.length < 2 || input.anchors.length > 24) throw new RangeError('A plan requires between 2 and 24 anchors.');
       input.anchors.forEach(assertPoint);
       let totalDirectDistance = 0;
@@ -176,11 +179,17 @@ export function createPlanService(database: Database, options: { cellSize: numbe
       const route: RoutePoint[] = [];
       const legs: PlanRouteResult['legs'] = [];
       let candidateCount = 0;
+      const targetSampleSpacingMeters = planSampleSpacingMeters(totalDirectDistance);
       for (let index = 1; index < input.anchors.length; index += 1) {
         const start = input.anchors[index - 1]!;
         const end = input.anchors[index]!;
-        const field = createThermalRoutingField({ start, end, maximumDeviationPercent: input.maximumDeviationPercent });
-        const scores = input.maximumDeviationPercent > 0 ? await thermalScores(field) : new Map<number, number>();
+        const field = createThermalRoutingField({
+          start,
+          end,
+          routingPriority: input.routingPriority,
+          targetSampleSpacingMeters,
+        });
+        const scores = await thermalScores(field);
         candidateCount += [...scores.values()].filter((score) => score > 0).length;
         const leg = thermalGuidedLeg({ field, relativeScores: scores });
         route.push(...(route.length ? leg.points.slice(1) : leg.points));
@@ -191,14 +200,19 @@ export function createPlanService(database: Database, options: { cellSize: numbe
         });
       }
       const directDistanceMeters = totalDirectDistance;
+      const maximumRouteDistanceMeters = legs.reduce((total, leg) => total + leg.maximumDistanceMeters, 0);
       const generatedDistanceMeters = routeDistanceMeters(route);
+      const actualExtraDistanceMeters = Math.max(0, generatedDistanceMeters - directDistanceMeters);
       return {
         anchors: input.anchors,
         route,
         legs,
         directDistanceMeters,
+        maximumRouteDistanceMeters,
         routeDistanceMeters: generatedDistanceMeters,
+        actualExtraDistanceMeters,
         actualDeviationPercent: directDistanceMeters > 0 ? ((generatedDistanceMeters / directDistanceMeters) - 1) * 100 : 0,
+        routingPriority: input.routingPriority,
         thermalCoverage: candidateCount > 0 ? 'available' : 'unavailable',
         claims: await claims(input.userId, route),
       };

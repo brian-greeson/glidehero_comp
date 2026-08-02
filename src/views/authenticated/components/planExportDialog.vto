@@ -1,0 +1,22 @@
+<dialog id="plan-export-dialog" class="plan-export-dialog" data-plan-export-dialog aria-labelledby="plan-export-title">
+  <form method="dialog" data-plan-export-form>
+    <header>
+      <div><p class="plan-eyebrow">Flight computer export</p><h2 id="plan-export-title">Export route</h2></div>
+      <button type="button" data-plan-export-close aria-label="Close export dialog">&times;</button>
+    </header>
+    <fieldset>
+      <legend>Route content</legend>
+      <label><input type="radio" name="variant" value="main-turnpoints" checked><span><strong>Main turnpoints</strong><small>Only the points you placed</small></span></label>
+      <label><input type="radio" name="variant" value="optimized-track"><span><strong>Optimized track</strong><small>The complete thermal-guided route</small></span></label>
+    </fieldset>
+    <label class="plan-export-field"><span>File type</span><select name="format">
+      <option value="cup">SeeYou (.cup)</option>
+      <option value="tsk">XCSoar (.tsk)</option>
+      <option value="wpt">GPSDump FormatGEO (.wpt)</option>
+      <option value="xctsk">XCTrack (.xctsk)</option>
+    </select></label>
+    <label class="plan-export-field"><span>Waypoint prefix</span><input name="prefix" value="GH" maxlength="8" pattern="[A-Za-z0-9]{1,8}" required></label>
+    <p class="plan-export-status" data-plan-export-status role="status"></p>
+    <footer><button type="button" data-plan-export-cancel>Cancel</button><button type="submit" data-plan-export-download>Download</button></footer>
+  </form>
+</dialog>

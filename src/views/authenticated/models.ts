@@ -142,7 +142,7 @@ export type PlanPageModel = AuthenticatedShellModel & {
   page: 'plan';
   mapStyleUrl: string;
   thermalTileUrl: string;
-  defaultDeviationPercent: number;
+  defaultRoutingPriority: 'shorter' | 'balanced' | 'thermal';
 };
 
 export type ActivityEventView = {

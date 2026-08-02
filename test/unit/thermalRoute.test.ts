@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   createThermalRoutingField,
+  planSampleSpacingMeters,
   routeDistanceMeters,
   thermalGuidedLeg,
   weightedThermalDistanceMeters,
@@ -12,8 +13,8 @@ describe('thermal-guided route domain', () => {
   const start = { latitude: 39, longitude: -105 };
   const end = { latitude: 39, longitude: -104.91 };
 
-  function field(maximumDeviationPercent = 50): ThermalRoutingField {
-    return createThermalRoutingField({ start, end, maximumDeviationPercent });
+  function field(routingPriority: 'shorter' | 'balanced' | 'thermal' = 'thermal'): ThermalRoutingField {
+    return createThermalRoutingField({ start, end, routingPriority });
   }
 
   function scoresFor(
@@ -23,8 +24,8 @@ describe('thermal-guided route domain', () => {
     return new Map(routingField.samples.map((sample) => [sample.sampleIndex, score(sample)]));
   }
 
-  it('keeps zero-percent routes direct', () => {
-    const routingField = field(0);
+  it('keeps routes direct when no thermal activity is scored', () => {
+    const routingField = field('shorter');
     const result = thermalGuidedLeg({ field: routingField, relativeScores: new Map() });
     expect(result.points).toEqual([start, end]);
     expect(result.routeDistanceMeters).toBe(result.directDistanceMeters);
@@ -99,7 +100,7 @@ describe('thermal-guided route domain', () => {
     const routingField = createThermalRoutingField({
       start: diagonalStart,
       end: diagonalEnd,
-      maximumDeviationPercent: 50,
+      routingPriority: 'thermal',
     });
     const scores = scoresFor(routingField, (sample) => {
       const inVerticalCorridor = Math.abs(sample.longitude + 105) < 0.003
@@ -123,7 +124,7 @@ describe('thermal-guided route domain', () => {
     const routingField = createThermalRoutingField({
       start: longStart,
       end: longEnd,
-      maximumDeviationPercent: 100,
+      routingPriority: 'thermal',
     });
     const scores = scoresFor(routingField, (sample) => {
       const inFoothillCorridor = Math.abs(sample.longitude + 105.28) < 0.006
@@ -155,9 +156,83 @@ describe('thermal-guided route domain', () => {
   });
 
   it('never exceeds the hard per-leg distance ceiling', () => {
-    const routingField = field(10);
+    const routingField = field('shorter');
     const scores = scoresFor(routingField, (sample) => (Math.abs(sample.lateralOffsetMeters) > 500 ? 1 : 0));
     const result = thermalGuidedLeg({ field: routingField, relativeScores: scores });
     expect(routeDistanceMeters(result.points)).toBeLessThanOrEqual(routingField.maximumDistanceMeters + 0.01);
+  });
+
+  it.each([25_000, 50_000, 75_000, 100_000])(
+    'keeps narrow thermal corridors discoverable on a %i meter leg',
+    (distanceMeters) => {
+      const longStart = { latitude: 39, longitude: -105 };
+      const longEnd = {
+        latitude: 39,
+        longitude: -105 + (distanceMeters / (111_320 * Math.cos((39 * Math.PI) / 180))),
+      };
+      const routingField = createThermalRoutingField({
+        start: longStart,
+        end: longEnd,
+        routingPriority: 'balanced',
+      });
+      const corridorOffset = 3_500;
+      const scores = scoresFor(routingField, (sample) => (
+        sample.progressMeters > routingField.directDistanceMeters * 0.15
+        && sample.progressMeters < routingField.directDistanceMeters * 0.85
+        && Math.abs(sample.lateralOffsetMeters - corridorOffset) < 250 ? 0.85 : 0
+      ));
+
+      const result = thermalGuidedLeg({ field: routingField, relativeScores: scores });
+
+      expect(routingField.sampleSpacingMeters).toBeLessThanOrEqual(225);
+      expect(result.points.length).toBeGreaterThan(2);
+      expect(result.points.length).toBeLessThanOrEqual(8);
+      expect(result.routeDistanceMeters).toBeLessThanOrEqual(result.maximumDistanceMeters);
+    },
+  );
+
+  it('makes thermal priority permit a larger detour than shorter priority', () => {
+    const shorter = field('shorter');
+    const thermal = field('thermal');
+    expect(shorter.extraDistancePenalty).toBeGreaterThan(thermal.extraDistancePenalty);
+    expect(shorter.maximumDistanceMeters).toBeLessThan(thermal.maximumDistanceMeters);
+  });
+
+  it.each([
+    ['east-west', { latitude: 39, longitude: -103.844 }],
+    ['north-south', { latitude: 39.9, longitude: -105 }],
+    ['diagonal', { latitude: 39.636, longitude: -104.182 }],
+  ])('routes a narrow offset corridor across a 100 km %s leg', (_orientation, longEnd) => {
+    const longStart = { latitude: 39, longitude: -105 };
+    const routingField = createThermalRoutingField({ start: longStart, end: longEnd, routingPriority: 'balanced' });
+    const scores = scoresFor(routingField, (sample) => (
+      sample.progressMeters > routingField.directDistanceMeters * 0.2
+      && sample.progressMeters < routingField.directDistanceMeters * 0.8
+      && Math.abs(sample.lateralOffsetMeters - 3_500) < 250 ? 0.85 : 0
+    ));
+
+    const result = thermalGuidedLeg({ field: routingField, relativeScores: scores });
+
+    expect(routingField.directDistanceMeters).toBeGreaterThan(95_000);
+    expect(routingField.directDistanceMeters).toBeLessThan(105_000);
+    expect(result.points.length).toBeGreaterThan(2);
+    expect(result.points.length).toBeLessThanOrEqual(8);
+    expect(result.routeDistanceMeters).toBeLessThanOrEqual(result.maximumDistanceMeters);
+  });
+
+  it('preserves 200 meter resolution for one 100 km leg but bounds a 23-leg plan', () => {
+    expect(planSampleSpacingMeters(100_000)).toBe(200);
+    const sharedSpacing = planSampleSpacingMeters(23 * 100_000);
+    const longEnd = { latitude: 39, longitude: -103.844 };
+    const fields = Array.from({ length: 23 }, () => createThermalRoutingField({
+      start: { latitude: 39, longitude: -105 },
+      end: longEnd,
+      routingPriority: 'balanced',
+      targetSampleSpacingMeters: sharedSpacing,
+    }));
+
+    expect(sharedSpacing).toBe(4_600);
+    expect(fields.reduce((total, routingField) => total + routingField.layers.length, 0)).toBeLessThanOrEqual(550);
+    expect(fields.reduce((total, routingField) => total + routingField.samples.length, 0)).toBeLessThan(20_000);
   });
 });

@@ -47,6 +47,7 @@ import type { MapReplayService } from '../services/mapReplayService.js';
 import type { OnboardingService, OnboardingStepKey } from '../services/onboardingService.js';
 import { createOnboardingView } from '../views/authenticated/adapters/onboardingView.js';
 import type { PlanService } from '../services/planService.js';
+import type { PlanExportService } from '../services/planExportService.js';
 import type { ThermalRasterCacheService } from '../services/thermalRasterCacheService.js';
 import { THERMAL_NATIVE_ZOOM, xyzYToTmsY } from '../domain/thermal/thermalTiles.js';
 
@@ -75,7 +76,13 @@ const planRouteSchema = z.object({
     latitude: z.number().finite().min(-85).max(85),
     longitude: z.number().finite().min(-180).max(180),
   }).strict()).min(2).max(24),
-  maximumDeviationPercent: z.number().finite().min(0).max(100),
+  routingPriority: z.enum(['shorter', 'balanced', 'thermal']),
+}).strict();
+const planExportSchema = z.object({
+  variant: z.enum(['main-turnpoints', 'optimized-track']),
+  format: z.enum(['cup', 'tsk', 'wpt', 'xctsk']),
+  prefix: z.string().trim().toUpperCase().regex(/^[A-Z0-9]{1,8}$/),
+  exportToken: z.string().uuid(),
 }).strict();
 const onboardingStepSchema = z.enum(['profile', 'first-flight', 'personal-map', 'follow-pilots', 'competitive-map', 'glider', 'history']);
 const activityQuerySchema = z.object({
@@ -235,6 +242,7 @@ export function createWebRouter(dependencies: {
   mapReplay?: MapReplayService;
   onboarding?: OnboardingService;
   plans?: PlanService;
+  planExports?: PlanExportService;
   thermalRasters?: ThermalRasterCacheService;
 }) {
   const router = Router();
@@ -1008,7 +1016,7 @@ export function createWebRouter(dependencies: {
       page: 'plan',
       mapStyleUrl: dependencies.mapTilerStyleUrl ?? '',
       thermalTileUrl: '/v1/thermal/tiles/{z}/{x}/{y}.png',
-      defaultDeviationPercent: 20,
+      defaultRoutingPriority: 'balanced',
     });
   });
 
@@ -1044,9 +1052,31 @@ export function createWebRouter(dependencies: {
     if (!currentUser) return next(new AppError(401, 'unauthorized', 'Sign in before planning a flight.'));
     if (!dependencies.plans) throw new Error('Flight planning is not configured.');
     const parsed = planRouteSchema.safeParse(req.body);
-    if (!parsed.success) return next(new AppError(422, 'invalid_request', 'Provide 2–24 valid route points and a deviation from 0–100%.'));
+    if (!parsed.success) return next(new AppError(422, 'invalid_request', 'Provide 2–24 valid route points and a routing priority.'));
     try {
-      res.status(200).json(await dependencies.plans.route({ userId: currentUser.userId, ...parsed.data }));
+      const result = await dependencies.plans.route({ userId: currentUser.userId, ...parsed.data });
+      const exportToken = dependencies.planExports
+        ? await dependencies.planExports.authorize({ userId: currentUser.userId, anchors: result.anchors, route: result.route })
+        : undefined;
+      res.status(200).json({ ...result, exportToken });
+    } catch (error) {
+      if (error instanceof RangeError) return next(new AppError(422, 'invalid_request', error.message));
+      next(error);
+    }
+  });
+
+  router.post('/v1/plan/export', async (req, res, next) => {
+    const currentUser = res.locals.currentUser;
+    if (!currentUser) return next(new AppError(401, 'unauthorized', 'Sign in before exporting a flight plan.'));
+    if (!dependencies.planExports) throw new Error('Flight plan export is not configured.');
+    const parsed = planExportSchema.safeParse(req.body);
+    if (!parsed.success) return next(new AppError(422, 'invalid_request', 'Choose a supported export format and provide a valid route export token.'));
+    try {
+      const result = await dependencies.planExports.export({ userId: currentUser.userId, ...parsed.data });
+      res.status(200)
+        .type(result.contentType)
+        .set('Content-Disposition', `attachment; filename="${result.filename}"`)
+        .send(result.body);
     } catch (error) {
       if (error instanceof RangeError) return next(new AppError(422, 'invalid_request', error.message));
       next(error);

@@ -54,6 +54,8 @@ import { createOnboardingService } from './services/onboardingService.js';
 import { createThermalKkClient } from './resources/thermalKkClient.js';
 import { createThermalRasterCacheService } from './services/thermalRasterCacheService.js';
 import { createPlanService } from './services/planService.js';
+import { createPlanExportService } from './services/planExportService.js';
+import { createMapTilerElevationClient } from './resources/mapTilerElevationClient.js';
 import { createThermalCrawlService } from './services/thermalCrawlService.js';
 import { createAdminThermalRouter } from './web/adminThermalRouter.js';
 
@@ -87,6 +89,7 @@ const thumbnailDelivery = createFlightThumbnailDeliveryService({
   bucketFolder: config.bucket.bucketFolder,
 });
 const valkey = await createValkeyClient(config.valkeyUrl);
+const planExports = createPlanExportService(createMapTilerElevationClient({ apiKey: config.mapTilerApiKey }), valkey);
 const workerControl = createWorkerControlService(valkey);
 const flightProcessingControl = createFlightProcessingControlService(valkey);
 const arenaLeadership = createArenaLeadershipReconciliationService(db, { cellSize: config.gridClaimCellSize });
@@ -177,6 +180,7 @@ const webMiddleware = [
     activity,
     onboarding,
     plans,
+    planExports,
     thermalRasters,
     flightDetail,
     mapReplay,

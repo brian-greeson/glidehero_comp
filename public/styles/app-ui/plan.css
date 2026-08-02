@@ -4,15 +4,22 @@
 .plan-eyebrow { margin: 0 0 .25rem; color: var(--app-blue); font-size: .72rem; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }
 .plan-panel h1 { margin: 0; font-size: 1.55rem; }
 .plan-intro { margin: .45rem 0 0; color: var(--app-muted); line-height: 1.5; }
-.plan-slider { display: grid; gap: .5rem; }
-.plan-slider > span { display: flex; justify-content: space-between; gap: 1rem; }
-.plan-slider output { color: var(--app-blue); font-weight: 800; }
-.plan-slider input { width: 100%; accent-color: var(--app-blue); }
-.plan-slider small, .plan-attribution { color: var(--app-muted); font-size: .78rem; line-height: 1.45; }
+.plan-priority { display: grid; gap: .5rem; margin: 0; padding: 0; border: 0; }
+.plan-priority legend { margin-bottom: .45rem; font-weight: 800; }
+.plan-priority > div { display: grid; grid-template-columns: repeat(3, 1fr); overflow: hidden; border: 1px solid var(--app-border); border-radius: .6rem; }
+.plan-priority label { position: relative; min-width: 0; }
+.plan-priority input { position: absolute; opacity: 0; pointer-events: none; }
+.plan-priority span { display: grid; min-height: 42px; place-items: center; padding: .45rem .25rem; color: var(--app-muted); background: #fff; font-size: .78rem; font-weight: 800; text-align: center; cursor: pointer; }
+.plan-priority label + label span { border-left: 1px solid var(--app-border); }
+.plan-priority input:checked + span { color: #fff; background: var(--app-blue); }
+.plan-priority input:focus-visible + span { outline: 3px solid rgb(37 99 235 / 35%); outline-offset: -3px; }
+.plan-priority small, .plan-attribution { color: var(--app-muted); font-size: .78rem; line-height: 1.45; }
 .plan-actions { display: grid; grid-template-columns: 1fr 1fr; gap: .5rem; }
 .plan-actions button { min-height: 40px; padding: .55rem .7rem; border: 1px solid var(--app-border); border-radius: .55rem; color: var(--app-navy-900); background: #fff; font: inherit; font-weight: 700; }
 .plan-actions button:last-child { grid-column: 1 / -1; }
 .plan-actions button:disabled { opacity: .45; }
+.plan-export-trigger { min-height: 42px; border: 0; border-radius: .6rem; color: #fff; background: var(--app-blue); font: inherit; font-weight: 800; }
+.plan-export-trigger:disabled { opacity: .45; }
 .plan-thermal-toggle { display: flex; align-items: center; gap: .55rem; font-weight: 700; }
 .plan-summary { display: grid; grid-template-columns: 1fr 1fr; gap: .55rem; margin: 0; }
 .plan-summary div { padding: .7rem; border: 1px solid var(--app-border); border-radius: .6rem; background: var(--app-surface); }
@@ -22,6 +29,24 @@
 .plan-attribution { margin: auto 0 0; }
 .plan-map-stage, .plan-map { min-width: 0; height: 100%; }
 .plan-map .maplibregl-canvas { cursor: crosshair; }
+.plan-export-dialog { width: min(92vw, 460px); padding: 0; border: 0; border-radius: .85rem; color: var(--app-navy-950); box-shadow: 0 24px 70px rgb(3 20 38 / 28%); }
+.plan-export-dialog::backdrop { background: rgb(3 20 38 / 55%); }
+.plan-export-dialog form { display: grid; gap: 1rem; padding: 1.2rem; }
+.plan-export-dialog header, .plan-export-dialog footer { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+.plan-export-dialog h2 { margin: 0; }
+.plan-export-dialog header > button { width: 38px; height: 38px; border: 0; border-radius: 50%; background: var(--app-surface); font-size: 1.5rem; }
+.plan-export-dialog fieldset { display: grid; gap: .5rem; margin: 0; padding: 0; border: 0; }
+.plan-export-dialog legend, .plan-export-field > span { margin-bottom: .45rem; font-weight: 800; }
+.plan-export-dialog fieldset label { display: flex; align-items: flex-start; gap: .65rem; padding: .75rem; border: 1px solid var(--app-border); border-radius: .6rem; }
+.plan-export-dialog fieldset label:has(input:checked) { border-color: var(--app-blue); background: var(--app-surface-soft); }
+.plan-export-dialog fieldset span { display: grid; gap: .15rem; }
+.plan-export-dialog fieldset small { color: var(--app-muted); }
+.plan-export-field { display: grid; }
+.plan-export-field select, .plan-export-field input { min-height: 42px; padding: .55rem .65rem; border: 1px solid var(--app-border); border-radius: .55rem; background: #fff; font: inherit; }
+.plan-export-status { min-height: 1.2em; margin: 0; color: var(--app-muted); font-size: .84rem; }
+.plan-export-dialog footer { justify-content: flex-end; }
+.plan-export-dialog footer button { min-height: 40px; padding: .55rem .9rem; border: 1px solid var(--app-border); border-radius: .55rem; background: #fff; font: inherit; font-weight: 800; }
+.plan-export-dialog footer button:last-child { border-color: var(--app-blue); color: #fff; background: var(--app-blue); }
 @media (max-width: 760px) {
   .plan-page { grid-template-columns: 1fr; grid-template-rows: minmax(0, 1fr) auto; height: calc(100vh - var(--app-mobile-header-height) - var(--app-mobile-nav-height)); }
   .plan-map-stage { grid-row: 1; }

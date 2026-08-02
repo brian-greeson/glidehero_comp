@@ -7,7 +7,7 @@ describe('plan service input bounds', () => {
 
   it('rejects duplicate consecutive anchors before querying PostGIS', async () => {
     await expect(service.route({
-      userId: 'user-1', maximumDeviationPercent: 20,
+      userId: 'user-1', routingPriority: 'balanced',
       anchors: [{ latitude: 39, longitude: -105 }, { latitude: 39, longitude: -105 }],
     })).rejects.toThrow('must be distinct');
     expect(database.execute).not.toHaveBeenCalled();
@@ -15,7 +15,7 @@ describe('plan service input bounds', () => {
 
   it('rejects pathological leg lengths before generating a grid preview', async () => {
     await expect(service.route({
-      userId: 'user-1', maximumDeviationPercent: 20,
+      userId: 'user-1', routingPriority: 'balanced',
       anchors: [{ latitude: 39, longitude: -105 }, { latitude: 39, longitude: -80 }],
     })).rejects.toThrow('1,000 km or shorter');
     expect(database.execute).not.toHaveBeenCalled();
@@ -30,13 +30,13 @@ describe('plan service input bounds', () => {
       { latitude: 39.01, longitude: -104.94 },
     ];
 
-    const result = await plans.route({ userId: 'user-1', maximumDeviationPercent: 0, anchors });
+    const result = await plans.route({ userId: 'user-1', routingPriority: 'shorter', anchors });
 
     expect(result.anchors).toEqual(anchors);
     expect(result.route).toEqual(anchors);
     expect(result.legs).toHaveLength(2);
     expect(result.legs.every((leg) => leg.routeDistanceMeters === leg.directDistanceMeters)).toBe(true);
-    expect(execute).toHaveBeenCalledOnce();
+    expect(execute).toHaveBeenCalledTimes(3);
   });
 
   it('falls back to the direct leg when the scored field has no thermal activity', async () => {
@@ -49,11 +49,12 @@ describe('plan service input bounds', () => {
       { latitude: 39.01, longitude: -104.95 },
     ];
 
-    const result = await plans.route({ userId: 'user-1', maximumDeviationPercent: 50, anchors });
+    const result = await plans.route({ userId: 'user-1', routingPriority: 'thermal', anchors });
 
     expect(result.route).toEqual(anchors);
     expect(result.thermalCoverage).toBe('unavailable');
     expect(result.actualDeviationPercent).toBe(0);
+    expect(result.actualExtraDistanceMeters).toBe(0);
     expect(execute).toHaveBeenCalledTimes(2);
   });
 });

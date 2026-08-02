@@ -34,6 +34,19 @@ function formatDistance(meters) {
   return `${(meters / 1000).toFixed(meters >= 100_000 ? 0 : 1)} km`;
 }
 
+export async function requestPlanExport({ fetchImpl, result, variant, format, prefix }) {
+  if (!result?.exportToken) throw new Error('Calculate a route before exporting.');
+  const response = await fetchImpl('/v1/plan/export', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', accept: '*/*' },
+    body: JSON.stringify({ variant, format, prefix, exportToken: result.exportToken }),
+  });
+  if (!response.ok) throw new Error('Flight plan export failed.');
+  const filename = response.headers.get('content-disposition')?.match(/filename="([^"]+)"/)?.[1]
+    ?? `glidehero-${variant}.${format}`;
+  return { blob: await response.blob(), filename };
+}
+
 export function initializePlanPage({
   documentRef = document,
   maplibre = globalThis.window?.maplibregl,
@@ -42,17 +55,24 @@ export function initializePlanPage({
   const root = documentRef.querySelector('[data-plan-page]');
   const mapNode = documentRef.querySelector('[data-plan-map]');
   if (!root || !mapNode || !maplibre || !fetchImpl) return null;
-  const deviation = documentRef.querySelector('[data-plan-deviation]');
-  const deviationOutput = documentRef.querySelector('[data-plan-deviation-output]');
+  const priorities = [...documentRef.querySelectorAll('[data-plan-priority]')];
   const status = documentRef.querySelector('[data-plan-status]');
   const undo = documentRef.querySelector('[data-plan-undo]');
   const deleteSelected = documentRef.querySelector('[data-plan-delete]');
   const reset = documentRef.querySelector('[data-plan-reset]');
   const thermalToggle = documentRef.querySelector('[data-plan-thermal-toggle]');
+  const exportOpen = documentRef.querySelector('[data-plan-export-open]');
+  const exportDialog = documentRef.querySelector('[data-plan-export-dialog]');
+  const exportForm = documentRef.querySelector('[data-plan-export-form]');
+  const exportClose = documentRef.querySelector('[data-plan-export-close]');
+  const exportCancel = documentRef.querySelector('[data-plan-export-cancel]');
+  const exportDownload = documentRef.querySelector('[data-plan-export-download]');
+  const exportStatus = documentRef.querySelector('[data-plan-export-status]');
   const values = {
     direct: documentRef.querySelector('[data-plan-direct-distance]'),
     route: documentRef.querySelector('[data-plan-route-distance]'),
-    deviation: documentRef.querySelector('[data-plan-actual-deviation]'),
+    extra: documentRef.querySelector('[data-plan-extra-distance]'),
+    maximum: documentRef.querySelector('[data-plan-maximum-distance]'),
     directCells: documentRef.querySelector('[data-plan-direct-cells]'),
     enclosedCells: documentRef.querySelector('[data-plan-enclosed-cells]'),
     newCells: documentRef.querySelector('[data-plan-new-cells]'),
@@ -71,6 +91,11 @@ export function initializePlanPage({
   let requestTimer;
   let requestController;
   let requestSequence = 0;
+  let lastResult = null;
+
+  function selectedPriority() {
+    return priorities.find((input) => input.checked)?.value ?? 'balanced';
+  }
 
   function setStatus(message) {
     if (status) status.textContent = message;
@@ -84,21 +109,25 @@ export function initializePlanPage({
     if (undo) undo.disabled = anchors.length === 0;
     if (reset) reset.disabled = anchors.length === 0;
     if (deleteSelected) deleteSelected.disabled = selectedIndex < 0;
+    if (exportOpen) exportOpen.disabled = !lastResult;
     setSource('plan-anchors', anchorFeatures(anchors, selectedIndex));
     setSource('plan-direct', lineFeature(anchors));
   }
 
   function clearResult() {
+    lastResult = null;
     setSource('plan-route', emptyFeatureCollection());
     setSource('plan-direct-cells', emptyFeatureCollection());
     setSource('plan-enclosed-cells', emptyFeatureCollection());
     setSource('plan-new-cells', emptyFeatureCollection());
     values.direct.textContent = '—';
     values.route.textContent = '—';
-    values.deviation.textContent = '—';
+    values.extra.textContent = '—';
+    values.maximum.textContent = '—';
     values.directCells.textContent = '0';
     values.enclosedCells.textContent = '0';
     values.newCells.textContent = '0';
+    if (exportOpen) exportOpen.disabled = true;
   }
 
   async function calculate(sequence = ++requestSequence) {
@@ -115,22 +144,25 @@ export function initializePlanPage({
       const response = await fetchImpl('/v1/plan/route', {
         method: 'POST',
         headers: { 'content-type': 'application/json', accept: 'application/json' },
-        body: JSON.stringify({ anchors, maximumDeviationPercent: Number(deviation?.value ?? 20) }),
+        body: JSON.stringify({ anchors, routingPriority: selectedPriority() }),
         signal: requestController.signal,
       });
       if (!response.ok) throw new Error('Route calculation failed.');
       const result = await response.json();
       if (sequence !== requestSequence) return;
+      lastResult = result;
       setSource('plan-route', lineFeature(result.route));
       setSource('plan-direct-cells', claimFeatures(result.claims.direct));
       setSource('plan-enclosed-cells', claimFeatures(result.claims.enclosed));
       setSource('plan-new-cells', claimFeatures(result.claims.newPersonal));
       values.direct.textContent = formatDistance(result.directDistanceMeters);
       values.route.textContent = formatDistance(result.routeDistanceMeters);
-      values.deviation.textContent = `${result.actualDeviationPercent.toFixed(1)}%`;
+      values.extra.textContent = `+${formatDistance(result.actualExtraDistanceMeters)} (${result.actualDeviationPercent.toFixed(1)}%)`;
+      values.maximum.textContent = formatDistance(result.maximumRouteDistanceMeters);
       values.directCells.textContent = String(result.claims.direct.length);
       values.enclosedCells.textContent = String(result.claims.enclosed.length);
       values.newCells.textContent = String(result.claims.newPersonal.length);
+      if (exportOpen) exportOpen.disabled = false;
       setStatus(result.thermalCoverage === 'available'
         ? 'Route calculated using available historical thermal areas.'
         : 'No processed thermal areas are available here yet; showing the direct route.');
@@ -212,6 +244,7 @@ export function initializePlanPage({
   map.on('mousemove', (event) => {
     if (draggingIndex < 0) return;
     anchors[draggingIndex] = { latitude: event.lngLat.lat, longitude: event.lngLat.lng };
+    clearResult();
     updateControls();
   });
   map.on('mouseup', () => {
@@ -222,11 +255,10 @@ export function initializePlanPage({
     scheduleCalculation();
   });
 
-  deviation?.addEventListener('input', () => {
-    deviationOutput.textContent = `${deviation.value}%`;
+  priorities.forEach((priority) => priority.addEventListener('change', () => {
     clearResult();
     scheduleCalculation();
-  });
+  }));
   undo?.addEventListener('click', () => {
     anchors.pop();
     selectedIndex = Math.min(selectedIndex, anchors.length - 1);
@@ -245,6 +277,39 @@ export function initializePlanPage({
   });
   thermalToggle?.addEventListener('change', () => {
     if (map.getLayer('thermal-history')) map.setLayoutProperty('thermal-history', 'visibility', thermalToggle.checked ? 'visible' : 'none');
+  });
+  exportOpen?.addEventListener('click', () => {
+    if (lastResult && exportDialog?.showModal && !exportDialog.open) exportDialog.showModal();
+  });
+  const closeExport = () => exportDialog?.close();
+  exportClose?.addEventListener('click', closeExport);
+  exportCancel?.addEventListener('click', closeExport);
+  exportForm?.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    if (!lastResult) return;
+    const formData = new FormData(exportForm);
+    if (exportDownload) exportDownload.disabled = true;
+    if (exportStatus) exportStatus.textContent = 'Preparing export…';
+    try {
+      const exported = await requestPlanExport({
+        fetchImpl,
+        result: lastResult,
+        variant: String(formData.get('variant') ?? 'main-turnpoints'),
+        format: String(formData.get('format') ?? 'cup'),
+        prefix: String(formData.get('prefix') ?? 'GH').trim().toUpperCase(),
+      });
+      const url = URL.createObjectURL(exported.blob);
+      const link = documentRef.createElement('a');
+      link.href = url;
+      link.download = exported.filename;
+      link.click();
+      URL.revokeObjectURL(url);
+      closeExport();
+    } catch {
+      if (exportStatus) exportStatus.textContent = 'Export is temporarily unavailable. Try again.';
+    } finally {
+      if (exportDownload) exportDownload.disabled = false;
+    }
   });
   return { map, anchors, calculate };
 }
