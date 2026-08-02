@@ -60,11 +60,10 @@ export function initializeFlightUploads(documentRef = document, windowRef = glob
   const currentReservations = new Set();
   const currentIntentIds = new Set();
   const representedIntentIds = new Set();
-  let resolveInitialProgress;
-  const initialProgress = new Promise((resolve) => { resolveInitialProgress = resolve; });
-  let initialProgressResolved = false;
+  const progressWaiters = new Set();
   let progressPollTimer = null;
   let progressRequestId = 0;
+  let progressRefreshPromise = null;
   let successRedirectTimer = null;
   const workflows = new Set();
   let hasBulkWorkflow = false;
@@ -241,19 +240,26 @@ export function initializeFlightUploads(documentRef = document, windowRef = glob
 
   function scheduleProgressPoll() {
     if (progressPollTimer !== null) windowRef.clearTimeout?.(progressPollTimer);
-    if (!uploadDialog.open) {
+    const localWorkActive = progressWaiters.size > 0
+      || selected > settled
+      || running > 0
+      || pending.length > 0
+      || currentReservations.size > 0;
+    const serverWorkActive = serverTotal > serverFinished;
+    if (!uploadDialog.open || (!localWorkActive && !serverWorkActive)) {
       progressPollTimer = null;
       return;
     }
     progressPollTimer = windowRef.setTimeout(() => {
       progressPollTimer = null;
-      void refreshProgress();
+      void requestProgressRefresh();
     }, PROGRESS_POLL_INTERVAL_MS);
   }
 
   async function refreshProgress() {
     const requestId = ++progressRequestId;
     const intentIdsBeforeRequest = new Set(currentIntentIds);
+    let succeeded = false;
     try {
       const progress = await jsonRequest('/v1/igc-upload-progress');
       if (requestId !== progressRequestId) return;
@@ -285,21 +291,42 @@ export function initializeFlightUploads(documentRef = document, windowRef = glob
         observedExternalGrowth = 0;
       }
       updateOverall();
-      if (!initialProgressResolved) {
-        initialProgressResolved = true;
-        resolveInitialProgress();
-      }
+      const waiters = [...progressWaiters];
+      progressWaiters.clear();
+      for (const resolve of waiters) resolve();
+      succeeded = true;
     } catch (error) {
       console.error('Unable to load flight progress', error);
     }
     if (requestId === progressRequestId && uploadDialog.open) scheduleProgressPoll();
+    return succeeded;
+  }
+
+  function requestProgressRefresh() {
+    if (progressRefreshPromise !== null) return progressRefreshPromise;
+    const request = refreshProgress().finally(() => {
+      if (progressRefreshPromise === request) progressRefreshPromise = null;
+    });
+    progressRefreshPromise = request;
+    return request;
+  }
+
+  function waitForProgressRefresh() {
+    return new Promise((resolve) => {
+      progressWaiters.add(resolve);
+      void requestProgressRefresh().then((succeeded) => {
+        // A waiter can be registered after a coalesced request has already
+        // captured its waiter list but before that request's promise settles.
+        if (succeeded && progressWaiters.has(resolve)) void requestProgressRefresh();
+      });
+    });
   }
 
   function openUploadDialog(mode = 'recent') {
     if (uploadDialog.dataset) uploadDialog.dataset.uploadMode = mode;
     else uploadDialog.setAttribute?.('data-upload-mode', mode);
     if (!uploadDialog.open) uploadDialog.showModal();
-    void refreshProgress();
+    void requestProgressRefresh();
   }
 
   function stopProgressPolling() {
@@ -371,8 +398,9 @@ export function initializeFlightUploads(documentRef = document, windowRef = glob
     void prepareFiles(files, 'regular').then(async ({ prepared, messages }) => {
       if (messages.length) windowRef.alert(messages.join('\n'));
       if (!prepared.length) return;
-      await initialProgress;
+      await waitForProgressRefresh();
       await addFiles(prepared, 'regular');
+      scheduleProgressPoll();
     });
   }
 
@@ -408,8 +436,9 @@ export function initializeFlightUploads(documentRef = document, windowRef = glob
     void prepareFiles(files, 'bulk').then(async ({ prepared, messages }) => {
       if (messages.length) windowRef.alert(messages.join('\n'));
       if (!prepared.length) return;
-      await initialProgress;
+      await waitForProgressRefresh();
       await addFiles(prepared, 'bulk');
+      scheduleProgressPoll();
     });
   });
 }
