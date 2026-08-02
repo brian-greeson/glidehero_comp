@@ -1,12 +1,20 @@
 import { Router, type NextFunction, type Request, type Response } from 'express';
 import { z } from 'zod';
 import { AppError } from '../domain/errors.js';
+import type { ThermalAreaMapService } from '../services/thermalAreaMapService.js';
 import type { ThermalCrawlService } from '../services/thermalCrawlService.js';
 import type { AdminThermalPageRenderer } from '../views/admin/renderer.js';
 
 const jobSchema = z.object({ name: z.string().trim().min(1).max(80), geometry: z.string().min(1).max(1_000_000) });
 const statusSchema = z.object({ status: z.enum(['running', 'paused', 'cancelled']) });
 const uuid = z.string().uuid();
+const coordinate = z.string().trim().min(1).transform(Number).pipe(z.number().finite());
+const viewportSchema = z.object({
+  west: coordinate.pipe(z.number().min(-180).max(180)),
+  south: coordinate.pipe(z.number().min(-90).max(90)),
+  east: coordinate.pipe(z.number().min(-180).max(180)),
+  north: coordinate.pipe(z.number().min(-90).max(90)),
+}).strict().refine((bounds) => bounds.south < bounds.north && bounds.west !== bounds.east);
 
 function polygon(value: string) {
   const parsed = JSON.parse(value) as { type?: string; coordinates?: unknown };
@@ -16,6 +24,7 @@ function polygon(value: string) {
 
 export function createAdminThermalRouter(dependencies: {
   adminEmails: readonly string[];
+  areas: ThermalAreaMapService;
   crawl: ThermalCrawlService;
   renderPage: AdminThermalPageRenderer;
 }) {
@@ -27,6 +36,7 @@ export function createAdminThermalRouter(dependencies: {
     next();
   }
   router.use('/admin/thermal', requireAdmin);
+  router.use('/admin/api/thermal', requireAdmin);
   router.get('/admin/thermal', async (req, res, next) => {
     try {
       res.status(200).type('html').send(await dependencies.renderPage({
@@ -54,6 +64,23 @@ export function createAdminThermalRouter(dependencies: {
     const parsed = statusSchema.safeParse(req.body);
     if (jobId.success && parsed.success) await dependencies.crawl.setStatus(jobId.data, parsed.data.status);
     res.redirect(303, '/admin/thermal');
+  });
+  router.get('/admin/api/thermal/areas', async (req, res, next) => {
+    const viewport = viewportSchema.safeParse(req.query);
+    if (!viewport.success) {
+      res.status(400).json({ error: { code: 'invalid_request', message: 'Processed thermal areas require valid viewport bounds.' } });
+      return;
+    }
+    try {
+      const result = await dependencies.areas.getViewport(viewport.data);
+      if (result.status === 'too_large') {
+        res.status(422).json({ error: { code: 'thermal_viewport_too_large', message: 'Zoom in to view processed areas.' } });
+        return;
+      }
+      res.status(200).type('application/geo+json').send(result.geojson);
+    } catch (error) {
+      next(error);
+    }
   });
   return router;
 }

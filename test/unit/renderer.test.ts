@@ -109,6 +109,9 @@ describe('Vento page renderer', () => {
     expect(thermal).toContain('Front Range');
     expect(thermal).toContain('data-thermal-map');
     expect(thermal).toContain('data-thermal-draw');
+    expect(thermal).toContain('data-thermal-processed-toggle');
+    expect(thermal).toContain('data-thermal-opacity-control');
+    expect(thermal).toContain('value="60"');
     expect(thermal).toContain('>Draw area</button>');
     expect(thermal).not.toContain('mapbox-gl-draw');
 

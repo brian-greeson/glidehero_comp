@@ -15,8 +15,16 @@
 .admin-thermal__jobs article form { display: inline-block; margin-right: .4rem; }
 .admin-thermal__map-stage { position: relative; height: 100%; min-height: 480px; }
 [data-thermal-map] { height: 100%; min-height: 480px; }
-.admin-thermal__map-tools { position: absolute; z-index: 2; top: .75rem; left: .75rem; display: flex; gap: .35rem; padding: .35rem; border-radius: .55rem; background: rgb(255 255 255 / 94%); box-shadow: 0 2px 9px rgb(0 0 0 / 18%); }
+.admin-thermal__map-tools { position: absolute; z-index: 2; top: .75rem; left: .75rem; right: 4rem; display: flex; flex-wrap: wrap; align-items: center; gap: .35rem; width: fit-content; max-width: calc(100% - 4.75rem); padding: .35rem; border-radius: .55rem; background: rgb(255 255 255 / 94%); box-shadow: 0 2px 9px rgb(0 0 0 / 18%); }
 .admin-thermal__map-tools button { width: auto; min-height: 38px; padding: .45rem .7rem; border-radius: .4rem; }
 .admin-thermal__map-tools button[aria-pressed='true'] { color: #fff; background: #1769aa; }
 .admin-thermal__map-tools button:disabled { cursor: not-allowed; opacity: .45; }
+.admin-thermal__opacity { display: flex; align-items: center; gap: .35rem; min-height: 38px; padding: 0 .45rem; color: #334155; font-size: .78rem; font-weight: 700; }
+.admin-thermal__opacity[hidden] { display: none; }
+.admin-thermal__opacity input { width: 96px; accent-color: #1769aa; }
+.admin-thermal__opacity output { min-width: 2.5rem; font-variant-numeric: tabular-nums; }
+.admin-thermal__map-status { align-self: center; max-width: 18rem; color: #526575; font-size: .78rem; }
+.admin-thermal__map-status.is-error { color: #991b1b; }
+.admin-thermal-tooltip { display: grid; gap: .15rem; min-width: 10rem; font-size: .78rem; line-height: 1.3; }
+.admin-thermal-tooltip span { white-space: nowrap; }
 @media (max-width: 780px) { .admin-thermal { grid-template-columns: 1fr; height: auto; } .admin-thermal__map-stage { height: 55vh; } }

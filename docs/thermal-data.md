@@ -52,6 +52,14 @@ Admins can open `/admin/thermal`, name a crawl, and draw one bounded polygon.
 The job expands that polygon into intersecting native zoom-12 tiles. Jobs are
 limited to 20,000 tiles and can be paused, resumed, or cancelled.
 
+The same map has an off-by-default processed-area debug layer. At close zooms,
+admins can enable the layer to inspect current vector polygons from completed
+rasters, adjust their opacity, and hover or tap a polygon to see its activity
+band, relative score, and locally formatted processing time. The layer excludes
+stale processing versions and does not persist its enabled state or opacity
+across page loads. Tooltip interaction is suppressed while drawing a crawl
+target.
+
 ## Activity bands
 
 Vectorization stores four relative bands derived from the source colors:

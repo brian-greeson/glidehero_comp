@@ -58,6 +58,7 @@ import { createPlanService } from './services/planService.js';
 import { createPlanExportService } from './services/planExportService.js';
 import { createMapTilerElevationClient } from './resources/mapTilerElevationClient.js';
 import { createThermalCrawlService } from './services/thermalCrawlService.js';
+import { createThermalAreaMapService } from './services/thermalAreaMapService.js';
 import { createAdminThermalRouter } from './web/adminThermalRouter.js';
 
 const config = parseConfig(process.env);
@@ -71,6 +72,7 @@ const thermalRasters = createThermalRasterCacheService(db, thermalKk, {
 });
 const plans = createPlanService(db, { cellSize: config.gridClaimCellSize });
 const thermalCrawl = createThermalCrawlService(db);
+const thermalAreaMap = createThermalAreaMapService(db);
 const thumbnails = createFlightThumbnailService({
   mapTilerCredentials: config.mapTilerCredentials,
   bucketName: config.bucket.bucketName,
@@ -167,6 +169,7 @@ const webMiddleware = [
   }),
   createAdminThermalRouter({
     adminEmails: config.adminEmails,
+    areas: thermalAreaMap,
     crawl: thermalCrawl,
     renderPage: createAdminThermalPageRenderer({ mapTilerApiKey: config.mapTilerApiKey }),
   }),

@@ -32,6 +32,13 @@
         <button type="button" data-thermal-draw>Draw area</button>
         <button type="button" data-thermal-finish disabled>Finish</button>
         <button type="button" data-thermal-clear disabled>Clear</button>
+        <button type="button" aria-pressed="false" data-thermal-processed-toggle>Show processed areas</button>
+        <label class="admin-thermal__opacity" hidden data-thermal-opacity-control>
+          <span>Opacity</span>
+          <input type="range" min="10" max="100" step="5" value="60" data-thermal-opacity>
+          <output data-thermal-opacity-output>60%</output>
+        </label>
+        <span class="admin-thermal__map-status" role="status" aria-live="polite" data-thermal-processed-status></span>
       </div>
       <div data-thermal-map data-map-style-url="{{ mapTilerStyleUrl }}"></div>
     </section>
