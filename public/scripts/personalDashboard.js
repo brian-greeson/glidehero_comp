@@ -134,7 +134,7 @@ export function initializePersonalDashboard({
         credentials: 'same-origin',
         headers: { accept: 'application/json' },
       }).catch(() => {});
-      replayController = initializeMapReplayController({ documentRef, map, fetchImpl, month: period.month, color: mapElement.dataset.territoryColor });
+      replayController = initializeMapReplayController({ documentRef, map, maplibre, fetchImpl, month: period.month, color: mapElement.dataset.territoryColor });
       if (map.getBounds) await statsRequest.run(map.getBounds());
     });
     map.on?.('moveend', () => {

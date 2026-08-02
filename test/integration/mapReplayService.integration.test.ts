@@ -18,7 +18,7 @@ describe('map replay service', () => {
     async function add(userId: string, status: 'completed' | 'processing', startedAt: string, points: Array<[number, number, string]>) {
       const [igc] = await database.db.insert(igcFiles).values({ userId, originalFilename: `${userId}.igc`, contentType: 'text/plain', byteSize: 1, bucketKey: `${userId}-${crypto.randomUUID()}` }).returning({ id: igcFiles.id });
       const [flight] = await database.db.insert(flights).values({ userId, igcFileId: igc!.id, contentHash: crypto.randomUUID().replaceAll('-', '').padEnd(64, '0'), processingStatus: status, startedAt: new Date(startedAt), launchTimezone: 'America/Denver' }).returning({ id: flights.id });
-      await database.db.insert(trackPoints).values(points.map(([longitude, latitude, recordedAt], i) => ({ flightId: flight!.id, sequenceNumber: i + 1, longitude, latitude, recordedAt: new Date(recordedAt), gpsAltitudeMeters: 1, pressureAltitudeMeters: 1 })));
+      await database.db.insert(trackPoints).values(points.map(([longitude, latitude, recordedAt], i) => ({ flightId: flight!.id, sequenceNumber: i + 1, longitude, latitude, recordedAt: new Date(recordedAt), gpsAltitudeMeters: 1_500 + i * 100, pressureAltitudeMeters: 1 })));
       return flight!.id;
     }
     await add(a.userId, 'completed', '2026-08-01T07:00:00Z', [[-106, 39.5, '2026-08-01T07:00:00Z'], [-104, 39.5, '2026-08-01T07:00:10Z'], [-103, 39.5, '2026-08-01T07:00:20Z']]);
@@ -33,7 +33,7 @@ describe('map replay service', () => {
     const personal = await service.getReplay({ ...input, mode: 'personal', userId: a.userId });
     expect(personal.flights).toHaveLength(1);
     expect(personal.flights[0]!.startOffsetMs).toBe(0);
-    expect(personal.flights[0]!.points).toEqual([[-106, 39.5, 0], [-104, 39.5, 10_000], [-103, 39.5, 20_000]]);
+    expect(personal.flights[0]!.points).toEqual([[-106, 39.5, 0, 1_500], [-104, 39.5, 10_000, 1_600], [-103, 39.5, 20_000, 1_700]]);
     const fractionalViewport = await service.getReplay({
       month: '2026-08',
       mode: 'personal',

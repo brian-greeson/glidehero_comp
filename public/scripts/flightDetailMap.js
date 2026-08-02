@@ -386,7 +386,7 @@ export function initializeFlightDetailMap({
               return;
             }
             if (!isCurrent()) return;
-            const layer = installMapReplayLayer(map, { dimLayerIds: [], colorForPilot: () => chooseContrastingTrackColor(payload.territoryColor ?? mapElement.dataset.territoryColor) });
+            const layer = installMapReplayLayer(map, { dimLayerIds: [], colorForPilot: () => chooseContrastingTrackColor(payload.territoryColor ?? mapElement.dataset.territoryColor), maplibre, documentRef });
             const timeline = createMapReplayTimeline({ flights: [replay] });
             const originalDestroy = timeline.destroy;
             timeline.destroy = () => { layer.close?.(); originalDestroy(); };

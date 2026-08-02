@@ -291,6 +291,7 @@ export function initializeCompetitionCoverage({
         replayController = initializeMapReplayController({
           documentRef,
           map,
+          maplibre,
           fetchImpl,
           month: periodControl.month,
           mode: scope === 'following' ? 'following' : 'competitive',

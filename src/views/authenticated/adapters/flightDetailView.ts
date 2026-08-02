@@ -171,7 +171,7 @@ export function createFlightMapPayload(summary: FlightDetailSummary, mapData: Fl
       firstTimestamp ??= timestamp;
       previousElapsedMs = Math.max(previousElapsedMs, timestamp - firstTimestamp);
     }
-    return [point.longitude, point.latitude, previousElapsedMs] as [number, number, number];
+    return [point.longitude, point.latitude, previousElapsedMs, point.gpsAltitudeMeters] as [number, number, number, number];
   });
   return {
     territoryColor: summary.territoryColor,

@@ -32,6 +32,35 @@ describe('map replay timeline', () => {
     expect(timeline.snapshot().flights[1].marker).toBeNull();
   });
 
+  it('interpolates GPS altitude and reports segment ground speed', () => {
+    const timeline = createMapReplayTimeline({ flights: [
+      { flightId: 'metrics', pilotUserId: 'p', durationMs: 10_000, points: [[0, 0, 0, 1_500], [0.001, 0, 10_000, 1_700]] },
+    ] });
+    expect(timeline.snapshot().flights[0]).toMatchObject({ altitudeMeters: 1_500, groundSpeedKph: 0 });
+    timeline.seek(5_000);
+    expect(timeline.snapshot().flights[0].altitudeMeters).toBe(1_600);
+    expect(timeline.snapshot().flights[0].groundSpeedKph).toBeCloseTo(40.03, 1);
+    timeline.seek(10_000);
+    expect(timeline.snapshot().flights[0]).toMatchObject({ altitudeMeters: 1_700, groundSpeedKph: 0, completed: true });
+  });
+
+  it('keeps replay metrics nullable when older point payloads do not include altitude', () => {
+    const timeline = createMapReplayTimeline({ flights: [
+      { flightId: 'legacy', pilotUserId: 'p', durationMs: 1_000, points: [[0, 0, 0], [0.001, 0, 1_000]] },
+    ] });
+    timeline.seek(500);
+    expect(timeline.snapshot().flights[0].altitudeMeters).toBeNull();
+    expect(timeline.snapshot().flights[0].groundSpeedKph).toBeGreaterThan(0);
+  });
+
+  it('calculates wrapped antimeridian speed across the short longitude path', () => {
+    const timeline = createMapReplayTimeline({ flights: [
+      { flightId: 'wrapped', pilotUserId: 'p', durationMs: 10_000, points: [[179.999, 0, 0, 100], [-179.999, 0, 10_000, 100]] },
+    ] });
+    timeline.seek(5_000);
+    expect(timeline.snapshot().flights[0].groundSpeedKph).toBeCloseTo(80.06, 1);
+  });
+
   it('scales rate, pauses without accumulating time, seeks backward, and cleans up', () => {
     let clock = 0; let callback: ((time: number) => void) | undefined; let cancelled = 0;
     const timeline = createMapReplayTimeline({ flights: [{ flightId: 'a', pilotUserId: 'p', durationMs: 100, points: [[0, 0, 0], [10, 0, 100]] }], now: () => clock, requestAnimationFrame: (cb: (time: number) => void) => { callback = cb; return 1; }, cancelAnimationFrame: () => { cancelled += 1; } });

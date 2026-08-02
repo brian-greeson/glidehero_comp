@@ -31,6 +31,7 @@ function mapHarness() {
   let errorHandler: (() => void) | undefined;
   const sources = new Map<string, any>();
   const layers: any[] = [];
+  const markers: any[] = [];
   const map = {
     addControl: vi.fn(),
     addSource: vi.fn((id: string, source: any) => {
@@ -53,9 +54,13 @@ function mapHarness() {
     map,
     sources,
     layers,
+    markers,
     maplibre: {
       Map: vi.fn(function Map() { return map; }),
       NavigationControl: vi.fn(function NavigationControl() {}),
+      Marker: vi.fn(function Marker(this: any, options: any) {
+        this.options = options; this.setLngLat = vi.fn(() => this); this.addTo = vi.fn(() => this); this.remove = vi.fn(); markers.push(this);
+      }),
     },
     load: async () => loadHandler?.(),
     error: () => errorHandler?.(),
@@ -255,7 +260,7 @@ describe('flight detail map', () => {
     const trackGeoJson = feature('LineString', [[-105, 39], [-104, 40]]);
     const payload = {
       track: trackGeoJson,
-      replay: { flightId: 'flight-1', pilotUserId: 'pilot-1', points: [[-105, 39, 0], [-104, 40, 1000]], durationMs: 1000 },
+      replay: { flightId: 'flight-1', pilotUserId: 'pilot-1', points: [[-105, 39, 0, 1_500], [-104, 40, 1000, 1_600]], durationMs: 1000 },
     };
     const fetchImpl = vi.fn(async () => new Response(JSON.stringify(payload), { status: 200 }));
     const replayBySelector: Record<string, any[]> = {
@@ -270,6 +275,7 @@ describe('flight detail map', () => {
         ['[data-flight-detail-map]', mapElement], ['[data-flight-map-status]', status], ['[data-map-replay]', mapElement],
       ]).get(selector) ?? null,
       querySelectorAll: (selector: string) => selector === '[data-flight-map-distance]' ? [] : (replayBySelector[selector] ?? []),
+      createElement: () => ({ className: '', textContent: '', children: [] as any[], style: { setProperty: vi.fn() }, setAttribute: vi.fn(), removeAttribute: vi.fn(), appendChild(child: any) { this.children.push(child); } }),
     };
     const controller = initializeFlightDetailMap({ documentRef, maplibre: harness.maplibre, fetchImpl });
     expect(replayDom.open.disabled).toBe(true);
@@ -287,11 +293,14 @@ describe('flight detail map', () => {
     expect(harness.sources.get(FLIGHT_DETAIL_SOURCE_IDS.track).setData).not.toHaveBeenCalled();
     expect(harness.sources.get('map-replay-tracks').setData).toHaveBeenCalled();
     expect(harness.layers.find((layer) => layer.id === 'map-replay-tracks-line')).toBeDefined();
+    expect(harness.markers).toHaveLength(1);
+    expect(harness.markers[0].options.element.children[0].children.map((node: any) => node.textContent)).toEqual(['0 km/h', '1,500 m']);
 
     replayDom.close.click();
     expect(replayDom.panel.hidden).toBe(true);
     expect(harness.sources.has('map-replay-tracks')).toBe(false);
     expect(harness.sources.has(FLIGHT_DETAIL_SOURCE_IDS.track)).toBe(true);
+    expect(harness.markers[0].remove).toHaveBeenCalledOnce();
   });
 
   it('keeps replay controls disabled and reports unavailable when replay payload is missing', async () => {

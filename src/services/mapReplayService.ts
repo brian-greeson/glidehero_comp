@@ -3,7 +3,7 @@ import type { Database } from '../db/client.js';
 import { flights, trackPoints } from '../db/schema.js';
 
 export type MapReplayInput = { month: string; mode: 'personal' | 'competitive' | 'following'; west: number; south: number; east: number; north: number; userId: string };
-export type MapReplayFlight = { flightId: string; pilotUserId: string; startOffsetMs: number; durationMs: number; points: Array<[number, number, number]> };
+export type MapReplayFlight = { flightId: string; pilotUserId: string; startOffsetMs: number; durationMs: number; points: Array<[number, number, number, number]> };
 export interface MapReplayService { getReplay(input: MapReplayInput): Promise<{ flights: MapReplayFlight[] }> }
 
 export function createMapReplayService(db: Database): MapReplayService {
@@ -48,7 +48,7 @@ export function createMapReplayService(db: Database): MapReplayService {
       ) SELECT id, user_id FROM tracks WHERE EXISTS (SELECT 1 FROM viewport_parts v WHERE ST_Intersects(tracks.geom,v.geometry))
     `);
     const ids = selected.rows.map(r => r.id); if (!ids.length) return { flights: [] };
-    const points = await db.select({ flightId: trackPoints.flightId, latitude: trackPoints.latitude, longitude: trackPoints.longitude, recordedAt: trackPoints.recordedAt }).from(trackPoints).where(inArray(trackPoints.flightId, ids)).orderBy(asc(trackPoints.sequenceNumber));
+    const points = await db.select({ flightId: trackPoints.flightId, latitude: trackPoints.latitude, longitude: trackPoints.longitude, recordedAt: trackPoints.recordedAt, gpsAltitudeMeters: trackPoints.gpsAltitudeMeters }).from(trackPoints).where(inArray(trackPoints.flightId, ids)).orderBy(asc(trackPoints.sequenceNumber));
     const by = new Map<string, typeof points>(); for (const p of points) by.set(p.flightId, [...(by.get(p.flightId) ?? []), p]);
     const firstRecordedAt = new Map<string, number>();
     let replayStart = Infinity;
@@ -61,7 +61,7 @@ export function createMapReplayService(db: Database): MapReplayService {
     return { flights: selected.rows.flatMap(row => {
       const ps=by.get(row.id) ?? []; if (!ps.length) return [];
       const first=firstRecordedAt.get(row.id)!;
-      const mapped=ps.map(p=>[p.longitude,p.latitude,p.recordedAt.getTime()-first] as [number,number,number]);
+      const mapped=ps.map(p=>[p.longitude,p.latitude,p.recordedAt.getTime()-first,p.gpsAltitudeMeters] as [number,number,number,number]);
       return [{ flightId: row.id, pilotUserId: row.user_id, startOffsetMs: first-replayStart, durationMs: mapped.at(-1)![2], points: mapped }];
     }) };
   }};
