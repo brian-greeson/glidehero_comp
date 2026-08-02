@@ -366,6 +366,7 @@ describe('webRouter', () => {
       endedAt: new Date('2026-07-23T15:00:00.000Z'),
       launchTimezone: 'America/Denver',
       durationSeconds: 3_600,
+      maxGpsAltitudeMeters: 1_600,
       launchLatitude: 40,
       launchLongitude: -105,
       progress: { directCellCount: 2, enclosedCellCount: 1, newPersonalCellCount: 1, personalCellTotalAfter: 10 },

@@ -55,6 +55,11 @@ function duration(seconds: number | null): string {
   return `${remainingSeconds}s`;
 }
 
+function altitude(meters: number | null): string {
+  if (meters === null || !Number.isFinite(meters)) return '—';
+  return `${new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 }).format(meters)} m`;
+}
+
 export function createFlightPageView(summary: FlightDetailSummary): FlightPageModel['flight'] {
   const launch = launchParts(summary.startedAt, summary.launchTimezone);
   const distances = distanceLabels.map(({ key, label }) => {
@@ -78,6 +83,8 @@ export function createFlightPageView(summary: FlightDetailSummary): FlightPageMo
     },
     ...launch,
     duration: duration(summary.durationSeconds),
+    maxAltitude: altitude(summary.maxGpsAltitudeMeters),
+    fivePointDistance: distances.find(({ key }) => key === 'fivePoint')?.value ?? '—',
     directCells: progress ? String(progress.directCellCount) : '—',
     enclosedCells: progress ? String(progress.enclosedCellCount) : '—',
     totalCells: progress ? String(progress.directCellCount + progress.enclosedCellCount) : '—',

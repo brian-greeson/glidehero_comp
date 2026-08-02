@@ -23,6 +23,7 @@ export type FlightDetailSummary = {
   endedAt: Date | null;
   launchTimezone: string | null;
   durationSeconds: number | null;
+  maxGpsAltitudeMeters: number | null;
   launchLatitude: number | null;
   launchLongitude: number | null;
   progress: {
@@ -124,6 +125,7 @@ export function createFlightDetailService(
           endedAt: flights.endedAt,
           launchTimezone: flights.launchTimezone,
           durationSeconds: flights.durationSeconds,
+          maxGpsAltitudeMeters: flights.maxGpsAltitudeMeters,
           launchLatitude: flights.launchLatitude,
           launchLongitude: flights.launchLongitude,
           directCellCount: flightProgress.directCellCount,
@@ -165,6 +167,7 @@ export function createFlightDetailService(
         endedAt: row.endedAt,
         launchTimezone: row.launchTimezone,
         durationSeconds: row.durationSeconds,
+        maxGpsAltitudeMeters: row.maxGpsAltitudeMeters,
         launchLatitude: row.launchLatitude,
         launchLongitude: row.launchLongitude,
         progress: row.directCellCount === null

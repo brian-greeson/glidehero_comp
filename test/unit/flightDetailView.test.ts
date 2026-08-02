@@ -20,6 +20,7 @@ const summary: FlightDetailSummary = {
   endedAt: new Date('2026-07-23T15:02:03.000Z'),
   launchTimezone: 'America/Denver',
   durationSeconds: 3_723,
+  maxGpsAltitudeMeters: 1_600,
   launchLatitude: 40,
   launchLongitude: -105,
   progress: {
@@ -66,6 +67,8 @@ describe('flight detail view', () => {
       time: '8:00 AM',
       timezone: 'MDT',
       duration: '1h 02m',
+      maxAltitude: '1,600 m',
+      fivePointDistance: '10.01 km',
       directCells: '8',
       enclosedCells: '3',
       totalCells: '11',
@@ -81,6 +84,18 @@ describe('flight detail view', () => {
     ]);
     expect(view.achievements).toHaveLength(1);
     expect(view.achievements[0]?.artworkKey).toBe('cell-explorer');
+
+    const unavailable = createFlightPageView({
+      ...summary,
+      durationSeconds: null,
+      maxGpsAltitudeMeters: null,
+      scores: summary.scores ? { ...summary.scores, fivePoint: null } : null,
+    });
+    expect(unavailable).toMatchObject({
+      duration: '—',
+      maxAltitude: '—',
+      fivePointDistance: '—',
+    });
   });
 
   it('adapts raw map data and stored score points to the controller contract', () => {
@@ -163,6 +178,9 @@ describe('flight detail view', () => {
     expect(html).toContain(`data-map-data-url="/v1/flights/${flightId}/map"`);
     expect(html).toContain('data-default-distance="fivePoint"');
     expect(html).toContain('<h2 id="flight-stats-heading">Stats</h2>');
+    expect(html).toContain('<dt>Max altitude</dt><dd>1,600 m</dd>');
+    expect(html).toContain('<dt>Duration</dt><dd>1h 02m</dd>');
+    expect(html).toContain('<dt>5-point distance</dt><dd>10.01 km</dd>');
     expect(html).not.toContain('Personal total');
     expect(html).toContain(`href="/pilots/${ownerId}" aria-label="View Cloud Dancer’s pilot profile"`);
     expect(html).toContain('5-Point Distance');
@@ -186,5 +204,10 @@ describe('flight detail view', () => {
     expect(css).toContain(
       '.flight-detail-map-stage > .flight-detail-map { position: absolute; inset: 0; width: 100%; height: 100%; }',
     );
+    expect(css).toContain('--flight-sheet-collapsed-height: min(132px, 15svh);');
+    expect(css).toContain('height: var(--flight-sheet-collapsed-height);');
+    expect(css).toContain('var(--app-mobile-nav-height) + var(--flight-sheet-collapsed-height)');
+    expect(css).toContain('.flight-detail-panel .mobile-map-sheet__content { display: none; }');
+    expect(css).toContain('.flight-detail-panel.mobile-map-sheet.is-expanded .mobile-map-sheet__content { display: block;');
   });
 });

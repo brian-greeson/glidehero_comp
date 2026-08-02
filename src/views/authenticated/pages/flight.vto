@@ -2,6 +2,7 @@
   <section class="flight-detail-page">
     <aside class="flight-detail-panel mobile-map-sheet" data-map-sheet aria-label="Flight details">
       <button class="mobile-map-sheet__handle" type="button" data-map-sheet-handle aria-expanded="false" aria-controls="flight-detail-panel-content"><span></span><span class="sr-only" data-map-sheet-label>Expand flight details</span></button>
+      {{ include "authenticated/components/flightDetailQuickStats.vto" { flight } }}
       <div class="mobile-map-sheet__content" id="flight-detail-panel-content">
         {{ include "authenticated/components/flightDetailPanel.vto" { flight } }}
       </div>
