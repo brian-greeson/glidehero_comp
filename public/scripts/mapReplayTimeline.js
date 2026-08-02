@@ -31,6 +31,15 @@ function segmentGroundSpeedKph(a, b) {
   return distanceMeters / (elapsedMs / 1000) * 3.6;
 }
 
+function smoothedGroundSpeedKph(points, segmentIndex) {
+  const speeds = [];
+  for (let index = Math.max(0, segmentIndex - 2); index <= segmentIndex; index += 1) {
+    const speed = segmentGroundSpeedKph(points[index], points[index + 1]);
+    if (Number.isFinite(speed)) speeds.push(speed);
+  }
+  return speeds.length > 0 ? speeds.reduce((total, speed) => total + speed, 0) / speeds.length : null;
+}
+
 function renderFlight(flight, elapsedMs, synchronized) {
   const points = flight.points;
   const flightElapsedMs = elapsedMs - (synchronized ? 0 : Math.max(0, flight.startOffsetMs ?? 0));
@@ -52,7 +61,7 @@ function renderFlight(flight, elapsedMs, synchronized) {
   const marker = [a[0] + (b[0] - a[0]) * ratio, a[1] + (b[1] - a[1]) * ratio];
   const track = points.slice(0, index + 1).map((p) => [...p.slice(0, 2)]);
   track.push(marker);
-  return { flightId: flight.flightId, pilotUserId: flight.pilotUserId, track, marker, altitudeMeters: interpolateAltitude(a, b, ratio), groundSpeedKph: flightElapsedMs <= points[0][2] ? 0 : segmentGroundSpeedKph(a, b), completed: false };
+  return { flightId: flight.flightId, pilotUserId: flight.pilotUserId, track, marker, altitudeMeters: interpolateAltitude(a, b, ratio), groundSpeedKph: flightElapsedMs <= points[0][2] ? 0 : smoothedGroundSpeedKph(points, index), completed: false };
 }
 
 export function createMapReplayTimeline({ flights = [], now = () => performance.now(), requestAnimationFrame = (callback) => globalThis.requestAnimationFrame(callback), cancelAnimationFrame = (id) => globalThis.cancelAnimationFrame(id) } = {}) {

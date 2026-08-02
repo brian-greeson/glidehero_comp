@@ -392,7 +392,7 @@ export function initializeFlightDetailMap({
             timeline.destroy = () => { layer.close?.(); originalDestroy(); };
             timeline.subscribe((state) => layer.update(state));
             setTimeline(timeline);
-            setStatus('Replay ready.');
+            setStatus('');
           },
         });
         if (payload.replay?.points?.length) {

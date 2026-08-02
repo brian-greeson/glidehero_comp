@@ -20,7 +20,7 @@ export function initializeReplayControls({ documentRef = document, root: provide
   const syncs = all('[data-map-replay-sync]');
   let timeline = null; let opened = false; let destroyed = false; let requestToken = 0;
   const format = (ms) => `${Math.floor(ms / 60000)}:${String(Math.floor(ms / 1000) % 60).padStart(2, '0')}`;
-  const setStatus = (text) => statuses.forEach((node) => { node.textContent = text; });
+  const setStatus = (text) => statuses.forEach((node) => { node.textContent = text; node.hidden = !text; });
   const setEnabled = (enabled) => [...plays, ...sliders, ...speeds, ...syncs].forEach((node) => { node.disabled = !enabled; });
   const setPlayState = (playing) => { playLabels.forEach((n) => { n.textContent = playing ? 'Pause' : 'Play'; }); playIcons.forEach((n) => n.setAttribute('d', playing ? 'M7 5h4v14H7zm6 0h4v14h-4z' : 'M8 5v14l11-7z')); };
   const setTimeline = (next) => {

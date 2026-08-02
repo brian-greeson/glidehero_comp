@@ -20,7 +20,7 @@ export function initializeMapReplayController({ documentRef = document, map, map
     layer = installLayer(map, { colorForPilot: colorForPilot ?? (() => color), maplibre, documentRef });
     const timeline = createTimeline({ flights: data.flights });
     timeline.subscribe((state) => layer?.update(state));
-    setTimeline(timeline); setStatus('Replay ready.');
+    setTimeline(timeline); setStatus('');
   } });
   entries.forEach((node) => { node.hidden = !selectedMonth; });
   return { open: controls.open, close: controls.close, setMonth(nextMonth) { selectedMonth = nextMonth ?? null; controls.close(); entries.forEach((node) => { node.hidden = !selectedMonth; }); }, destroy() { controls.close(); controls.destroy(); } };

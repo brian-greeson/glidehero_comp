@@ -28,7 +28,7 @@ describe('shared replay controls', () => {
     };
     const documentRef = { querySelector: () => null, querySelectorAll: (selector: string) => bySelector[selector] ?? [] } as any;
     const timelines: any[] = [];
-    const controller: any = initializeReplayControls({ documentRef, onOpen: ({ setTimeline }: any) => {
+    const controller: any = initializeReplayControls({ documentRef, onOpen: ({ setTimeline, setStatus }: any) => {
       const timeline: any = {
         synchronized: false,
         subscribe: (cb: any) => { timeline.cb = cb; cb({ elapsedMs: 0, duration: 1000, rate: 60, playing: false, synchronized: timeline.synchronized }); },
@@ -37,10 +37,11 @@ describe('shared replay controls', () => {
         setSynchronized: vi.fn((value) => { timeline.synchronized = value; timeline.cb({ elapsedMs: 0, duration: 2000, rate: 60, playing: false, synchronized: value }); }),
         destroy: vi.fn(),
       };
-      timelines.push(timeline); setTimeline(timeline);
+      timelines.push(timeline); setTimeline(timeline); setStatus('');
     } });
     open.click();
     expect(timelines).toHaveLength(1);
+    expect(status.hidden).toBe(true);
     speeds[1].value = '200'; speeds[1].change();
     timelines[0].cb({ elapsedMs: 0, duration: 1000, rate: 200, playing: false });
     expect(speeds.map((speed) => speed.value)).toEqual(['200', '200']);

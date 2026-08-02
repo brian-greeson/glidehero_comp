@@ -44,6 +44,23 @@ describe('map replay timeline', () => {
     expect(timeline.snapshot().flights[0]).toMatchObject({ altitudeMeters: 1_700, groundSpeedKph: 0, completed: true });
   });
 
+  it('smooths displayed ground speed over the current and two prior segments', () => {
+    const timeline = createMapReplayTimeline({ flights: [
+      { flightId: 'smoothed', pilotUserId: 'p', durationMs: 30_000, points: [
+        [0, 0, 0, 1_500],
+        [0.001, 0, 10_000, 1_550],
+        [0.003, 0, 20_000, 1_600],
+        [0.006, 0, 30_000, 1_650],
+      ] },
+    ] });
+    timeline.seek(5_000);
+    expect(timeline.snapshot().flights[0].groundSpeedKph).toBeCloseTo(40.03, 1);
+    timeline.seek(15_000);
+    expect(timeline.snapshot().flights[0].groundSpeedKph).toBeCloseTo(60.05, 1);
+    timeline.seek(25_000);
+    expect(timeline.snapshot().flights[0].groundSpeedKph).toBeCloseTo(80.06, 1);
+  });
+
   it('keeps replay metrics nullable when older point payloads do not include altitude', () => {
     const timeline = createMapReplayTimeline({ flights: [
       { flightId: 'legacy', pilotUserId: 'p', durationMs: 1_000, points: [[0, 0, 0], [0.001, 0, 1_000]] },
