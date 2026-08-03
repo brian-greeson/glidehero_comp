@@ -253,7 +253,7 @@ describe('flight detail map', () => {
     expect(status.textContent).toBe('Unable to load this flight map. Try again.');
   });
 
-  it('initializes flight replay paused, preserves static sources, and cleans up on close', async () => {
+  it('opens flight replay paused by default, preserves static sources, and cleans up on close', async () => {
     const harness = mapHarness();
     const replayDom = replayElements();
     const mapElement = element({ mapStyleUrl: '/map-style.json', mapDataUrl: '/flights/flight-1/map' });
@@ -283,10 +283,7 @@ describe('flight detail map', () => {
     await harness.load();
     expect(controller?.replayControls).toBeDefined();
     expect(replayDom.open.disabled).toBe(false);
-    expect(replayDom.play.disabled).toBe(true);
-
-    replayDom.open.click();
-    await Promise.resolve();
+    expect(replayDom.open.hidden).toBe(true);
     expect(replayDom.panel.hidden).toBe(false);
     expect(replayDom.play.disabled).toBe(false);
     expect(replayDom.label.textContent).toBe('Play');

@@ -13,7 +13,8 @@
         data-map-data-url="{{ flight.mapDataUrl }}"
         data-territory-color="{{ flight.territoryColor }}"
         data-default-distance="{{ flight.defaultDistance }}"></div>
-      <div data-map-replay class="map-mobile-replay flight-detail-replay-mobile"><button type="button" data-map-replay-open aria-controls="flight-map-replay-panel-mobile" aria-expanded="false" disabled>Replay</button>{{ include "authenticated/components/mapReplayControls.vto" { panelId: "flight-map-replay-panel-mobile", showSync: false } }}</div>
+      <div data-map-replay class="flight-detail-replay-desktop"><button type="button" data-map-replay-open aria-controls="flight-map-replay-panel-desktop" aria-expanded="false" disabled>Replay flight</button>{{ include "authenticated/components/mapReplayControls.vto" { panelId: "flight-map-replay-panel-desktop", showSync: false, showClose: false } }}</div>
+      <div data-map-replay class="map-mobile-replay flight-detail-replay-mobile"><button type="button" data-map-replay-open aria-controls="flight-map-replay-panel-mobile" aria-expanded="false" disabled>Replay</button>{{ include "authenticated/components/mapReplayControls.vto" { panelId: "flight-map-replay-panel-mobile", showSync: false, showClose: false } }}</div>
       <p class="flight-detail-map-status" data-flight-map-status aria-live="polite">Loading flight map…</p>
     </section>
   </section>

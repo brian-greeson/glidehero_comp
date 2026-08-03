@@ -1,4 +1,5 @@
 [data-map-replay-panel][hidden] { display: none; }
+[data-map-replay] > [data-map-replay-open][hidden] { display: none; }
 .map-replay-telemetry-marker { position: relative; width: 12px; height: 12px; pointer-events: none; user-select: none; }
 .map-replay-telemetry-dot { position: absolute; z-index: 3; inset: 0; border: 2px solid #fff; border-radius: 50%; background: var(--map-replay-pilot-color, #1769aa); box-shadow: 0 2px 6px rgb(0 0 0 / 25%); }
 .map-replay-telemetry-leader { position: absolute; z-index: 1; bottom: 6px; left: 5px; width: 2px; height: 50px; transform: rotate(-10deg); transform-origin: bottom center; background: rgb(232 243 250 / 82%); }

@@ -12,9 +12,11 @@
       <span data-map-replay-elapsed>0:00 / 0:00</span>
       <input type="range" data-map-replay-slider min="0" max="0" value="0" step="1" aria-label="Replay position" disabled>
     </div>
-    <span class="map-replay-divider" aria-hidden="true"></span>
-    <button class="map-replay-button map-replay-button--close" type="button" data-map-replay-close aria-label="Close replay">
-      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg>
-    </button>
+    {{ if typeof showClose === "undefined" || showClose }}
+      <span class="map-replay-divider" aria-hidden="true"></span>
+      <button class="map-replay-button map-replay-button--close" type="button" data-map-replay-close aria-label="Close replay">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg>
+      </button>
+    {{ /if }}
   </div>
 </div>

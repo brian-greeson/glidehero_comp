@@ -5,9 +5,8 @@
 .app-ui-body--guest .flight-detail-page { --flight-bottom-nav-height: 0px; }
 .flight-detail-panel { min-width: 0; overflow-y: auto; border: 1px solid var(--app-border); border-radius: var(--app-radius); background: var(--app-surface); box-shadow: var(--app-shadow-sm); }
 .flight-detail-panel__pilot { padding: 1rem; border-bottom: 1px solid var(--app-border); }
-.flight-detail-replay-desktop { padding: .75rem 1rem; border-bottom: 1px solid var(--app-border); }
+.flight-detail-replay-desktop { position: absolute; z-index: 30; right: 0; bottom: 1rem; left: 0; }
 .flight-detail-replay-desktop > button { display: flex; width: 100%; min-height: 42px; align-items: center; justify-content: center; padding: .5rem .75rem; border: 1px solid var(--app-border); border-radius: 1.3rem; color: var(--app-ink); background: #fff; font: inherit; font-size: .72rem; font-weight: 720; cursor: pointer; }
-.flight-detail-replay-desktop .map-replay-controls { position: fixed; z-index: 30; right: 2rem; bottom: 2rem; left: calc(340px + 2.8rem); }
 .flight-detail-replay-mobile { display: none; }
 .flight-detail-panel__pilot-link { display: inline-flex; align-items: center; gap: .7rem; border-radius: .55rem; color: var(--app-ink); text-decoration: none; }
 .flight-detail-panel__pilot-link:focus-visible { outline: 3px solid var(--app-blue); outline-offset: 3px; }
@@ -58,7 +57,8 @@
   .flight-detail-replay-desktop { display: none; }
   .flight-detail-replay-mobile { position: absolute; z-index: 25; right: .75rem; bottom: calc(var(--flight-bottom-nav-height) + var(--flight-sheet-collapsed-height) + .75rem + env(safe-area-inset-bottom, 0px)); display: block; }
   .flight-detail-replay-mobile > [data-map-replay-open] { min-height: 42px; padding: .55rem .85rem; border: 1px solid rgb(255 255 255 / 76%); border-radius: 1.4rem; color: var(--app-ink); background: rgb(255 255 255 / 94%); box-shadow: 0 6px 18px rgb(5 18 29 / 18%); font: inherit; font-size: .75rem; font-weight: 750; cursor: pointer; -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); }
-  .flight-detail-replay-mobile .map-replay-controls { position: fixed; z-index: 30; right: .75rem; bottom: calc(var(--flight-bottom-nav-height) + var(--flight-sheet-collapsed-height) + 4.1rem + env(safe-area-inset-bottom, 0px)); left: .75rem; }
+  .flight-detail-replay-mobile .map-replay-controls { position: fixed; z-index: 30; right: .75rem; bottom: calc(var(--flight-bottom-nav-height) + var(--flight-sheet-collapsed-height) + .75rem + env(safe-area-inset-bottom, 0px)); left: .75rem; }
+  .flight-detail-replay-mobile .map-replay-controls__bar { min-height: 52px; padding-block: .3rem; }
   .flight-detail-replay-mobile .map-replay-controls[hidden] { display: none; }
   .flight-detail-panel.mobile-map-sheet { position: fixed; z-index: 20; right: 0; bottom: var(--flight-bottom-nav-height); left: 0; display: block; height: var(--flight-sheet-collapsed-height); overflow: hidden; border: 0; border-radius: 1.2rem 1.2rem 0 0; box-shadow: 0 -8px 30px rgb(15 35 60 / 18%); transition: height .24s ease; }
   .flight-detail-panel.mobile-map-sheet.is-expanded { height: calc(99svh - var(--app-mobile-header-height) - var(--flight-bottom-nav-height)); }

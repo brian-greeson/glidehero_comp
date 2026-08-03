@@ -399,6 +399,7 @@ export function initializeFlightDetailMap({
         });
         if (payload.replay?.points?.length) {
           replayEntries.forEach((entry) => { entry.disabled = false; });
+          await replayControls.open();
         }
         setStatus('');
       } catch {
