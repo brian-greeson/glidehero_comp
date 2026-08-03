@@ -8,6 +8,15 @@ import { resolveAchievementArtworkKey } from '../achievementArtwork.js';
 import { initialsForDisplayName } from './shellModel.js';
 import type { FlightPageModel } from '../models.js';
 
+export type FlightSocialPreview = {
+  description: string;
+  canonicalUrl: string;
+  imageUrl: string;
+  imageAlt: string;
+  imageWidth: number;
+  imageHeight: number;
+};
+
 type ScoreKey = FlightPageModel['flight']['distances'][number]['key'];
 
 const distanceLabels: ReadonlyArray<{ key: ScoreKey; label: string }> = [
@@ -120,6 +129,33 @@ export function createPublicFlightPageView(summary: FlightDetailSummary): Flight
       delete publicAchievement.href;
       return publicAchievement;
     }),
+  };
+}
+
+export function createFlightSocialPreview(input: {
+  flight: FlightPageModel['flight'];
+  publicOrigin: string;
+  imageUrl: string;
+  imageWidth: number;
+  imageHeight: number;
+}): FlightSocialPreview {
+  const selectedDistance = input.flight.distances.find(({ key }) => key === input.flight.defaultDistance);
+  const descriptionParts = [
+    input.flight.date === 'Date unavailable' ? null : input.flight.date,
+    selectedDistance?.available
+      ? `${selectedDistance.value} ${selectedDistance.key === 'track' ? 'track' : '5-point'} distance`
+      : null,
+    input.flight.duration === '—' ? null : input.flight.duration,
+    input.flight.totalCells === '—' ? null : `${input.flight.totalCells} cells`,
+  ].filter((part): part is string => Boolean(part));
+  const origin = input.publicOrigin.endsWith('/') ? input.publicOrigin : `${input.publicOrigin}/`;
+  return {
+    description: descriptionParts.join(' · ') || 'View this flight on GlideHero.',
+    canonicalUrl: new URL(`flights/${input.flight.id}`, origin).toString(),
+    imageUrl: input.imageUrl,
+    imageAlt: `${input.flight.pilot.displayName} flight territory preview`,
+    imageWidth: input.imageWidth,
+    imageHeight: input.imageHeight,
   };
 }
 

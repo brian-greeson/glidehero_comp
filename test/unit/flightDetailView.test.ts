@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import type { FlightDetailMapData, FlightDetailSummary } from '../../src/services/flightDetailService.js';
-import { createFlightMapPayload, createFlightPageView, createPublicFlightPageView } from '../../src/views/authenticated/adapters/flightDetailView.js';
+import { createFlightMapPayload, createFlightPageView, createFlightSocialPreview, createPublicFlightPageView } from '../../src/views/authenticated/adapters/flightDetailView.js';
 import { createAuthenticatedShellModel } from '../../src/views/authenticated/adapters/shellModel.js';
 import { createAuthenticatedPageRenderer } from '../../src/views/authenticated/renderer.js';
 import { createPublicFlightPageRenderer } from '../../src/views/publicFlight/renderer.js';
@@ -213,16 +213,40 @@ describe('flight detail view', () => {
 
   it('renders the complete flight for guests without signed-in-only links or controls', async () => {
     const flight = createPublicFlightPageView(summary);
+    const socialPreview = createFlightSocialPreview({
+      flight,
+      publicOrigin: 'https://glidehero.example',
+      imageUrl: 'https://objects.example/flight.webp?signature=temporary',
+      imageWidth: 800,
+      imageHeight: 450,
+    });
     const html = await createPublicFlightPageRenderer()({
       page: 'flight',
-      title: 'Cloud Dancer flight · GlideHero',
+      title: 'Cloud Dancer’s flight · GlideHero',
+      socialPreview,
       flight: { ...flight, mapStyleUrl: 'https://maps.example/style.json' },
     });
 
     expect(flight.pilot.href).toBeUndefined();
     expect(flight.achievements[0]?.href).toBeUndefined();
-    expect(html).toContain('<title>Cloud Dancer flight · GlideHero</title>');
+    expect(socialPreview).toEqual({
+      description: 'Jul 23, 2026 · 10.01 km 5-point distance · 1h 02m · 11 cells',
+      canonicalUrl: `https://glidehero.example/flights/${flightId}`,
+      imageUrl: 'https://objects.example/flight.webp?signature=temporary',
+      imageAlt: 'Cloud Dancer flight territory preview',
+      imageWidth: 800,
+      imageHeight: 450,
+    });
+    expect(html).toContain('<title>Cloud Dancer’s flight · GlideHero</title>');
     expect(html).toContain('<meta name="robots" content="noindex, nofollow">');
+    expect(html).toContain(`<link rel="canonical" href="https://glidehero.example/flights/${flightId}">`);
+    expect(html).toContain('<meta property="og:site_name" content="GlideHero">');
+    expect(html).toContain('<meta property="og:title" content="Cloud Dancer’s flight · GlideHero">');
+    expect(html).toContain('<meta property="og:description" content="Jul 23, 2026 · 10.01 km 5-point distance · 1h 02m · 11 cells">');
+    expect(html).toContain('<meta property="og:image" content="https://objects.example/flight.webp?signature=temporary">');
+    expect(html).toContain('<meta property="og:image:width" content="800">');
+    expect(html).toContain('<meta property="og:image:height" content="450">');
+    expect(html).toContain('<meta name="twitter:card" content="summary_large_image">');
     expect(html).toContain('Join or sign in');
     expect(html).toContain('data-flight-detail-map');
     expect(html).toContain(`data-map-data-url="/v1/flights/${flightId}/map"`);
@@ -232,6 +256,20 @@ describe('flight detail view', () => {
     expect(html).not.toContain('class="mobile-navigation"');
     expect(html).not.toContain('/scripts/app-ui/app.js');
     expect(html).not.toContain(`href="/pilots/${ownerId}"`);
+
+    const escapedHtml = await createPublicFlightPageRenderer()({
+      page: 'flight',
+      title: 'Cloud & <Dancer> flight',
+      socialPreview: {
+        ...socialPreview,
+        description: 'Fast & <high>',
+        imageUrl: 'https://objects.example/flight.webp?one=1&two=2',
+      },
+      flight: { ...flight, mapStyleUrl: 'https://maps.example/style.json' },
+    });
+    expect(escapedHtml).toContain('content="Cloud &amp; &lt;Dancer&gt; flight"');
+    expect(escapedHtml).toContain('content="Fast &amp; &lt;high&gt;"');
+    expect(escapedHtml).toContain('flight.webp?one=1&amp;two=2');
   });
 
   it('keeps the MapLibre container absolutely sized to the full flight stage', () => {

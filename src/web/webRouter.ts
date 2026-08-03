@@ -41,7 +41,7 @@ import type { FlightThumbnailDeliveryService } from '../services/flightThumbnail
 import { WORKER_STATUS_TTL_SECONDS, type WorkerControlService } from '../services/workerControlService.js';
 import type { FlightProcessingControlService } from '../services/flightProcessingControlService.js';
 import type { FlightDetailService } from '../services/flightDetailService.js';
-import { createFlightMapPayload, createFlightPageView, createPublicFlightPageView } from '../views/authenticated/adapters/flightDetailView.js';
+import { createFlightMapPayload, createFlightPageView, createFlightSocialPreview, createPublicFlightPageView } from '../views/authenticated/adapters/flightDetailView.js';
 import type { PublicFlightPageRenderer } from '../views/publicFlight/renderer.js';
 import type { CellFlightTrackService } from '../services/cellFlightTrackService.js';
 import type { MapReplayService } from '../services/mapReplayService.js';
@@ -233,6 +233,7 @@ export function createWebRouter(dependencies: {
   renderAuthenticatedPage: AuthenticatedPageRenderer;
   renderAuthenticatedActivityFeed: AuthenticatedActivityFeedRenderer;
   renderPublicFlightPage?: PublicFlightPageRenderer;
+  publicOrigin?: string;
   mapTilerStyleUrl?: string;
   adminEmails?: readonly string[];
   adminFlights?: AdminFlightService;
@@ -1116,11 +1117,25 @@ export function createWebRouter(dependencies: {
         return;
       }
       if (!dependencies.renderPublicFlightPage) throw new Error('Public flight detail renderer is not configured.');
+      const publicOrigin = dependencies.publicOrigin ?? 'https://glidehero.com';
+      const flight = createPublicFlightPageView(summary);
+      const thumbnailUrl = await dependencies.thumbnailDelivery?.signWideIfExists({
+        userId: summary.ownerUserId,
+        flightId: summary.id,
+      });
+      const imageUrl = thumbnailUrl ?? new URL('/flight-thumbnail-fallback.webp', publicOrigin).toString();
       await renderPublicFlight(res, dependencies.renderPublicFlightPage, 200, {
         page: 'flight',
-        title: `${summary.ownerDisplayName} flight · GlideHero`,
+        title: `${summary.ownerDisplayName}’s flight · GlideHero`,
+        socialPreview: createFlightSocialPreview({
+          flight,
+          publicOrigin,
+          imageUrl,
+          imageWidth: thumbnailUrl ? 800 : 450,
+          imageHeight: 450,
+        }),
         flight: {
-          ...createPublicFlightPageView(summary),
+          ...flight,
           mapStyleUrl: dependencies.mapTilerStyleUrl,
         },
       });

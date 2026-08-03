@@ -29,6 +29,7 @@ import type { PlanService } from '../../src/services/planService.js';
 import type { PlanExportService } from '../../src/services/planExportService.js';
 import type { ThermalRasterCacheService } from '../../src/services/thermalRasterCacheService.js';
 import type { PublicFlightPageRenderer } from '../../src/views/publicFlight/renderer.js';
+import type { FlightThumbnailDeliveryService } from '../../src/services/flightThumbnailDeliveryService.js';
 
 const viewportStats = {
   claimedCellCount: 2,
@@ -429,6 +430,14 @@ describe('webRouter', () => {
         enclosedCells: { type: 'FeatureCollection' as const, features: [] },
       })),
     };
+    const thumbnailDelivery: FlightThumbnailDeliveryService = {
+      sign: vi.fn(async () => ({
+        wideUrl: 'https://objects.example.test/flight-wide.webp?signature=temporary',
+        squareUrl: 'https://objects.example.test/flight-square.webp?signature=temporary',
+      })),
+      signWideIfExists: vi.fn(async () => 'https://objects.example.test/flight-wide.webp?signature=temporary'),
+      signMany: vi.fn(async () => new Map()),
+    };
     const router = createWebRouter({
       auth: base.auth,
       cookie: base.cookie,
@@ -446,6 +455,8 @@ describe('webRouter', () => {
       renderAuthenticatedPage: base.renderAuthenticatedPage,
       renderAuthenticatedActivityFeed: base.renderAuthenticatedActivityFeed,
       renderPublicFlightPage: base.renderPublicFlightPage,
+      publicOrigin: 'https://glidehero.example',
+      thumbnailDelivery,
       mapTilerStyleUrl: 'https://maps.example/style.json',
     });
     const app = createApp({ webMiddleware: [createCurrentUserMiddleware(base.auth, base.cookie), router] });
@@ -455,7 +466,15 @@ describe('webRouter', () => {
       expect(anonymousPage.status).toBe(200);
       expect(base.renderPublicFlightPage).toHaveBeenCalledWith(expect.objectContaining({
         page: 'flight',
-        title: 'Cloud Dancer flight · GlideHero',
+        title: 'Cloud Dancer’s flight · GlideHero',
+        socialPreview: {
+          description: 'Jul 23, 2026 · 10.01 km 5-point distance · 1h 00m · 3 cells',
+          canonicalUrl: `https://glidehero.example/flights/${flightId}`,
+          imageUrl: 'https://objects.example.test/flight-wide.webp?signature=temporary',
+          imageAlt: 'Cloud Dancer flight territory preview',
+          imageWidth: 800,
+          imageHeight: 450,
+        },
         flight: expect.objectContaining({
           id: flightId,
           defaultDistance: 'fivePoint',
@@ -463,6 +482,7 @@ describe('webRouter', () => {
           pilot: expect.not.objectContaining({ href: expect.anything() }),
         }),
       }));
+      expect(thumbnailDelivery.signWideIfExists).toHaveBeenCalledWith({ userId: pilotProfile.userId, flightId });
       const anonymousMap = await fetch(`${baseUrl}/v1/flights/${flightId}/map`);
       expect(anonymousMap.status).toBe(200);
       expect(anonymousMap.headers.get('cache-control')).toBe('private, max-age=60');
@@ -488,6 +508,16 @@ describe('webRouter', () => {
         track: { geometry: { coordinates: [[-105, 40], [-104.9, 40.1]] } },
         scores: { fivePoint: { turnpoints: { features: [{ properties: {} }, { properties: {} }] } } },
       });
+
+      vi.mocked(thumbnailDelivery.signWideIfExists).mockResolvedValueOnce(null);
+      expect((await fetch(`${baseUrl}/flights/${flightId}?preview=fallback`)).status).toBe(200);
+      expect(base.renderPublicFlightPage).toHaveBeenLastCalledWith(expect.objectContaining({
+        socialPreview: expect.objectContaining({
+          imageUrl: 'https://glidehero.example/flight-thumbnail-fallback.webp',
+          imageWidth: 450,
+          imageHeight: 450,
+        }),
+      }));
     });
 
     vi.mocked(flightDetail.getSummary).mockResolvedValueOnce(null);

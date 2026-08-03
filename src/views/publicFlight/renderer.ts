@@ -1,10 +1,12 @@
 import { resolve } from 'node:path';
 import vento from 'ventojs';
+import type { FlightSocialPreview } from '../authenticated/adapters/flightDetailView.js';
 import type { FlightPageModel } from '../authenticated/models.js';
 
 export type PublicFlightPageModel = {
   page: 'flight';
   title: string;
+  socialPreview: FlightSocialPreview;
   flight: FlightPageModel['flight'];
 };
 

@@ -202,6 +202,7 @@ const webMiddleware = [
     renderAuthenticatedPage: createAuthenticatedPageRenderer(),
     renderAuthenticatedActivityFeed: createAuthenticatedActivityFeedRenderer(),
     renderPublicFlightPage: createPublicFlightPageRenderer(),
+    publicOrigin: config.publicOrigin,
     mapTilerStyleUrl: `https://api.maptiler.com/maps/outdoor-v2/style.json?key=${config.mapTilerApiKey}`,
     adminEmails: config.adminEmails,
     adminFlights,

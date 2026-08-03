@@ -32,4 +32,39 @@ describe('flight thumbnail delivery service', () => {
       { userId: 'user-1', flightId: 'flight-2' },
     ])).resolves.toEqual(new Map());
   });
+
+  it('presigns a wide social thumbnail only after confirming the object exists', async () => {
+    const send = vi.fn(async () => ({}));
+    const presign = vi.fn(async (command: { input: { Key?: string } }) => `signed:${command.input.Key}`);
+    const service = createFlightThumbnailDeliveryService({
+      s3Client: { send } as never,
+      bucketName: 'flights',
+      bucketFolder: 'glidehero-test',
+      presign,
+    });
+
+    await expect(service.signWideIfExists({ userId: 'user-1', flightId: 'flight-1' }))
+      .resolves.toBe('signed:glidehero-test/uploads/user-1/thumbnails/flight-1-800x450.webp');
+    expect(send).toHaveBeenCalledTimes(1);
+    expect(presign).toHaveBeenCalledTimes(1);
+  });
+
+  it('returns null instead of a signed URL when the social thumbnail object is missing', async () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const presign = vi.fn(async () => 'signed');
+    const service = createFlightThumbnailDeliveryService({
+      s3Client: { send: vi.fn(async () => { throw new Error('NotFound'); }) } as never,
+      bucketName: 'flights',
+      bucketFolder: 'glidehero-test',
+      presign,
+    });
+
+    await expect(service.signWideIfExists({ userId: 'user-1', flightId: 'flight-1' })).resolves.toBeNull();
+    expect(presign).not.toHaveBeenCalled();
+    expect(consoleError).toHaveBeenCalledWith('Unable to deliver flight social preview thumbnail', {
+      flightId: 'flight-1',
+      error: 'NotFound',
+    });
+    consoleError.mockRestore();
+  });
 });

@@ -1,4 +1,4 @@
-import { GetObjectCommand, type S3 } from '@aws-sdk/client-s3';
+import { GetObjectCommand, HeadObjectCommand, type S3 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { flightThumbnailKeys } from './flightThumbnailService.js';
 
@@ -11,6 +11,7 @@ export type FlightThumbnailUrls = {
 
 export interface FlightThumbnailDeliveryService {
   sign(input: { userId: string; flightId: string }): Promise<FlightThumbnailUrls | null>;
+  signWideIfExists(input: { userId: string; flightId: string }): Promise<string | null>;
   signMany(inputs: readonly { userId: string; flightId: string }[]): Promise<ReadonlyMap<string, FlightThumbnailUrls>>;
 }
 
@@ -41,6 +42,22 @@ export function createFlightThumbnailDeliveryService(options: {
 
   return {
     sign,
+    async signWideIfExists(input) {
+      const { wideKey } = flightThumbnailKeys(options.bucketFolder, input.userId, input.flightId);
+      try {
+        await options.s3Client.send(new HeadObjectCommand({ Bucket: options.bucketName, Key: wideKey }));
+        return await presign(
+          new GetObjectCommand({ Bucket: options.bucketName, Key: wideKey }),
+          THUMBNAIL_URL_TTL_SECONDS,
+        );
+      } catch (error) {
+        console.error('Unable to deliver flight social preview thumbnail', {
+          flightId: input.flightId,
+          error: error instanceof Error ? error.message : 'unknown error',
+        });
+        return null;
+      }
+    },
     async signMany(inputs) {
       const unique = new Map(inputs.map((input) => [`${input.userId}:${input.flightId}`, input]));
       const results = await Promise.all([...unique.values()].map(async (input) => [input.flightId, await sign(input)] as const));

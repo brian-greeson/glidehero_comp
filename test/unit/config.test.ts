@@ -21,6 +21,7 @@ describe('parseConfig', () => {
       environment: 'development',
       isProduction: false,
       port: 3000,
+      publicOrigin: 'https://glidehero.com',
       sessionCookieName: 'glidehero_session',
       sessionTtlSeconds: 604800,
       mapTilerApiKey: 'maptiler-test-key',
@@ -123,7 +124,47 @@ describe('parseConfig', () => {
         MAPTILER_CREDENTIALS: 'maptiler-test-key_00112233445566778899aabbccddeeff',
         KOFI_VERIFICATION_TOKEN: 'kofi-test-token',
       }),
-    ).toMatchObject({ environment: 'production', isProduction: true });
+    ).toMatchObject({
+      environment: 'production',
+      isProduction: true,
+      publicOrigin: 'https://glidehero.com',
+    });
+  });
+
+  it('normalizes an explicitly configured public origin', () => {
+    const config = parseConfig({
+      DATABASE_URL: 'postgres://localhost/glidehero',
+      VALKEY_URL: 'redis://localhost:6379',
+      PUBLIC_ORIGIN: 'https://glidehero.example/',
+      BUCKET_SECRET: 'secret',
+      BUCKET_ID: 'id',
+      BUCKET_NAME: 'glidehero-files',
+      BUCKET_TILES_NAME: 'glidehero-thermal-tiles',
+      BUCKET_URL: 'https://s3.example.test',
+      BUCKET_FOLDER: 'glidehero-dev',
+      MAPTILER_API_KEY: 'maptiler-test-key',
+      MAPTILER_CREDENTIALS: 'maptiler-test-key_00112233445566778899aabbccddeeff',
+      KOFI_VERIFICATION_TOKEN: 'kofi-test-token',
+    });
+
+    expect(config.publicOrigin).toBe('https://glidehero.example');
+  });
+
+  it('rejects a public origin containing a path', () => {
+    expect(() => parseConfig({
+      DATABASE_URL: 'postgres://localhost/glidehero',
+      VALKEY_URL: 'redis://localhost:6379',
+      PUBLIC_ORIGIN: 'https://glidehero.example/app',
+      BUCKET_SECRET: 'secret',
+      BUCKET_ID: 'id',
+      BUCKET_NAME: 'glidehero-files',
+      BUCKET_TILES_NAME: 'glidehero-thermal-tiles',
+      BUCKET_URL: 'https://s3.example.test',
+      BUCKET_FOLDER: 'glidehero-dev',
+      MAPTILER_API_KEY: 'maptiler-test-key',
+      MAPTILER_CREDENTIALS: 'maptiler-test-key_00112233445566778899aabbccddeeff',
+      KOFI_VERIFICATION_TOKEN: 'kofi-test-token',
+    })).toThrow('PUBLIC_ORIGIN must be an HTTP(S) origin');
   });
 
   it('accepts optional comma-separated admin emails', () => {

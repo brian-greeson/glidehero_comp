@@ -1,10 +1,21 @@
 import { z } from 'zod';
 
+const publicOriginSchema = z.string().url().refine((value) => {
+  const url = new URL(value);
+  return (url.protocol === 'http:' || url.protocol === 'https:')
+    && url.pathname === '/'
+    && !url.search
+    && !url.hash
+    && !url.username
+    && !url.password;
+}, 'PUBLIC_ORIGIN must be an HTTP(S) origin without credentials, a path, query, or fragment.');
+
 const envSchema = z.object({
   DATABASE_URL: z.string().min(1),
   VALKEY_URL: z.string().url(),
   ENVIRONMENT: z.enum(['development', 'test', 'production']).default('development'),
   PORT: z.coerce.number().int().min(0).max(65535).default(3000),
+  PUBLIC_ORIGIN: publicOriginSchema.default('https://glidehero.com'),
   SESSION_COOKIE_NAME: z
     .string()
     .regex(/^[A-Za-z0-9_]+$/)
@@ -37,6 +48,7 @@ export type AppConfig = {
   environment: 'development' | 'test' | 'production';
   isProduction: boolean;
   port: number;
+  publicOrigin: string;
   sessionCookieName: string;
   sessionTtlSeconds: number;
   mapTilerApiKey: string;
@@ -63,6 +75,7 @@ export function parseConfig(env: NodeJS.ProcessEnv): AppConfig {
     environment: parsed.ENVIRONMENT,
     isProduction: parsed.ENVIRONMENT === 'production',
     port: parsed.PORT,
+    publicOrigin: parsed.PUBLIC_ORIGIN.replace(/\/$/, ''),
     sessionCookieName: parsed.SESSION_COOKIE_NAME,
     sessionTtlSeconds: parsed.SESSION_TTL_SECONDS,
     mapTilerApiKey: parsed.MAPTILER_API_KEY,

@@ -10,6 +10,11 @@ and generate flight territory thumbnails.
 thumbnail requests. Browser-facing map styles continue to use the separately
 configured `MAPTILER_API_KEY`.
 
+`PUBLIC_ORIGIN` defaults to `https://glidehero.com`. Override it with another
+externally reachable origin, without a path, for local or staging deployments.
+The web process uses it to emit absolute canonical and flight-thumbnail URLs
+for Telegram and other social link previews.
+
 ## Chronological upload workflow rollout
 
 The regular and bulk upload paths require the web and worker processes to use
