@@ -1,5 +1,6 @@
 import { createMapReplayTimeline } from './mapReplayTimeline.js';
 import { installMapReplayLayer } from './mapReplayLayer.js';
+import { createMapReplayCamera } from './mapReplayCamera.js';
 import { initializeReplayControls } from './replayControlsController.js';
 
 export const FLIGHT_DETAIL_SOURCE_IDS = Object.freeze({
@@ -387,10 +388,11 @@ export function initializeFlightDetailMap({
             }
             if (!isCurrent()) return;
             const layer = installMapReplayLayer(map, { dimLayerIds: [], colorForPilot: () => chooseContrastingTrackColor(payload.territoryColor ?? mapElement.dataset.territoryColor), maplibre, documentRef });
+            const camera = createMapReplayCamera(map, { documentRef });
             const timeline = createMapReplayTimeline({ flights: [replay] });
             const originalDestroy = timeline.destroy;
-            timeline.destroy = () => { layer.close?.(); originalDestroy(); };
-            timeline.subscribe((state) => layer.update(state));
+            timeline.destroy = () => { layer.close?.(); camera.destroy?.(); originalDestroy(); };
+            timeline.subscribe((state) => { layer.update(state); camera.update(state); });
             setTimeline(timeline);
             setStatus('');
           },

@@ -45,6 +45,7 @@ function mapHarness() {
     getPaintProperty: vi.fn(),
     setPaintProperty: vi.fn(),
     fitBounds: vi.fn(),
+    easeTo: vi.fn(),
     once: vi.fn((name: string, handler: any) => {
       if (name === 'load') loadHandler = handler;
       if (name === 'error') errorHandler = handler;
@@ -275,7 +276,7 @@ describe('flight detail map', () => {
         ['[data-flight-detail-map]', mapElement], ['[data-flight-map-status]', status], ['[data-map-replay]', mapElement],
       ]).get(selector) ?? null,
       querySelectorAll: (selector: string) => selector === '[data-flight-map-distance]' ? [] : (replayBySelector[selector] ?? []),
-      createElement: () => ({ className: '', textContent: '', children: [] as any[], style: { setProperty: vi.fn() }, setAttribute: vi.fn(), removeAttribute: vi.fn(), appendChild(child: any) { this.children.push(child); } }),
+      createElement: () => ({ className: '', textContent: '', children: [] as any[], style: { setProperty: vi.fn() }, setAttribute: vi.fn(), removeAttribute: vi.fn(), addEventListener: vi.fn(), append(child: any) { this.children.push(child); }, appendChild(child: any) { this.children.push(child); } }),
     };
     const controller = initializeFlightDetailMap({ documentRef, maplibre: harness.maplibre, fetchImpl });
     expect(replayDom.open.disabled).toBe(true);
@@ -295,6 +296,7 @@ describe('flight detail map', () => {
     expect(harness.layers.find((layer) => layer.id === 'map-replay-tracks-line')).toBeDefined();
     expect(harness.markers).toHaveLength(1);
     expect(harness.markers[0].options.element.children[0].children.map((node: any) => node.textContent)).toEqual(['0 km/h', '1,500 m']);
+    expect(harness.map.easeTo).toHaveBeenCalledWith({ center: [-105, 39], zoom: 12, duration: 0 });
 
     replayDom.close.click();
     expect(replayDom.panel.hidden).toBe(true);
