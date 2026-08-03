@@ -1,4 +1,4 @@
-export type AppErrorCode = 'invalid_request' | 'unauthorized' | 'conflict' | 'server_error';
+export type AppErrorCode = 'invalid_request' | 'unauthorized' | 'forbidden' | 'not_found' | 'conflict' | 'server_error';
 
 export class AppError extends Error {
   constructor(

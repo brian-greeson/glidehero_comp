@@ -240,3 +240,7 @@ export function initializeProfileLists(documentRef = document) {
 }
 
 if (typeof document !== 'undefined') initializeProfileLists(document);
+if (typeof document !== 'undefined' && globalThis.location?.hash === '#new-group') {
+  const createGroup = document.querySelector('#new-group');
+  if (createGroup instanceof HTMLDetailsElement) createGroup.open = true;
+}

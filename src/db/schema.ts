@@ -40,6 +40,30 @@ export const pilotFollows = pgTable(
   ],
 );
 
+export const pilotGroupMembershipStatus = pgEnum('pilot_group_membership_status', ['pending', 'accepted']);
+
+export const pilotGroups = pgTable('pilot_groups', {
+  id: uuid('group_id').primaryKey().defaultRandom(),
+  ownerUserId: uuid('owner_user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  name: text('name').notNull(),
+  ...timestamps,
+}, (table) => [
+  index('pilot_groups_owner_user_id_idx').on(table.ownerUserId),
+]);
+
+export const pilotGroupMemberships = pgTable('pilot_group_memberships', {
+  groupId: uuid('group_id').notNull().references(() => pilotGroups.id, { onDelete: 'cascade' }),
+  userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  status: pilotGroupMembershipStatus('status').notNull(),
+  invitedAt: timestamp('invited_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
+  acceptedAt: timestamp('accepted_at', { withTimezone: true, mode: 'date' }),
+  ...timestamps,
+}, (table) => [
+  primaryKey({ columns: [table.groupId, table.userId] }),
+  index('pilot_group_memberships_user_status_idx').on(table.userId, table.status),
+  index('pilot_group_memberships_group_status_idx').on(table.groupId, table.status),
+]);
+
 export const userPasswords = pgTable('user_passwords', {
   userId: uuid('user_id').primaryKey().references(() => users.id, { onDelete: 'cascade' }),
   passwordHash: text('password_hash').notNull(),
@@ -166,6 +190,7 @@ export const userOnboardingState = pgTable('user_onboarding_state', {
   personalMapViewedAt: timestamp('personal_map_viewed_at', { withTimezone: true, mode: 'date' }),
   competitiveMapViewedAt: timestamp('competitive_map_viewed_at', { withTimezone: true, mode: 'date' }),
   followedThreePilotsAt: timestamp('followed_three_pilots_at', { withTimezone: true, mode: 'date' }),
+  groupsAt: timestamp('groups_at', { withTimezone: true, mode: 'date' }),
   gliderAddedAt: timestamp('glider_added_at', { withTimezone: true, mode: 'date' }),
   historyImportCompletedAt: timestamp('history_import_completed_at', { withTimezone: true, mode: 'date' }),
   dismissedAt: timestamp('dismissed_at', { withTimezone: true, mode: 'date' }),
@@ -603,6 +628,11 @@ export const competitionGridClaims = pgTable(
       table.claimTimestamp,
     ),
     index('competition_grid_claims_claim_flight_idx').on(table.claimFlight),
+    index('competition_grid_claims_month_user_flight_idx').on(
+      table.competitionMonth,
+      table.claimUser,
+      table.claimFlight,
+    ),
   ],
 );
 

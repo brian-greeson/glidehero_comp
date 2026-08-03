@@ -1,0 +1,1 @@
+CREATE INDEX "competition_grid_claims_month_user_flight_idx" ON "competition_grid_claims" ("competition_month","claim_user","claim_flight");

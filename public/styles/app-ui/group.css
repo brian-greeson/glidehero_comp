@@ -1,0 +1,94 @@
+.group-page { display: grid; gap: 1rem; max-width: 1400px; margin: 0 auto; padding: 1.25rem; background: #f7fafc; }
+.group-identity-card, .group-card, .group-map-card { border: 1px solid var(--app-border); border-radius: var(--app-radius); background: #fff; box-shadow: var(--app-shadow-sm); }
+.group-identity-card { display: flex; align-items: center; gap: 1rem; padding: 1rem 1.25rem; }
+.group-mark { display: grid; width: 38px; height: 38px; flex: 0 0 auto; place-items: center; border-radius: .65rem; color: var(--app-blue); background: #edf6ff; font-size: .72rem; font-weight: 850; }
+.group-mark .app-icon { width: 1.4rem; }
+.group-mark--large { width: 58px; height: 58px; border-radius: 50%; font-size: 1rem; }
+.group-identity-copy { min-width: 0; }
+.group-eyebrow { margin: 0 0 .25rem; color: var(--app-muted); font-size: .64rem; font-weight: 750; letter-spacing: .04em; text-transform: uppercase; }
+.group-identity-card h1 { margin: 0; overflow-wrap: anywhere; color: var(--app-ink); font-size: 1.45rem; }
+.group-members, .group-flights-period { margin: .25rem 0 0; color: var(--app-muted); font-size: .7rem; }
+.group-header-actions { display: flex; gap: .45rem; margin-left: auto; }
+.group-header-actions form { display: contents; }
+.group-button { display: inline-flex; min-height: 40px; align-items: center; justify-content: center; gap: .35rem; padding: .45rem .75rem; border: 1px solid var(--app-blue); border-radius: 999px; color: #fff; background: var(--app-blue); font: inherit; font-size: .66rem; font-weight: 750; text-decoration: none; cursor: pointer; }
+.group-button .app-icon { width: 1rem; }
+.group-button--quiet { color: var(--app-blue); background: #fff; }
+.group-content-grid { display: grid; grid-template-columns: minmax(340px, .8fr) minmax(0, 1.35fr); gap: 1rem; }
+.group-map-card { position: relative; grid-column: 2; min-height: 440px; overflow: hidden; background: #8aa09b; }
+.group-map-canvas { position: absolute; inset: 0; background: linear-gradient(145deg, #9ab1a8, #d6dfd6); }
+.group-map-filter, .group-map-all-members { position: absolute; z-index: 3; top: 1rem; display: inline-flex; min-height: 40px; align-items: center; border: 1px solid var(--app-blue); border-radius: 999px; background: rgb(255 255 255 / 96%); box-shadow: var(--app-shadow-sm); font-size: .7rem; font-weight: 750; }
+.group-map-filter { left: 1rem; gap: .45rem; padding: .45rem .55rem .45rem .75rem; color: var(--app-blue); }
+.group-map-filter a { display: grid; width: 28px; height: 28px; place-items: center; border-radius: 50%; color: inherit; text-decoration: none; }
+.group-map-all-members { right: 1rem; display: none; padding: .45rem .8rem; color: var(--app-blue); text-decoration: none; }
+.group-map-empty { position: absolute; z-index: 4; inset: 50% auto auto 50%; max-width: min(24rem, calc(100% - 2rem)); margin: 0; padding: .65rem .8rem; transform: translate(-50%, -50%); border-radius: .5rem; background: #fff; font-size: .7rem; text-align: center; }
+.group-map-empty[hidden] { display: none; }
+.group-card { padding: .9rem; }
+.group-standings-card { min-width: 0; grid-column: 1; grid-row: 1; }
+.group-standings-scroll { overflow-x: auto; }
+.group-standings { width: 100%; border-collapse: collapse; }
+.group-standings th { padding: .5rem .35rem; border-bottom: 1px solid var(--app-border); color: var(--app-muted); font-size: .57rem; text-align: left; text-transform: uppercase; }
+.group-standings td { padding: .55rem .35rem; border-bottom: 1px solid var(--app-border); font-size: .68rem; white-space: nowrap; }
+.group-standings tbody tr.is-current { background: #f3f8fd; }
+.group-standings tbody tr.is-selected { background: #edfafa; box-shadow: inset 3px 0 var(--app-blue); }
+.group-pilot { display: flex; align-items: center; gap: .45rem; color: var(--app-ink); font-weight: 700; text-decoration: none; }
+.group-pilot-avatar { display: grid; width: 32px; height: 32px; flex: 0 0 auto; place-items: center; border-radius: 50%; color: #fff; background: var(--pilot-color); font-size: .6rem; font-weight: 800; }
+.group-pilot-avatar--standing { width: 28px; height: 28px; color: var(--app-ink); background: color-mix(in srgb, var(--pilot-color) 24%, white); }
+.group-clear-filter { color: var(--app-blue); font-size: .63rem; font-weight: 700; text-decoration: none; }
+.group-flights-card { min-width: 0; }
+.group-flights-list { display: grid; margin-top: .45rem; }
+.group-flight-row { display: grid; grid-template-columns: 6rem minmax(0, 1.4fr) 7rem 7rem auto; align-items: center; gap: .75rem; padding: .65rem .25rem; border-top: 1px solid var(--app-border); }
+.group-flight-thumbnail { display: block; overflow: hidden; width: 6rem; aspect-ratio: 16 / 9; border-radius: .5rem; background: #d9e0dc; }
+.group-flight-thumbnail img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.group-flight-pilot { display: flex; min-width: 0; align-items: center; gap: .55rem; }
+.group-flight-pilot > div { display: grid; min-width: 0; gap: .1rem; }
+.group-flight-pilot strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.group-flight-row small { display: block; color: var(--app-muted); font-size: .57rem; }
+.group-flight-row b { font-size: .68rem; }
+.group-flight-actions { display: flex; align-items: center; justify-content: flex-end; gap: .5rem; }
+.group-flight-actions a, .group-flight-actions button { padding: .35rem .15rem; border: 0; color: var(--app-blue); background: transparent; font: inherit; font-size: .63rem; font-weight: 750; text-decoration: none; white-space: nowrap; cursor: pointer; }
+.group-flight-actions button:disabled { color: var(--app-muted); cursor: wait; }
+.group-flight-row.is-selected { background: #f3f8fd; box-shadow: inset 3px 0 var(--app-blue); }
+.group-management-card { display: grid; gap: .65rem; scroll-margin-top: 5rem; }
+.group-invite-form { display: grid; gap: .35rem; max-width: 34rem; }
+.group-invite-form label { color: var(--app-muted); font-size: .62rem; font-weight: 700; }
+.group-invite-form > div { display: flex; gap: .45rem; }
+.group-invite-form input { min-width: 0; min-height: 40px; flex: 1; padding: .4rem .55rem; border: 1px solid var(--app-border); border-radius: .4rem; font: inherit; font-size: .68rem; }
+.group-invite-status { min-height: 1em; margin: 0; color: var(--app-muted); font-size: .62rem; }
+.group-invite-results { display: grid !important; overflow: hidden; border: 1px solid var(--app-border); border-radius: .45rem; background: #fff; box-shadow: var(--app-shadow-sm); }
+.group-invite-results[hidden] { display: none !important; }
+.group-invite-results button { min-height: 40px; padding: .55rem .65rem; border: 0; border-bottom: 1px solid var(--app-border); background: #fff; color: var(--app-ink); font: inherit; font-size: .68rem; text-align: left; cursor: pointer; }
+.group-invite-results button:hover, .group-invite-results button:focus-visible, .group-invite-results button[aria-selected="true"] { background: #edf5ff; }
+.group-roster { display: grid; gap: .3rem; padding: 0; margin: 0; list-style: none; }
+.group-roster li { display: flex; align-items: center; justify-content: space-between; gap: .5rem; padding: .5rem 0; border-top: 1px solid var(--app-border); }
+.group-roster li > span { display: grid; min-width: 0; gap: .1rem; overflow-wrap: anywhere; }
+.group-roster small { color: var(--app-muted); font-size: .58rem; text-transform: capitalize; }
+.group-danger-button { justify-self: start; min-height: 40px; padding: .35rem .7rem; border: 1px solid #bf3026; border-radius: 999px; color: #a12720; background: #fff; font: inherit; font-size: .62rem; font-weight: 750; }
+@media (max-width: 900px) {
+  .group-page { padding: .75rem; }
+  .group-identity-card { align-items: flex-start; padding: .8rem; }
+  .group-header-actions { flex-wrap: wrap; justify-content: flex-end; }
+  .group-button, .group-invite-form input, .group-invite-results button, .group-danger-button { min-height: 44px; }
+  .group-content-grid { display: flex; flex-direction: column; }
+  .group-map-card { min-height: 300px; order: -1; }
+  .group-map-all-members { display: inline-flex; }
+  .group-standings-card { order: 0; }
+  .group-flight-row { grid-template-columns: 4.5rem minmax(0, 1fr) auto; gap: .45rem .7rem; }
+  .group-flight-thumbnail { width: 4.5rem; aspect-ratio: 1; }
+  .group-flight-row > span { display: none; }
+  .group-flight-pilot { grid-column: 2; }
+  .group-flight-actions { grid-column: 3; grid-row: 1; }
+  .group-flight-actions a, .group-flight-actions button { min-height: 44px; }
+}
+@media (max-width: 500px) {
+  .group-identity-card { display: grid; grid-template-columns: auto minmax(0, 1fr); }
+  .group-header-actions { grid-column: 1 / -1; justify-content: flex-start; margin-left: 0; }
+  .group-identity-card h1 { font-size: 1.15rem; }
+  .group-map-card { min-height: 250px; }
+  .group-map-filter, .group-map-all-members { top: .65rem; }
+  .group-map-filter { left: .65rem; }
+  .group-map-all-members { right: .65rem; }
+  .group-standings th, .group-standings td { padding-inline: .25rem; }
+  .group-pilot-avatar--standing { width: 30px; height: 30px; }
+  .group-flight-actions { display: grid; justify-items: end; gap: 0; }
+  .group-invite-form > div { align-items: stretch; flex-direction: column; }
+}

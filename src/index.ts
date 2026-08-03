@@ -52,6 +52,7 @@ import { createFlightDetailService } from './services/flightDetailService.js';
 import { createMapReplayService } from './services/mapReplayService.js';
 import { createCellFlightTrackService } from './services/cellFlightTrackService.js';
 import { createOnboardingService } from './services/onboardingService.js';
+import { createGroupService } from './services/groupService.js';
 import { createThermalKkClient } from './resources/thermalKkClient.js';
 import { createThermalRasterCacheService } from './services/thermalRasterCacheService.js';
 import { createPlanService } from './services/planService.js';
@@ -99,6 +100,7 @@ const arenaLeadership = createArenaLeadershipReconciliationService(db, { cellSiz
 const userAchievementProgress = createUserAchievementProgressService(db, { cellSize: config.gridClaimCellSize });
 const userArenaProgress = createUserArenaProgressService(db, { cellSize: config.gridClaimCellSize });
 const onboarding = createOnboardingService(db);
+const groups = createGroupService(db);
 const auth = createAuthService(db, { sessionTtlSeconds: config.sessionTtlSeconds }, userAchievementProgress, onboarding);
 const gridClaim = createGridClaimService(db, { cellSize: config.gridClaimCellSize }, undefined, undefined, arenaLeadership, userAchievementProgress, userArenaProgress);
 const adminAreas = createAdminAreaService(db, { cellSize: config.gridClaimCellSize }, arenaLeadership, userArenaProgress, userAchievementProgress);
@@ -183,6 +185,7 @@ const webMiddleware = [
     follow,
     activity,
     onboarding,
+    groups,
     plans,
     planExports,
     thermalRasters,

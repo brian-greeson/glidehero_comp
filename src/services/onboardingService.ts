@@ -4,6 +4,7 @@ import {
   bulkImports,
   flights,
   pilotFollows,
+  pilotGroupMemberships,
   profiles,
   regularUploadMembers,
   userOnboardingState,
@@ -11,19 +12,19 @@ import {
 
 type OnboardingTransaction = Parameters<Parameters<Database['transaction']>[0]>[0];
 
-export type OnboardingStepKey = 'profile' | 'first-flight' | 'personal-map' | 'follow-pilots' | 'competitive-map' | 'glider' | 'history';
+export type OnboardingStepKey = 'profile' | 'first-flight' | 'personal-map' | 'follow-pilots' | 'competitive-map' | 'groups' | 'glider' | 'history';
 
 export type OnboardingState = {
   dismissed: boolean;
   completeCount: number;
-  totalCount: 7;
+  totalCount: number;
   coreComplete: boolean;
   allComplete: boolean;
   shouldPoll: boolean;
   firstFlightId: string | null;
   firstFlightStatus: 'not-started' | 'processing' | 'failed' | 'completed';
   historyStatus: 'not-started' | 'preparing' | 'processing' | 'replaying' | 'failed' | 'completed';
-  steps: Record<OnboardingStepKey, boolean>;
+  steps: Partial<Record<OnboardingStepKey, boolean>>;
 };
 
 export interface OnboardingService {
@@ -33,6 +34,7 @@ export interface OnboardingService {
   restore(userId: string): Promise<boolean>;
   markPersonalMapViewed(userId: string): Promise<boolean>;
   markCompetitiveMapViewed(userId: string): Promise<boolean>;
+  markGroupsJoined?(userId: string): Promise<boolean>;
 }
 
 export function createOnboardingService(database: Database): OnboardingService {
@@ -49,7 +51,7 @@ export function createOnboardingService(database: Database): OnboardingService {
       const [stored] = await database.select().from(userOnboardingState).where(eq(userOnboardingState.userId, userId)).limit(1);
       if (!stored) return null;
 
-      const [[firstFlight], [profile], [followCount], [completedHistory], [activeHistory], [activeRegular], [failedRegular]] = await Promise.all([
+      const [[firstFlight], [profile], [followCount], [groupMembership], [completedHistory], [activeHistory], [activeRegular], [failedRegular]] = await Promise.all([
         database.select({ id: flights.id, processedAt: flights.processedAt })
           .from(regularUploadMembers)
           .innerJoin(flights, eq(regularUploadMembers.flightId, flights.id))
@@ -62,6 +64,9 @@ export function createOnboardingService(database: Database): OnboardingService {
           .limit(1),
         database.select({ gliderModelId: profiles.gliderModelId }).from(profiles).where(eq(profiles.userId, userId)).limit(1),
         database.select({ value: count() }).from(pilotFollows).where(eq(pilotFollows.followerUserId, userId)),
+        database.select({ groupId: pilotGroupMemberships.groupId }).from(pilotGroupMemberships)
+          .where(and(eq(pilotGroupMemberships.userId, userId), eq(pilotGroupMemberships.status, 'accepted')))
+          .limit(1),
         database.select({ id: bulkImports.id }).from(bulkImports)
           .where(and(eq(bulkImports.userId, userId), eq(bulkImports.phase, 'completed')))
           .limit(1),
@@ -85,6 +90,7 @@ export function createOnboardingService(database: Database): OnboardingService {
         followedThreePilotsAt: stored.followedThreePilotsAt ?? (Number(followCount?.value ?? 0) >= 3 ? now : null),
         gliderAddedAt: stored.gliderAddedAt ?? (profile?.gliderModelId ? now : null),
         historyImportCompletedAt: stored.historyImportCompletedAt ?? (completedHistory ? now : null),
+        groupsAt: stored.groupsAt ?? (groupMembership ? now : (stored.completedAt ? now : null)),
       };
       const steps = {
         profile: true,
@@ -92,11 +98,12 @@ export function createOnboardingService(database: Database): OnboardingService {
         'personal-map': Boolean(stored.personalMapViewedAt),
         'follow-pilots': Boolean(reconciled.followedThreePilotsAt),
         'competitive-map': Boolean(stored.competitiveMapViewedAt),
+        groups: Boolean(reconciled.groupsAt),
         glider: Boolean(reconciled.gliderAddedAt),
         history: Boolean(reconciled.historyImportCompletedAt),
       } satisfies Record<OnboardingStepKey, boolean>;
       const completeCount = Object.values(steps).filter(Boolean).length;
-      const allComplete = completeCount === 7;
+      const allComplete = completeCount === 8;
       const completedAt = stored.completedAt ?? (allComplete ? now : null);
 
       if (
@@ -105,6 +112,7 @@ export function createOnboardingService(database: Database): OnboardingService {
         || reconciled.followedThreePilotsAt !== stored.followedThreePilotsAt
         || reconciled.gliderAddedAt !== stored.gliderAddedAt
         || reconciled.historyImportCompletedAt !== stored.historyImportCompletedAt
+        || reconciled.groupsAt !== stored.groupsAt
         || completedAt !== stored.completedAt
       ) {
         await updateTimestamp(userId, { ...reconciled, completedAt });
@@ -129,7 +137,7 @@ export function createOnboardingService(database: Database): OnboardingService {
       return {
         dismissed: Boolean(stored.dismissedAt),
         completeCount,
-        totalCount: 7,
+        totalCount: 8,
         coreComplete: steps.profile && steps['first-flight'] && steps['personal-map'],
         allComplete,
         shouldPoll: firstFlightStatus === 'processing' || ['preparing', 'processing', 'replaying'].includes(historyStatus),
@@ -167,6 +175,14 @@ export function createOnboardingService(database: Database): OnboardingService {
     async markCompetitiveMapViewed(userId) {
       const rows = await database.update(userOnboardingState)
         .set({ competitiveMapViewedAt: sql`COALESCE(${userOnboardingState.competitiveMapViewedAt}, now())`, updatedAt: new Date() })
+        .where(eq(userOnboardingState.userId, userId))
+        .returning({ userId: userOnboardingState.userId });
+      return rows.length > 0;
+    },
+
+    async markGroupsJoined(userId) {
+      const rows = await database.update(userOnboardingState)
+        .set({ groupsAt: sql`COALESCE(${userOnboardingState.groupsAt}, now())`, updatedAt: new Date() })
         .where(eq(userOnboardingState.userId, userId))
         .returning({ userId: userOnboardingState.userId });
       return rows.length > 0;

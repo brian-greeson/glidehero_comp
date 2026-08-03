@@ -1,7 +1,7 @@
 <dialog class="onboarding-instructions" data-onboarding-dialog aria-labelledby="onboarding-instruction-title">
   <section>
     <button type="button" class="onboarding-instructions__close" data-onboarding-dialog-close aria-label="Close instructions">&times;</button>
-    <span class="onboarding-instructions__icon">{{ include "authenticated/components/icon.vto" { name: step.key === 'history' ? 'archive' : step.key === 'follow-pilots' ? 'people' : step.key === 'competitive-map' ? 'trophy' : step.key === 'glider' ? 'flight' : step.key === 'personal-map' ? 'map' : step.key === 'profile' ? 'profile' : 'upload-cloud' } }}</span>
+    <span class="onboarding-instructions__icon">{{ include "authenticated/components/icon.vto" { name: step.key === 'history' ? 'archive' : step.key === 'follow-pilots' || step.key === 'groups' ? 'people' : step.key === 'competitive-map' ? 'trophy' : step.key === 'glider' ? 'flight' : step.key === 'personal-map' ? 'map' : step.key === 'profile' ? 'profile' : 'upload-cloud' } }}</span>
     <h2 id="onboarding-instruction-title">{{ step.label }}</h2>
     <p>{{ step.description }}</p>
     <ol>

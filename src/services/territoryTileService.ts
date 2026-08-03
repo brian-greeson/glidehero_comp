@@ -37,6 +37,15 @@ export interface TerritoryTileService {
     currentUserId?: string;
     scope?: CompetitionScope;
   }): Promise<TerritoryTileResult>;
+  /** Return monthly competition coverage visible to accepted members of a group. */
+  getGroupCompetitionTile?(input: {
+    z: number;
+    x: number;
+    y: number;
+    groupId: string;
+    period: MonthlyCoveragePeriod;
+    pilotUserId?: string;
+  }): Promise<TerritoryTileResult>;
 }
 
 type StoredTile = { data: Buffer; featureCount: number };
@@ -103,6 +112,7 @@ export function createTerritoryTileService(
     pilotUserId?: string;
     currentUserId?: string;
     scope?: CompetitionScope;
+    groupId?: string;
   }): Promise<TerritoryTileResult> {
     const competitionMonth = normalizePeriod(input.period);
     const result = await database.execute<StoredTile>(sql`
@@ -120,7 +130,14 @@ export function createTerritoryTileService(
       scoped_pilot_cells AS (
         SELECT pilot.*
         FROM pilot_cells pilot
-        WHERE ${input.scope === 'following' && input.currentUserId
+        WHERE ${input.groupId
+          ? sql`EXISTS (
+              SELECT 1 FROM pilot_group_memberships membership
+              WHERE membership.group_id = ${input.groupId}
+                AND membership.user_id = pilot.claim_user
+                AND membership.status = 'accepted'
+            )`
+          : input.scope === 'following' && input.currentUserId
           ? sql`pilot.claim_user = ${input.currentUserId} OR EXISTS (
               SELECT 1 FROM pilot_follows follow
               WHERE follow.follower_user_id = ${input.currentUserId}
@@ -143,17 +160,30 @@ export function createTerritoryTileService(
           claimant.y,
           claimant.claimant_count,
           ${input.pilotUserId
-            ? sql`${input.pilotUserId}::uuid`
+            ? input.groupId
+              ? sql`CASE WHEN claimant.claimant_count = 1 THEN ${input.pilotUserId}::uuid END`
+              : sql`${input.pilotUserId}::uuid`
             : sql`claimant.pilot_user_id`} AS pilot_user_id
         FROM cell_claimants claimant
         ${input.pilotUserId
           ? sql`INNER JOIN scoped_pilot_cells pilot USING (x, y)`
           : sql``}
         WHERE true
-          ${!input.pilotUserId && input.scope === 'following' && input.currentUserId
+          ${!input.pilotUserId && input.groupId
             ? sql`AND EXISTS (SELECT 1 FROM scoped_pilot_cells pilot WHERE pilot.x = claimant.x AND pilot.y = claimant.y)`
+            : !input.pilotUserId && input.scope === 'following' && input.currentUserId
+              ? sql`AND EXISTS (SELECT 1 FROM scoped_pilot_cells pilot WHERE pilot.x = claimant.x AND pilot.y = claimant.y)`
+              : sql``}
+          ${input.pilotUserId
+            ? input.groupId
+              ? sql`AND pilot.claim_user = ${input.pilotUserId} AND EXISTS (
+                  SELECT 1 FROM pilot_group_memberships membership
+                  WHERE membership.group_id = ${input.groupId}
+                    AND membership.user_id = pilot.claim_user
+                    AND membership.status = 'accepted'
+                )`
+              : sql`AND pilot.claim_user = ${input.pilotUserId}`
             : sql``}
-          ${input.pilotUserId ? sql`AND pilot.claim_user = ${input.pilotUserId}` : sql``}
       ),
       scoped_cells AS (
         SELECT selected.*
@@ -297,6 +327,10 @@ export function createTerritoryTileService(
     },
 
     getArenaCompetitionTile(input) {
+      return getCompetitionTile(input);
+    },
+
+    getGroupCompetitionTile(input) {
       return getCompetitionTile(input);
     },
   };

@@ -1,4 +1,4 @@
-export type AuthenticatedPage = 'map' | 'plan' | 'activity' | 'achievements' | 'profile' | 'flight';
+export type AuthenticatedPage = 'map' | 'plan' | 'activity' | 'achievements' | 'profile' | 'flight' | 'group';
 
 export type AuthenticatedUserView = {
   displayName: string;
@@ -178,7 +178,7 @@ export type ActivityStatisticsView = {
 };
 
 export type OnboardingStepView = {
-  key: 'profile' | 'first-flight' | 'personal-map' | 'follow-pilots' | 'competitive-map' | 'glider' | 'history';
+  key: 'profile' | 'first-flight' | 'personal-map' | 'follow-pilots' | 'competitive-map' | 'groups' | 'glider' | 'history';
   label: string;
   description: string;
   complete: boolean;
@@ -275,6 +275,91 @@ export type ProfilePageModel = AuthenticatedShellModel & {
     error: string;
     isOpen: boolean;
   };
+  groups: GroupMembershipView[];
+  pendingGroupInvitations: GroupInvitationView[];
+};
+
+export type GroupMembershipView = {
+  id: string;
+  name: string;
+  initials: string;
+  href: string;
+  rank: number | null;
+  cells: string;
+  fivePointDistance: string;
+  isDistanceLeader: boolean;
+  memberCount: string;
+  isOwner: boolean;
+};
+
+export type GroupInvitationView = {
+  groupId: string;
+  groupName: string;
+  ownerName: string;
+  memberCount: string;
+  acceptHref: string;
+  declineHref: string;
+};
+
+export type GroupStandingView = {
+  userId: string;
+  displayName: string;
+  initials: string;
+  color: string;
+  rank: number | null;
+  cells: string;
+  fivePointDistance: string;
+  isDistanceLeader: boolean;
+  isCurrent: boolean;
+  filterHref?: string;
+};
+
+export type GroupFlightView = {
+  id: string;
+  pilotName: string;
+  pilotInitials: string;
+  pilotColor: string;
+  launchTime: string;
+  fivePointDistance: string;
+  duration: string;
+  thumbnail?: { wideUrl: string; squareUrl: string };
+  detailHref: string;
+  trackHref?: string;
+  isSelected?: boolean;
+};
+
+export type GroupPageModel = AuthenticatedShellModel & {
+  page: 'group';
+  group: {
+    id: string;
+    name: string;
+    initials: string;
+    month: string;
+    monthLabel: string;
+    memberCount: string;
+    capacity: string;
+    isOwner: boolean;
+    inviteHref?: string;
+    settingsHref?: string;
+    leaveHref?: string;
+    deleteHref?: string;
+    inviteSearchHref?: string;
+    inviteSubmitHref?: string;
+    members?: Array<{ userId: string; displayName: string; status: 'accepted' | 'pending'; removeHref?: string; cancelHref?: string }>;
+  };
+  standings: GroupStandingView[];
+  flights: GroupFlightView[];
+  mapStyleUrl?: string;
+  tileUrl?: string;
+  pilotColorsJson?: string;
+  territoryTileMinimumZoom?: number;
+  territoryTileMaximumZoom?: number;
+  selectedPilotId?: string;
+  selectedPilotName?: string;
+  clearFilterHref?: string;
+  selectedFlightId?: string;
+  standingsLoadMoreHref?: string;
+  flightsLoadMoreHref?: string;
 };
 
 export type FlightDistanceView = {
@@ -310,4 +395,4 @@ export type FlightPageModel = AuthenticatedShellModel & {
   };
 };
 
-export type AuthenticatedPageModel = MapPageModel | PlanPageModel | ActivityPageModel | AchievementsPageModel | ProfilePageModel | FlightPageModel;
+export type AuthenticatedPageModel = MapPageModel | PlanPageModel | ActivityPageModel | AchievementsPageModel | ProfilePageModel | FlightPageModel | GroupPageModel;

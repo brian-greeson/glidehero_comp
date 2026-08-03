@@ -11,6 +11,7 @@ const pageLabels: Record<AuthenticatedPage, string> = {
   achievements: 'Achievements',
   profile: 'Profile',
   flight: 'Flight',
+  group: 'Group',
 };
 
 /** Return up to two initials for the compact account avatar. */

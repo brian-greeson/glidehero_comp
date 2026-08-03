@@ -32,11 +32,17 @@ const definitions: Record<OnboardingStepKey, Omit<OnboardingStepView, 'complete'
     ],
   },
   'competitive-map': {
-    key: 'competitive-map', label: 'Explore the Competitive Map', description: 'Join a fun monthly contest with the group you created.', actionLabel: 'Open Competitive Map', href: '/following',
+    key: 'competitive-map', label: 'Explore the Competitive Map', description: 'Compare territory worldwide or with pilots you follow.', actionLabel: 'Open Competitive Map', href: '/following',
     instructions: [
-      { number: 1, title: 'Create your group', detail: 'The pilots you follow become the group you compete with.' },
-      { number: 2, title: 'Compete for one month', detail: 'Each month is a new, month-long contest between you and your group.' },
-      { number: 3, title: 'Follow the contest', detail: 'Open the Competitive Map to see everyone’s cells and compare progress throughout the month.' },
+      { number: 1, title: 'Choose a map scope', detail: 'Switch between worldwide territory and pilots you follow.' },
+      { number: 2, title: 'Compare territory', detail: 'See claimed cells and leaderboard progress for the current month.' },
+    ],
+  },
+  groups: {
+    key: 'groups', label: 'Join or create a group', description: 'Compete with friends in a private monthly contest.', actionLabel: 'View groups', href: '/profile#groups',
+    instructions: [
+      { number: 1, title: 'Create or accept an invitation', detail: 'Start a group or join one a friend invited you to.' },
+      { number: 2, title: 'Compete each month', detail: 'Compare claimed cells, five-point distance, and flights with your group.' },
     ],
   },
   glider: {
@@ -68,7 +74,7 @@ export function createOnboardingView(state: OnboardingState, selectedKey?: Onboa
     if (key === 'history' && ['preparing', 'processing', 'replaying'].includes(state.historyStatus)) {
       return { ...definition, complete: false, description: 'Your older flights are being added chronologically.', actionLabel: 'View upload status' };
     }
-    return { ...definition, complete: state.steps[key] };
+    return { ...definition, complete: Boolean(state.steps[key]) };
   });
   return {
     dismissed: state.dismissed,
@@ -78,7 +84,7 @@ export function createOnboardingView(state: OnboardingState, selectedKey?: Onboa
     allComplete: state.allComplete,
     shouldPoll: state.shouldPoll,
     statusKey: `${state.completeCount}:${state.firstFlightStatus}:${state.historyStatus}`,
-    firstFlightComplete: state.steps['first-flight'],
+    firstFlightComplete: Boolean(state.steps['first-flight']),
     steps,
     selectedStep: selectedKey ? steps.find((step) => step.key === selectedKey) : undefined,
   };

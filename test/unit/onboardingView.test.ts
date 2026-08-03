@@ -6,14 +6,14 @@ describe('onboarding view', () => {
     const view = createOnboardingView({
       dismissed: false,
       completeCount: 2,
-      totalCount: 7,
+      totalCount: 8,
       coreComplete: false,
       allComplete: false,
       shouldPoll: false,
       firstFlightId: 'flight-id',
       firstFlightStatus: 'completed',
       historyStatus: 'not-started',
-      steps: { profile: true, 'first-flight': true, 'personal-map': false, 'follow-pilots': false, 'competitive-map': false, glider: false, history: false },
+      steps: { profile: true, 'first-flight': true, 'personal-map': false, 'follow-pilots': false, 'competitive-map': false, groups: false, glider: false, history: false },
     }, 'history');
 
     expect(view.steps[1]).toMatchObject({ label: 'Upload your first flight', href: '/flights/flight-id', actionLabel: 'View results' });
@@ -22,18 +22,18 @@ describe('onboarding view', () => {
     expect(view.selectedStep?.instructions.map((instruction) => instruction.detail).join(' ')).toContain('not added to the Activity feed');
   });
 
-  it('presents the Competitive Map as a monthly contest with the user-created group', () => {
+  it('keeps Following map scope distinct from accepted group competition', () => {
     const view = createOnboardingView({
       dismissed: false,
       completeCount: 1,
-      totalCount: 7,
+      totalCount: 8,
       coreComplete: false,
       allComplete: false,
       shouldPoll: false,
       firstFlightId: null,
       firstFlightStatus: 'not-started',
       historyStatus: 'not-started',
-      steps: { profile: true, 'first-flight': false, 'personal-map': false, 'follow-pilots': false, 'competitive-map': false, glider: false, history: false },
+      steps: { profile: true, 'first-flight': false, 'personal-map': false, 'follow-pilots': false, 'competitive-map': false, groups: false, glider: false, history: false },
     }, 'competitive-map');
 
     expect(view.selectedStep).toMatchObject({
@@ -43,7 +43,17 @@ describe('onboarding view', () => {
     });
     const instructions = view.selectedStep?.instructions.map((instruction) => instruction.detail).join(' ');
     expect(instructions).toContain('pilots you follow');
-    expect(instructions).toContain('month-long contest');
-    expect(instructions).toContain('you and your group');
+    expect(instructions).toContain('current month');
+    expect(instructions).not.toContain('your group');
+  });
+
+  it('offers creating or accepting a group as its own onboarding milestone', () => {
+    const view = createOnboardingView({
+      dismissed: false, completeCount: 1, totalCount: 8, coreComplete: false, allComplete: false, shouldPoll: false,
+      firstFlightId: null, firstFlightStatus: 'not-started', historyStatus: 'not-started',
+      steps: { profile: true, 'first-flight': false, 'personal-map': false, 'follow-pilots': false, 'competitive-map': false, groups: false, glider: false, history: false },
+    }, 'groups');
+    expect(view.selectedStep).toMatchObject({ label: 'Join or create a group', href: '/profile#groups' });
+    expect(view.selectedStep?.instructions.map((instruction) => instruction.detail).join(' ')).toContain('friend invited you');
   });
 });

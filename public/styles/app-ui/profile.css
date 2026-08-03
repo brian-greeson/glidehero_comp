@@ -14,6 +14,28 @@
 }
 @media (max-width: 390px) { .profile-page > .metric-strip .metric__icon { width: 30px; height: 30px; }.profile-name { flex-wrap: wrap; } }
 
+/* Groups profile card */
+.profile-card--groups { grid-column: 1 / -1; }
+.profile-groups__create { position: relative; display: inline-flex; align-items: center; gap: .25rem; color: var(--app-blue); font-size: .68rem; font-weight: 750; text-decoration: none; }
+.profile-groups__create .app-icon { width: .85rem; }
+.profile-groups__create summary { display: inline-flex; min-height: 44px; align-items: center; gap: .25rem; padding-inline: .4rem; cursor: pointer; list-style: none; }.profile-groups__create summary::-webkit-details-marker { display: none; }.profile-groups__create-form { position: absolute; z-index: 5; top: 100%; right: 0; display: grid; gap: .35rem; width: min(220px, calc(100vw - 2.5rem)); margin-top: .35rem; padding: .7rem; border: 1px solid var(--app-border); border-radius: .55rem; background: #fff; box-shadow: var(--app-shadow); }.profile-groups__create-form label { color: var(--app-muted); font-size: .6rem; }.profile-groups__create-form input { min-height: 44px; padding: .35rem .45rem; border: 1px solid var(--app-border); border-radius: .35rem; font: inherit; font-size: .68rem; }.profile-groups__create-form button { min-height: 44px; border: 0; border-radius: 999px; color: #fff; background: var(--app-blue); font: inherit; font-size: .64rem; font-weight: 750; }
+.profile-groups__list { display: grid; gap: .2rem; padding: 0; margin: .45rem 0 0; list-style: none; }
+.profile-group-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(7rem, auto) auto; align-items: center; gap: .8rem; padding: .55rem .25rem; border-top: 1px solid var(--app-border); }
+.profile-group-row__identity { display: flex; min-width: 0; align-items: center; gap: .65rem; color: var(--app-ink); text-decoration: none; }
+.profile-group-row__identity > span:last-child { display: grid; min-width: 0; gap: .15rem; }
+.profile-group-row__identity strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.group-mark { display: grid; width: 38px; height: 38px; flex: 0 0 auto; place-items: center; border-radius: .65rem; color: #fff; background: linear-gradient(145deg, var(--app-blue), var(--app-purple)); font-size: .72rem; font-weight: 850; }
+.profile-group-row small, .profile-group-row__stat small { color: var(--app-muted); font-size: .58rem; }
+.profile-group-row__stat { display: grid; gap: .1rem; text-align: right; }
+.profile-group-row__stat b { font-size: .72rem; }
+.profile-group-row__chevron { color: var(--app-muted); font-size: 1.15rem; }
+.profile-groups__invites { margin-top: .75rem; padding: .75rem; border: 1px solid #f2d8c1; border-radius: .6rem; background: #fff9f3; }
+.profile-groups__invites h3 { margin: 0 0 .35rem; font-size: .68rem; }
+.profile-group-invite { display: flex; align-items: center; justify-content: space-between; gap: .8rem; padding: .55rem 0; border-top: 1px solid #f2d8c1; }
+.profile-group-invite > div:first-child { display: grid; gap: .12rem; }.profile-group-invite small { color: var(--app-muted); font-size: .6rem; }
+.profile-group-invite__actions { display: flex; gap: .35rem; }.profile-group-invite__actions button { min-height: 44px; padding: .35rem .7rem; border: 1px solid var(--app-blue); border-radius: 999px; color: #fff; background: var(--app-blue); font: inherit; font-size: .62rem; font-weight: 750; cursor: pointer; }.profile-group-invite__actions .button-quiet { color: var(--app-blue); background: #fff; }
+@media (max-width: 900px) { .profile-card--groups .section-heading { cursor: default; }.profile-card--groups .section-heading::after { content: none; }.profile-card--groups .profile-card__desktop-content { display: block !important; }.profile-group-row { grid-template-columns: minmax(0, 1fr) auto auto; gap: .45rem; }.profile-group-invite { align-items: flex-start; flex-direction: column; }.profile-group-invite__actions { width: 100%; }.profile-group-invite__actions form { flex: 1; }.profile-group-invite__actions button { width: 100%; } }
+
 /* Reusable flight table and profile record cards. */
 .profile-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .profile-card--flights { grid-column: 1 / -1; }

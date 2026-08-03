@@ -17,7 +17,7 @@ import type {
   AdminPageRenderer,
 } from '../views/admin/renderer.js';
 import type { AuthenticatedActivityFeedRenderer, AuthenticatedPageRenderer } from '../views/authenticated/renderer.js';
-import { createAuthenticatedShellModel } from '../views/authenticated/adapters/shellModel.js';
+import { createAuthenticatedShellModel, initialsForDisplayName } from '../views/authenticated/adapters/shellModel.js';
 import { activityFeedToViews, activityPilotResultToView, activityStatsToView } from '../views/authenticated/adapters/activityView.js';
 import { createAchievementsPageModel } from '../views/authenticated/adapters/achievementView.js';
 import { pilotProfileToView } from '../views/authenticated/adapters/profileView.js';
@@ -46,6 +46,7 @@ import type { PublicFlightPageRenderer } from '../views/publicFlight/renderer.js
 import type { CellFlightTrackService } from '../services/cellFlightTrackService.js';
 import type { MapReplayService } from '../services/mapReplayService.js';
 import type { OnboardingService, OnboardingStepKey } from '../services/onboardingService.js';
+import { GroupError, type GroupService } from '../services/groupService.js';
 import { createOnboardingView } from '../views/authenticated/adapters/onboardingView.js';
 import type { PlanService } from '../services/planService.js';
 import type { PlanExportService } from '../services/planExportService.js';
@@ -68,6 +69,9 @@ const competitionMonthValue = z.string().refine((value) => {
     return false;
   }
 });
+const currentGroupMonthValue = competitionMonthValue.refine((value) => value === currentCompetitionMonth(), {
+  message: 'Groups are available for the current month only.',
+});
 const competitionMonthSchema = z.object({ month: competitionMonthValue.optional(), scope: z.literal('following').optional() }).strict();
 const personalPeriodSchema = z.object({ month: competitionMonthValue.optional() }).strict();
 const pilotUserIdSchema = z.string().uuid();
@@ -85,7 +89,7 @@ const planExportSchema = z.object({
   prefix: z.string().trim().toUpperCase().regex(/^[A-Z0-9]{1,8}$/),
   exportToken: z.string().uuid(),
 }).strict();
-const onboardingStepSchema = z.enum(['profile', 'first-flight', 'personal-map', 'follow-pilots', 'competitive-map', 'glider', 'history']);
+const onboardingStepSchema = z.enum(['profile', 'first-flight', 'personal-map', 'follow-pilots', 'competitive-map', 'groups', 'glider', 'history']);
 const activityQuerySchema = z.object({
   q: z.string().max(100).optional(),
   before: z.string().min(1).optional(),
@@ -132,6 +136,17 @@ const tileQuerySchema = z.object({
   pilot: z.string().uuid().optional(),
   scope: z.literal('following').optional(),
 }).strict();
+const groupIdSchema = z.string().uuid();
+const groupNameSchema = z.string().trim().min(1).max(80);
+const groupMonthQuerySchema = z.object({
+  month: currentGroupMonthValue.optional(),
+  pilot: pilotUserIdSchema.optional(),
+  flight: z.string().uuid().optional(),
+}).strict();
+const groupTileQuerySchema = z.object({
+  month: currentGroupMonthValue,
+  pilot: pilotUserIdSchema.optional(),
+}).strict();
 const territoryTileZoomSchema = z.string().trim().regex(/^\d+$/).transform(Number)
   .pipe(z.number().int().min(MINIMUM_TERRITORY_TILE_ZOOM).max(MAXIMUM_TERRITORY_TILE_ZOOM));
 const territoryTileSettingsSchema = z.object({
@@ -159,6 +174,39 @@ function territoryTileCoordinates(
 
 function coveragePeriod(month?: string): MonthlyCoveragePeriod {
   return month ? { competitionMonth: month } : { period: 'all-time' };
+}
+
+function currentCompetitionMonth(now = new Date()): string {
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+}
+
+function groupErrorToAppError(error: GroupError): AppError {
+  const status = error.code === 'not_found' ? 404
+    : error.code === 'forbidden' ? 403
+      : error.code === 'conflict' ? 409
+        : 422;
+  return new AppError(status, error.code === 'validation' ? 'invalid_request' : error.code, error.message);
+}
+
+function formatGroupDistance(value: number | null): string {
+  return value === null || !Number.isFinite(value)
+    ? '—'
+    : `${new Intl.NumberFormat('en-US', { maximumFractionDigits: 1 }).format(value / 1_000)} km`;
+}
+
+function formatGroupDuration(value: unknown): string {
+  if (!Number.isFinite(Number(value))) return '—';
+  const seconds = Math.max(0, Math.round(Number(value)));
+  const hours = Math.floor(seconds / 3_600);
+  const minutes = Math.floor((seconds % 3_600) / 60);
+  return hours ? `${hours}h ${String(minutes).padStart(2, '0')}m` : `${minutes}m`;
+}
+
+function formatGroupMonth(value: string): string {
+  const [year, month] = value.split('-').map(Number);
+  if (!year || !month) return value;
+  return new Intl.DateTimeFormat('en-US', { month: 'long', year: 'numeric', timeZone: 'UTC' })
+    .format(new Date(Date.UTC(year, month - 1, 1)));
 }
 
 function mapPagePeriod(query: Request['query']): {
@@ -248,6 +296,7 @@ export function createWebRouter(dependencies: {
   cellFlightTracks?: CellFlightTrackService;
   mapReplay?: MapReplayService;
   onboarding?: OnboardingService;
+  groups?: GroupService;
   plans?: PlanService;
   planExports?: PlanExportService;
   thermalRasters?: ThermalRasterCacheService;
@@ -305,20 +354,153 @@ export function createWebRouter(dependencies: {
       isOpen: boolean;
     },
   ) {
-    const profile = await dependencies.profiles.getPilotProfile(currentUser.userId);
+    const [profile, groupProfile] = await Promise.all([
+      dependencies.profiles.getPilotProfile(currentUser.userId),
+      dependencies.groups?.getProfileGroups(currentUser.userId, currentCompetitionMonth()),
+    ]);
     if (!profile) return false;
     const thumbnailUrls = dependencies.thumbnailDelivery
       ? await dependencies.thumbnailDelivery.signMany(profile.recentFlights.map((flight) => ({ userId: profile.userId, flightId: flight.flightId })))
       : undefined;
     const shell = authenticatedShell('profile', currentUser);
     const view = pilotProfileToView(profile, { isCurrent: true, isFollowed: false, currentPath: '/profile', thumbnailUrls });
+    const groups = (groupProfile?.groups ?? []).map((group) => ({
+      id: group.groupId,
+      name: group.name,
+      initials: initialsForDisplayName(group.name),
+      href: `/groups/${group.groupId}`,
+      rank: group.rank,
+      cells: String(group.claimedCellCount),
+      fivePointDistance: formatGroupDistance(group.bestFivePointDistanceMeters),
+      isDistanceLeader: group.trophy,
+      memberCount: String(group.memberCount),
+      isOwner: group.ownerUserId === currentUser.userId,
+    }));
+    const pendingGroupInvitations = (groupProfile?.invitations ?? []).map((invitation) => ({
+      groupId: invitation.groupId,
+      groupName: invitation.name,
+      ownerName: invitation.ownerDisplayName,
+      memberCount: String(invitation.memberCount),
+      acceptHref: `/groups/${invitation.groupId}/invitations/accept`,
+      declineHref: `/groups/${invitation.groupId}/invitations/decline`,
+    }));
     await renderAuthenticated(res, dependencies.renderAuthenticatedPage, status, {
       ...shell,
       page: 'profile',
       ...view,
+      groups,
+      pendingGroupInvitations,
       gliderEditor: gliderEditor ?? view.gliderEditor,
     });
     return true;
+  }
+
+  async function renderGroupPage(
+    res: Response,
+    currentUser: AuthenticatedUser,
+    groupId: string,
+    input: { month: string; pilotUserId?: string; selectedFlightId?: string },
+  ) {
+    if (!dependencies.groups) throw new Error('Group service is not configured.');
+    const [group, allStandings, flightPage, members] = await Promise.all([
+      dependencies.groups.getGroup({ groupId, userId: currentUser.userId }),
+      dependencies.groups.getStandings({ groupId, userId: currentUser.userId, competitionMonth: input.month }),
+      dependencies.groups.listFlights({ groupId, userId: currentUser.userId, competitionMonth: input.month, pilotUserId: input.pilotUserId }),
+      dependencies.groups.getMembers({ groupId, userId: currentUser.userId }),
+    ]);
+    const flightThumbnailUrls = dependencies.thumbnailDelivery
+      ? await dependencies.thumbnailDelivery.signMany(flightPage.flights.map((flight) => ({
+        userId: flight.pilotUserId,
+        flightId: flight.flightId,
+      })))
+      : new Map();
+    const firstStandings = allStandings.length <= 25
+      ? allStandings
+      : [...allStandings.slice(0, 25), ...allStandings.filter((standing, index) => index >= 25 && standing.userId === currentUser.userId)];
+    const groupHref = `/groups/${groupId}?month=${encodeURIComponent(input.month)}`;
+    const selectedPilot = allStandings.find((standing) => standing.userId === input.pilotUserId);
+    if (input.pilotUserId && !selectedPilot) throw new GroupError('validation', 'Selected pilot is not a group member.');
+    const standings = firstStandings.map((standing) => ({
+      userId: standing.userId,
+      displayName: standing.displayName,
+      initials: initialsForDisplayName(standing.displayName),
+      color: standing.territoryColor,
+      rank: standing.rank,
+      cells: String(standing.claimedCellCount),
+      fivePointDistance: formatGroupDistance(standing.bestFivePointDistanceMeters),
+      isDistanceLeader: standing.trophy,
+      isCurrent: standing.userId === currentUser.userId,
+      filterHref: `${groupHref}&pilot=${encodeURIComponent(standing.userId)}`,
+    }));
+    const flights = flightPage.flights.map((flight) => {
+      let launchTime = 'Launch time unavailable';
+      try {
+        launchTime = new Intl.DateTimeFormat('en-US', {
+          month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit',
+          timeZone: flight.launchTimezone || 'UTC',
+        }).format(flight.startedAt);
+      } catch {
+        launchTime = new Intl.DateTimeFormat('en-US', {
+          month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: 'UTC',
+        }).format(flight.startedAt);
+      }
+      const pilot = allStandings.find((standing) => standing.userId === flight.pilotUserId);
+      return {
+        id: flight.flightId,
+        pilotName: flight.pilotName,
+        pilotInitials: initialsForDisplayName(flight.pilotName),
+        pilotColor: pilot?.territoryColor ?? '#1769AA',
+        launchTime,
+        fivePointDistance: formatGroupDistance(flight.fivePointDistanceMeters),
+        duration: formatGroupDuration(flight.durationSeconds),
+        thumbnail: flightThumbnailUrls.get(flight.flightId),
+        detailHref: `/flights/${flight.flightId}`,
+        trackHref: `/v1/groups/${groupId}/flights/${flight.flightId}/track?month=${encodeURIComponent(input.month)}`,
+        isSelected: flight.flightId === input.selectedFlightId,
+      };
+    });
+    const isOwner = group.ownerUserId === currentUser.userId;
+    const shell = authenticatedShell('group', currentUser);
+    const groupTileZoom = territoryTileSettings.get().competition;
+    await renderAuthenticated(res, dependencies.renderAuthenticatedPage, 200, {
+      ...shell,
+      page: 'group',
+      group: {
+        id: group.groupId,
+        name: group.name,
+        initials: initialsForDisplayName(group.name),
+        month: input.month,
+        monthLabel: formatGroupMonth(input.month),
+        memberCount: String(group.memberCount),
+        capacity: String(group.capacity),
+        isOwner,
+        inviteHref: isOwner ? '#group-member-management' : undefined,
+        leaveHref: isOwner ? undefined : `/groups/${groupId}/leave`,
+        deleteHref: isOwner ? `/groups/${groupId}/delete` : undefined,
+        inviteSearchHref: isOwner ? `/v1/groups/${groupId}/invite-candidates` : undefined,
+        inviteSubmitHref: isOwner ? `/groups/${groupId}/invitations` : undefined,
+        members: isOwner ? members.map((member) => ({
+          userId: member.userId,
+          displayName: member.displayName,
+          status: member.status,
+          removeHref: member.status === 'accepted' && !member.isOwner ? `/groups/${groupId}/members/${member.userId}/remove` : undefined,
+          cancelHref: member.status === 'pending' ? `/groups/${groupId}/invitations/${member.userId}/cancel` : undefined,
+        })) : undefined,
+      },
+      standings,
+      flights,
+      mapStyleUrl: dependencies.mapTilerStyleUrl,
+      tileUrl: `/v1/groups/${groupId}/competition-territory/tiles/{z}/{x}/{y}.mvt?month=${encodeURIComponent(input.month)}${selectedPilot ? `&pilot=${encodeURIComponent(selectedPilot.userId)}` : ''}`,
+      pilotColorsJson: JSON.stringify(Object.fromEntries(allStandings.map((standing) => [standing.userId, standing.territoryColor]))),
+      territoryTileMinimumZoom: groupTileZoom.minimumZoom,
+      territoryTileMaximumZoom: groupTileZoom.maximumZoom,
+      selectedPilotId: selectedPilot?.userId,
+      selectedPilotName: selectedPilot?.displayName,
+      clearFilterHref: groupHref,
+      selectedFlightId: input.selectedFlightId,
+      standingsLoadMoreHref: allStandings.length > 25 ? `/v1/groups/${groupId}/standings?month=${encodeURIComponent(input.month)}&offset=25` : undefined,
+      flightsLoadMoreHref: flightPage.nextCursor ? `/v1/groups/${groupId}/flights?month=${encodeURIComponent(input.month)}${selectedPilot ? `&pilot=${encodeURIComponent(selectedPilot.userId)}` : ''}&cursor=${encodeURIComponent(flightPage.nextCursor)}` : undefined,
+    });
   }
 
   function sendTerritoryTile(res: Response, tile: { data: Buffer }) {
@@ -389,7 +571,7 @@ export function createWebRouter(dependencies: {
     return Boolean(currentUser && isAdmin(currentUser.email));
   }
 
-  function authenticatedShell(page: 'map' | 'plan' | 'activity' | 'achievements' | 'profile' | 'flight', currentUser: AuthenticatedUser, options: { mapHref?: string; showFooter?: boolean } = {}) {
+  function authenticatedShell(page: 'map' | 'plan' | 'activity' | 'achievements' | 'profile' | 'flight' | 'group', currentUser: AuthenticatedUser, options: { mapHref?: string; showFooter?: boolean } = {}) {
     return createAuthenticatedShellModel({
       page,
       user: currentUser,
@@ -1164,6 +1346,218 @@ export function createWebRouter(dependencies: {
     } catch (error) {
       next(error);
     }
+  });
+
+  router.get('/groups/new', (_req, res) => {
+    res.redirect(302, '/profile#new-group');
+  });
+
+  router.post('/groups', async (req, res, next) => {
+    const currentUser = res.locals.currentUser;
+    if (!currentUser) return res.redirect(302, '/');
+    if (!dependencies.groups) throw new Error('Group service is not configured.');
+    const parsed = z.object({ name: groupNameSchema }).strict().safeParse(formBody(req.body));
+    if (!parsed.success) return next(new AppError(422, 'invalid_request', 'Enter a group name of up to 80 characters.'));
+    try {
+      const group = await dependencies.groups.createGroup({ ownerUserId: currentUser.userId, name: parsed.data.name });
+      res.redirect(303, `/groups/${group.groupId}`);
+    } catch (error) {
+      next(error instanceof GroupError ? groupErrorToAppError(error) : error);
+    }
+  });
+
+  router.get('/groups/:groupId', async (req, res, next) => {
+    const currentUser = res.locals.currentUser;
+    if (!currentUser) return res.redirect(302, '/');
+    const parsedId = groupIdSchema.safeParse(req.params.groupId);
+    const parsedQuery = groupMonthQuerySchema.safeParse(req.query);
+    if (!parsedId.success) return next();
+    if (!parsedQuery.success) return next(new AppError(422, 'invalid_request', 'Group competition request is invalid.'));
+    try {
+      await renderGroupPage(res, currentUser, parsedId.data, {
+        month: parsedQuery.data.month ?? currentCompetitionMonth(),
+        pilotUserId: parsedQuery.data.pilot,
+        selectedFlightId: parsedQuery.data.flight,
+      });
+    } catch (error) {
+      next(error instanceof GroupError ? groupErrorToAppError(error) : error);
+    }
+  });
+
+  router.get('/v1/groups/:groupId/invite-candidates', async (req, res, next) => {
+    const currentUser = res.locals.currentUser;
+    if (!currentUser) return next(new AppError(401, 'unauthorized', 'Sign in to manage a group.'));
+    if (!dependencies.groups) throw new Error('Group service is not configured.');
+    const parsed = z.object({ groupId: groupIdSchema }).safeParse(req.params);
+    const query = z.object({ q: z.string().trim().min(1).max(100) }).strict().safeParse(req.query);
+    if (!parsed.success || !query.success) return next(new AppError(422, 'invalid_request', 'Enter a pilot name.'));
+    try {
+      const group = await dependencies.groups.getGroup({ groupId: parsed.data.groupId, userId: currentUser.userId });
+      if (group.ownerUserId !== currentUser.userId) throw new GroupError('forbidden', 'Only the group owner can invite pilots.');
+      res.status(200).set('Cache-Control', 'private, no-store').json(await dependencies.groups.searchPilots({ query: query.data.q, excludeUserId: currentUser.userId, excludeGroupId: group.groupId }));
+    } catch (error) {
+      next(error instanceof GroupError ? groupErrorToAppError(error) : error);
+    }
+  });
+
+  router.get('/v1/groups/:groupId/standings', async (req, res, next) => {
+    const currentUser = res.locals.currentUser;
+    if (!currentUser) return next(new AppError(401, 'unauthorized', 'Sign in to view group standings.'));
+    if (!dependencies.groups) throw new Error('Group service is not configured.');
+    const groupId = groupIdSchema.safeParse(req.params.groupId);
+    const query = z.object({ month: currentGroupMonthValue, offset: z.coerce.number().int().min(0).max(200).default(0) }).strict().safeParse(req.query);
+    if (!groupId.success || !query.success) return next(new AppError(422, 'invalid_request', 'Standings request is invalid.'));
+    try {
+      const standings = await dependencies.groups.getStandings({ groupId: groupId.data, userId: currentUser.userId, competitionMonth: query.data.month });
+      res.status(200).set('Cache-Control', 'private, max-age=30').json({ standings: standings.slice(query.data.offset, query.data.offset + 25), nextOffset: query.data.offset + 25 < standings.length ? query.data.offset + 25 : null });
+    } catch (error) {
+      next(error instanceof GroupError ? groupErrorToAppError(error) : error);
+    }
+  });
+
+  router.get('/v1/groups/:groupId/flights', async (req, res, next) => {
+    const currentUser = res.locals.currentUser;
+    if (!currentUser) return next(new AppError(401, 'unauthorized', 'Sign in to view group flights.'));
+    if (!dependencies.groups) throw new Error('Group service is not configured.');
+    const groupId = groupIdSchema.safeParse(req.params.groupId);
+    const query = z.object({ month: currentGroupMonthValue, pilot: pilotUserIdSchema.optional(), cursor: z.string().max(500).optional() }).strict().safeParse(req.query);
+    if (!groupId.success || !query.success) return next(new AppError(422, 'invalid_request', 'Flight request is invalid.'));
+    try {
+      const page = await dependencies.groups.listFlights({
+        groupId: groupId.data, userId: currentUser.userId, competitionMonth: query.data.month,
+        pilotUserId: query.data.pilot, cursor: query.data.cursor,
+      });
+      const thumbnailUrls = dependencies.thumbnailDelivery
+        ? await dependencies.thumbnailDelivery.signMany(page.flights.map((flight) => ({
+          userId: flight.pilotUserId,
+          flightId: flight.flightId,
+        })))
+        : new Map();
+      res.status(200).set('Cache-Control', 'private, max-age=30').json({
+        ...page,
+        flights: page.flights.map((flight) => ({ ...flight, thumbnail: thumbnailUrls.get(flight.flightId) })),
+      });
+    } catch (error) {
+      next(error instanceof GroupError ? groupErrorToAppError(error) : error);
+    }
+  });
+
+  router.get('/v1/groups/:groupId/flights/:flightId/track', async (req, res, next) => {
+    const currentUser = res.locals.currentUser;
+    if (!currentUser) return next(new AppError(401, 'unauthorized', 'Sign in to view a group flight.'));
+    if (!dependencies.groups) throw new Error('Group service is not configured.');
+    const params = z.object({ groupId: groupIdSchema, flightId: z.string().uuid() }).safeParse(req.params);
+    const query = z.object({ month: currentGroupMonthValue }).strict().safeParse(req.query);
+    if (!params.success || !query.success) return next();
+    try {
+      const track = await dependencies.groups.getFlightTrack({ groupId: params.data.groupId, userId: currentUser.userId, flightId: params.data.flightId, competitionMonth: query.data.month });
+      if (!track) return next();
+      res.status(200).set('Cache-Control', 'private, max-age=60').json({ type: 'Feature', geometry: track.geometry, properties: { flightId: track.flightId, pilotUserId: track.pilotUserId } });
+    } catch (error) {
+      next(error instanceof GroupError ? groupErrorToAppError(error) : error);
+    }
+  });
+
+  router.get('/v1/groups/:groupId/competition-territory/tiles/:z/:x/:y.mvt', async (req, res, next) => {
+    const currentUser = res.locals.currentUser;
+    if (!currentUser) return next(new AppError(401, 'unauthorized', 'Sign in to view group territory.'));
+    if (!dependencies.groups || !dependencies.territoryTiles.getGroupCompetitionTile) throw new Error('Group territory is not configured.');
+    const groupId = groupIdSchema.safeParse(req.params.groupId);
+    const query = groupTileQuerySchema.safeParse(req.query);
+    const coordinates = territoryTileCoordinates(territoryTileSettings.get().competition, req.params as Record<string, string>);
+    if (!groupId.success || !query.success || !coordinates) return next();
+    try {
+      if (!(await dependencies.groups.canView({ groupId: groupId.data, userId: currentUser.userId }))) throw new GroupError('forbidden', 'Group access denied.');
+      sendTerritoryTile(res, await dependencies.territoryTiles.getGroupCompetitionTile({
+        ...coordinates, groupId: groupId.data, period: { competitionMonth: query.data.month }, pilotUserId: query.data.pilot,
+      }));
+    } catch (error) {
+      next(error instanceof GroupError ? groupErrorToAppError(error) : error);
+    }
+  });
+
+  router.post('/groups/:groupId/invitations', async (req, res, next) => {
+    const currentUser = res.locals.currentUser;
+    if (!currentUser) return res.redirect(302, '/');
+    if (!dependencies.groups) throw new Error('Group service is not configured.');
+    const input = z.object({ groupId: groupIdSchema, userId: pilotUserIdSchema }).safeParse({ ...req.params, ...formBody(req.body) });
+    if (!input.success) return next(new AppError(422, 'invalid_request', 'Select a registered pilot to invite.'));
+    try {
+      await dependencies.groups.invite({ groupId: input.data.groupId, actorUserId: currentUser.userId, userId: input.data.userId });
+      res.redirect(303, `/groups/${input.data.groupId}`);
+    } catch (error) { next(error instanceof GroupError ? groupErrorToAppError(error) : error); }
+  });
+
+  router.post('/groups/:groupId/invitations/accept', async (req, res, next) => {
+    const currentUser = res.locals.currentUser;
+    if (!currentUser) return res.redirect(302, '/');
+    if (!dependencies.groups) throw new Error('Group service is not configured.');
+    const groupId = groupIdSchema.safeParse(req.params.groupId);
+    if (!groupId.success) return next();
+    try {
+      await dependencies.groups.acceptInvitation({ groupId: groupId.data, userId: currentUser.userId });
+      res.redirect(303, `/groups/${groupId.data}`);
+    } catch (error) { next(error instanceof GroupError ? groupErrorToAppError(error) : error); }
+  });
+
+  router.post('/groups/:groupId/invitations/decline', async (req, res, next) => {
+    const currentUser = res.locals.currentUser;
+    if (!currentUser) return res.redirect(302, '/');
+    if (!dependencies.groups) throw new Error('Group service is not configured.');
+    const groupId = groupIdSchema.safeParse(req.params.groupId);
+    if (!groupId.success) return next();
+    try {
+      await dependencies.groups.declineInvitation({ groupId: groupId.data, userId: currentUser.userId });
+      res.redirect(303, '/profile');
+    } catch (error) { next(error instanceof GroupError ? groupErrorToAppError(error) : error); }
+  });
+
+  router.post('/groups/:groupId/invitations/:userId/cancel', async (req, res, next) => {
+    const currentUser = res.locals.currentUser;
+    if (!currentUser) return res.redirect(302, '/');
+    if (!dependencies.groups) throw new Error('Group service is not configured.');
+    const input = z.object({ groupId: groupIdSchema, userId: pilotUserIdSchema }).safeParse(req.params);
+    if (!input.success) return next();
+    try {
+      await dependencies.groups.cancelInvitation({ groupId: input.data.groupId, actorUserId: currentUser.userId, userId: input.data.userId });
+      res.redirect(303, `/groups/${input.data.groupId}`);
+    } catch (error) { next(error instanceof GroupError ? groupErrorToAppError(error) : error); }
+  });
+
+  router.post('/groups/:groupId/members/:userId/remove', async (req, res, next) => {
+    const currentUser = res.locals.currentUser;
+    if (!currentUser) return res.redirect(302, '/');
+    if (!dependencies.groups) throw new Error('Group service is not configured.');
+    const input = z.object({ groupId: groupIdSchema, userId: pilotUserIdSchema }).safeParse(req.params);
+    if (!input.success) return next();
+    try {
+      await dependencies.groups.removeMember({ groupId: input.data.groupId, actorUserId: currentUser.userId, userId: input.data.userId });
+      res.redirect(303, `/groups/${input.data.groupId}`);
+    } catch (error) { next(error instanceof GroupError ? groupErrorToAppError(error) : error); }
+  });
+
+  router.post('/groups/:groupId/leave', async (req, res, next) => {
+    const currentUser = res.locals.currentUser;
+    if (!currentUser) return res.redirect(302, '/');
+    if (!dependencies.groups) throw new Error('Group service is not configured.');
+    const groupId = groupIdSchema.safeParse(req.params.groupId);
+    if (!groupId.success) return next();
+    try {
+      await dependencies.groups.leave({ groupId: groupId.data, userId: currentUser.userId });
+      res.redirect(303, '/profile');
+    } catch (error) { next(error instanceof GroupError ? groupErrorToAppError(error) : error); }
+  });
+
+  router.post('/groups/:groupId/delete', async (req, res, next) => {
+    const currentUser = res.locals.currentUser;
+    if (!currentUser) return res.redirect(302, '/');
+    if (!dependencies.groups) throw new Error('Group service is not configured.');
+    const groupId = groupIdSchema.safeParse(req.params.groupId);
+    if (!groupId.success) return next();
+    try {
+      await dependencies.groups.deleteGroup({ groupId: groupId.data, actorUserId: currentUser.userId });
+      res.redirect(303, '/profile');
+    } catch (error) { next(error instanceof GroupError ? groupErrorToAppError(error) : error); }
   });
 
   router.get('/profile', async (_req, res, next) => {

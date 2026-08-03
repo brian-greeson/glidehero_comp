@@ -1,6 +1,6 @@
 <nav class="mobile-navigation" aria-label="Primary navigation">
   {{ for item of navigation }}
-    <a class="mobile-navigation__item{{ if item.page === page }} is-active{{ /if }}" href="{{ item.href }}"{{ if item.page === page }} aria-current="page"{{ /if }}>
+    <a class="mobile-navigation__item{{ if item.page === page || (page === 'group' && item.page === 'map') }} is-active{{ /if }}" href="{{ item.href }}"{{ if item.page === page }} aria-current="page"{{ /if }}>
       {{ include "authenticated/components/icon.vto" { name: item.icon } }}<span>{{ item.label }}</span>
     </a>
   {{ /for }}

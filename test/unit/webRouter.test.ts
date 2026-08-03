@@ -30,6 +30,7 @@ import type { PlanExportService } from '../../src/services/planExportService.js'
 import type { ThermalRasterCacheService } from '../../src/services/thermalRasterCacheService.js';
 import type { PublicFlightPageRenderer } from '../../src/views/publicFlight/renderer.js';
 import type { FlightThumbnailDeliveryService } from '../../src/services/flightThumbnailDeliveryService.js';
+import type { GroupService } from '../../src/services/groupService.js';
 
 const viewportStats = {
   claimedCellCount: 2,
@@ -216,6 +217,19 @@ function dependencies() {
     getPersonalTile: vi.fn(async () => ({ data: Buffer.alloc(0), featureCount: 0 })),
     getGlobalCompetitionTile: vi.fn(async () => ({ data: Buffer.alloc(0), featureCount: 0 })),
     getArenaCompetitionTile: vi.fn(async () => ({ data: Buffer.alloc(0), featureCount: 0 })),
+    getGroupCompetitionTile: vi.fn(async () => ({ data: Buffer.alloc(0), featureCount: 0 })),
+  };
+  const groups: GroupService = {
+    createGroup: vi.fn(async ({ ownerUserId, name }) => ({ groupId: '00000000-0000-4000-8000-000000000101', name, ownerUserId, memberCount: 1, capacity: 200 })),
+    deleteGroup: vi.fn(async () => undefined), invite: vi.fn(async () => undefined), cancelInvitation: vi.fn(async () => undefined),
+    acceptInvitation: vi.fn(async () => undefined), declineInvitation: vi.fn(async () => undefined), leave: vi.fn(async () => undefined), removeMember: vi.fn(async () => undefined),
+    searchPilots: vi.fn(async () => []), canView: vi.fn(async () => true),
+    getProfileGroups: vi.fn(async () => ({ groups: [], invitations: [] })),
+    getGroup: vi.fn(async ({ groupId }) => ({ groupId, name: 'Weekend XC', ownerUserId: user.userId, memberCount: 2, capacity: 200 })),
+    getMembers: vi.fn(async () => [{ userId: user.userId, displayName: user.displayName, territoryColor: user.territoryColor, status: 'accepted' as const, isOwner: true }]),
+    getStandings: vi.fn(async () => [{ userId: user.userId, displayName: user.displayName, territoryColor: user.territoryColor, claimedCellCount: 12, bestFivePointDistanceMeters: 34_000, rank: 1, trophy: true }]),
+    listFlights: vi.fn(async () => ({ flights: [], nextCursor: null })),
+    getFlightTrack: vi.fn(async () => ({ flightId: '00000000-0000-4000-8000-000000000102', pilotUserId: user.userId, geometry: { type: 'LineString', coordinates: [[-105, 40], [-104.9, 40.1]] } })),
   };
   const cellTrackResult: CellFlightTrackResult = {
     cell: {
@@ -272,6 +286,7 @@ function dependencies() {
     thermalRasters,
     coverage,
     territoryTiles,
+    groups,
     cellFlightTracks,
     arenas,
     arenaProgress,
@@ -294,6 +309,7 @@ function dependencies() {
     thermalRasters,
     coverage,
     territoryTiles,
+    groups,
     cellFlightTracks,
     arenas,
     arenaProgress,
@@ -307,6 +323,66 @@ function dependencies() {
 }
 
 describe('webRouter', () => {
+  it('renders current profile group memberships and pending invitations without exposing them on other profiles', async () => {
+    const base = dependencies();
+    vi.mocked(base.profiles.getPilotProfile).mockResolvedValue({ ...pilotProfile, userId: user.userId, displayName: user.displayName });
+    vi.mocked(base.groups.getProfileGroups).mockResolvedValue({
+      groups: [{ groupId: '00000000-0000-4000-8000-000000000101', name: 'Weekend XC', ownerUserId: user.userId, memberCount: 4, capacity: 200, rank: 2, claimedCellCount: 19, bestFivePointDistanceMeters: 42_000, trophy: false }],
+      invitations: [{ groupId: '00000000-0000-4000-8000-000000000103', name: 'Front Range', ownerUserId: pilotProfile.userId, ownerDisplayName: pilotProfile.displayName, memberCount: 8, capacity: 200, invitedAt: new Date() }],
+    });
+    await withServer(base.app, async (baseUrl) => {
+      const response = await fetch(`${baseUrl}/profile`, { headers: { cookie: 'glidehero_session=valid-token' } });
+      expect(response.status).toBe(200);
+      expect(base.renderAuthenticatedPage).toHaveBeenLastCalledWith(expect.objectContaining({
+        groups: [expect.objectContaining({ name: 'Weekend XC', rank: 2, cells: '19' })],
+        pendingGroupInvitations: [expect.objectContaining({ groupName: 'Front Range', ownerName: 'Cloud Dancer' })],
+      }));
+      vi.mocked(base.profiles.getPilotProfile).mockResolvedValue(pilotProfile);
+      const otherProfile = await fetch(`${baseUrl}/pilots/${pilotProfile.userId}`, { headers: { cookie: 'glidehero_session=valid-token' } });
+      expect(otherProfile.status).toBe(200);
+      expect(base.renderAuthenticatedPage).toHaveBeenLastCalledWith(expect.objectContaining({ groups: [], pendingGroupInvitations: [], profileIsCurrent: false }));
+      expect(base.groups.getProfileGroups).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  it('creates and renders a private current-month group page', async () => {
+    const base = dependencies();
+    await withServer(base.app, async (baseUrl) => {
+      const headers = { cookie: 'glidehero_session=valid-token', 'content-type': 'application/x-www-form-urlencoded' };
+      const created = await fetch(`${baseUrl}/groups`, { method: 'POST', headers, body: 'name=Weekend+XC', redirect: 'manual' });
+      expect(created.status).toBe(303);
+      expect(created.headers.get('location')).toBe('/groups/00000000-0000-4000-8000-000000000101');
+      const page = await fetch(`${baseUrl}/groups/00000000-0000-4000-8000-000000000101?month=2026-08`, { headers });
+      expect(page.status).toBe(200);
+      expect(base.renderAuthenticatedPage).toHaveBeenLastCalledWith(expect.objectContaining({
+        page: 'group',
+        group: expect.objectContaining({ name: 'Weekend XC', monthLabel: 'August 2026', isOwner: true, capacity: '200', inviteHref: '#group-member-management' }),
+        standings: [expect.objectContaining({ rank: 1, cells: '12', isDistanceLeader: true })],
+      }));
+      const historical = await fetch(`${baseUrl}/groups/00000000-0000-4000-8000-000000000101?month=2026-07`, { headers });
+      expect(historical.status).toBe(422);
+    });
+  });
+
+  it('authorizes group tiles, tracks, invite search, and membership mutations', async () => {
+    const base = dependencies();
+    vi.mocked(base.groups.searchPilots).mockResolvedValue([{ userId: pilotProfile.userId, displayName: pilotProfile.displayName }]);
+    await withServer(base.app, async (baseUrl) => {
+      const auth = { cookie: 'glidehero_session=valid-token' };
+      const candidates = await fetch(`${baseUrl}/v1/groups/00000000-0000-4000-8000-000000000101/invite-candidates?q=Cloud`, { headers: auth });
+      expect(candidates.status).toBe(200);
+      const track = await fetch(`${baseUrl}/v1/groups/00000000-0000-4000-8000-000000000101/flights/00000000-0000-4000-8000-000000000102/track?month=2026-08`, { headers: auth });
+      expect(await track.json()).toMatchObject({ type: 'Feature', geometry: { type: 'LineString' } });
+      const tile = await fetch(`${baseUrl}/v1/groups/00000000-0000-4000-8000-000000000101/competition-territory/tiles/8/64/64.mvt?month=2026-08`, { headers: auth });
+      expect(tile.status).toBe(200);
+      const invite = await fetch(`${baseUrl}/groups/00000000-0000-4000-8000-000000000101/invitations`, {
+        method: 'POST', headers: { ...auth, 'content-type': 'application/x-www-form-urlencoded' }, body: `userId=${pilotProfile.userId}`, redirect: 'manual',
+      });
+      expect(invite.status).toBe(303);
+      expect(base.groups.invite).toHaveBeenCalledWith({ groupId: '00000000-0000-4000-8000-000000000101', actorUserId: user.userId, userId: pilotProfile.userId });
+    });
+  });
+
   it('serves the authenticated Plan page, cached raster tiles, and route calculations', async () => {
     const base = dependencies();
     await withServer(base.app, async (baseUrl) => {
@@ -1629,14 +1705,14 @@ describe('webRouter', () => {
     vi.mocked(base.onboarding.getState).mockResolvedValue({
       dismissed: false,
       completeCount: 1,
-      totalCount: 7,
+      totalCount: 8,
       coreComplete: false,
       allComplete: false,
       shouldPoll: false,
       firstFlightId: null,
       firstFlightStatus: 'not-started',
       historyStatus: 'not-started',
-      steps: { profile: true, 'first-flight': false, 'personal-map': false, 'follow-pilots': false, 'competitive-map': false, glider: false, history: false },
+      steps: { profile: true, 'first-flight': false, 'personal-map': false, 'follow-pilots': false, 'competitive-map': false, groups: false, glider: false, history: false },
     });
     await withServer(base.app, async (baseUrl) => {
       expect((await fetch(`${baseUrl}/v1/onboarding/status`)).status).toBe(401);

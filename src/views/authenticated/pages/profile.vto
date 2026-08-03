@@ -19,6 +19,7 @@
     </header>
     {{ include "authenticated/components/metricStrip.vto" { metrics, label: "Pilot statistics", compact: true } }}
     <div class="profile-grid">
+      {{ if typeof profileIsCurrent !== 'undefined' && profileIsCurrent }}{{ include "authenticated/components/profileGroups.vto" { groups, pendingGroupInvitations } }}{{ /if }}
       {{ include "authenticated/components/profileFlights.vto" { flights } }}
       {{ include "authenticated/components/profilePersonalRecords.vto" { personalRecords } }}
       {{ include "authenticated/components/profileRecentAchievements.vto" { recentAchievements } }}

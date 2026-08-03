@@ -127,5 +127,7 @@ export function pilotProfileToView(summary: PilotProfileSummary, options: Profil
       error: '',
       isOpen: false,
     },
+    groups: [],
+    pendingGroupInvitations: [],
   };
 }

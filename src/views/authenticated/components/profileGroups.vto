@@ -1,0 +1,17 @@
+<section class="profile-card profile-card--groups" id="groups" data-profile-always-open>
+  <header class="section-heading"><div>{{ include "authenticated/components/icon.vto" { name: "users" } }}<h2>Groups</h2></div><details id="new-group" class="profile-groups__create"><summary>Create group{{ include "authenticated/components/icon.vto" { name: "arrow-right" } }}</summary><form method="post" action="/groups" class="profile-groups__create-form"><label for="new-group-name">Group name</label><input id="new-group-name" name="name" required maxlength="80" placeholder="Weekend XC crew"><button type="submit">Create group</button></form></details></header>
+  <div class="profile-card__desktop-content">
+    {{ if groups.length }}
+      <ul class="profile-groups__list">
+        {{ for group of groups }}
+          <li class="profile-group-row"><a class="profile-group-row__identity" href="{{ group.href }}"><span class="group-mark" aria-hidden="true">{{ group.initials }}</span><span><strong>{{ group.name }}</strong><small>{{ if typeof group.rank !== 'undefined' && group.rank !== null }}#{{ group.rank }} of {{ group.memberCount }} · {{ group.cells }} cells{{ else }}Not ranked yet{{ /if }}{{ if group.isOwner }} · Owner{{ /if }}</small></span></a><span class="profile-group-row__stat"><b>{{ if group.isDistanceLeader }}🏆 {{ /if }}{{ group.fivePointDistance }}</b><small>Best 5-point</small></span><span class="profile-group-row__chevron" aria-hidden="true">›</span></li>
+        {{ /for }}
+      </ul>
+    {{ else }}<p class="profile-empty">No groups yet. Create one to compete with friends.</p>{{ /if }}
+    {{ if pendingGroupInvitations.length }}
+      <div class="profile-groups__invites"><h3>Pending invitations</h3>
+        {{ for invitation of pendingGroupInvitations }}<article class="profile-group-invite"><div><strong>{{ invitation.groupName }}</strong><small>{{ invitation.ownerName }} · {{ invitation.memberCount }} members</small></div><div class="profile-group-invite__actions"><form method="post" action="{{ invitation.acceptHref }}"><button type="submit">Accept</button></form><form method="post" action="{{ invitation.declineHref }}"><button class="button-quiet" type="submit">Decline</button></form></div></article>{{ /for }}
+      </div>
+    {{ /if }}
+  </div>
+</section>

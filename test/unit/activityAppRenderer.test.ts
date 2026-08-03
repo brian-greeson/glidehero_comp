@@ -7,9 +7,9 @@ describe('Activity page rendering', () => {
   it('renders the onboarding checklist, focused instructions, and reversible account action', async () => {
     const shell = createAuthenticatedShellModel({ page: 'activity', user: { displayName: 'New Pilot' } });
     const onboarding = createOnboardingView({
-      dismissed: false, completeCount: 1, totalCount: 7, coreComplete: false, allComplete: false, shouldPoll: false,
+      dismissed: false, completeCount: 1, totalCount: 8, coreComplete: false, allComplete: false, shouldPoll: false,
       firstFlightId: null, firstFlightStatus: 'not-started', historyStatus: 'not-started',
-      steps: { profile: true, 'first-flight': false, 'personal-map': false, 'follow-pilots': false, 'competitive-map': false, glider: false, history: false },
+      steps: { profile: true, 'first-flight': false, 'personal-map': false, 'follow-pilots': false, 'competitive-map': false, groups: false, glider: false, history: false },
     }, 'first-flight');
     const emptyPeriod = { flightCount: '0', mostAccomplishments: null, mostCells: null, greatestFivePointDistance: null };
     const html = await createAuthenticatedPageRenderer()({
@@ -20,7 +20,7 @@ describe('Activity page rendering', () => {
     });
 
     expect(html).toContain('data-onboarding-card');
-    expect(html).toContain('1 of 7 complete');
+    expect(html).toContain('1 of 8 complete');
     expect(html).toContain('Explore the Competitive Map');
     expect(html).toContain('data-onboarding-dialog');
     expect(html).toContain('data-upload-mode="recent"');
