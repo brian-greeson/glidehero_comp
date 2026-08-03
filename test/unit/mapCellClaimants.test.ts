@@ -42,7 +42,7 @@ class Popup {
   }
 }
 
-function result(pilots: any[] = []) {
+function result(flights: any[] = []) {
   return {
     cell: {
       type: 'Feature',
@@ -52,12 +52,12 @@ function result(pilots: any[] = []) {
         coordinates: [[[-106, 39], [-105, 39], [-105, 40], [-106, 40], [-106, 39]]],
       },
     },
-    pilots,
+    flights,
   };
 }
 
 describe('map cell claimant popup', () => {
-  it('renders a colored, accessible pilot list at the selected cell center', () => {
+  it('renders accessible flight links with pilot, date, distance, and track color', () => {
     Popup.instances = [];
     const documentRef = { createElement: vi.fn(() => element()) };
     const popup = createMapCellClaimantPopup({
@@ -68,17 +68,35 @@ describe('map cell claimant popup', () => {
     });
 
     popup.render(result([
-      { userId: 'alpha', displayName: 'Alpha Pilot' },
-      { userId: 'bravo', displayName: 'Bravo Pilot' },
+      {
+        flightId: 'flight-alpha', userId: 'alpha', displayName: 'Alpha Pilot',
+        startedAt: '2026-07-04T03:00:00.000Z', launchTimezone: 'America/Denver', distanceMeters: 25_430,
+      },
+      {
+        flightId: 'flight-bravo', userId: 'bravo', displayName: 'Bravo Pilot',
+        startedAt: null, launchTimezone: null, distanceMeters: null,
+      },
     ]));
 
     const instance = Popup.instances[0]!;
+    expect(instance.options).toMatchObject({
+      className: 'cell-claimants-popup',
+      maxWidth: '18rem',
+    });
     expect(instance.setLngLat).toHaveBeenCalledWith([-105.5, 39.5]);
     const content = instance.setDOMContent.mock.calls[0]![0];
-    expect(content.getAttribute('aria-label')).toBe('Pilots who claimed this cell');
-    expect(content.children[1].children.map((item: any) => item.children[1].textContent))
+    expect(content.getAttribute('aria-label')).toBe('Flights through this cell');
+    const links = content.children[1].children.map((item: any) => item.children[0]);
+    expect(links.map((link: any) => link.href)).toEqual([
+      '/flights/flight-alpha',
+      '/flights/flight-bravo',
+    ]);
+    expect(links.map((link: any) => link.children[1].children[0].textContent))
       .toEqual(['Alpha Pilot', 'Bravo Pilot']);
-    expect(content.children[1].children[0].children[0].style.setProperty)
+    expect(links[0].children[1].children[1].textContent).toBe('Jul 3, 2026 · 25.4 km');
+    expect(links[1].children[1].children[1].textContent)
+      .toBe('Date unavailable · Distance unavailable');
+    expect(links[0].children[0].style.setProperty)
       .toHaveBeenCalledWith('--pilot-color', '#111111');
   });
 
@@ -93,7 +111,10 @@ describe('map cell claimant popup', () => {
       onClose,
     });
     popup.render(result());
-    popup.render(result([{ userId: 'alpha', displayName: 'Alpha Pilot' }]));
+    popup.render(result([{
+      flightId: 'flight-alpha', userId: 'alpha', displayName: 'Alpha Pilot',
+      startedAt: null, launchTimezone: null, distanceMeters: null,
+    }]));
 
     expect(Popup.instances).toHaveLength(1);
     expect(Popup.instances[0]!.setDOMContent).toHaveBeenCalledTimes(2);

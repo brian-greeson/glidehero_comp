@@ -32,6 +32,14 @@ export type CellFlightTrackResult = {
     userId: string;
     displayName: string;
   }>;
+  flights?: Array<{
+    flightId: string;
+    userId: string;
+    displayName: string;
+    startedAt: string | null;
+    launchTimezone: string | null;
+    distanceMeters: number | null;
+  }>;
 };
 
 export interface CellFlightTrackService {
@@ -58,6 +66,12 @@ type StoredTrack = {
   geometry: LineStringGeometry;
 };
 type StoredPilot = { userId: string; displayName: string };
+type StoredClaimingFlight = StoredPilot & {
+  flightId: string;
+  startedAt: Date | string | null;
+  launchTimezone: string | null;
+  distanceMeters: number | string | null;
+};
 
 function normalizePeriod(period: MonthlyCoveragePeriod): string | undefined {
   return 'competitionMonth' in period
@@ -98,12 +112,12 @@ export function createCellFlightTrackService(
     x: number,
     y: number,
     tracks: Promise<{ rows: StoredTrack[] }>,
-    pilots?: Promise<{ rows: StoredPilot[] }>,
+    claimingFlights?: Promise<{ rows: StoredClaimingFlight[] }>,
   ): Promise<CellFlightTrackResult> {
-    const [cellFeature, storedTracks, storedPilots] = await Promise.all([
+    const [cellFeature, storedTracks, storedClaimingFlights] = await Promise.all([
       cell(x, y),
       tracks,
-      pilots,
+      claimingFlights,
     ]);
     const response: CellFlightTrackResult = {
       cell: cellFeature,
@@ -119,7 +133,26 @@ export function createCellFlightTrackService(
         })),
       },
     };
-    if (storedPilots) response.pilots = storedPilots.rows;
+    if (storedClaimingFlights) {
+      response.flights = storedClaimingFlights.rows.map((flight) => {
+        const startedAt = flight.startedAt instanceof Date
+          ? flight.startedAt
+          : flight.startedAt ? new Date(flight.startedAt) : null;
+        const distanceMeters = flight.distanceMeters === null ? null : Number(flight.distanceMeters);
+        return {
+          flightId: flight.flightId,
+          userId: flight.userId,
+          displayName: flight.displayName,
+          startedAt: startedAt && !Number.isNaN(startedAt.getTime()) ? startedAt.toISOString() : null,
+          launchTimezone: flight.launchTimezone,
+          distanceMeters: distanceMeters !== null && Number.isFinite(distanceMeters) ? distanceMeters : null,
+        };
+      });
+      response.pilots = [...new Map(storedClaimingFlights.rows.map((flight) => [
+        flight.userId,
+        { userId: flight.userId, displayName: flight.displayName },
+      ])).values()].sort((left, right) => left.displayName.localeCompare(right.displayName));
+    }
     return response;
   }
 
@@ -217,10 +250,14 @@ export function createCellFlightTrackService(
         FROM track_geometries
         ORDER BY claim_timestamp DESC, flight_id
       `);
-      const pilots = database.execute<StoredPilot>(sql`
+      const claimingFlights = database.execute<StoredClaimingFlight>(sql`
         SELECT
+          claim.claim_flight::text AS "flightId",
           claim.claim_user::text AS "userId",
-          profile.display_name AS "displayName"
+          profile.display_name AS "displayName",
+          flight.started_at AS "startedAt",
+          flight.launch_timezone AS "launchTimezone",
+          flight.distance_meters AS "distanceMeters"
         FROM competition_grid_claims claim
         INNER JOIN flights flight ON flight.flight_id = claim.claim_flight
         INNER JOIN profiles profile ON profile.user_id = claim.claim_user
@@ -236,10 +273,9 @@ export function createCellFlightTrackService(
           ${input.scope === 'following' && input.currentUserId
             ? sql`AND (claim.claim_user = ${input.currentUserId} OR EXISTS (SELECT 1 FROM pilot_follows follow WHERE follow.follower_user_id = ${input.currentUserId} AND follow.followed_user_id = claim.claim_user))`
             : sql``}
-        GROUP BY claim.claim_user, profile.display_name
-        ORDER BY lower(profile.display_name), profile.display_name, claim.claim_user
+        ORDER BY claim.claim_timestamp DESC, claim.claim_flight
       `);
-      return result(input.x, input.y, tracks, pilots);
+      return result(input.x, input.y, tracks, claimingFlights);
     },
   };
 }

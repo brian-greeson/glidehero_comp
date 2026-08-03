@@ -90,6 +90,29 @@ describe('refreshed map UI controls', () => {
     expect(css.slice(css.indexOf('@media (max-width: 390px)'))).toContain('.map-mobile-period-controls { right: .75rem; left: .75rem; }');
   });
 
+  it('keeps selected-cell popup styles in the authenticated map stylesheet', async () => {
+    const render = createAuthenticatedPageRenderer();
+    const [mapCss, legacyCss, html] = await Promise.all([
+      readFile('public/styles/app-ui/map.css', 'utf8'),
+      readFile('public/styles/app.css', 'utf8'),
+      render({
+        ...createAuthenticatedShellModel({ page: 'map' as const, user: { displayName: 'Pilot' }, mapHref: '/global' }),
+        page: 'map' as const,
+        mode: 'competitive',
+        period: 'current-month' as const,
+        location: null,
+        metrics: [],
+        leaderboard: [],
+      }),
+    ]);
+
+    expect(html).toContain('<link rel="stylesheet" href="/styles/app-ui/map.css">');
+    expect(html).toContain('<script type="module" src="/scripts/app-ui/map.js"></script>');
+    expect(mapCss).toContain('.cell-claimants-popup .maplibregl-popup-content');
+    expect(mapCss).toContain('.cell-claimants li a');
+    expect(legacyCss).not.toContain('.cell-claimants');
+  });
+
   it('renders the mobile map-view dropdown and period controls without the map sheet', async () => {
     const render = createAuthenticatedPageRenderer();
     const html = await render({

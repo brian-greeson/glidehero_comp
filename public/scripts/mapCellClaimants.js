@@ -14,32 +14,68 @@ function cellCenter(cell) {
   ];
 }
 
-function claimantContent(documentRef, pilots, colorForPilot) {
+function safeTimeZone(value) {
+  if (!value) return 'UTC';
+  try {
+    new Intl.DateTimeFormat(undefined, { timeZone: value }).format(new Date());
+    return value;
+  } catch {
+    return 'UTC';
+  }
+}
+
+function flightDate(flight) {
+  const date = flight?.startedAt ? new Date(flight.startedAt) : null;
+  if (!date || Number.isNaN(date.getTime())) return 'Date unavailable';
+  return new Intl.DateTimeFormat(undefined, {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    timeZone: safeTimeZone(flight.launchTimezone),
+  }).format(date);
+}
+
+function flightDistance(flight) {
+  if (!Number.isFinite(flight?.distanceMeters)) return 'Distance unavailable';
+  return `${new Intl.NumberFormat(undefined, { maximumFractionDigits: 1 }).format(flight.distanceMeters / 1_000)} km`;
+}
+
+function claimantContent(documentRef, flights, colorForPilot) {
   const content = documentRef.createElement('section');
   content.className = 'cell-claimants';
-  content.setAttribute('aria-label', 'Pilots who claimed this cell');
+  content.setAttribute('aria-label', 'Flights through this cell');
 
   const heading = documentRef.createElement('h2');
-  heading.textContent = 'Pilots';
+  heading.textContent = 'Flights';
   content.append(heading);
 
-  if (pilots.length === 0) {
+  if (flights.length === 0) {
     const empty = documentRef.createElement('p');
-    empty.textContent = 'No pilots claimed this cell during this period.';
+    empty.textContent = 'No flights claimed this cell during this period.';
     content.append(empty);
     return content;
   }
 
   const list = documentRef.createElement('ul');
-  for (const pilot of pilots) {
+  for (const flight of flights) {
     const item = documentRef.createElement('li');
+    const link = documentRef.createElement('a');
+    link.href = `/flights/${encodeURIComponent(flight.flightId)}`;
+    link.setAttribute('aria-label', `View ${flight.displayName}'s flight from ${flightDate(flight)}`);
     const marker = documentRef.createElement('span');
     marker.className = 'cell-claimants-marker';
     marker.setAttribute('aria-hidden', 'true');
-    marker.style.setProperty('--pilot-color', colorForPilot(pilot.userId));
+    marker.style.setProperty('--pilot-color', colorForPilot(flight.userId));
+    const details = documentRef.createElement('span');
+    details.className = 'cell-claimants-details';
     const name = documentRef.createElement('span');
-    name.textContent = pilot.displayName;
-    item.append(marker, name);
+    name.className = 'cell-claimants-name';
+    name.textContent = flight.displayName;
+    const summary = documentRef.createElement('small');
+    summary.textContent = `${flightDate(flight)} · ${flightDistance(flight)}`;
+    details.append(name, summary);
+    link.append(marker, details);
+    item.append(link);
     list.append(item);
   }
   content.append(list);
@@ -69,7 +105,7 @@ export function createMapCellClaimantPopup({
     }
     const content = claimantContent(
       documentRef,
-      Array.isArray(result?.pilots) ? result.pilots : [],
+      Array.isArray(result?.flights) ? result.flights : [],
       colorForPilot,
     );
     if (!popup) {
@@ -77,7 +113,7 @@ export function createMapCellClaimantPopup({
         className: 'cell-claimants-popup',
         closeButton: true,
         closeOnClick: false,
-        maxWidth: '16rem',
+        maxWidth: '18rem',
       });
       popup = next;
       next.on('close', () => {

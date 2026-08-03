@@ -33,6 +33,8 @@ async function createFlight(
     launchTimezone?: string;
     points?: Array<[longitude: number, latitude: number]>;
     status?: 'processing' | 'completed' | 'failed';
+    startedAt?: Date;
+    distanceMeters?: number;
   } = {},
 ) {
   const [file] = await database.db.insert(igcFiles).values({
@@ -49,6 +51,8 @@ async function createFlight(
     contentHash: crypto.randomUUID().replaceAll('-', '').padEnd(64, '0'),
     processingStatus: input.status ?? 'completed',
     launchTimezone: input.launchTimezone ?? 'UTC',
+    startedAt: input.startedAt,
+    distanceMeters: input.distanceMeters,
   }).returning({ id: flights.id });
   if (!flight) throw new Error('Expected a flight.');
   const points = input.points ?? [[-105, 40], [-104.9, 40.1]];
@@ -115,9 +119,21 @@ describe('CellFlightTrackService', () => {
   it('returns every Competition claiming flight and a deduplicated pilot list in scope', async () => {
     const alpha = await createPilot('Alpha Pilot');
     const bravo = await createPilot('Bravo Pilot');
-    const alphaOlder = await createFlight(alpha, { points: [[-105, 40], [-104.9, 40.1]] });
-    const alphaLatest = await createFlight(alpha, { points: [[-104, 39], [-103.9, 39.1]] });
-    const bravoFlight = await createFlight(bravo, { points: [[-103, 38], [-102.9, 38.1]] });
+    const alphaOlder = await createFlight(alpha, {
+      points: [[-105, 40], [-104.9, 40.1]],
+      startedAt: new Date('2026-07-01T15:00:00Z'),
+      distanceMeters: 10_500,
+    });
+    const alphaLatest = await createFlight(alpha, {
+      points: [[-104, 39], [-103.9, 39.1]],
+      startedAt: new Date('2026-07-02T16:00:00Z'),
+      distanceMeters: 20_250,
+    });
+    const bravoFlight = await createFlight(bravo, {
+      points: [[-103, 38], [-102.9, 38.1]],
+      startedAt: new Date('2026-07-03T17:00:00Z'),
+      distanceMeters: 30_750,
+    });
     await database.db.insert(competitionGridClaims).values([
       {
         competitionMonth: '2026-07-01', x: -1, y: 2, claimFlight: alphaOlder, claimUser: alpha,
@@ -153,6 +169,20 @@ describe('CellFlightTrackService', () => {
       { userId: alpha, displayName: 'Alpha Pilot' },
       { userId: bravo, displayName: 'Bravo Pilot' },
     ]);
+    expect(result.flights).toEqual([
+      {
+        flightId: bravoFlight, userId: bravo, displayName: 'Bravo Pilot',
+        startedAt: '2026-07-03T17:00:00.000Z', launchTimezone: 'UTC', distanceMeters: 30_750,
+      },
+      {
+        flightId: alphaLatest, userId: alpha, displayName: 'Alpha Pilot',
+        startedAt: '2026-07-02T16:00:00.000Z', launchTimezone: 'UTC', distanceMeters: 20_250,
+      },
+      {
+        flightId: alphaOlder, userId: alpha, displayName: 'Alpha Pilot',
+        startedAt: '2026-07-01T15:00:00.000Z', launchTimezone: 'UTC', distanceMeters: 10_500,
+      },
+    ]);
 
     const selected = await service.getCompetition({
       x: -1,
@@ -165,6 +195,7 @@ describe('CellFlightTrackService', () => {
       alphaOlder,
     ]);
     expect(selected.pilots).toEqual([{ userId: alpha, displayName: 'Alpha Pilot' }]);
+    expect(selected.flights?.map((flight) => flight.flightId)).toEqual([alphaLatest, alphaOlder]);
   });
 
   it('filters Following competition tracks to viewer and followed pilots', async () => {

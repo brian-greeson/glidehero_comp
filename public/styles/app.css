@@ -1136,48 +1136,6 @@ button {
   background: rgb(255 255 255 / 0.94);
   box-shadow: 0 5px 18px rgb(0 0 0 / 0.15);
 }
-.cell-claimants-popup .maplibregl-popup-content {
-  min-width: 10rem;
-  padding: 0.75rem 1.8rem 0.75rem 0.85rem;
-  border-radius: 0.7rem;
-  color: var(--color-text-strong);
-  box-shadow: 0 5px 18px rgb(15 23 42 / 18%);
-}
-.cell-claimants h2 {
-  margin: 0 0 0.45rem;
-  font-size: 0.9rem;
-}
-.cell-claimants p,
-.cell-claimants ul {
-  margin: 0;
-}
-.cell-claimants p {
-  max-width: 13rem;
-  color: var(--color-text-muted);
-  font-size: 0.82rem;
-}
-.cell-claimants ul {
-  display: grid;
-  gap: 0.35rem;
-  max-height: min(12rem, 35vh);
-  padding: 0;
-  overflow-y: auto;
-  list-style: none;
-}
-.cell-claimants li {
-  display: flex;
-  align-items: center;
-  gap: 0.45rem;
-  font-size: 0.85rem;
-}
-.cell-claimants-marker {
-  width: 0.65rem;
-  height: 0.65rem;
-  flex: 0 0 auto;
-  border: 1px solid rgb(15 23 42 / 24%);
-  border-radius: 50%;
-  background: var(--pilot-color);
-}
 .maplibregl-ctrl-top-right {
   top: 18px;
   right: 16px;
