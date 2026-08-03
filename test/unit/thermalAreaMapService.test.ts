@@ -7,7 +7,7 @@ describe('thermal area map service', () => {
   it('maps stored processed areas into minimal GeoJSON properties', async () => {
     const execute = vi.fn(async () => ({ rows: [{
       activityBand: 'yellow_orange', relativeScore: '0.75',
-      processedAt: new Date('2026-08-02T20:32:00Z'), geometry,
+      processedAt: '2026-08-02T20:32:00.000Z', geometry,
     }] }));
     const service = createThermalAreaMapService({ execute } as never);
 
@@ -22,7 +22,7 @@ describe('thermal area map service', () => {
   });
 
   it('rejects a viewport response beyond the configured feature limit', async () => {
-    const row = { activityBand: 'red', relativeScore: 1, processedAt: new Date(), geometry };
+    const row = { activityBand: 'red', relativeScore: 1, processedAt: new Date().toISOString(), geometry };
     const execute = vi.fn(async () => ({ rows: [row, row] }));
     const service = createThermalAreaMapService({ execute } as never, { maximumFeatures: 1 });
 

@@ -27,7 +27,7 @@ export interface ThermalAreaMapService {
 type StoredThermalArea = {
   activityBand: ThermalActivityBand;
   relativeScore: number;
-  processedAt: Date;
+  processedAt: string;
   geometry: GeoJSON.MultiPolygon;
 };
 
@@ -68,7 +68,7 @@ export function createThermalAreaMapService(
             properties: {
               activityBand: row.activityBand,
               relativeScore: Number(row.relativeScore),
-              processedAt: row.processedAt.toISOString(),
+              processedAt: new Date(row.processedAt).toISOString(),
             },
             geometry: row.geometry,
           })),
