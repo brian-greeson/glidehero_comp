@@ -8,6 +8,7 @@ export type TerritoryTileResult = {
   data: Buffer;
   featureCount: number;
 };
+export type GroupTerritoryTileResult = TerritoryTileResult & { authorized: boolean };
 export type CompetitionScope = 'following';
 
 export interface TerritoryTileService {
@@ -43,12 +44,13 @@ export interface TerritoryTileService {
     x: number;
     y: number;
     groupId: string;
+    currentUserId: string;
     period: MonthlyCoveragePeriod;
     pilotUserId?: string;
-  }): Promise<TerritoryTileResult>;
+  }): Promise<GroupTerritoryTileResult>;
 }
 
-type StoredTile = { data: Buffer; featureCount: number };
+type StoredTile = { data: Buffer; featureCount: number; authorized?: boolean };
 
 function tileBoundsCtes(input: {
   z: number;
@@ -89,10 +91,12 @@ function normalizePeriod(period: MonthlyCoveragePeriod): string | undefined {
 }
 
 function tileResult(row?: StoredTile): TerritoryTileResult {
-  return {
+  const result: TerritoryTileResult & { authorized?: boolean } = {
     data: row?.data ?? Buffer.alloc(0),
     featureCount: row?.featureCount ?? 0,
   };
+  if (typeof row?.authorized === 'boolean') result.authorized = row.authorized;
+  return result;
 }
 
 export function createTerritoryTileService(
@@ -117,10 +121,20 @@ export function createTerritoryTileService(
     const competitionMonth = normalizePeriod(input.period);
     const result = await database.execute<StoredTile>(sql`
       WITH ${tileBoundsCtes({ ...input, cellSize, extent, buffer })},
+      ${input.groupId
+        ? sql`authorized_actor AS (
+            SELECT 1
+            FROM pilot_group_memberships membership
+            WHERE membership.group_id = ${input.groupId}
+              AND membership.user_id = ${input.currentUserId}
+              AND membership.status = 'accepted'
+          ),`
+        : sql``}
       pilot_cells AS (
         SELECT DISTINCT claim.x, claim.y, claim.claim_user
         FROM competition_grid_claims claim
         CROSS JOIN cell_ranges range
+        ${input.groupId ? sql`CROSS JOIN authorized_actor` : sql``}
         WHERE claim.x BETWEEN range.min_x AND range.max_x
           AND claim.y BETWEEN range.min_y AND range.max_y
           ${competitionMonth
@@ -175,14 +189,7 @@ export function createTerritoryTileService(
               ? sql`AND EXISTS (SELECT 1 FROM scoped_pilot_cells pilot WHERE pilot.x = claimant.x AND pilot.y = claimant.y)`
               : sql``}
           ${input.pilotUserId
-            ? input.groupId
-              ? sql`AND pilot.claim_user = ${input.pilotUserId} AND EXISTS (
-                  SELECT 1 FROM pilot_group_memberships membership
-                  WHERE membership.group_id = ${input.groupId}
-                    AND membership.user_id = pilot.claim_user
-                    AND membership.status = 'accepted'
-                )`
-              : sql`AND pilot.claim_user = ${input.pilotUserId}`
+            ? sql`AND pilot.claim_user = ${input.pilotUserId}`
             : sql``}
       ),
       scoped_cells AS (
@@ -224,6 +231,9 @@ export function createTerritoryTileService(
       SELECT
         COALESCE(ST_AsMVT(mvt_features.*, 'competition-coverage', ${extent}, 'geom'), ''::bytea) AS data,
         COUNT(*)::integer AS "featureCount"
+        ${input.groupId
+          ? sql`, EXISTS (SELECT 1 FROM authorized_actor) AS authorized`
+          : sql``}
       FROM mvt_features
     `);
     return tileResult(result.rows[0]);
@@ -330,8 +340,9 @@ export function createTerritoryTileService(
       return getCompetitionTile(input);
     },
 
-    getGroupCompetitionTile(input) {
-      return getCompetitionTile(input);
+    async getGroupCompetitionTile(input) {
+      const tile = await getCompetitionTile(input) as TerritoryTileResult & { authorized?: boolean };
+      return { ...tile, authorized: tile.authorized === true };
     },
   };
 }

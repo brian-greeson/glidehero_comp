@@ -121,7 +121,7 @@ describe('groupService', () => {
     await service.acceptInvitation({ groupId: group.groupId, userId: member.user.userId });
     const month = '2026-08-01';
 
-    await addClaimedFlight({ userId: owner.user.userId, sequence: 1, month, distanceMeters: 20_000, cells: [[1, 1], [1, 2]] });
+    const ownerFlight = await addClaimedFlight({ userId: owner.user.userId, sequence: 1, month, distanceMeters: 20_000, cells: [[1, 1], [1, 2]] });
     const memberFlight = await addClaimedFlight({ userId: member.user.userId, sequence: 2, month, distanceMeters: 30_000, cells: [[2, 1], [2, 2]] });
 
     const standings = await service.getStandings({ groupId: group.groupId, userId: owner.user.userId, competitionMonth: month });
@@ -129,7 +129,28 @@ describe('groupService', () => {
       { name: 'Alpine Two', rank: 1, cells: 2, trophy: true },
       { name: 'Alpine One', rank: 2, cells: 2, trophy: false },
     ]);
+    expect(await service.getStandingsPage({ groupId: group.groupId, userId: owner.user.userId, competitionMonth: month, limit: 1, includeUserId: owner.user.userId })).toEqual({
+      standings: [
+        expect.objectContaining({ userId: member.user.userId, rank: 1 }),
+        expect.objectContaining({ userId: owner.user.userId, rank: 2 }),
+      ],
+      nextOffset: 1,
+    });
+    expect(await service.getStandingsPage({ groupId: group.groupId, userId: owner.user.userId, competitionMonth: month, offset: 1, limit: 1 })).toEqual({
+      standings: [expect.objectContaining({ userId: owner.user.userId, rank: 2 })],
+      nextOffset: null,
+    });
+    const soloGroup = await service.createGroup({ ownerUserId: owner.user.userId, name: 'Solo League' });
+    expect((await service.getProfileGroups(owner.user.userId, month)).groups).toEqual(expect.arrayContaining([
+      expect.objectContaining({ groupId: group.groupId, rank: 2, claimedCellCount: 2, bestFivePointDistanceMeters: 20_000, trophy: false }),
+      expect.objectContaining({ groupId: soloGroup.groupId, rank: 1, claimedCellCount: 2, bestFivePointDistanceMeters: 20_000, trophy: true }),
+    ]));
     expect((await service.listFlights({ groupId: group.groupId, userId: owner.user.userId, competitionMonth: month })).flights.map((flight) => flight.flightId)).toContain(memberFlight);
+    const firstFlightPage = await service.listFlights({ groupId: group.groupId, userId: owner.user.userId, competitionMonth: month, limit: 1 });
+    expect(firstFlightPage.flights.map((flight) => flight.flightId)).toEqual([memberFlight]);
+    expect(firstFlightPage.nextCursor).not.toBeNull();
+    const finalFlightPage = await service.listFlights({ groupId: group.groupId, userId: owner.user.userId, competitionMonth: month, limit: 1, cursor: firstFlightPage.nextCursor! });
+    expect(finalFlightPage).toEqual({ flights: [expect.objectContaining({ flightId: ownerFlight })], nextCursor: null });
     await expect(service.listFlights({ groupId: group.groupId, userId: owner.user.userId, competitionMonth: month, cursor: Buffer.from('date|not-a-uuid').toString('base64url') })).rejects.toMatchObject({ code: 'validation' });
 
     await service.removeMember({ groupId: group.groupId, actorUserId: owner.user.userId, userId: member.user.userId });

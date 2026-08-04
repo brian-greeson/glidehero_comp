@@ -217,7 +217,7 @@ function dependencies() {
     getPersonalTile: vi.fn(async () => ({ data: Buffer.alloc(0), featureCount: 0 })),
     getGlobalCompetitionTile: vi.fn(async () => ({ data: Buffer.alloc(0), featureCount: 0 })),
     getArenaCompetitionTile: vi.fn(async () => ({ data: Buffer.alloc(0), featureCount: 0 })),
-    getGroupCompetitionTile: vi.fn(async () => ({ data: Buffer.alloc(0), featureCount: 0 })),
+    getGroupCompetitionTile: vi.fn(async () => ({ data: Buffer.alloc(0), featureCount: 0, authorized: true })),
   };
   const groups: GroupService = {
     createGroup: vi.fn(async ({ ownerUserId, name }) => ({ groupId: '00000000-0000-4000-8000-000000000101', name, ownerUserId, memberCount: 1, capacity: 200 })),
@@ -226,8 +226,19 @@ function dependencies() {
     searchPilots: vi.fn(async () => []), canView: vi.fn(async () => true),
     getProfileGroups: vi.fn(async () => ({ groups: [], invitations: [] })),
     getGroup: vi.fn(async ({ groupId }) => ({ groupId, name: 'Weekend XC', ownerUserId: user.userId, memberCount: 2, capacity: 200 })),
+    getPage: vi.fn(async ({ groupId }) => ({
+      group: { groupId, name: 'Weekend XC', ownerUserId: user.userId, memberCount: 2, capacity: 200 },
+      standingsPage: { standings: [{ userId: user.userId, displayName: user.displayName, territoryColor: user.territoryColor, claimedCellCount: 12, bestFivePointDistanceMeters: 34_000, rank: 1, trophy: true }], nextOffset: null },
+      pilots: [
+        { userId: user.userId, displayName: user.displayName, territoryColor: user.territoryColor },
+        { userId: pilotProfile.userId, displayName: pilotProfile.displayName, territoryColor: pilotProfile.territoryColor },
+      ],
+      flightPage: { flights: [], nextCursor: null },
+      members: [{ userId: user.userId, displayName: user.displayName, territoryColor: user.territoryColor, status: 'accepted' as const, isOwner: true }],
+    })),
     getMembers: vi.fn(async () => [{ userId: user.userId, displayName: user.displayName, territoryColor: user.territoryColor, status: 'accepted' as const, isOwner: true }]),
     getStandings: vi.fn(async () => [{ userId: user.userId, displayName: user.displayName, territoryColor: user.territoryColor, claimedCellCount: 12, bestFivePointDistanceMeters: 34_000, rank: 1, trophy: true }]),
+    getStandingsPage: vi.fn(async () => ({ standings: [], nextOffset: null })),
     listFlights: vi.fn(async () => ({ flights: [], nextCursor: null })),
     getFlightTrack: vi.fn(async () => ({ flightId: '00000000-0000-4000-8000-000000000102', pilotUserId: user.userId, geometry: { type: 'LineString', coordinates: [[-105, 40], [-104.9, 40.1]] } })),
   };
@@ -358,7 +369,38 @@ describe('webRouter', () => {
         page: 'group',
         group: expect.objectContaining({ name: 'Weekend XC', monthLabel: 'August 2026', isOwner: true, capacity: '200', inviteHref: '#group-member-management' }),
         standings: [expect.objectContaining({ rank: 1, cells: '12', isDistanceLeader: true })],
+        pilotColorsJson: JSON.stringify({ [user.userId]: user.territoryColor, [pilotProfile.userId]: pilotProfile.territoryColor }),
       }));
+      expect(base.groups.getPage).toHaveBeenCalledWith({
+        groupId: '00000000-0000-4000-8000-000000000101',
+        userId: user.userId,
+        competitionMonth: '2026-08',
+        pilotUserId: undefined,
+      });
+      expect(base.groups.getGroup).not.toHaveBeenCalled();
+      expect(base.groups.getMembers).not.toHaveBeenCalled();
+      expect(base.groups.getStandings).not.toHaveBeenCalled();
+      expect(base.groups.listFlights).not.toHaveBeenCalled();
+      const selectedPilotPage = await fetch(`${baseUrl}/groups/00000000-0000-4000-8000-000000000101?month=2026-08&pilot=${pilotProfile.userId}`, { headers });
+      expect(selectedPilotPage.status).toBe(200);
+      expect(base.renderAuthenticatedPage).toHaveBeenLastCalledWith(expect.objectContaining({
+        selectedPilotId: pilotProfile.userId,
+        selectedPilotName: pilotProfile.displayName,
+      }));
+      vi.mocked(base.groups.getStandingsPage).mockResolvedValueOnce({
+        standings: [{ userId: pilotProfile.userId, displayName: pilotProfile.displayName, territoryColor: pilotProfile.territoryColor, claimedCellCount: 3, bestFivePointDistanceMeters: 12_000, rank: 26, trophy: false }],
+        nextOffset: 50,
+      });
+      const standingsPage = await fetch(`${baseUrl}/v1/groups/00000000-0000-4000-8000-000000000101/standings?month=2026-08&offset=25`, { headers });
+      expect(standingsPage.status).toBe(200);
+      expect(await standingsPage.json()).toMatchObject({ standings: [{ userId: pilotProfile.userId, rank: 26 }], nextOffset: 50 });
+      expect(base.groups.getStandingsPage).toHaveBeenCalledWith({
+        groupId: '00000000-0000-4000-8000-000000000101',
+        userId: user.userId,
+        competitionMonth: '2026-08',
+        offset: 25,
+        limit: 25,
+      });
       const historical = await fetch(`${baseUrl}/groups/00000000-0000-4000-8000-000000000101?month=2026-07`, { headers });
       expect(historical.status).toBe(422);
     });
@@ -375,11 +417,34 @@ describe('webRouter', () => {
       expect(await track.json()).toMatchObject({ type: 'Feature', geometry: { type: 'LineString' } });
       const tile = await fetch(`${baseUrl}/v1/groups/00000000-0000-4000-8000-000000000101/competition-territory/tiles/8/64/64.mvt?month=2026-08`, { headers: auth });
       expect(tile.status).toBe(200);
+      expect(tile.headers.get('vary')).toBe('Cookie');
+      expect(base.groups.canView).not.toHaveBeenCalled();
+      expect(base.territoryTiles.getGroupCompetitionTile).toHaveBeenCalledWith({
+        z: 8, x: 64, y: 64,
+        groupId: '00000000-0000-4000-8000-000000000101',
+        currentUserId: user.userId,
+        period: { competitionMonth: '2026-08' },
+      });
       const invite = await fetch(`${baseUrl}/groups/00000000-0000-4000-8000-000000000101/invitations`, {
         method: 'POST', headers: { ...auth, 'content-type': 'application/x-www-form-urlencoded' }, body: `userId=${pilotProfile.userId}`, redirect: 'manual',
       });
       expect(invite.status).toBe(303);
       expect(base.groups.invite).toHaveBeenCalledWith({ groupId: '00000000-0000-4000-8000-000000000101', actorUserId: user.userId, userId: pilotProfile.userId });
+    });
+  });
+
+  it('rejects a group tile when the tile query reports no accepted actor membership', async () => {
+    const base = dependencies();
+    vi.mocked(base.territoryTiles.getGroupCompetitionTile!).mockResolvedValueOnce({
+      data: Buffer.alloc(0), featureCount: 0, authorized: false,
+    });
+    await withServer(base.app, async (baseUrl) => {
+      const response = await fetch(
+        `${baseUrl}/v1/groups/00000000-0000-4000-8000-000000000101/competition-territory/tiles/8/64/64.mvt?month=2026-08`,
+        { headers: { cookie: 'glidehero_session=valid-token' } },
+      );
+      expect(response.status).toBe(403);
+      expect(base.groups.canView).not.toHaveBeenCalled();
     });
   });
 

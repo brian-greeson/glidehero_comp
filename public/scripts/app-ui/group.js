@@ -30,10 +30,21 @@ export function initializeGroupInviteSearch(documentRef = document, fetchImpl = 
   const results = form?.querySelector('[data-group-invite-results]');
   const status = form?.querySelector('[data-group-invite-status]');
   if (!form || !search || !userId || !results || !fetchImpl) return;
+  let timer;
+  let controller;
   let request = 0;
+
+  function cancelPendingSearch() {
+    clearTimeout(timer);
+    timer = undefined;
+    controller?.abort();
+    controller = undefined;
+    request += 1;
+  }
 
   function options() { return [...results.querySelectorAll('[role="option"]')]; }
   function choose(button, pilot) {
+    cancelPendingSearch();
     search.value = pilot.displayName;
     userId.value = pilot.userId;
     search.setCustomValidity('');
@@ -51,19 +62,17 @@ export function initializeGroupInviteSearch(documentRef = document, fetchImpl = 
     next.focus();
   }
 
-  search.addEventListener('input', async () => {
-    userId.value = '';
-    search.setCustomValidity('');
-    if (status) status.textContent = '';
-    const query = search.value.trim();
-    if (query.length < 2) { results.replaceChildren(); setInviteResultsState(search, results, false); return; }
+  async function searchPilots(query) {
+    timer = undefined;
+    controller = typeof AbortController === 'undefined' ? undefined : new AbortController();
     const current = ++request;
     const url = new URL(form.dataset.searchHref, globalThis.location?.origin ?? 'http://localhost');
     url.searchParams.set('q', query);
     try {
-      const response = await fetchImpl(url.pathname + url.search, { credentials: 'same-origin', headers: { accept: 'application/json' } });
+      const response = await fetchImpl(url.pathname + url.search, { credentials: 'same-origin', headers: { accept: 'application/json' }, signal: controller?.signal });
       if (current !== request || !response.ok) return;
       const pilots = await response.json();
+      if (current !== request) return;
       results.replaceChildren(...pilots.map((pilot, index) => {
         const button = documentRef.createElement('button');
         button.type = 'button';
@@ -74,19 +83,32 @@ export function initializeGroupInviteSearch(documentRef = document, fetchImpl = 
         button.addEventListener('click', () => choose(button, pilot));
         button.addEventListener('keydown', (event) => {
           if (event.key === 'ArrowDown' || event.key === 'ArrowUp') { event.preventDefault(); moveOption(button, event.key === 'ArrowDown' ? 1 : -1); }
-          if (event.key === 'Escape') { event.preventDefault(); setInviteResultsState(search, results, false); search.focus(); }
+          if (event.key === 'Escape') { event.preventDefault(); cancelPendingSearch(); setInviteResultsState(search, results, false); search.focus(); }
         });
         return button;
       }));
       setInviteResultsState(search, results, pilots.length > 0);
       if (status) status.textContent = pilots.length ? `${pilots.length} pilots found.` : 'No matching pilots found.';
-    } catch {
+    } catch (error) {
+      if (error?.name === 'AbortError' || current !== request) return;
       setInviteResultsState(search, results, false);
       if (status) status.textContent = 'Pilot search is temporarily unavailable.';
+    } finally {
+      if (current === request) controller = undefined;
     }
+  }
+
+  search.addEventListener('input', () => {
+    cancelPendingSearch();
+    userId.value = '';
+    search.setCustomValidity('');
+    if (status) status.textContent = '';
+    const query = search.value.trim();
+    if (query.length < 2) { results.replaceChildren(); setInviteResultsState(search, results, false); return; }
+    timer = setTimeout(() => void searchPilots(query), 200);
   });
   search.addEventListener('keydown', (event) => {
-    if (event.key === 'Escape') { setInviteResultsState(search, results, false); return; }
+    if (event.key === 'Escape') { cancelPendingSearch(); setInviteResultsState(search, results, false); return; }
     if (event.key !== 'ArrowDown' || results.hidden) return;
     const first = options()[0];
     if (!first) return;
@@ -112,11 +134,19 @@ export function initializeStandingsLoadMore(documentRef = document, fetchImpl = 
     const response = await fetchImpl(link.href, { credentials: 'same-origin', headers: { accept: 'application/json' } });
     if (!response.ok) return;
     const page = await response.json();
-    const existingPilotIds = new Set([...body.querySelectorAll('[data-group-pilot-id]')].map((element) => element.dataset.groupPilotId));
-    for (const standing of page.standings) {
-      if (existingPilotIds.has(standing.userId)) continue;
-      existingPilotIds.add(standing.userId);
+    const selectedPilotId = new URL(globalThis.location?.href ?? link.href, 'http://localhost').searchParams.get('pilot');
+    const existingRows = new Map([...body.querySelectorAll('[data-group-standing-user-id]')]
+      .map((row) => [row.dataset.groupStandingUserId, row]));
+    let nextRow = null;
+    for (const standing of [...page.standings].reverse()) {
+      const existingRow = existingRows.get(standing.userId);
+      if (existingRow) {
+        nextRow = existingRow;
+        continue;
+      }
       const row = body.insertRow();
+      row.dataset.groupStandingUserId = standing.userId;
+      row.classList.toggle('is-selected', standing.userId === selectedPilotId);
       row.insertCell().textContent = standing.rank ?? 'Not ranked yet';
       const pilotCell = row.insertCell();
       const anchor = documentRef.createElement('a');
@@ -134,6 +164,9 @@ export function initializeStandingsLoadMore(documentRef = document, fetchImpl = 
       anchor.append(avatar, name); pilotCell.append(anchor);
       row.insertCell().textContent = String(standing.claimedCellCount);
       row.insertCell().textContent = `${formatDistance(standing.bestFivePointDistanceMeters)}${standing.trophy ? ' 🏆' : ''}`;
+      if (nextRow) body.insertBefore(row, nextRow);
+      nextRow = row;
+      existingRows.set(standing.userId, row);
     }
     if (page.nextOffset === null) link.remove();
     else { const url = new URL(link.href); url.searchParams.set('offset', String(page.nextOffset)); link.href = url.toString(); }

@@ -22,6 +22,7 @@ describe('group app renderer', () => {
     });
     expect(html).toContain('Not ranked yet');
     expect(html).toContain('data-group-pilot-colors');
+    expect(html).toContain('data-group-standing-user-id="pilot"');
     expect(html).toContain('data-group-flight-track');
     expect(html).toContain('https://example.test/wide.webp');
     expect(html).toContain('data-group-flights-load-more');

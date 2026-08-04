@@ -402,25 +402,22 @@ export function createWebRouter(dependencies: {
     input: { month: string; pilotUserId?: string; selectedFlightId?: string },
   ) {
     if (!dependencies.groups) throw new Error('Group service is not configured.');
-    const [group, allStandings, flightPage, members] = await Promise.all([
-      dependencies.groups.getGroup({ groupId, userId: currentUser.userId }),
-      dependencies.groups.getStandings({ groupId, userId: currentUser.userId, competitionMonth: input.month }),
-      dependencies.groups.listFlights({ groupId, userId: currentUser.userId, competitionMonth: input.month, pilotUserId: input.pilotUserId }),
-      dependencies.groups.getMembers({ groupId, userId: currentUser.userId }),
-    ]);
+    const { group, standingsPage, pilots, flightPage, members } = await dependencies.groups.getPage({
+      groupId,
+      userId: currentUser.userId,
+      competitionMonth: input.month,
+      pilotUserId: input.pilotUserId,
+    });
     const flightThumbnailUrls = dependencies.thumbnailDelivery
       ? await dependencies.thumbnailDelivery.signMany(flightPage.flights.map((flight) => ({
         userId: flight.pilotUserId,
         flightId: flight.flightId,
       })))
       : new Map();
-    const firstStandings = allStandings.length <= 25
-      ? allStandings
-      : [...allStandings.slice(0, 25), ...allStandings.filter((standing, index) => index >= 25 && standing.userId === currentUser.userId)];
     const groupHref = `/groups/${groupId}?month=${encodeURIComponent(input.month)}`;
-    const selectedPilot = allStandings.find((standing) => standing.userId === input.pilotUserId);
+    const selectedPilot = pilots.find((pilot) => pilot.userId === input.pilotUserId);
     if (input.pilotUserId && !selectedPilot) throw new GroupError('validation', 'Selected pilot is not a group member.');
-    const standings = firstStandings.map((standing) => ({
+    const standings = standingsPage.standings.map((standing) => ({
       userId: standing.userId,
       displayName: standing.displayName,
       initials: initialsForDisplayName(standing.displayName),
@@ -444,7 +441,7 @@ export function createWebRouter(dependencies: {
           month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: 'UTC',
         }).format(flight.startedAt);
       }
-      const pilot = allStandings.find((standing) => standing.userId === flight.pilotUserId);
+      const pilot = pilots.find((member) => member.userId === flight.pilotUserId);
       return {
         id: flight.flightId,
         pilotName: flight.pilotName,
@@ -479,7 +476,7 @@ export function createWebRouter(dependencies: {
         deleteHref: isOwner ? `/groups/${groupId}/delete` : undefined,
         inviteSearchHref: isOwner ? `/v1/groups/${groupId}/invite-candidates` : undefined,
         inviteSubmitHref: isOwner ? `/groups/${groupId}/invitations` : undefined,
-        members: isOwner ? members.map((member) => ({
+        members: isOwner ? (members ?? []).map((member) => ({
           userId: member.userId,
           displayName: member.displayName,
           status: member.status,
@@ -491,14 +488,14 @@ export function createWebRouter(dependencies: {
       flights,
       mapStyleUrl: dependencies.mapTilerStyleUrl,
       tileUrl: `/v1/groups/${groupId}/competition-territory/tiles/{z}/{x}/{y}.mvt?month=${encodeURIComponent(input.month)}${selectedPilot ? `&pilot=${encodeURIComponent(selectedPilot.userId)}` : ''}`,
-      pilotColorsJson: JSON.stringify(Object.fromEntries(allStandings.map((standing) => [standing.userId, standing.territoryColor]))),
+      pilotColorsJson: JSON.stringify(Object.fromEntries(pilots.map((pilot) => [pilot.userId, pilot.territoryColor]))),
       territoryTileMinimumZoom: groupTileZoom.minimumZoom,
       territoryTileMaximumZoom: groupTileZoom.maximumZoom,
       selectedPilotId: selectedPilot?.userId,
       selectedPilotName: selectedPilot?.displayName,
       clearFilterHref: groupHref,
       selectedFlightId: input.selectedFlightId,
-      standingsLoadMoreHref: allStandings.length > 25 ? `/v1/groups/${groupId}/standings?month=${encodeURIComponent(input.month)}&offset=25` : undefined,
+      standingsLoadMoreHref: standingsPage.nextOffset === null ? undefined : `/v1/groups/${groupId}/standings?month=${encodeURIComponent(input.month)}&offset=${standingsPage.nextOffset}`,
       flightsLoadMoreHref: flightPage.nextCursor ? `/v1/groups/${groupId}/flights?month=${encodeURIComponent(input.month)}${selectedPilot ? `&pilot=${encodeURIComponent(selectedPilot.userId)}` : ''}&cursor=${encodeURIComponent(flightPage.nextCursor)}` : undefined,
     });
   }
@@ -1408,8 +1405,14 @@ export function createWebRouter(dependencies: {
     const query = z.object({ month: currentGroupMonthValue, offset: z.coerce.number().int().min(0).max(200).default(0) }).strict().safeParse(req.query);
     if (!groupId.success || !query.success) return next(new AppError(422, 'invalid_request', 'Standings request is invalid.'));
     try {
-      const standings = await dependencies.groups.getStandings({ groupId: groupId.data, userId: currentUser.userId, competitionMonth: query.data.month });
-      res.status(200).set('Cache-Control', 'private, max-age=30').json({ standings: standings.slice(query.data.offset, query.data.offset + 25), nextOffset: query.data.offset + 25 < standings.length ? query.data.offset + 25 : null });
+      const page = await dependencies.groups.getStandingsPage({
+        groupId: groupId.data,
+        userId: currentUser.userId,
+        competitionMonth: query.data.month,
+        offset: query.data.offset,
+        limit: 25,
+      });
+      res.status(200).set('Cache-Control', 'private, max-age=30').json(page);
     } catch (error) {
       next(error instanceof GroupError ? groupErrorToAppError(error) : error);
     }
@@ -1467,10 +1470,13 @@ export function createWebRouter(dependencies: {
     const coordinates = territoryTileCoordinates(territoryTileSettings.get().competition, req.params as Record<string, string>);
     if (!groupId.success || !query.success || !coordinates) return next();
     try {
-      if (!(await dependencies.groups.canView({ groupId: groupId.data, userId: currentUser.userId }))) throw new GroupError('forbidden', 'Group access denied.');
-      sendTerritoryTile(res, await dependencies.territoryTiles.getGroupCompetitionTile({
-        ...coordinates, groupId: groupId.data, period: { competitionMonth: query.data.month }, pilotUserId: query.data.pilot,
-      }));
+      const tile = await dependencies.territoryTiles.getGroupCompetitionTile({
+        ...coordinates, groupId: groupId.data, currentUserId: currentUser.userId,
+        period: { competitionMonth: query.data.month }, pilotUserId: query.data.pilot,
+      });
+      if (!tile.authorized) throw new GroupError('forbidden', 'Group access denied.');
+      res.vary('Cookie');
+      sendTerritoryTile(res, tile);
     } catch (error) {
       next(error instanceof GroupError ? groupErrorToAppError(error) : error);
     }

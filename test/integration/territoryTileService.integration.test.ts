@@ -8,6 +8,8 @@ import {
   igcFiles,
   personalGridClaims,
   pilotFollows,
+  pilotGroupMemberships,
+  pilotGroups,
   users,
 } from '../../src/db/schema.js';
 import { createTerritoryTileService } from '../../src/services/territoryTileService.js';
@@ -246,5 +248,40 @@ describe('TerritoryTileService with PostGIS MVT', () => {
     const features = decode(result.data, 'competition-coverage').map((feature) => feature.properties);
     expect(features).toEqual([expect.objectContaining({ cellId: '1000:0:0', claimantCount: 2, isShared: true })]);
     expect(features.some((feature) => feature.cellId === '1000:1:0')).toBe(false);
+  });
+
+  it('authorizes and scopes a Group tile in the same database query', async () => {
+    const owner = await createPilot();
+    const member = await createPilot();
+    const outsider = await createPilot();
+    const [group] = await database.db.insert(pilotGroups).values({
+      ownerUserId: owner.userId,
+      name: 'Tile pilots',
+    }).returning({ id: pilotGroups.id });
+    if (!group) throw new Error('Expected a group.');
+    await database.db.insert(pilotGroupMemberships).values([
+      { groupId: group.id, userId: owner.userId, status: 'accepted', acceptedAt: new Date() },
+      { groupId: group.id, userId: member.userId, status: 'accepted', acceptedAt: new Date() },
+    ]);
+    await addCompetitionClaim(member, { x: 0, y: 0 });
+    await addCompetitionClaim(outsider, { x: 1, y: 0 });
+    const service = createTerritoryTileService(database.db, { cellSize: 1_000 });
+
+    const authorized = await service.getGroupCompetitionTile?.({
+      ...tile,
+      groupId: group.id,
+      currentUserId: owner.userId,
+      period: { competitionMonth: '2026-07' },
+    });
+    expect(authorized?.authorized).toBe(true);
+    expect(decode(authorized!.data, 'competition-coverage').map((feature) => feature.properties.cellId))
+      .toEqual(['1000:0:0']);
+
+    await expect(service.getGroupCompetitionTile?.({
+      ...tile,
+      groupId: group.id,
+      currentUserId: outsider.userId,
+      period: { competitionMonth: '2026-07' },
+    })).resolves.toEqual({ data: Buffer.alloc(0), featureCount: 0, authorized: false });
   });
 });

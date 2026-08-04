@@ -72,6 +72,10 @@ type StoredClaimingFlight = StoredPilot & {
   launchTimezone: string | null;
   distanceMeters: number | string | null;
 };
+type StoredCompetitionFlight = StoredClaimingFlight & {
+  pilotUserId: string;
+  geometry: LineStringGeometry | null;
+};
 
 function normalizePeriod(period: MonthlyCoveragePeriod): string | undefined {
   return 'competitionMonth' in period
@@ -205,14 +209,19 @@ export function createCellFlightTrackService(
 
     getCompetition(input) {
       const competitionMonth = normalizePeriod(input.period);
-      const tracks = database.execute<StoredTrack>(sql`
+      const claimingFlightsAndTracks = database.execute<StoredCompetitionFlight>(sql`
         WITH candidate_claims AS (
           SELECT
             claim.claim_flight AS flight_id,
             claim.claim_user AS pilot_user_id,
-            claim.claim_timestamp
+            claim.claim_timestamp,
+            profile.display_name,
+            flight.started_at,
+            flight.launch_timezone,
+            flight.distance_meters
           FROM competition_grid_claims claim
           INNER JOIN flights flight ON flight.flight_id = claim.claim_flight
+          INNER JOIN profiles profile ON profile.user_id = claim.claim_user
           WHERE claim.x = ${input.x}
             AND claim.y = ${input.y}
             AND flight.processing_status = 'completed'
@@ -228,54 +237,37 @@ export function createCellFlightTrackService(
         ),
         track_geometries AS (
           SELECT
-            candidate.flight_id,
-            candidate.pilot_user_id,
-            candidate.claim_timestamp,
+            candidate_flight.flight_id,
             ST_AsGeoJSON(ST_MakeLine(
               ST_SetSRID(ST_Point(point.longitude, point.latitude), 4326)
               ORDER BY point.sequence_number
             ))::jsonb AS geometry
-          FROM candidate_claims candidate
-          INNER JOIN track_points point ON point.flight_id = candidate.flight_id
-          GROUP BY
-            candidate.flight_id,
-            candidate.pilot_user_id,
-            candidate.claim_timestamp
+          FROM (SELECT DISTINCT flight_id FROM candidate_claims) candidate_flight
+          INNER JOIN track_points point ON point.flight_id = candidate_flight.flight_id
+          GROUP BY candidate_flight.flight_id
           HAVING COUNT(*) >= 2
         )
         SELECT
-          flight_id::text AS "flightId",
-          pilot_user_id::text AS "pilotUserId",
-          geometry
-        FROM track_geometries
-        ORDER BY claim_timestamp DESC, flight_id
+          candidate.flight_id::text AS "flightId",
+          candidate.pilot_user_id::text AS "pilotUserId",
+          candidate.pilot_user_id::text AS "userId",
+          candidate.display_name AS "displayName",
+          candidate.started_at AS "startedAt",
+          candidate.launch_timezone AS "launchTimezone",
+          candidate.distance_meters AS "distanceMeters",
+          track.geometry
+        FROM candidate_claims candidate
+        LEFT JOIN track_geometries track ON track.flight_id = candidate.flight_id
+        ORDER BY candidate.claim_timestamp DESC, candidate.flight_id
       `);
-      const claimingFlights = database.execute<StoredClaimingFlight>(sql`
-        SELECT
-          claim.claim_flight::text AS "flightId",
-          claim.claim_user::text AS "userId",
-          profile.display_name AS "displayName",
-          flight.started_at AS "startedAt",
-          flight.launch_timezone AS "launchTimezone",
-          flight.distance_meters AS "distanceMeters"
-        FROM competition_grid_claims claim
-        INNER JOIN flights flight ON flight.flight_id = claim.claim_flight
-        INNER JOIN profiles profile ON profile.user_id = claim.claim_user
-        WHERE claim.x = ${input.x}
-          AND claim.y = ${input.y}
-          AND flight.processing_status = 'completed'
-          ${competitionMonth
-            ? sql`AND claim.competition_month = ${competitionMonth}::date`
-            : sql``}
-          ${input.pilotUserId
-            ? sql`AND claim.claim_user = ${input.pilotUserId}`
-            : sql``}
-          ${input.scope === 'following' && input.currentUserId
-            ? sql`AND (claim.claim_user = ${input.currentUserId} OR EXISTS (SELECT 1 FROM pilot_follows follow WHERE follow.follower_user_id = ${input.currentUserId} AND follow.followed_user_id = claim.claim_user))`
-            : sql``}
-        ORDER BY claim.claim_timestamp DESC, claim.claim_flight
-      `);
-      return result(input.x, input.y, tracks, claimingFlights);
+      const tracks = claimingFlightsAndTracks.then(({ rows }) => ({
+        rows: rows.flatMap((row): StoredTrack[] => row.geometry ? [{
+          flightId: row.flightId,
+          pilotUserId: row.pilotUserId,
+          geometry: row.geometry,
+        }] : []),
+      }));
+      return result(input.x, input.y, tracks, claimingFlightsAndTracks);
     },
   };
 }

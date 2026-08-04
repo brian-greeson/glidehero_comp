@@ -134,6 +134,11 @@ describe('CellFlightTrackService', () => {
       startedAt: new Date('2026-07-03T17:00:00Z'),
       distanceMeters: 30_750,
     });
+    const shortFlight = await createFlight(bravo, {
+      points: [[-102, 37]],
+      startedAt: new Date('2026-07-04T18:00:00Z'),
+      distanceMeters: 1_250,
+    });
     await database.db.insert(competitionGridClaims).values([
       {
         competitionMonth: '2026-07-01', x: -1, y: 2, claimFlight: alphaOlder, claimUser: alpha,
@@ -147,8 +152,20 @@ describe('CellFlightTrackService', () => {
         competitionMonth: '2026-07-01', x: -1, y: 2, claimFlight: bravoFlight, claimUser: bravo,
         claimTimestamp: new Date('2026-07-03T00:00:00Z'),
       },
+      {
+        competitionMonth: '2026-07-01', x: -1, y: 2, claimFlight: shortFlight, claimUser: bravo,
+        claimTimestamp: new Date('2026-07-04T00:00:00Z'),
+      },
     ]);
-    const service = createCellFlightTrackService(database.db, { cellSize: 1_000 });
+    let executionCount = 0;
+    const originalExecute = database.db.execute.bind(database.db);
+    const trackedDatabase = {
+      execute: ((query: Parameters<typeof originalExecute>[0]) => {
+        executionCount += 1;
+        return originalExecute(query);
+      }) as typeof database.db.execute,
+    };
+    const service = createCellFlightTrackService(trackedDatabase, { cellSize: 1_000 });
 
     const result = await service.getCompetition({
       x: -1,
@@ -171,6 +188,10 @@ describe('CellFlightTrackService', () => {
     ]);
     expect(result.flights).toEqual([
       {
+        flightId: shortFlight, userId: bravo, displayName: 'Bravo Pilot',
+        startedAt: '2026-07-04T18:00:00.000Z', launchTimezone: 'UTC', distanceMeters: 1_250,
+      },
+      {
         flightId: bravoFlight, userId: bravo, displayName: 'Bravo Pilot',
         startedAt: '2026-07-03T17:00:00.000Z', launchTimezone: 'UTC', distanceMeters: 30_750,
       },
@@ -183,6 +204,7 @@ describe('CellFlightTrackService', () => {
         startedAt: '2026-07-01T15:00:00.000Z', launchTimezone: 'UTC', distanceMeters: 10_500,
       },
     ]);
+    expect(executionCount).toBe(2);
 
     const selected = await service.getCompetition({
       x: -1,

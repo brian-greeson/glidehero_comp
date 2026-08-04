@@ -10,10 +10,19 @@ export type GroupStanding = {
   userId: string; displayName: string; territoryColor: string; claimedCellCount: number; bestFivePointDistanceMeters: number | null;
   rank: number | null; trophy: boolean;
 };
+export type GroupStandingsPage = { standings: GroupStanding[]; nextOffset: number | null };
+export type GroupPilot = { userId: string; displayName: string; territoryColor: string };
 export type GroupMember = { userId: string; displayName: string; territoryColor: string; status: 'accepted'|'pending'; isOwner: boolean };
 export type GroupFlight = {
   flightId: string; pilotUserId: string; pilotName: string; startedAt: Date;
   launchTimezone: string | null; fivePointDistanceMeters: number | null; durationSeconds: number | null;
+};
+export type GroupPageData = {
+  group: GroupSummary;
+  standingsPage: GroupStandingsPage;
+  pilots: GroupPilot[];
+  flightPage: { flights: GroupFlight[]; nextCursor: string | null };
+  members?: GroupMember[];
 };
 
 export interface GroupService {
@@ -29,8 +38,10 @@ export interface GroupService {
   canView(input: { groupId: string; userId: string }): Promise<boolean>;
   getProfileGroups(userId: string, competitionMonth?: string): Promise<{ groups: Array<GroupSummary & { rank: number | null; claimedCellCount: number; bestFivePointDistanceMeters: number | null; trophy: boolean }>; invitations: GroupInvitation[] }>;
   getGroup(input: { groupId: string; userId: string }): Promise<GroupSummary>;
+  getPage(input: { groupId: string; userId: string; competitionMonth: string; pilotUserId?: string }): Promise<GroupPageData>;
   getMembers(input: { groupId: string; userId: string }): Promise<GroupMember[]>;
   getStandings(input: { groupId: string; userId: string; competitionMonth: string }): Promise<GroupStanding[]>;
+  getStandingsPage(input: { groupId: string; userId: string; competitionMonth: string; offset?: number; limit?: number; includeUserId?: string }): Promise<GroupStandingsPage>;
   listFlights(input: { groupId: string; userId: string; competitionMonth: string; pilotUserId?: string; cursor?: string; limit?: number }): Promise<{ flights: GroupFlight[]; nextCursor: string | null }>;
   getFlightTrack(input: { groupId: string; userId: string; flightId: string; competitionMonth: string }): Promise<Record<string, unknown> | null>;
 }
@@ -78,6 +89,84 @@ export function createGroupService(database: Database): GroupService {
     if (!result.rows[0]) throw new GroupError('not_found', 'Group not found.');
     return result.rows[0];
   }
+  async function memberRows(groupId: string, userId: string): Promise<GroupMember[]> {
+    const result = await database.execute<GroupMember & { ownerUserId: string }>(sql`
+      SELECT m.user_id AS "userId", p.display_name AS "displayName", p.territory_color AS "territoryColor", m.status,
+        (m.user_id = g.owner_user_id) AS "isOwner", g.owner_user_id AS "ownerUserId"
+      FROM pilot_group_memberships m
+      JOIN pilot_groups g ON g.group_id = m.group_id
+      JOIN profiles p ON p.user_id = m.user_id
+      WHERE m.group_id = ${groupId} AND (m.status = 'accepted' OR g.owner_user_id = ${userId})
+      ORDER BY CASE WHEN m.status = 'accepted' THEN 0 ELSE 1 END, lower(p.display_name), m.user_id
+    `);
+    return result.rows.map((row) => ({ userId: row.userId, displayName: row.displayName, territoryColor: row.territoryColor, status: row.status, isOwner: row.isOwner }));
+  }
+  async function pilotRows(groupId: string): Promise<GroupPilot[]> {
+    const result = await database.execute<GroupPilot>(sql`
+      SELECT m.user_id AS "userId", p.display_name AS "displayName", p.territory_color AS "territoryColor"
+      FROM pilot_group_memberships m
+      JOIN profiles p ON p.user_id = m.user_id
+      WHERE m.group_id = ${groupId} AND m.status = 'accepted'
+      ORDER BY lower(p.display_name), m.user_id
+    `);
+    return result.rows;
+  }
+  async function standingRows(
+    groupId: string,
+    competitionMonth: string,
+    options: { offset?: number; limit?: number; includeUserId?: string } = {},
+  ): Promise<GroupStandingsPage> {
+    const offset = Math.max(options.offset ?? 0, 0);
+    const pageSize = options.limit === undefined ? undefined : Math.min(Math.max(options.limit, 1), 100);
+    const result = await database.execute<GroupStanding & { cells: number; distance: number | null; rank_value: number; position: number }>(sql`
+      WITH members AS (SELECT m.user_id FROM pilot_group_memberships m WHERE m.group_id=${groupId} AND m.status='accepted'),
+      cells AS (SELECT c.claim_user AS user_id,COUNT(DISTINCT (c.x,c.y))::int AS cells FROM competition_grid_claims c JOIN members m ON m.user_id=c.claim_user WHERE c.competition_month=${competitionMonth}::date GROUP BY c.claim_user),
+      distances AS (SELECT f.user_id,MAX(s.five_point_distance_meters)::double precision AS distance FROM flights f JOIN flight_scores s ON s.flight_id=f.flight_id JOIN members m ON m.user_id=f.user_id WHERE f.processing_status='completed' AND f.started_at IS NOT NULL AND EXISTS (SELECT 1 FROM competition_grid_claims c WHERE c.claim_flight=f.flight_id AND c.competition_month=${competitionMonth}::date) GROUP BY f.user_id),
+      ranked AS (SELECT m.user_id,COALESCE(c.cells,0)::int AS cells,d.distance,RANK() OVER (ORDER BY COALESCE(c.cells,0) DESC,d.distance DESC NULLS LAST)::int AS rank_value, (d.distance IS NOT NULL AND d.distance=(MAX(d.distance) OVER ())) AS trophy FROM members m LEFT JOIN cells c ON c.user_id=m.user_id LEFT JOIN distances d ON d.user_id=m.user_id),
+      ordered AS (SELECT r.user_id,p.display_name,p.territory_color,r.cells,r.distance,r.rank_value,r.trophy,ROW_NUMBER() OVER (ORDER BY r.rank_value,lower(p.display_name),r.user_id)::int AS position FROM ranked r JOIN profiles p ON p.user_id=r.user_id)
+      SELECT o.user_id AS "userId",o.display_name AS "displayName",o.territory_color AS "territoryColor",o.cells,o.distance,o.rank_value,o.trophy,o.position
+      FROM ordered o
+      ${pageSize === undefined ? sql`` : sql`WHERE (o.position > ${offset} AND o.position <= ${offset + pageSize + 1}) ${options.includeUserId ? sql`OR o.user_id = ${options.includeUserId}` : sql``}`}
+      ORDER BY o.position
+    `);
+    const hasMore = pageSize !== undefined && result.rows.some((row) => row.position > offset + pageSize);
+    const pageRows = pageSize === undefined
+      ? result.rows
+      : result.rows.filter((row) => row.position <= offset + pageSize || row.userId === options.includeUserId);
+    return { standings: pageRows.map((row) => ({
+      userId: row.userId,
+      displayName: row.displayName,
+      territoryColor: row.territoryColor,
+      claimedCellCount: row.cells,
+      bestFivePointDistanceMeters: row.distance,
+      rank: row.cells === 0 && row.distance === null ? null : row.rank_value,
+      trophy: Boolean(row.trophy),
+    })), nextOffset: pageSize !== undefined && hasMore ? offset + pageSize : null };
+  }
+  async function flightRows(input: { groupId: string; competitionMonth: string; pilotUserId?: string; cursor?: string; limit?: number }) {
+    const { groupId, competitionMonth, pilotUserId, cursor, limit = 25 } = input;
+    const pageSize = Math.min(limit, 100);
+    let cursorDate: Date | undefined;
+    let cursorId: string | undefined;
+    if (cursor) {
+      const [date, id, ...extra] = Buffer.from(cursor, 'base64url').toString('utf8').split('|');
+      if (!date || !id || extra.length || Number.isNaN(Date.parse(date)) || !uuidPattern.test(id)) {
+        throw new GroupError('validation', 'Invalid flight cursor.');
+      }
+      cursorDate = new Date(date);
+      cursorId = id;
+    }
+    const result = await database.execute<GroupFlight>(sql`SELECT f.flight_id AS "flightId",f.user_id AS "pilotUserId",p.display_name AS "pilotName",f.started_at AS "startedAt",f.launch_timezone AS "launchTimezone",s.five_point_distance_meters AS "fivePointDistanceMeters",f.duration_seconds AS "durationSeconds" FROM flights f JOIN profiles p ON p.user_id=f.user_id LEFT JOIN flight_scores s ON s.flight_id=f.flight_id WHERE f.processing_status='completed' AND f.started_at IS NOT NULL AND EXISTS (SELECT 1 FROM pilot_group_memberships m WHERE m.group_id=${groupId} AND m.user_id=f.user_id AND m.status='accepted') AND EXISTS (SELECT 1 FROM competition_grid_claims c WHERE c.claim_flight=f.flight_id AND c.competition_month=${competitionMonth}::date) ${pilotUserId ? sql`AND f.user_id=${pilotUserId}` : sql``} ${cursorDate ? sql`AND (f.started_at, f.flight_id) < (${cursorDate},${cursorId}::uuid)` : sql``} ORDER BY f.started_at DESC,f.flight_id DESC LIMIT ${pageSize + 1}`);
+    const hasMore = result.rows.length > pageSize;
+    const rows = result.rows.slice(0, pageSize);
+    const last = rows.at(-1);
+    return {
+      flights: rows,
+      nextCursor: hasMore && last?.startedAt && last?.flightId
+        ? Buffer.from(`${new Date(last.startedAt).toISOString()}|${last.flightId}`).toString('base64url')
+        : null,
+    };
+  }
   const service: GroupService = {
     async createGroup({ ownerUserId, name }) {
       return database.transaction(async (tx) => {
@@ -109,60 +198,94 @@ export function createGroupService(database: Database): GroupService {
     async searchPilots({ query, excludeUserId, excludeGroupId, limit = 10 }) { const result = await database.execute<{ userId: string; displayName: string }>(sql`SELECT p.user_id AS "userId", p.display_name AS "displayName" FROM profiles p WHERE p.display_name ILIKE ${`%${query.trim()}%`} ${excludeUserId ? sql`AND p.user_id <> ${excludeUserId}` : sql``} ${excludeGroupId ? sql`AND NOT EXISTS (SELECT 1 FROM pilot_group_memberships m WHERE m.group_id=${excludeGroupId} AND m.user_id=p.user_id)` : sql``} ORDER BY lower(p.display_name), p.user_id LIMIT ${Math.min(limit, 25)}`); return result.rows; },
     async canView({ groupId, userId }) { return Boolean(await membership(database, groupId, userId, true)); },
     async getProfileGroups(userId, competitionMonth = new Date().toISOString().slice(0, 7)) {
-      const groups = await database.execute(sql`SELECT g.group_id AS "groupId",g.name,g.owner_user_id AS "ownerUserId",(SELECT COUNT(*)::int FROM pilot_group_memberships roster WHERE roster.group_id=g.group_id) AS "memberCount",200 AS capacity FROM pilot_group_memberships m JOIN pilot_groups g ON g.group_id=m.group_id WHERE m.user_id=${userId} AND m.status='accepted'`);
-      const invitations = await database.execute(sql`SELECT g.group_id AS "groupId",g.name,g.owner_user_id AS "ownerUserId",owner.display_name AS "ownerDisplayName",(SELECT COUNT(*)::int FROM pilot_group_memberships roster WHERE roster.group_id=g.group_id) AS "memberCount",200 AS capacity,m.invited_at AS "invitedAt" FROM pilot_group_memberships m JOIN pilot_groups g ON g.group_id=m.group_id JOIN profiles owner ON owner.user_id=g.owner_user_id WHERE m.user_id=${userId} AND m.status='pending'`);
-      const enriched = await Promise.all((groups.rows as GroupSummary[]).map(async g => { const rows = await service.getStandings({ groupId:g.groupId,userId,competitionMonth }); const me=rows.find(r=>r.userId===userId); return {...g,rank:me?.rank??null,claimedCellCount:me?.claimedCellCount??0,bestFivePointDistanceMeters:me?.bestFivePointDistanceMeters??null,trophy:me?.trophy??false}; }));
-      return { groups: enriched, invitations: invitations.rows as GroupInvitation[] };
+      competitionMonth = canonicalMonth(competitionMonth);
+      type ProfileGroup = GroupSummary & {
+        rank: number | null;
+        claimedCellCount: number;
+        bestFivePointDistanceMeters: number | null;
+        trophy: boolean;
+      };
+      const [groups, invitations] = await Promise.all([
+        database.execute<ProfileGroup>(sql`
+          WITH profile_groups AS (
+            SELECT g.group_id, g.name, g.owner_user_id,
+              (SELECT COUNT(*)::int FROM pilot_group_memberships roster WHERE roster.group_id=g.group_id) AS member_count
+            FROM pilot_group_memberships m
+            JOIN pilot_groups g ON g.group_id=m.group_id
+            WHERE m.user_id=${userId} AND m.status='accepted'
+          ), members AS (
+            SELECT m.group_id, m.user_id
+            FROM pilot_group_memberships m
+            JOIN profile_groups g ON g.group_id=m.group_id
+            WHERE m.status='accepted'
+          ), cells AS (
+            SELECT m.group_id, c.claim_user AS user_id, COUNT(DISTINCT (c.x,c.y))::int AS cells
+            FROM competition_grid_claims c
+            JOIN members m ON m.user_id=c.claim_user
+            WHERE c.competition_month=${competitionMonth}::date
+            GROUP BY m.group_id,c.claim_user
+          ), distances AS (
+            SELECT m.group_id, f.user_id, MAX(s.five_point_distance_meters)::double precision AS distance
+            FROM flights f
+            JOIN flight_scores s ON s.flight_id=f.flight_id
+            JOIN members m ON m.user_id=f.user_id
+            WHERE f.processing_status='completed' AND f.started_at IS NOT NULL
+              AND EXISTS (SELECT 1 FROM competition_grid_claims c WHERE c.claim_flight=f.flight_id AND c.competition_month=${competitionMonth}::date)
+            GROUP BY m.group_id,f.user_id
+          ), ranked AS (
+            SELECT m.group_id,m.user_id,COALESCE(c.cells,0)::int AS cells,d.distance,
+              RANK() OVER (PARTITION BY m.group_id ORDER BY COALESCE(c.cells,0) DESC,d.distance DESC NULLS LAST)::int AS rank_value,
+              (d.distance IS NOT NULL AND d.distance=(MAX(d.distance) OVER (PARTITION BY m.group_id))) AS trophy
+            FROM members m
+            LEFT JOIN cells c ON c.group_id=m.group_id AND c.user_id=m.user_id
+            LEFT JOIN distances d ON d.group_id=m.group_id AND d.user_id=m.user_id
+          )
+          SELECT g.group_id AS "groupId",g.name,g.owner_user_id AS "ownerUserId",g.member_count AS "memberCount",200 AS capacity,
+            CASE WHEN r.cells=0 AND r.distance IS NULL THEN NULL ELSE r.rank_value END AS rank,
+            r.cells AS "claimedCellCount",r.distance AS "bestFivePointDistanceMeters",r.trophy
+          FROM profile_groups g
+          JOIN ranked r ON r.group_id=g.group_id AND r.user_id=${userId}
+        `),
+        database.execute<GroupInvitation>(sql`SELECT g.group_id AS "groupId",g.name,g.owner_user_id AS "ownerUserId",owner.display_name AS "ownerDisplayName",(SELECT COUNT(*)::int FROM pilot_group_memberships roster WHERE roster.group_id=g.group_id) AS "memberCount",200 AS capacity,m.invited_at AS "invitedAt" FROM pilot_group_memberships m JOIN pilot_groups g ON g.group_id=m.group_id JOIN profiles owner ON owner.user_id=g.owner_user_id WHERE m.user_id=${userId} AND m.status='pending'`),
+      ]);
+      return { groups: groups.rows, invitations: invitations.rows };
     },
     async getGroup({ groupId, userId }) { await requireMember(database, groupId, userId); return summary(database, groupId); },
+    async getPage({ groupId, userId, competitionMonth, pilotUserId }) {
+      competitionMonth = canonicalMonth(competitionMonth);
+      const actor = await membership(database, groupId, userId, true);
+      if (!actor) denied();
+      const [group, standingsPage, flightPage, contextRows] = await Promise.all([
+        summary(database, groupId),
+        standingRows(groupId, competitionMonth, { limit: 25, includeUserId: userId }),
+        flightRows({ groupId, competitionMonth, pilotUserId }),
+        actor.owner_user_id === userId ? memberRows(groupId, userId) : pilotRows(groupId),
+      ]);
+      const members = actor.owner_user_id === userId ? contextRows as GroupMember[] : undefined;
+      const pilots = (contextRows as Array<GroupMember | GroupPilot>)
+        .filter((pilot) => !('status' in pilot) || pilot.status === 'accepted')
+        .map(({ userId: pilotUserId, displayName, territoryColor }) => ({ userId: pilotUserId, displayName, territoryColor }));
+      return { group, standingsPage, pilots, flightPage, members };
+    },
     async getMembers({ groupId, userId }) {
       const actor = await membership(database, groupId, userId, true);
       if (!actor) denied();
-      const result = await database.execute<GroupMember & { ownerUserId: string }>(sql`
-        SELECT m.user_id AS "userId", p.display_name AS "displayName", p.territory_color AS "territoryColor", m.status,
-          (m.user_id = g.owner_user_id) AS "isOwner", g.owner_user_id AS "ownerUserId"
-        FROM pilot_group_memberships m
-        JOIN pilot_groups g ON g.group_id = m.group_id
-        JOIN profiles p ON p.user_id = m.user_id
-        WHERE m.group_id = ${groupId} AND (m.status = 'accepted' OR g.owner_user_id = ${userId})
-        ORDER BY CASE WHEN m.status = 'accepted' THEN 0 ELSE 1 END, lower(p.display_name), m.user_id
-      `);
-      return result.rows.map((row) => ({ userId: row.userId, displayName: row.displayName, territoryColor: row.territoryColor, status: row.status, isOwner: row.isOwner }));
+      return memberRows(groupId, userId);
     },
     async getStandings({ groupId, userId, competitionMonth }) {
       await requireMember(database, groupId, userId);
       competitionMonth = canonicalMonth(competitionMonth);
-      const result = await database.execute<GroupStanding & { cells: number; distance: number | null; rank_value: number | null }>(sql`
-        WITH members AS (SELECT m.user_id FROM pilot_group_memberships m WHERE m.group_id=${groupId} AND m.status='accepted'),
-        cells AS (SELECT c.claim_user AS user_id,COUNT(DISTINCT (c.x,c.y))::int AS cells FROM competition_grid_claims c JOIN members m ON m.user_id=c.claim_user WHERE c.competition_month=${competitionMonth}::date GROUP BY c.claim_user),
-        distances AS (SELECT f.user_id,MAX(s.five_point_distance_meters)::double precision AS distance FROM flights f JOIN flight_scores s ON s.flight_id=f.flight_id JOIN members m ON m.user_id=f.user_id WHERE f.processing_status='completed' AND f.started_at IS NOT NULL AND EXISTS (SELECT 1 FROM competition_grid_claims c WHERE c.claim_flight=f.flight_id AND c.competition_month=${competitionMonth}::date) GROUP BY f.user_id),
-        ranked AS (SELECT m.user_id,COALESCE(c.cells,0)::int AS cells,d.distance,RANK() OVER (ORDER BY COALESCE(c.cells,0) DESC,d.distance DESC NULLS LAST)::int AS rank_value FROM members m LEFT JOIN cells c ON c.user_id=m.user_id LEFT JOIN distances d ON d.user_id=m.user_id)
-        SELECT r.user_id AS "userId",p.display_name AS "displayName",p.territory_color AS "territoryColor",r.cells,r.distance,r.rank_value, (r.distance IS NOT NULL AND r.distance=(MAX(r.distance) OVER ())) AS trophy FROM ranked r JOIN profiles p ON p.user_id=r.user_id ORDER BY r.rank_value NULLS LAST,lower(p.display_name),r.user_id
-      `);
-      return result.rows.map((r:any)=>({userId:r.userId,displayName:r.displayName,territoryColor:r.territoryColor,claimedCellCount:r.cells,bestFivePointDistanceMeters:r.distance,rank:r.cells===0&&r.distance===null?null:r.rank_value,trophy:Boolean(r.trophy)}));
+      return (await standingRows(groupId, competitionMonth)).standings;
+    },
+    async getStandingsPage({ groupId, userId, competitionMonth, offset = 0, limit = 25, includeUserId }) {
+      await requireMember(database, groupId, userId);
+      competitionMonth = canonicalMonth(competitionMonth);
+      return standingRows(groupId, competitionMonth, { offset, limit, includeUserId });
     },
     async listFlights({ groupId, userId, competitionMonth, pilotUserId, cursor, limit = 25 }) {
       competitionMonth = canonicalMonth(competitionMonth);
       await requireMember(database, groupId, userId);
-      let cursorDate: Date | undefined;
-      let cursorId: string | undefined;
-      if (cursor) {
-        const [date, id, ...extra] = Buffer.from(cursor, 'base64url').toString('utf8').split('|');
-        if (!date || !id || extra.length || Number.isNaN(Date.parse(date)) || !uuidPattern.test(id)) {
-          throw new GroupError('validation', 'Invalid flight cursor.');
-        }
-        cursorDate = new Date(date);
-        cursorId = id;
-      }
-      const result = await database.execute<GroupFlight>(sql`SELECT f.flight_id AS "flightId",f.user_id AS "pilotUserId",p.display_name AS "pilotName",f.started_at AS "startedAt",f.launch_timezone AS "launchTimezone",s.five_point_distance_meters AS "fivePointDistanceMeters",f.duration_seconds AS "durationSeconds" FROM flights f JOIN profiles p ON p.user_id=f.user_id LEFT JOIN flight_scores s ON s.flight_id=f.flight_id WHERE f.processing_status='completed' AND f.started_at IS NOT NULL AND EXISTS (SELECT 1 FROM pilot_group_memberships m WHERE m.group_id=${groupId} AND m.user_id=f.user_id AND m.status='accepted') AND EXISTS (SELECT 1 FROM competition_grid_claims c WHERE c.claim_flight=f.flight_id AND c.competition_month=${competitionMonth}::date) ${pilotUserId ? sql`AND f.user_id=${pilotUserId}` : sql``} ${cursorDate ? sql`AND (f.started_at, f.flight_id) < (${cursorDate},${cursorId}::uuid)` : sql``} ORDER BY f.started_at DESC,f.flight_id DESC LIMIT ${Math.min(limit,100)}`);
-      const rows = result.rows;
-      const last = rows.at(-1);
-      return {
-        flights: rows,
-        nextCursor: rows.length === Math.min(limit, 100) && last?.startedAt && last?.flightId
-          ? Buffer.from(`${new Date(last.startedAt).toISOString()}|${last.flightId}`).toString('base64url')
-          : null,
-      };
+      return flightRows({ groupId, competitionMonth, pilotUserId, cursor, limit });
     },
     async getFlightTrack({ groupId,userId,flightId,competitionMonth }) { competitionMonth=canonicalMonth(competitionMonth); await requireMember(database,groupId,userId); const result=await database.execute(sql`SELECT f.flight_id AS "flightId",f.user_id AS "pilotUserId",ST_AsGeoJSON(ST_MakeLine(ST_SetSRID(ST_MakePoint(tp.longitude,tp.latitude),4326) ORDER BY tp.sequence_number))::jsonb AS geometry FROM flights f JOIN track_points tp ON tp.flight_id=f.flight_id WHERE f.flight_id=${flightId} AND EXISTS (SELECT 1 FROM pilot_group_memberships m WHERE m.group_id=${groupId} AND m.user_id=f.user_id AND m.status='accepted') AND EXISTS (SELECT 1 FROM competition_grid_claims c WHERE c.claim_flight=f.flight_id AND c.competition_month=${competitionMonth}::date) GROUP BY f.flight_id,f.user_id`); return (result.rows[0] as Record<string,unknown>|undefined)??null; },
   };
