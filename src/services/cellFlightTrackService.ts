@@ -28,10 +28,6 @@ export type CellFlightTrackResult = {
       geometry: LineStringGeometry;
     }>;
   };
-  pilots?: Array<{
-    userId: string;
-    displayName: string;
-  }>;
   flights?: Array<{
     flightId: string;
     userId: string;
@@ -152,10 +148,6 @@ export function createCellFlightTrackService(
           distanceMeters: distanceMeters !== null && Number.isFinite(distanceMeters) ? distanceMeters : null,
         };
       });
-      response.pilots = [...new Map(storedClaimingFlights.rows.map((flight) => [
-        flight.userId,
-        { userId: flight.userId, displayName: flight.displayName },
-      ])).values()].sort((left, right) => left.displayName.localeCompare(right.displayName));
     }
     return response;
   }

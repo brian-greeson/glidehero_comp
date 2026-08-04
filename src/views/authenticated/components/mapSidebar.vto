@@ -28,19 +28,13 @@
       {{ if location && typeof locationClearHref !== 'undefined' }}<a class="map-location__clear" href="{{ locationClearHref }}" aria-label="Clear location {{ location }}">×</a>{{ /if }}
     </div>
   </section>
-  {{ if mode === 'personal' || metrics.length }}
+  {{ if mode === 'personal' }}
     <section class="map-control-group map-stats">
       <h2>Your Stats</h2>
-      <div class="map-stat-grid" data-map-viewport-stats {{ if mode === 'personal' }}data-personal-stats aria-busy="true"{{ /if }}>
-        {{ if mode === 'personal' && metrics.length === 0 }}
-          <article class="map-stat map-stat--green"><strong data-personal-claimed-cells>—</strong><span>Cells Owned</span></article>
-          <article class="map-stat map-stat--blue"><strong data-personal-claimed-area>—</strong><span>Claimed Area</span></article>
-          <article class="map-stat map-stat--purple"><strong data-personal-flights>—</strong><span>Flights</span></article>
-        {{ else }}
-          {{ for metric of metrics }}
-            <article class="map-stat map-stat--{{ metric.tone }}"><strong>{{ metric.value }}</strong><span>{{ metric.label }}</span></article>
-          {{ /for }}
-        {{ /if }}
+      <div class="map-stat-grid" data-map-viewport-stats data-personal-stats aria-busy="true">
+        <article class="map-stat map-stat--green"><strong data-personal-claimed-cells>—</strong><span>Cells Owned</span></article>
+        <article class="map-stat map-stat--blue"><strong data-personal-claimed-area>—</strong><span>Claimed Area</span></article>
+        <article class="map-stat map-stat--purple"><strong data-personal-flights>—</strong><span>Flights</span></article>
       </div>
     </section>
   {{ /if }}

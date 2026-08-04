@@ -143,12 +143,10 @@ export function createMapCellTrackSelection({
   onError = () => undefined,
 }) {
   let selectedCell = null;
-  let selectedResult = null;
   const request = createLatestRequest(async ({ signal, isCurrent }, cell, period) => {
     try {
       const result = await loadCellTracks(cell, period, signal);
       if (!isCurrent() || selectedCell?.cellId !== cell.cellId) return;
-      selectedResult = result;
       renderSelection(map, result, colorTracks);
       onResult(result);
     } catch (error) {
@@ -158,7 +156,6 @@ export function createMapCellTrackSelection({
 
   function clear() {
     selectedCell = null;
-    selectedResult = null;
     request.cancel();
     renderSelection(map, null, colorTracks);
     onClear();
@@ -175,7 +172,6 @@ export function createMapCellTrackSelection({
     }
     onSelect();
     selectedCell = cell;
-    selectedResult = null;
     const initialCell = plainCellFeature(initialFeature);
     renderSelection(map, initialCell ? {
       cell: initialCell,
@@ -202,9 +198,6 @@ export function createMapCellTrackSelection({
     },
     get selectedCell() {
       return selectedCell;
-    },
-    get selectedResult() {
-      return selectedResult;
     },
   };
 }

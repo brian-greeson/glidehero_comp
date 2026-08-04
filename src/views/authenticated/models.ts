@@ -121,7 +121,6 @@ export type MapPageModel = AuthenticatedShellModel & {
   period: 'all-time' | 'current-month';
   location: string | null;
   locationClearHref?: string;
-  metrics: MetricView[];
   leaderboard: Array<{ rank: number; pilot: PilotView; cells: string; isCurrent: boolean }>;
   mapModeHrefs?: {
     personal: string;

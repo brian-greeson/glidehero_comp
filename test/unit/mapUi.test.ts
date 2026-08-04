@@ -39,7 +39,6 @@ describe('refreshed map UI controls', () => {
       mode,
       period: 'current-month' as const,
       location: null,
-      metrics: [],
       leaderboard: [],
     });
 
@@ -86,7 +85,9 @@ describe('refreshed map UI controls', () => {
     expect(mobileRules).toContain('.map-page[data-dashboard] .map-mobile-replay { bottom: calc(5.75rem + env(safe-area-inset-bottom, 0px)); }');
     expect(mobileRules).toContain('.map-stage .maplibregl-ctrl-top-right { top: calc(.75rem + 44px + .65rem); right: .75rem; }');
     expect(mobileRules).toContain('.map-mobile-replay__icon { display: grid;');
-    expect(mobileRules).not.toContain('.mobile-map-sheet { position: fixed;');
+    expect(css).not.toContain('.map-controls');
+    expect(css).not.toContain('.mobile-map-sheet');
+    expect(css).not.toContain('.map-stat--orange');
     expect(css.slice(css.indexOf('@media (max-width: 390px)'))).toContain('.map-mobile-period-controls { right: .75rem; left: .75rem; }');
   });
 
@@ -101,7 +102,6 @@ describe('refreshed map UI controls', () => {
         mode: 'competitive',
         period: 'current-month' as const,
         location: null,
-        metrics: [],
         leaderboard: [],
       }),
     ]);
@@ -121,7 +121,6 @@ describe('refreshed map UI controls', () => {
       mode: 'personal',
       period: 'current-month' as const,
       location: null,
-      metrics: [],
       leaderboard: [],
     });
     expect(html).toContain('class="map-mobile-controls"');
@@ -166,7 +165,6 @@ describe('refreshed map UI controls', () => {
       mode: 'competitive',
       period: 'current-month' as const,
       location: null,
-      metrics: [],
       leaderboard: [],
     });
     expect(html).toContain('<h2>View</h2>');
@@ -196,7 +194,6 @@ describe('refreshed map UI controls', () => {
       period: 'current-month' as const,
       location: 'Boulder',
       locationClearHref: '/following?month=2026-07',
-      metrics: [],
       leaderboard: [],
     });
 
@@ -213,13 +210,16 @@ describe('refreshed map UI controls', () => {
       mode: 'personal',
       period: 'current-month' as const,
       location: null,
-      metrics: [],
       leaderboard: [],
     });
     const sidebar = html.match(/<aside class="map-sidebar"[\s\S]*?<\/aside>/)?.[0];
 
     expect(sidebar).toContain('data-competition-period-option="all-time" aria-pressed="false"');
     expect(sidebar).toContain('data-competition-period-option="current-month" aria-pressed="true"');
+    expect(sidebar).toContain('data-personal-stats aria-busy="true"');
+    expect(sidebar).toContain('data-personal-claimed-cells');
+    expect(sidebar).toContain('data-personal-claimed-area');
+    expect(sidebar).toContain('data-personal-flights');
   });
 
   it('turns period controls into links that preserve map URL state', () => {

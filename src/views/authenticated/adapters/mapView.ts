@@ -18,7 +18,7 @@ export type ProductionMapInput = {
 
 /** Build an endpoint-backed map model. Map data is loaded by MapLibre after render. */
 export function createMapPageModel(
-  shell: Omit<MapPageModel, 'page' | 'mode' | 'period' | 'location' | 'metrics' | 'leaderboard'>,
+  shell: Omit<MapPageModel, 'page' | 'mode' | 'period' | 'location' | 'leaderboard'>,
   input: ProductionMapInput,
 ): MapPageModel {
   return {
@@ -28,7 +28,6 @@ export function createMapPageModel(
     period: input.period,
     location: input.location,
     ...(input.locationClearHref ? { locationClearHref: input.locationClearHref } : {}),
-    metrics: [],
     leaderboard: [],
     currentUserId: input.currentUserId,
     territoryColor: input.territoryColor,

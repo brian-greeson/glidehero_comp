@@ -182,10 +182,6 @@ describe('CellFlightTrackService', () => {
       [[-104, 39], [-103.9, 39.1]],
       [[-105, 40], [-104.9, 40.1]],
     ]);
-    expect(result.pilots).toEqual([
-      { userId: alpha, displayName: 'Alpha Pilot' },
-      { userId: bravo, displayName: 'Bravo Pilot' },
-    ]);
     expect(result.flights).toEqual([
       {
         flightId: shortFlight, userId: bravo, displayName: 'Bravo Pilot',
@@ -216,7 +212,6 @@ describe('CellFlightTrackService', () => {
       alphaLatest,
       alphaOlder,
     ]);
-    expect(selected.pilots).toEqual([{ userId: alpha, displayName: 'Alpha Pilot' }]);
     expect(selected.flights?.map((flight) => flight.flightId)).toEqual([alphaLatest, alphaOlder]);
   });
 
@@ -238,9 +233,5 @@ describe('CellFlightTrackService', () => {
     });
     expect(result.tracks.features.map((feature) => feature.properties.pilotUserId)).toEqual([followed, viewer]);
     expect(result.tracks.features.some((feature) => feature.properties.pilotUserId === outsider)).toBe(false);
-    expect(result.pilots).toEqual([
-      { userId: followed, displayName: 'Followed Pilot' },
-      { userId: viewer, displayName: 'Viewer Pilot' },
-    ]);
   });
 });
