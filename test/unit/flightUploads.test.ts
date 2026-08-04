@@ -141,6 +141,39 @@ describe('flight upload progress UI', () => {
     expect(harness.timers.some((timer) => timer.delay === 5_000)).toBe(false);
   });
 
+  it('does not poll for an abandoned uploading intent with no queued or processing work', async () => {
+    const harness = uploadHarness(1, async (url, options, fallback) => (
+      String(url) === '/v1/igc-upload-progress'
+        ? { ok: true, json: async () => ({ total: 1, finished: 0, queued: 0, processing: 0, failed: 0 }) }
+        : fallback(url, options)
+    ));
+
+    harness.selectors.get('[data-upload-trigger]').dispatch('click');
+
+    await vi.waitFor(() => expect(fetch.mock.calls.filter(([url]) => String(url) === '/v1/igc-upload-progress')).toHaveLength(1));
+    await vi.waitFor(() => expect(harness.timers.some((timer) => timer.delay === 5_000)).toBe(false));
+  });
+
+  it('stops polling after a local upload reaches a retained failed server state', async () => {
+    let progressAttempt = 0;
+    const harness = uploadHarness(0, async (url, options, fallback) => {
+      if (String(url) !== '/v1/igc-upload-progress') return fallback(url, options);
+      progressAttempt += 1;
+      if (progressAttempt === 1) return fallback(url, options);
+      return { ok: true, json: async () => ({ total: 1, finished: 1, queued: 0, processing: 0, failed: 1 }) };
+    });
+
+    harness.select(harness.uploadInput, files(1, 'server-failed'));
+    await vi.waitFor(() => expect(harness.xhr.instances).toHaveLength(1));
+    harness.xhr.instances[0].succeed();
+    await vi.waitFor(() => expect(harness.timers.some((timer) => timer.delay === 5_000)).toBe(true));
+
+    harness.timers.splice(harness.timers.findIndex((timer) => timer.delay === 5_000), 1)[0]();
+
+    await vi.waitFor(() => expect(progressAttempt).toBe(2));
+    await vi.waitFor(() => expect(harness.timers.some((timer) => timer.delay === 5_000)).toBe(false));
+  });
+
   it('stops aggregate polling when the upload modal closes', async () => {
     const harness = uploadHarness(2);
     harness.selectors.get('[data-upload-trigger]').dispatch('click');

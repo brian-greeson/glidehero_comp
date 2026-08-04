@@ -245,7 +245,6 @@ export function initializeFlightUploads(documentRef = document, windowRef = glob
       || running > 0
       || pending.length > 0
       || currentReservations.size > 0;
-    const serverWorkActive = serverTotal > serverFinished;
     if (!uploadDialog.open || (!localWorkActive && !serverWorkActive)) {
       progressPollTimer = null;
       return;
@@ -277,7 +276,7 @@ export function initializeFlightUploads(documentRef = document, windowRef = glob
       }
       const reservations = [...currentReservations];
       if (
-        serverTotal === 0
+        serverTotal === serverFinished
         && selected === settled
         && running === 0
         && pending.length === 0
