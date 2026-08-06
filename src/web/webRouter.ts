@@ -209,6 +209,21 @@ function formatGroupMonth(value: string): string {
     .format(new Date(Date.UTC(year, month - 1, 1)));
 }
 
+function formatGroupLaunchTime(value: Date | string, timeZone: string | null): string {
+  const startedAt = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(startedAt.getTime())) return 'Launch time unavailable';
+  try {
+    return new Intl.DateTimeFormat('en-US', {
+      month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit',
+      timeZone: timeZone || 'UTC',
+    }).format(startedAt);
+  } catch {
+    return new Intl.DateTimeFormat('en-US', {
+      month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: 'UTC',
+    }).format(startedAt);
+  }
+}
+
 function mapPagePeriod(query: Request['query']): {
   period: 'all-time' | 'current-month';
   month?: string;
@@ -430,24 +445,13 @@ export function createWebRouter(dependencies: {
       filterHref: `${groupHref}&pilot=${encodeURIComponent(standing.userId)}`,
     }));
     const flights = flightPage.flights.map((flight) => {
-      let launchTime = 'Launch time unavailable';
-      try {
-        launchTime = new Intl.DateTimeFormat('en-US', {
-          month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit',
-          timeZone: flight.launchTimezone || 'UTC',
-        }).format(flight.startedAt);
-      } catch {
-        launchTime = new Intl.DateTimeFormat('en-US', {
-          month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: 'UTC',
-        }).format(flight.startedAt);
-      }
       const pilot = pilots.find((member) => member.userId === flight.pilotUserId);
       return {
         id: flight.flightId,
         pilotName: flight.pilotName,
         pilotInitials: initialsForDisplayName(flight.pilotName),
         pilotColor: pilot?.territoryColor ?? '#1769AA',
-        launchTime,
+        launchTime: formatGroupLaunchTime(flight.startedAt, flight.launchTimezone),
         fivePointDistance: formatGroupDistance(flight.fivePointDistanceMeters),
         duration: formatGroupDuration(flight.durationSeconds),
         thumbnail: flightThumbnailUrls.get(flight.flightId),

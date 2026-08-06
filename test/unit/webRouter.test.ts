@@ -233,7 +233,15 @@ function dependencies() {
         { userId: user.userId, displayName: user.displayName, territoryColor: user.territoryColor },
         { userId: pilotProfile.userId, displayName: pilotProfile.displayName, territoryColor: pilotProfile.territoryColor },
       ],
-      flightPage: { flights: [], nextCursor: null },
+      flightPage: { flights: [{
+        flightId: '00000000-0000-4000-8000-000000000102',
+        pilotUserId: user.userId,
+        pilotName: user.displayName,
+        startedAt: '2026-08-03T14:15:00.000Z',
+        launchTimezone: 'UTC',
+        fivePointDistanceMeters: 34_000,
+        durationSeconds: 3_600,
+      }], nextCursor: null },
       members: [{ userId: user.userId, displayName: user.displayName, territoryColor: user.territoryColor, status: 'accepted' as const, isOwner: true }],
     })),
     getMembers: vi.fn(async () => [{ userId: user.userId, displayName: user.displayName, territoryColor: user.territoryColor, status: 'accepted' as const, isOwner: true }]),
@@ -369,6 +377,7 @@ describe('webRouter', () => {
         page: 'group',
         group: expect.objectContaining({ name: 'Weekend XC', monthLabel: 'August 2026', isOwner: true, capacity: '200', inviteHref: '#group-member-management' }),
         standings: [expect.objectContaining({ rank: 1, cells: '12', isDistanceLeader: true })],
+        flights: [expect.objectContaining({ launchTime: 'Aug 3, 2:15 PM' })],
         pilotColorsJson: JSON.stringify({ [user.userId]: user.territoryColor, [pilotProfile.userId]: pilotProfile.territoryColor }),
       }));
       expect(base.groups.getPage).toHaveBeenCalledWith({

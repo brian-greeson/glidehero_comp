@@ -14,7 +14,7 @@ export type GroupStandingsPage = { standings: GroupStanding[]; nextOffset: numbe
 export type GroupPilot = { userId: string; displayName: string; territoryColor: string };
 export type GroupMember = { userId: string; displayName: string; territoryColor: string; status: 'accepted'|'pending'; isOwner: boolean };
 export type GroupFlight = {
-  flightId: string; pilotUserId: string; pilotName: string; startedAt: Date;
+  flightId: string; pilotUserId: string; pilotName: string; startedAt: Date | string;
   launchTimezone: string | null; fivePointDistanceMeters: number | null; durationSeconds: number | null;
 };
 export type GroupPageData = {
