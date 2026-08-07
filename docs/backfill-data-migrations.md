@@ -1,19 +1,5 @@
-# Flight upload deployment
+# Backfill data migrations
 
-The web service and `flight-worker` component both require `VALKEY_URL`, the
-configured private Space, `BUCKET_FOLDER`, and `MAPTILER_CREDENTIALS`. The web
-service uses Spaces credentials to create presigned upload and thumbnail-read
-URLs. The worker needs Spaces and PostgreSQL access to process queued objects
-and generate flight territory thumbnails.
-
-`MAPTILER_CREDENTIALS` is a server-only MapTiler credential used to sign static
-thumbnail requests. Browser-facing map styles continue to use the separately
-configured `MAPTILER_API_KEY`.
-
-`PUBLIC_ORIGIN` defaults to `https://glidehero.com`. Override it with another
-externally reachable origin, without a path, for local or staging deployments.
-The web process uses it to emit absolute canonical and flight-thumbnail URLs
-for Telegram and other social link previews.
 
 ## Chronological upload workflow rollout
 
