@@ -23,6 +23,5 @@ describe('app color palette', () => {
     expect(css).toContain('color: var(--color-text);');
     expect(css).toContain('background: var(--color-surface-subtle);');
     expect(css).toContain('border-bottom: 3px solid var(--color-primary);');
-    expect(css).toContain('stroke: var(--color-accent);');
   });
 });

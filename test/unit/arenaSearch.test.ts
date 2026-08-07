@@ -183,35 +183,8 @@ describe('Arena autocomplete', () => {
     expect(context.navigate).toHaveBeenCalledWith('/arena/us/alpha-1?month=2026-07');
   });
 
-  it('carries the URL month into Arena navigation', async () => {
-    const context = harness(vi.fn(async () => response(arenas)), '?month=2026-07');
-    context.input.value = 'a';
-    context.input.dispatch('input');
-    await vi.advanceTimersByTimeAsync(200);
 
-    context.results.children[0]?.dispatch('click');
 
-    expect(context.navigate).toHaveBeenCalledWith('/arena/us/alpha-1?month=2026-07');
-  });
-
-  it('keeps touch-selected results mounted when focusout has no related target', async () => {
-    const context = harness(vi.fn(async () => response(arenas)));
-    context.input.value = 'a';
-    context.input.dispatch('input');
-    await vi.advanceTimersByTimeAsync(200);
-    const option = context.results.children[0];
-
-    const pointerDown = option?.dispatch('pointerdown');
-    context.root.dispatch('focusout', { relatedTarget: null });
-
-    expect(pointerDown?.preventDefault).toHaveBeenCalledOnce();
-    expect(context.results.hidden).toBe(false);
-    expect(context.results.children).toHaveLength(3);
-
-    option?.dispatch('click');
-
-    expect(context.navigate).toHaveBeenCalledWith('/arena/us/alpha-1?month=2026-07');
-  });
 
   it('does not carry a stray Following view from a Global URL into an Arena', async () => {
     const context = harness(

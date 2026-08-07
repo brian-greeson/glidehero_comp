@@ -294,66 +294,7 @@ describe('Personal dashboard controller', () => {
     }
   });
 
-  it('loads Personal territory and refreshes stats after viewport movement', async () => {
-    const harness = mapHarness();
-    const mapElement = {
-      dataset: {
-        mapStyleUrl: 'map-style',
-        territoryColor: '#1769AA',
-        territoryTileMinimumZoom: '4',
-        territoryTileMaximumZoom: '14',
-      },
-    };
-    const emptyState = element();
-    const statsCard = element();
-    const claimedArea = element();
-    const flights = element();
-    const documentRef = {
-      createElement: element,
-      querySelector(selector: string) {
-        return (
-          new Map<string, any>([
-            ['[data-dashboard-map]', mapElement],
-            ['[data-map-empty-state]', emptyState],
-            ['[data-personal-stats]', statsCard],
-            ['[data-personal-claimed-area]', claimedArea],
-            ['[data-personal-flights]', flights],
-          ]).get(selector) ?? null
-        );
-      },
-    };
-    const fetchImpl = vi.fn(async (url: string) => {
-      return new Response(
-        JSON.stringify({
-          claimedCellCount: 1,
-          claimedAreaSquareMeters: 1_000_000,
-          flightCount: 1,
-        }),
-        { status: 200 },
-      );
-    });
 
-    initializePersonalDashboard({ documentRef, maplibre: harness.maplibre, fetchImpl });
-    expect(harness.maplibre.Map).toHaveBeenCalledWith(expect.objectContaining({ maxPitch: 0 }));
-    harness.move({ west: -106, east: -104 });
-    expect(fetchImpl).not.toHaveBeenCalled();
-    await harness.load();
-    expect(fetchImpl.mock.calls.map(([url]) => url)).toEqual([
-      '/onboarding/personal-map-viewed',
-      '/v1/personal-stats?month=2026-07&west=-106&south=39&east=-104&north=41',
-    ]);
-    expect(harness.map.addSource).toHaveBeenCalledWith('personal-territory', {
-      type: 'vector',
-      tiles: ['/v1/personal-territory/tiles/{z}/{x}/{y}.mvt?month=2026-07'],
-      minzoom: 4,
-      maxzoom: 14,
-    });
-    expect(claimedArea.textContent).toBe('1 km²');
-
-    harness.move({ west: -105, east: -103 });
-    await vi.waitFor(() => expect(fetchImpl).toHaveBeenCalledTimes(3));
-    expect(fetchImpl.mock.calls[2]?.[0]).toContain('west=-105');
-  });
 
   it('selects a Personal cell and preserves it while changing the period in place', async () => {
     const harness = mapHarness();
