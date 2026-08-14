@@ -278,7 +278,7 @@ function dependencies() {
     legs: [{ directDistanceMeters: 1_000, maximumDistanceMeters: 1_200, routeDistanceMeters: 1_000 }],
     directDistanceMeters: 1_000, maximumRouteDistanceMeters: 1_200, routeDistanceMeters: 1_000,
     actualExtraDistanceMeters: 0, actualDeviationPercent: 0, routingPriority: input.routingPriority,
-    thermalCoverage: 'unavailable' as const, claims: { direct: [], enclosed: [], newPersonal: [] },
+    thermalCoverage: 'unavailable' as const, claims: { direct: [], enclosed: [], newPersonal: input.userId ? [] : null },
   })) };
   const planExports: PlanExportService = {
     authorize: vi.fn(async () => '00000000-0000-4000-8000-000000000099'),
@@ -457,15 +457,39 @@ describe('webRouter', () => {
     });
   });
 
-  it('serves the authenticated Plan page, cached raster tiles, and route calculations', async () => {
+  it('serves Plan, raster tiles, and route calculations to guests while keeping export authenticated', async () => {
     const base = dependencies();
     await withServer(base.app, async (baseUrl) => {
       const anonymous = await fetch(`${baseUrl}/plan`, { redirect: 'manual' });
-      expect(anonymous.status).toBe(302);
+      expect(anonymous.status).toBe(200);
+      expect(base.renderAuthenticatedPage).toHaveBeenLastCalledWith(expect.objectContaining({ page: 'plan', isGuest: true }));
+
+      const guestTile = await fetch(`${baseUrl}/v1/thermal/tiles/12/2144/2717.png`);
+      expect(guestTile.status).toBe(200);
+
+      const guestRoute = await fetch(`${baseUrl}/v1/plan/route`, {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          anchors: [{ latitude: 39, longitude: -105 }, { latitude: 39.1, longitude: -104.9 }],
+          routingPriority: 'balanced',
+        }),
+      });
+      expect(guestRoute.status).toBe(200);
+      expect(base.plans.route).toHaveBeenLastCalledWith(expect.objectContaining({ userId: null, routingPriority: 'balanced' }));
+      expect(await guestRoute.json()).toEqual(expect.objectContaining({
+        claims: expect.objectContaining({ newPersonal: null }),
+      }));
+      expect(base.planExports.authorize).not.toHaveBeenCalled();
+
+      const guestExport = await fetch(`${baseUrl}/v1/plan/export`, {
+        method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}',
+      });
+      expect(guestExport.status).toBe(401);
+
       const headers = { cookie: 'glidehero_session=valid-token' };
       expect((await fetch(`${baseUrl}/plan`, { headers })).status).toBe(200);
       expect(base.renderAuthenticatedPage).toHaveBeenCalledWith(expect.objectContaining({
-        page: 'plan', thermalTileUrl: '/v1/thermal/tiles/{z}/{x}/{y}.png', defaultRoutingPriority: 'balanced',
+        page: 'plan', isGuest: false, thermalTileUrl: '/v1/thermal/tiles/{z}/{x}/{y}.png', defaultRoutingPriority: 'balanced',
       }));
 
       const tile = await fetch(`${baseUrl}/v1/thermal/tiles/12/2144/2717.png`, { headers });
@@ -475,7 +499,7 @@ describe('webRouter', () => {
 
       const invalidTile = await fetch(`${baseUrl}/v1/thermal/tiles/13/0/0.png`, { headers });
       expect(invalidTile.status).toBe(400);
-      expect(base.thermalRasters.get).toHaveBeenCalledTimes(1);
+      expect(base.thermalRasters.get).toHaveBeenCalledTimes(2);
 
       const route = await fetch(`${baseUrl}/v1/plan/route`, {
         method: 'POST', headers: { ...headers, 'content-type': 'application/json' },
@@ -1371,6 +1395,79 @@ describe('webRouter', () => {
       expect(response.headers.get('set-cookie')).toContain(
         'glidehero_session=login-token; Max-Age=604800; Path=/; HttpOnly; SameSite=Lax',
       );
+    });
+  });
+
+  it('returns JSON and sets the session cookie for modal signup without redirecting to onboarding', async () => {
+    const { app } = dependencies();
+    await withServer(app, async (baseUrl) => {
+      const response = await fetch(`${baseUrl}/signup`, {
+        method: 'POST',
+        redirect: 'manual',
+        headers: { accept: 'application/json', 'content-type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+          email: 'pilot@example.com',
+          password: 'correct horse battery staple',
+          displayName: 'Sky Pilot',
+        }),
+      });
+
+      expect(response.status).toBe(200);
+      expect(response.headers.get('location')).toBeNull();
+      expect(response.headers.get('set-cookie')).toContain('glidehero_session=new-token');
+      expect(await response.json()).toEqual({ ok: true });
+    });
+  });
+
+  it('returns JSON and sets the session cookie for modal login', async () => {
+    const { app } = dependencies();
+    await withServer(app, async (baseUrl) => {
+      const response = await fetch(`${baseUrl}/login`, {
+        method: 'POST',
+        redirect: 'manual',
+        headers: { accept: 'application/json', 'content-type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({ email: 'pilot@example.com', password: 'correct horse battery staple' }),
+      });
+
+      expect(response.status).toBe(200);
+      expect(response.headers.get('location')).toBeNull();
+      expect(response.headers.get('set-cookie')).toContain('glidehero_session=login-token');
+      expect(await response.json()).toEqual({ ok: true });
+    });
+  });
+
+  it('returns structured JSON errors for modal authentication failures', async () => {
+    const { app, auth } = dependencies();
+    vi.mocked(auth.login).mockRejectedValueOnce(new AuthFailure('invalid_credentials'));
+    vi.mocked(auth.signup).mockRejectedValueOnce(new AuthFailure('duplicate_email'));
+    await withServer(app, async (baseUrl) => {
+      const invalidLogin = await fetch(`${baseUrl}/login`, {
+        method: 'POST',
+        headers: { accept: 'application/json', 'content-type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({ email: 'pilot@example.com', password: 'wrong-password' }),
+      });
+      expect(invalidLogin.status).toBe(401);
+      expect(await invalidLogin.json()).toEqual({
+        error: { code: 'invalid_credentials', message: 'Email or password is incorrect.' },
+      });
+
+      const duplicateSignup = await fetch(`${baseUrl}/signup`, {
+        method: 'POST',
+        headers: { accept: 'application/json', 'content-type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+          email: 'pilot@example.com', password: 'correct horse battery staple', displayName: 'Sky Pilot',
+        }),
+      });
+      expect(duplicateSignup.status).toBe(409);
+      expect(await duplicateSignup.json()).toEqual({
+        error: { code: 'duplicate_email', message: 'An account with that email already exists.' },
+      });
+
+      const invalidSignup = await fetch(`${baseUrl}/signup`, {
+        method: 'POST', headers: { accept: 'application/json' },
+      });
+      expect(invalidSignup.status).toBe(422);
+      expect((await invalidSignup.json() as { error: { code: string } }).error.code).toBe('invalid_request');
     });
   });
 

@@ -137,7 +137,14 @@ export type MapPageModel = AuthenticatedShellModel & {
   mapEmptyState?: string;
 };
 
-export type PlanPageModel = AuthenticatedShellModel & {
+export type GuestPlanShellModel = {
+  page: 'plan';
+  title: string;
+  isGuest: true;
+  showFooter: false;
+};
+
+export type PlanPageModel = (AuthenticatedShellModel & { isGuest?: false } | GuestPlanShellModel) & {
   page: 'plan';
   mapStyleUrl: string;
   thermalTileUrl: string;

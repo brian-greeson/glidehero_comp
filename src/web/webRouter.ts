@@ -1197,12 +1197,11 @@ export function createWebRouter(dependencies: {
 
   router.get('/plan', async (_req, res) => {
     const currentUser = res.locals.currentUser;
-    if (!currentUser) {
-      res.redirect(302, '/');
-      return;
-    }
+    const shell = currentUser
+      ? { ...authenticatedShell('plan', currentUser, { showFooter: false }), isGuest: false as const }
+      : { page: 'plan' as const, title: 'Plan · GlideHero', isGuest: true as const, showFooter: false as const };
     await renderAuthenticated(res, dependencies.renderAuthenticatedPage, 200, {
-      ...authenticatedShell('plan', currentUser, { showFooter: false }),
+      ...shell,
       page: 'plan',
       mapStyleUrl: dependencies.mapTilerStyleUrl ?? '',
       thermalTileUrl: '/v1/thermal/tiles/{z}/{x}/{y}.png',
@@ -1211,7 +1210,6 @@ export function createWebRouter(dependencies: {
   });
 
   router.get('/v1/thermal/tiles/:z/:x/:y.png', async (req, res, next) => {
-    if (!res.locals.currentUser) return next(new AppError(401, 'unauthorized', 'Sign in before viewing thermal tiles.'));
     if (!dependencies.thermalRasters) throw new Error('Thermal raster cache is not configured.');
     const zoom = thermalTileCoordinateSchema.safeParse(req.params.z);
     const x = thermalTileCoordinateSchema.safeParse(req.params.x);
@@ -1239,13 +1237,12 @@ export function createWebRouter(dependencies: {
 
   router.post('/v1/plan/route', async (req, res, next) => {
     const currentUser = res.locals.currentUser;
-    if (!currentUser) return next(new AppError(401, 'unauthorized', 'Sign in before planning a flight.'));
     if (!dependencies.plans) throw new Error('Flight planning is not configured.');
     const parsed = planRouteSchema.safeParse(req.body);
     if (!parsed.success) return next(new AppError(422, 'invalid_request', 'Provide 2–24 valid route points and a routing priority.'));
     try {
-      const result = await dependencies.plans.route({ userId: currentUser.userId, ...parsed.data });
-      const exportToken = dependencies.planExports
+      const result = await dependencies.plans.route({ userId: currentUser?.userId ?? null, ...parsed.data });
+      const exportToken = currentUser && dependencies.planExports
         ? await dependencies.planExports.authorize({ userId: currentUser.userId, anchors: result.anchors, route: result.route })
         : undefined;
       res.status(200).json({ ...result, exportToken });
@@ -2082,13 +2079,18 @@ export function createWebRouter(dependencies: {
   });
 
   router.post('/signup', async (req, res) => {
+    const wantsJson = req.get('accept')?.toLowerCase().includes('application/json') ?? false;
     const body = formBody(req.body);
     const parsed = signupSchema.safeParse(body);
     if (!parsed.success) {
+      const message = 'Enter a valid email, an optional display name of up to 48 characters, and a password of 12 to 128 characters.';
+      if (wantsJson) {
+        res.status(422).json({ error: { code: 'invalid_request', message } });
+        return;
+      }
       await render(res, dependencies.renderPage, 422, {
         currentUser: null,
-        signupError:
-          'Enter a valid email, an optional display name of up to 48 characters, and a password of 12 to 128 characters.',
+        signupError: message,
         signupEmail: typeof body.email === 'string' ? body.email : '',
         signupDisplayName: typeof body.displayName === 'string' ? body.displayName : '',
       });
@@ -2102,12 +2104,21 @@ export function createWebRouter(dependencies: {
         displayName: parsed.data.displayName || undefined,
       });
       res.setHeader('set-cookie', dependencies.cookie.set(session.token));
+      if (wantsJson) {
+        res.status(200).json({ ok: true });
+        return;
+      }
       res.redirect(303, '/activity?onboardingStep=first-flight');
     } catch (error) {
       if (error instanceof AuthFailure && error.code === 'duplicate_email') {
+        const message = 'An account with that email already exists.';
+        if (wantsJson) {
+          res.status(409).json({ error: { code: 'duplicate_email', message } });
+          return;
+        }
         await render(res, dependencies.renderPage, 409, {
           currentUser: null,
-          signupError: 'An account with that email already exists.',
+          signupError: message,
           signupEmail: parsed.data.email,
           signupDisplayName: parsed.data.displayName,
         });
@@ -2118,12 +2129,18 @@ export function createWebRouter(dependencies: {
   });
 
   router.post('/login', async (req, res) => {
+    const wantsJson = req.get('accept')?.toLowerCase().includes('application/json') ?? false;
     const body = formBody(req.body);
     const parsed = loginSchema.safeParse(body);
     if (!parsed.success) {
+      const message = 'Email or password is incorrect.';
+      if (wantsJson) {
+        res.status(401).json({ error: { code: 'invalid_credentials', message } });
+        return;
+      }
       await render(res, dependencies.renderPage, 401, {
         currentUser: null,
-        loginError: 'Email or password is incorrect.',
+        loginError: message,
         loginEmail: typeof body.email === 'string' ? body.email : '',
       });
       return;
@@ -2132,12 +2149,21 @@ export function createWebRouter(dependencies: {
     try {
       const session = await dependencies.auth.login(parsed.data);
       res.setHeader('set-cookie', dependencies.cookie.set(session.token));
+      if (wantsJson) {
+        res.status(200).json({ ok: true });
+        return;
+      }
       res.redirect(303, '/');
     } catch (error) {
       if (error instanceof AuthFailure && error.code === 'invalid_credentials') {
+        const message = 'Email or password is incorrect.';
+        if (wantsJson) {
+          res.status(401).json({ error: { code: 'invalid_credentials', message } });
+          return;
+        }
         await render(res, dependencies.renderPage, 401, {
           currentUser: null,
-          loginError: 'Email or password is incorrect.',
+          loginError: message,
           loginEmail: parsed.data.email,
         });
         return;

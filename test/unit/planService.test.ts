@@ -57,4 +57,28 @@ describe('plan service input bounds', () => {
     expect(result.actualExtraDistanceMeters).toBe(0);
     expect(execute).toHaveBeenCalledTimes(2);
   });
+
+  it('returns route claims without a personal comparison for a guest', async () => {
+    const execute = vi.fn()
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [{
+        x: 1,
+        y: 2,
+        source: 'direct',
+        isNewPersonal: false,
+        geometry: { type: 'Polygon', coordinates: [] },
+      }] });
+    const plans = createPlanService({ execute } as never, { cellSize: 500 });
+
+    const result = await plans.route({
+      userId: null,
+      routingPriority: 'shorter',
+      anchors: [{ latitude: 39, longitude: -105 }, { latitude: 39.01, longitude: -104.99 }],
+    });
+
+    expect(result.claims.direct).toHaveLength(1);
+    expect(result.claims.enclosed).toEqual([]);
+    expect(result.claims.newPersonal).toBeNull();
+    expect(execute).toHaveBeenCalledTimes(2);
+  });
 });

@@ -25,12 +25,12 @@ export type PlanRouteResult = {
   claims: {
     direct: PlanCell[];
     enclosed: PlanCell[];
-    newPersonal: PlanCell[];
+    newPersonal: PlanCell[] | null;
   };
 };
 
 export interface PlanService {
-  route(input: { userId: string; anchors: RoutePoint[]; routingPriority: RoutingPriority }): Promise<PlanRouteResult>;
+  route(input: { userId: string | null; anchors: RoutePoint[]; routingPriority: RoutingPriority }): Promise<PlanRouteResult>;
 }
 
 type StoredSampleScore = { sampleIndex: number; relativeScore: number };
@@ -76,8 +76,14 @@ export function createPlanService(database: Database, options: { cellSize: numbe
     return new Map(result.rows.map((row) => [Number(row.sampleIndex), Number(row.relativeScore)]));
   }
 
-  async function claims(userId: string, points: RoutePoint[]): Promise<PlanRouteResult['claims']> {
+  async function claims(userId: string | null, points: RoutePoint[]): Promise<PlanRouteResult['claims']> {
     const input = points.map((point, sequence) => ({ ...point, sequence }));
+    const isNewPersonal = userId
+      ? sql`NOT EXISTS (
+          SELECT 1 FROM user_grid_claims existing
+          WHERE existing.claim_user = ${userId} AND existing.x = candidates.x AND existing.y = candidates.y
+        )`
+      : sql`FALSE`;
     const result = await database.execute<StoredCell>(sql`
       WITH input_points AS (
         SELECT latitude, longitude, sequence
@@ -142,10 +148,7 @@ export function createPlanService(database: Database, options: { cellSize: numbe
         WHERE direct_cells.x IS NULL
       )
       SELECT candidates.x, candidates.y, candidates.source,
-        NOT EXISTS (
-          SELECT 1 FROM user_grid_claims existing
-          WHERE existing.claim_user = ${userId} AND existing.x = candidates.x AND existing.y = candidates.y
-        ) AS "isNewPersonal",
+        ${isNewPersonal} AS "isNewPersonal",
         ST_AsGeoJSON(ST_Transform(candidates.geometry, 4326))::json AS geometry
       FROM candidates
       ORDER BY candidates.source, candidates.x, candidates.y
@@ -159,12 +162,12 @@ export function createPlanService(database: Database, options: { cellSize: numbe
       else enclosed.push(cell);
       if (row.isNewPersonal) newPersonal.push(cell);
     }
-    return { direct, enclosed, newPersonal };
+    return { direct, enclosed, newPersonal: userId ? newPersonal : null };
   }
 
   return {
     async route(input) {
-      if (!input.userId.trim()) throw new RangeError('Plan user is required.');
+      if (input.userId !== null && !input.userId.trim()) throw new RangeError('Plan user is invalid.');
       if (!['shorter', 'balanced', 'thermal'].includes(input.routingPriority)) throw new RangeError('Routing priority is invalid.');
       if (input.anchors.length < 2 || input.anchors.length > 24) throw new RangeError('A plan requires between 2 and 24 anchors.');
       input.anchors.forEach(assertPoint);

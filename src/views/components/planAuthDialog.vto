@@ -1,0 +1,98 @@
+<dialog class="plan-auth-dialog" data-plan-auth-dialog aria-label="GlideHero account access">
+  <div class="plan-auth-card">
+    <button class="plan-auth-close" type="button" data-plan-auth-close
+      aria-label="Close account dialog">&times;</button>
+
+    <section class="plan-auth-panel plan-auth-choice" data-plan-auth-choice aria-labelledby="plan-auth-choice-title">
+      <div class="plan-auth-hero" aria-hidden="true">
+        <div class="app-brand">
+          <img src="/android-chrome-192x192.png" alt="">
+          <span class="app-brand__wordmark"><strong>GLIDE</strong><strong>HERO</strong></span>
+        </div>
+      </div>
+      <header class="plan-auth-heading">
+        <h2 id="plan-auth-choice-title">Sign in to continue</h2>
+        <p>Save your routes, collect Personal cells, and turn every flight into progress on GlideHero.</p>
+      </header>
+      <div class="plan-auth-choice-actions">
+        <button class="plan-auth-primary" type="button" data-plan-auth-signin>Sign in</button>
+        <button class="plan-auth-secondary" type="button" data-plan-auth-signup>
+          <span aria-hidden="true">{{ include "authenticated/components/icon.vto" { name: "profile" } }}</span>
+          Create free account
+        </button>
+      </div>
+      <ul class="plan-auth-features" aria-label="GlideHero account features">
+        <li>
+          <span class="plan-auth-feature-icon plan-auth-feature-icon--blue"
+            aria-hidden="true">{{ include "authenticated/components/icon.vto" { name: "flight" } }}</span>
+          <span><strong>Track your flights</strong><small>Analyze and improve with detailed stats.</small></span>
+        </li>
+        <li>
+          <span class="plan-auth-feature-icon plan-auth-feature-icon--orange"
+            aria-hidden="true">{{ include "authenticated/components/icon.vto" { name: "arena" } }}</span>
+          <span><strong>Compete for cells and Arenas</strong><small>Climb the leaderboards and explore new
+              sky.</small></span>
+        </li>
+        <li>
+          <span class="plan-auth-feature-icon plan-auth-feature-icon--cyan"
+            aria-hidden="true">{{ include "authenticated/components/icon.vto" { name: "people" } }}</span>
+          <span><strong>Follow pilots and view activity</strong><small>Stay connected with the flying
+              community.</small></span>
+        </li>
+      </ul>
+    </section>
+
+    <section class="plan-auth-panel plan-auth-form-panel" data-plan-auth-signin-panel
+      aria-labelledby="plan-auth-signin-title" hidden>
+      <button class="plan-auth-back" type="button" data-plan-auth-back aria-label="Back to account choices"><span
+          aria-hidden="true">&larr;</span> Back</button>
+      <header class="plan-auth-heading">
+        <p class="plan-eyebrow">Welcome back</p>
+        <h2 id="plan-auth-signin-title">Sign in to GlideHero</h2>
+        <p>Sign in and return to your route right where you left it.</p>
+      </header>
+      <form method="post" action="/login" data-plan-login-form>
+        <label>Email
+          <input name="email" type="email" autocomplete="email" inputmode="email" placeholder="you@example.com"
+            required>
+        </label>
+        <label>Password
+          <input name="password" type="password" autocomplete="current-password" minlength="3" maxlength="128"
+            placeholder="Enter your password" required>
+        </label>
+        <p class="plan-auth-status" data-plan-login-status role="status" aria-live="polite"></p>
+        <button class="plan-auth-primary" type="submit">Sign in</button>
+      </form>
+      <p class="plan-auth-switch">New to GlideHero? <button type="button" data-plan-auth-signup>Create a free
+          account</button></p>
+    </section>
+
+    <section class="plan-auth-panel plan-auth-form-panel" data-plan-auth-signup-panel
+      aria-labelledby="plan-auth-signup-title" hidden>
+      <button class="plan-auth-back" type="button" data-plan-auth-back aria-label="Back to account choices"><span
+          aria-hidden="true">&larr;</span> Back</button>
+      <header class="plan-auth-heading">
+        <p class="plan-eyebrow">Start your Personal Map</p>
+        <h2 id="plan-auth-signup-title">Create your account</h2>
+        <p>Join GlideHero for free. Your planned route will stay right where you left it.</p>
+      </header>
+      <form method="post" action="/signup" data-plan-signup-form>
+        <label>Display name <span class="plan-auth-optional">Optional</span>
+          <input name="displayName" maxlength="48" autocomplete="nickname" placeholder="Sky Pilot">
+        </label>
+        <label>Email
+          <input name="email" type="email" autocomplete="email" inputmode="email" placeholder="you@example.com"
+            required>
+        </label>
+        <label>Password
+          <input name="password" type="password" autocomplete="new-password" minlength="12" maxlength="128"
+            placeholder="Create a password" required>
+        </label>
+        <p class="plan-auth-status" data-plan-signup-status role="status" aria-live="polite"></p>
+        <button class="plan-auth-primary" type="submit">Create account</button>
+      </form>
+      <p class="plan-auth-switch">Already have an account? <button type="button" data-plan-auth-signin>Sign in</button>
+      </p>
+    </section>
+  </div>
+</dialog>

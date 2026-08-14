@@ -1,5 +1,5 @@
 {{ layout "authenticated/layouts/appLayout.vto" }}
-  <section class="plan-page" data-plan-page>
+  <section class="plan-page" data-plan-page data-plan-authenticated="{{ if isGuest }}false{{ else }}true{{ /if }}">
     <section class="plan-map-stage" aria-label="Flight planning map">
       <div class="plan-map" data-plan-map
         data-map-style-url="{{ mapStyleUrl }}"
@@ -56,7 +56,11 @@
           <div><dt>Maximum route</dt><dd data-plan-maximum-distance>—</dd></div>
           <div><dt>Direct cells</dt><dd data-plan-direct-cells>0</dd></div>
           <div><dt>Enclosed cells</dt><dd data-plan-enclosed-cells>0</dd></div>
-          <div><dt>New Personal cells</dt><dd data-plan-new-cells>0</dd></div>
+          {{ if isGuest }}
+            <div class="plan-personal-guest"><dt>Personal cells</dt><dd><button type="button" data-plan-collect-cells>Sign in to collect cells</button></dd></div>
+          {{ else }}
+            <div><dt>New Personal cells</dt><dd data-plan-new-cells>0</dd></div>
+          {{ /if }}
         </dl>
       </section>
       <p class="plan-status" data-plan-status role="status">Place at least two points to calculate a route.</p>
@@ -64,4 +68,5 @@
     </aside>
   </section>
   {{ include "authenticated/components/planExportDialog.vto" }}
+  {{ if isGuest }}{{ include "components/planAuthDialog.vto" }}{{ /if }}
 {{ /layout }}
