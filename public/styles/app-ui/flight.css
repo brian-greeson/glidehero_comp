@@ -60,7 +60,7 @@
   .flight-detail-replay-mobile .map-replay-controls { position: fixed; z-index: 30; right: .75rem; bottom: calc(var(--flight-bottom-nav-height) + var(--flight-sheet-collapsed-height) + .75rem + env(safe-area-inset-bottom, 0px)); left: .75rem; }
   .flight-detail-replay-mobile .map-replay-controls__bar { min-height: 52px; padding-block: .3rem; }
   .flight-detail-replay-mobile .map-replay-controls[hidden] { display: none; }
-  .flight-detail-panel.mobile-map-sheet { position: fixed; z-index: 20; right: 0; bottom: var(--flight-bottom-nav-height); left: 0; display: block; height: var(--flight-sheet-collapsed-height); overflow: hidden; border: 0; border-radius: 1.2rem 1.2rem 0 0; box-shadow: 0 -8px 30px rgb(15 35 60 / 18%); transition: height .24s ease; }
+  .flight-detail-panel.mobile-map-sheet { position: fixed; z-index: 35; right: 0; bottom: var(--flight-bottom-nav-height); left: 0; display: block; height: var(--flight-sheet-collapsed-height); overflow: hidden; border: 0; border-radius: 1.2rem 1.2rem 0 0; box-shadow: 0 -8px 30px rgb(15 35 60 / 18%); transition: height .24s ease; }
   .flight-detail-panel.mobile-map-sheet.is-expanded { height: calc(99svh - var(--app-mobile-header-height) - var(--flight-bottom-nav-height)); }
   .flight-detail-panel .mobile-map-sheet__handle { display: grid; width: 100%; height: 30px; place-items: center; padding: 0; border: 0; background: var(--app-surface); cursor: ns-resize; touch-action: none; }
   .flight-detail-panel .mobile-map-sheet__handle > span:first-child { width: 42px; height: 4px; border-radius: 99px; background: #b8c3d0; }

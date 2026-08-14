@@ -285,4 +285,18 @@ describe('flight detail view', () => {
     expect(css).toContain('.flight-detail-panel .mobile-map-sheet__content { display: none; }');
     expect(css).toContain('.flight-detail-panel.mobile-map-sheet.is-expanded .mobile-map-sheet__content { display: block;');
   });
+
+  it('stacks the mobile flight drawer above replay controls and below navigation', () => {
+    const flightCss = readFileSync('public/styles/app-ui/flight.css', 'utf8');
+    const appCss = readFileSync('public/styles/app-ui/app.css', 'utf8');
+    const replayLayer = flightCss.match(/\.flight-detail-replay-mobile \{ position: absolute; z-index: (\d+);/)?.[1];
+    const drawerLayer = flightCss.match(/\.flight-detail-panel\.mobile-map-sheet \{ position: fixed; z-index: (\d+);/)?.[1];
+    const navigationLayer = appCss.match(/\.mobile-navigation \{ position: fixed; z-index: (\d+);/)?.[1];
+
+    expect(replayLayer).toBeDefined();
+    expect(drawerLayer).toBeDefined();
+    expect(navigationLayer).toBeDefined();
+    expect(Number(drawerLayer)).toBeGreaterThan(Number(replayLayer));
+    expect(Number(drawerLayer)).toBeLessThan(Number(navigationLayer));
+  });
 });
