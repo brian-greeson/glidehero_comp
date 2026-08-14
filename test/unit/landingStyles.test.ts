@@ -8,6 +8,8 @@ describe('landing page stylesheet contract', () => {
     expect(css).toContain("background: var(--color-logo-navy) url('/landing-territories.webp') center / cover no-repeat");
     expect(css).toMatch(/\.landing\s*{\s*display: grid;/);
     expect(css).toMatch(/\.auth-form-panel\[hidden\]\s*{\s*display: none;/);
+    expect(css).toMatch(/\.landing-plan-cta\s*\{\s*display: inline-flex;/);
+    expect(css).toMatch(/\.landing-plan-cta \.app-icon\s*\{/);
     expect(css).toContain('grid-template-columns: minmax(0, 1.68fr) minmax(360px, 1fr)');
     expect(css).toContain('@media (max-width: 720px)');
     expect(css).toMatch(/\.landing\s*{\s*display: block;/);

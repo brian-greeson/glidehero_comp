@@ -138,6 +138,54 @@ button {
   letter-spacing: -0.045em;
   text-wrap: balance;
 }
+.landing-plan-cta {
+  display: inline-flex;
+  width: fit-content;
+  min-height: 54px;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  padding: 0.85rem 1.25rem;
+  margin-top: 1.75rem;
+  border: 1px solid rgb(255 255 255 / 0.22);
+  border-radius: 0.75rem;
+  color: var(--color-on-primary);
+  background: linear-gradient(
+    110deg,
+    var(--color-primary-strong),
+    var(--color-primary) 58%,
+    var(--color-logo-aqua)
+  );
+  box-shadow: 0 12px 28px rgb(0 0 0 / 0.28);
+  font-size: 1.05rem;
+  font-weight: 850;
+  text-decoration: none;
+  text-shadow: none;
+  transition:
+    transform 0.15s ease,
+    box-shadow 0.15s ease;
+}
+.landing-plan-cta:hover {
+  box-shadow: 0 15px 32px rgb(0 0 0 / 0.34);
+  transform: translateY(-1px);
+}
+.landing-plan-cta:active {
+  transform: translateY(0);
+}
+.landing-plan-cta:focus-visible {
+  outline: 3px solid var(--color-focus-ring);
+  outline-offset: 3px;
+}
+.landing-plan-cta .app-icon {
+  width: 1.35rem;
+  height: 1.35rem;
+  flex: 0 0 auto;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.75;
+}
 .landing-copy > p:last-child {
   margin: 1.35rem 0 0;
   font-size: clamp(1rem, 1.45vw, 1.35rem);
@@ -394,6 +442,7 @@ button {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .landing-plan-cta,
   .auth-form-panel input,
   .auth-submit {
     transition: none;

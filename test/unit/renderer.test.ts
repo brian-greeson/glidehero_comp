@@ -24,7 +24,11 @@ describe('Vento page renderer', () => {
   it('renders the anonymous landing page', async () => {
     const html = await createPageRenderer({ mapTilerApiKey: 'maptiler-test-key' })({ currentUser: null });
     expect(html).toContain('<title>GlideHero</title>');
-    expect(html).toContain('Paint the sky with your friends.');
+    expect(html).toContain('Try the thermal-aware XC planner.');
+    expect(html).toContain('<a class="landing-plan-cta" href="/plan">');
+    expect(html).toContain('href="/images/app-ui/icons.svg#icon-paper-plane"');
+    expect(html).toContain('<span>Try XC Planner</span>');
+    expect(html).not.toContain('Paint the sky with your friends.');
     expect(html).toContain('action="/login"');
     expect(html).toContain('action="/signup"');
     expect(html).toContain('<script type="module" src="/scripts/landing.js"></script>');
