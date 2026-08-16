@@ -1,25 +1,20 @@
 {{ layout "authenticated/layouts/appLayout.vto" }}
-  <section class="map-page" data-map-page
-    {{ if mode === 'personal' }}data-dashboard data-dashboard-mode="personal"{{ else }}data-competition-coverage="{{ if typeof arenaSourceId !== 'undefined' && arenaSourceId }}arena{{ else }}global{{ /if }}"{{ /if }}>
-    {{ include "authenticated/components/mapSidebar.vto" { mode, period, location, locationClearHref: typeof locationClearHref !== 'undefined' ? locationClearHref : undefined, leaderboard } }}
-    <section class="map-stage" aria-label="Territory map">
-      <div class="map-canvas" data-map-canvas {{ if mode === 'personal' }}data-dashboard-map{{ else }}data-territory-map{{ /if }}
-        data-map-style-url="{{ if typeof mapStyleUrl !== 'undefined' }}{{ mapStyleUrl }}{{ /if }}"
-        data-current-user-id="{{ if typeof currentUserId !== 'undefined' }}{{ currentUserId }}{{ /if }}"
-        data-territory-color="{{ if typeof territoryColor !== 'undefined' }}{{ territoryColor }}{{ /if }}"
-        {{ if mode === 'following' }}data-coverage-scope="following"{{ /if }}
-        data-territory-tile-minimum-zoom="{{ if typeof territoryTileMinimumZoom !== 'undefined' }}{{ if territoryTileMinimumZoom === 0 }}0{{ else }}{{ territoryTileMinimumZoom }}{{ /if }}{{ else }}0{{ /if }}"
-        data-territory-tile-maximum-zoom="{{ if typeof territoryTileMaximumZoom !== 'undefined' }}{{ if territoryTileMaximumZoom === 0 }}0{{ else }}{{ territoryTileMaximumZoom }}{{ /if }}{{ else }}22{{ /if }}"
-        {{ if typeof arenaSourceId !== 'undefined' && arenaSourceId }}data-arena-source-id="{{ arenaSourceId }}"{{ /if }}
-        {{ if typeof focusArenaSourceId !== 'undefined' && focusArenaSourceId }}data-focus-arena-source-id="{{ focusArenaSourceId }}"{{ /if }}></div>
-      {{ if typeof mapEmptyState !== 'undefined' }}<p class="map-empty-state" data-map-empty-state hidden>{{ mapEmptyState }}</p>{{ else }}<p class="map-empty-state" data-map-empty-state hidden>Map unavailable. Check your connection and try again.</p>{{ /if }}
-      {{ include "authenticated/components/mapFlightAidStatus.vto" }}
-      <div class="map-arena-search" data-map-arena-search>{{ include "authenticated/components/arenaSearch.vto" }}</div>
-      {{ if mode !== 'personal' }}
-        {{ include "authenticated/components/mapLeaderboard.vto" { compact: true } }}
-      {{ /if }}
-      {{ include "authenticated/components/mapMobileControls.vto" { mode, period } }}
-      <div data-map-replay class="map-mobile-replay"><button type="button" data-map-replay-open aria-controls="map-replay-panel-mobile" aria-expanded="false"><span class="map-mobile-replay__icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M9 7v10l8-5z"/></svg></span><span>Replay</span></button>{{ include "authenticated/components/mapReplayControls.vto" { panelId: "map-replay-panel-mobile", showSync: true } }}</div>
+  <section class="flight-map-page" data-map-page
+    data-initial-scope="{{ if mode === 'personal' }}personal{{ else if mode === 'following' }}following{{ else }}all{{ /if }}"
+    data-initial-period="{{ if period === 'all-time' }}all-time{{ else }}month{{ /if }}"
+    data-track-endpoint="{{ if typeof mapTrackEndpoint !== 'undefined' }}{{ mapTrackEndpoint }}{{ else }}/v1/map-flights/tracks{{ /if }}"
+    data-list-endpoint="{{ if typeof mapFlightListEndpoint !== 'undefined' }}{{ mapFlightListEndpoint }}{{ else }}/v1/map-flights{{ /if }}"
+    data-replay-endpoint-template="{{ if typeof mapReplayEndpointTemplate !== 'undefined' }}{{ mapReplayEndpointTemplate }}{{ else }}/v1/map-flights/{flightId}/replay{{ /if }}">
+    {{ include "authenticated/components/mapFlightBrowser.vto" { mode } }}
+    <section class="flight-map-stage" aria-label="Flight map">
+      <div class="flight-map-canvas" data-map-canvas
+        data-map-style-url="{{ if typeof mapStyleUrl !== 'undefined' }}{{ mapStyleUrl }}{{ /if }}"></div>
+      <p class="flight-map-status" data-map-status role="status" hidden></p>
+      {{ include "authenticated/components/mapTimeControls.vto" { period } }}
     </section>
+    <div class="flight-map-replay" data-selected-flight-replay hidden>
+      <button type="button" data-map-replay-open hidden aria-controls="selected-flight-replay" aria-expanded="false">Replay</button>
+      {{ include "authenticated/components/mapReplayControls.vto" { panelId: "selected-flight-replay", showSync: false } }}
+    </div>
   </section>
 {{ /layout }}

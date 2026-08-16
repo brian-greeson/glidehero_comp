@@ -13,6 +13,10 @@ const geometryMultiPolygon4326 = customType<{ data: string; driverData: string }
   dataType: () => 'geometry(MultiPolygon,4326)',
 });
 
+const geometryMultiLineString4326 = customType<{ data: string; driverData: string }>({
+  dataType: () => 'geometry(MultiLineString,4326)',
+});
+
 const timestamps = {
   createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
@@ -179,6 +183,56 @@ export const flights = pgTable(
     index('flights_user_id_processed_at_flight_id_idx').on(table.userId, table.processedAt, table.id),
     index('flights_igc_file_id_idx').on(table.igcFileId),
     index('flights_started_at_idx').on(table.startedAt),
+  ],
+);
+
+/** Durable, rebuildable spatial read model for the flight map. */
+export const flightMapFeatures = pgTable(
+  'flight_map_features',
+  {
+    flightId: uuid('flight_id').primaryKey().references(() => flights.id, { onDelete: 'cascade' }),
+    projectionVersion: integer('projection_version').notNull(),
+    fullTrack: geometryMultiLineString4326('full_track').notNull(),
+    west: doublePrecision('west').notNull(),
+    south: doublePrecision('south').notNull(),
+    east: doublePrecision('east').notNull(),
+    north: doublePrecision('north').notNull(),
+    crossesAntimeridian: boolean('crosses_antimeridian').notNull(),
+    landingLatitude: doublePrecision('landing_latitude').notNull(),
+    landingLongitude: doublePrecision('landing_longitude').notNull(),
+    sourcePointCount: integer('source_point_count').notNull(),
+    projectedAt: timestamp('projected_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
+  },
+  (table) => [
+    check('flight_map_features_projection_version_positive', sql`${table.projectionVersion} > 0`),
+    check('flight_map_features_source_point_count_valid', sql`${table.sourcePointCount} >= 2`),
+    check('flight_map_features_latitude_bounds_valid', sql`${table.south} >= -90 AND ${table.north} <= 90 AND ${table.south} <= ${table.north}`),
+    check('flight_map_features_longitude_bounds_valid', sql`${table.west} >= -180 AND ${table.west} <= 180 AND ${table.east} >= -180 AND ${table.east} <= 180`),
+    index('flight_map_features_full_track_gist_idx').using('gist', table.fullTrack),
+  ],
+);
+
+/** Zoom-specific rendering derivatives. Never used for spatial eligibility. */
+export const flightMapGeometryLods = pgTable(
+  'flight_map_geometry_lods',
+  {
+    flightId: uuid('flight_id').notNull().references(() => flights.id, { onDelete: 'cascade' }),
+    projectionVersion: integer('projection_version').notNull(),
+    minZoom: integer('min_zoom').notNull(),
+    maxZoom: integer('max_zoom').notNull(),
+    toleranceMeters: doublePrecision('tolerance_meters').notNull(),
+    geometry: geometryMultiLineString4326('geometry').notNull(),
+    pointCount: integer('point_count').notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.flightId, table.projectionVersion, table.minZoom] }),
+    check('flight_map_geometry_lods_projection_version_positive', sql`${table.projectionVersion} > 0`),
+    check('flight_map_geometry_lods_zoom_range_valid', sql`${table.minZoom} >= 0 AND ${table.maxZoom} >= ${table.minZoom}`),
+    check('flight_map_geometry_lods_tolerance_positive', sql`${table.toleranceMeters} > 0`),
+    check('flight_map_geometry_lods_point_count_valid', sql`${table.pointCount} >= 2`),
+    index('flight_map_geometry_lods_geometry_gist_idx').using('gist', table.geometry),
+    index('flight_map_geometry_lods_zoom_idx').on(table.minZoom, table.maxZoom),
   ],
 );
 

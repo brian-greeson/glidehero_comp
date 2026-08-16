@@ -1,3 +1,5 @@
+const STATES = ['collapsed', 'partial', 'expanded'];
+
 export function initializeMapSheet({ documentRef = document, swipeThreshold = 40 } = {}) {
   const sheet = documentRef.querySelector('[data-map-sheet]');
   const handle = documentRef.querySelector('[data-map-sheet-handle]');
@@ -8,13 +10,12 @@ export function initializeMapSheet({ documentRef = document, swipeThreshold = 40
   let moved = false;
   let suppressClick = false;
 
-  function setExpanded(expanded) {
-    sheet.classList.toggle('is-expanded', expanded);
-    handle.setAttribute('aria-expanded', String(expanded));
-    if (label) {
-      const current = label.textContent || 'Expand map controls';
-      label.textContent = current.replace(/^(Expand|Collapse)/, expanded ? 'Collapse' : 'Expand');
-    }
+  function setState(state) {
+    const next = STATES.includes(state) ? state : 'partial';
+    sheet.dataset.sheetState = next;
+    for (const value of STATES) sheet.classList.toggle(`is-${value}`, value === next);
+    handle.setAttribute('aria-expanded', String(next === 'expanded'));
+    if (label) label.textContent = next === 'expanded' ? 'Collapse flight browser' : 'Expand flight browser';
   }
 
   handle.addEventListener('click', () => {
@@ -22,7 +23,8 @@ export function initializeMapSheet({ documentRef = document, swipeThreshold = 40
       suppressClick = false;
       return;
     }
-    setExpanded(!sheet.classList.contains('is-expanded'));
+    const current = STATES.indexOf(sheet.dataset.sheetState || 'partial');
+    setState(STATES[(current + 1) % STATES.length]);
   });
   handle.addEventListener('pointerdown', (event) => {
     if (event.isPrimary === false || (event.button !== undefined && event.button !== 0)) return;
@@ -39,7 +41,12 @@ export function initializeMapSheet({ documentRef = document, swipeThreshold = 40
     startY = null;
     suppressClick = moved;
     moved = false;
-    if (Math.abs(distance) >= swipeThreshold) setExpanded(distance > 0);
+    if (Math.abs(distance) >= swipeThreshold) {
+      const current = STATES.indexOf(sheet.dataset.sheetState || 'partial');
+      setState(STATES[Math.max(0, Math.min(STATES.length - 1, current + (distance > 0 ? 1 : -1)))]);
+    }
   });
   handle.addEventListener('pointercancel', () => { startY = null; moved = false; });
+  setState(sheet.dataset.sheetState || 'partial');
+  return { setState, getState: () => sheet.dataset.sheetState };
 }

@@ -21,7 +21,7 @@ describe('map replay service', () => {
       await database.db.insert(trackPoints).values(points.map(([longitude, latitude, recordedAt], i) => ({ flightId: flight!.id, sequenceNumber: i + 1, longitude, latitude, recordedAt: new Date(recordedAt), gpsAltitudeMeters: 1_500 + i * 100, pressureAltitudeMeters: 1 })));
       return flight!.id;
     }
-    await add(a.userId, 'completed', '2026-08-01T07:00:00Z', [[-106, 39.5, '2026-08-01T07:00:00Z'], [-104, 39.5, '2026-08-01T07:00:10Z'], [-103, 39.5, '2026-08-01T07:00:20Z']]);
+    const personalFlightId = await add(a.userId, 'completed', '2026-08-01T07:00:00Z', [[-106, 39.5, '2026-08-01T07:00:00Z'], [-104, 39.5, '2026-08-01T07:00:10Z'], [-103, 39.5, '2026-08-01T07:00:20Z']]);
     await add(b.userId, 'completed', '2026-07-31T23:00:00Z', [[-105, 39.5, '2026-07-31T23:00:00Z'], [-104.5, 39.5, '2026-07-31T23:00:10Z']]);
     await add(b.userId, 'completed', '2026-08-02T07:00:00Z', [[-105, 39.5, '2026-08-02T07:00:00Z'], [-104.5, 39.5, '2026-08-02T07:00:10Z']]);
     await add(c.userId, 'completed', '2026-08-03T07:00:00Z', [[-105, 39.5, '2026-08-03T07:00:00Z'], [-104.5, 39.5, '2026-08-03T07:00:10Z']]);
@@ -59,5 +59,15 @@ describe('map replay service', () => {
     expect(dateline.flights).toHaveLength(2);
     const central = await service.getReplay({ month: '2026-08', mode: 'personal', userId: a.userId, west: -1, south: 39, east: 1, north: 40 });
     expect(central.flights).toHaveLength(0);
+
+    const selectedFlight = await service.getFlightReplay({ flightId: personalFlightId });
+    expect(selectedFlight).toEqual({
+      flightId: personalFlightId,
+      pilotUserId: a.userId,
+      startOffsetMs: 0,
+      durationMs: 20_000,
+      points: [[-106, 39.5, 0, 1_500], [-104, 39.5, 10_000, 1_600], [-103, 39.5, 20_000, 1_700]],
+    });
+    expect(await service.getFlightReplay({ flightId: crypto.randomUUID() })).toBeNull();
   });
 });

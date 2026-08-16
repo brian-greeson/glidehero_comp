@@ -1,303 +1,76 @@
 import { readFile } from 'node:fs/promises';
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { createAuthenticatedShellModel } from '../../src/views/authenticated/adapters/shellModel.js';
 import { createAuthenticatedPageRenderer } from '../../src/views/authenticated/renderer.js';
 
-// @ts-expect-error Browser assets remain JavaScript.
-import { initializeMapUrlControls } from '../../public/scripts/app-ui/map.js';
-// @ts-expect-error Browser asset remains JavaScript.
-import { initializeCompetitionPeriodControl } from '../../public/scripts/competitionPeriod.js';
-// @ts-expect-error Browser asset remains JavaScript.
-import { initializeMapMobileControls } from '../../public/scripts/app-ui/mapMobileControls.js';
-
-function node() {
-  const listeners = new Map<string, (event?: any) => void>();
-  const attributes = new Map<string, string>();
+function model(mode: 'personal' | 'following' | 'competitive' = 'following', period: 'current-month' | 'all-time' = 'current-month') {
   return {
-    hidden: true,
-    disabled: false,
-    href: '/global',
-    dataset: {} as Record<string, string>,
-    addEventListener(name: string, listener: (event?: any) => void) { listeners.set(name, listener); },
-    dispatch(name: string, event?: any) { listeners.get(name)?.(event); },
-    getAttribute(name: string) { return attributes.get(name) ?? this.href; },
-    setAttribute(name: string, value: string) { attributes.set(name, value); },
-    querySelector: vi.fn(() => ({ focus: vi.fn() })),
+    ...createAuthenticatedShellModel({ page: 'map' as const, user: { displayName: 'Pilot' }, mapHref: '/following' }),
+    page: 'map' as const,
+    mode,
+    period,
+    location: null,
+    leaderboard: [],
   };
 }
 
-describe('refreshed map UI controls', () => {
-  it('renders full and compact leaderboards only on Competitive maps', async () => {
-    const render = createAuthenticatedPageRenderer();
-    const mapModel = (mode: 'personal' | 'competitive') => ({
-      ...createAuthenticatedShellModel({
-        page: 'map' as const,
-        user: { displayName: 'Pilot' },
-        mapHref: mode === 'personal' ? '/personal' : '/global',
-      }),
-      page: 'map' as const,
-      mode,
-      period: 'current-month' as const,
-      location: null,
-      leaderboard: [],
-    });
-
-    const competitive = await render(mapModel('competitive'));
-    expect(competitive.match(/data-territory-leaderboard(?:[ =])/g)).toHaveLength(2);
-    expect(competitive).toContain('data-territory-leaderboard-variant="full"');
-    expect(competitive).toContain('data-territory-leaderboard-variant="compact"');
-    expect(competitive).toContain('map-leaderboard--compact');
-    expect(competitive).toContain('class="coverage-table__columns"');
-    expect(competitive).toContain('<span role="columnheader">Pilot</span>');
-    expect(competitive).toContain('<span role="columnheader">Cells</span>');
-    expect(competitive).toContain('<span role="columnheader">Area</span>');
-
-    const personal = await render(mapModel('personal'));
-    expect(personal).not.toContain('data-territory-leaderboard');
-    expect(personal).not.toContain('map-leaderboard--compact');
-    expect(personal).not.toContain('Viewport Leaderboard');
+describe('flight-first map UI', () => {
+  it('renders a flight map without competition product surfaces', async () => {
+    const html = await createAuthenticatedPageRenderer()(model());
+    expect(html).toContain('class="flight-map-page"');
+    expect(html).toContain('aria-label="Flight browser"');
+    expect(html).toContain('data-track-endpoint="/v1/map-flights/tracks"');
+    expect(html).toContain('data-list-endpoint="/v1/map-flights"');
+    expect(html).not.toContain('data-territory-map');
+    expect(html).not.toContain('data-territory-leaderboard');
+    expect(html).not.toContain('Arena search');
   });
 
-  it('keeps the compact leaderboard mobile-only and exposes one surface opacity control', async () => {
+  it('renders Personal, Following, and All Pilots in the flight browser', async () => {
+    const personal = await createAuthenticatedPageRenderer()(model('personal'));
+    expect(personal).toContain('<option value="personal" selected>My Flights</option>');
+    expect(personal).toContain('<option value="following">Following</option>');
+    expect(personal).toContain('<option value="all">All Pilots</option>');
+    expect(personal).toContain('data-styled-select-trigger aria-haspopup="listbox"');
+    expect(personal).toContain('data-styled-select-option="following"');
+    const all = await createAuthenticatedPageRenderer()(model('competitive'));
+    expect(all).toContain('<option value="all" selected>All Pilots</option>');
+  });
+
+  it('defaults to Global geography and Distance sort with explicit Load more', async () => {
+    const html = await createAuthenticatedPageRenderer()(model());
+    expect(html).toContain('data-map-geography="global" aria-pressed="true"');
+    expect(html).toContain('data-map-geography="map-area" aria-pressed="false"');
+    expect(html).toContain('<option value="distance" selected>Distance</option>');
+    expect(html).toContain('data-flight-load-more hidden>Load more</button>');
+  });
+
+  it('offers Day, Month, Year, and All Time with month selected by default', async () => {
+    const html = await createAuthenticatedPageRenderer()(model());
+    expect(html).toContain('<option value="day">Day</option>');
+    expect(html).toContain('<option value="month" selected>Month</option>');
+    expect(html).toContain('<option value="year">Year</option>');
+    expect(html).toContain('<option value="all-time">All Time</option>');
+    expect(html).toContain('data-styled-select-option="all-time"');
+    const allTime = await createAuthenticatedPageRenderer()(model('following', 'all-time'));
+    expect(allTime).toContain('<option value="all-time" selected>All Time</option>');
+  });
+
+  it('keeps Activity and Achievements in navigation', async () => {
+    const html = await createAuthenticatedPageRenderer()(model());
+    expect(html).toContain('href="/activity"');
+    expect(html).toContain('href="/achievements"');
+  });
+
+  it('styles a persistent desktop panel and three mobile sheet states', async () => {
     const css = await readFile('public/styles/app-ui/map.css', 'utf8');
-    const opacityVariable = '--mobile-leaderboard-surface-opacity';
-
-    expect(css.match(new RegExp(opacityVariable, 'g'))).toHaveLength(2);
-    expect(css).toContain(`${opacityVariable}: .9`);
-    expect(css).toContain(`rgb(255 255 255 / var(${opacityVariable}))`);
-    expect(css).toContain('.map-leaderboard--compact { display: none; }');
-    expect(css).toContain('.map-mobile-replay { display: none; }');
-    expect(css).toContain('.map-mode-control { grid-template-columns: 1fr; }');
-    expect(css).toContain('.map-stage .maplibregl-ctrl-group');
-    expect(css).toContain('@media (min-width: 901px) and (max-width: 1050px)');
-    expect(css).toContain('.app-ui-body--map .desktop-navigation__item { min-width: 96px;');
-    expect(css).toContain("@media (prefers-reduced-motion: reduce)");
-
-    const mobileRules = css.slice(css.indexOf('@media (max-width: 900px)'));
-    expect(mobileRules).toContain('.map-leaderboard--compact { position: absolute;');
-    expect(mobileRules).toContain('.map-mobile-controls { position: absolute;');
-    expect(mobileRules).toContain('.map-mobile-view__menu { position: absolute;');
-    expect(mobileRules).toContain('overflow: visible;');
-    expect(mobileRules).toContain('.map-mobile-period-controls { position: fixed;');
-    expect(mobileRules).toContain('.map-mobile-replay { display: block; }');
-    expect(mobileRules).toContain('.map-leaderboard--compact { position: absolute; z-index: 8; bottom: calc(4rem + env(safe-area-inset-bottom, 0px));');
-    expect(mobileRules).toContain('.map-arena-search { z-index: 21; top: .75rem; right: calc(.75rem + 8.75rem + .65rem); left: .75rem; width: auto; transform: none; }');
-    expect(mobileRules).toContain('.map-page[data-dashboard] .map-mobile-replay { bottom: calc(5.75rem + env(safe-area-inset-bottom, 0px)); }');
-    expect(mobileRules).toContain('.map-stage .maplibregl-ctrl-top-right { top: calc(.75rem + 44px + .65rem); right: .75rem; }');
-    expect(mobileRules).toContain('.map-mobile-replay__icon { display: grid;');
-    expect(css).not.toContain('.map-controls');
-    expect(css).not.toContain('.mobile-map-sheet');
-    expect(css).not.toContain('.map-stat--orange');
-    expect(css.slice(css.indexOf('@media (max-width: 390px)'))).toContain('.map-mobile-period-controls { right: .75rem; left: .75rem; }');
-  });
-
-  it('keeps selected-cell popup styles in the authenticated map stylesheet', async () => {
-    const render = createAuthenticatedPageRenderer();
-    const [mapCss, legacyCss, html] = await Promise.all([
-      readFile('public/styles/app-ui/map.css', 'utf8'),
-      readFile('public/styles/app.css', 'utf8'),
-      render({
-        ...createAuthenticatedShellModel({ page: 'map' as const, user: { displayName: 'Pilot' }, mapHref: '/global' }),
-        page: 'map' as const,
-        mode: 'competitive',
-        period: 'current-month' as const,
-        location: null,
-        leaderboard: [],
-      }),
-    ]);
-
-    expect(html).toContain('<link rel="stylesheet" href="/styles/app-ui/map.css">');
-    expect(html).toContain('<script type="module" src="/scripts/app-ui/map.js"></script>');
-    expect(mapCss).toContain('.cell-claimants-popup .maplibregl-popup-content');
-    expect(mapCss).toContain('.cell-claimants li a');
-    expect(legacyCss).not.toContain('.cell-claimants');
-  });
-
-  it('renders the mobile map-view dropdown and period controls without the map sheet', async () => {
-    const render = createAuthenticatedPageRenderer();
-    const html = await render({
-      ...createAuthenticatedShellModel({ page: 'map' as const, user: { displayName: 'Pilot' }, mapHref: '/personal' }),
-      page: 'map' as const,
-      mode: 'personal',
-      period: 'current-month' as const,
-      location: null,
-      leaderboard: [],
-    });
-    expect(html).toContain('class="map-mobile-controls"');
-    expect(html).toContain('data-map-mobile-view-trigger');
-    expect(html).toContain('>My Flights</span>');
-    expect(html).toContain('>Following</span>');
-    expect(html).toContain('>All Pilots</span>');
-    expect(html).toContain('class="map-mobile-period-controls"');
-    expect(html).toContain('data-competition-period-option="all-time" aria-pressed="false"');
-    expect(html).toContain('map-mobile-period-chevron');
-    expect(html).toContain('data-competition-period-option="current-month" aria-pressed="true"');
-    expect(html).toContain('class="map-mobile-month-control"');
-    expect(html).toContain('data-competition-month-nav="previous" aria-label="Previous month">‹</button>');
-    expect(html).toContain('data-competition-month-nav="next" aria-label="Next month">›</button>');
-    expect(html).toContain('class="map-mobile-replay__icon"');
-    expect(html).not.toContain('data-map-sheet');
-    expect(html).not.toContain('map-scale');
-  });
-
-  it('opens, dismisses, and restores focus for the mobile map-view dropdown', () => {
-    const listeners = new Map<string, (event?: any) => void>();
-    const trigger = { setAttribute: vi.fn(), focus: vi.fn(), addEventListener: vi.fn((name, fn) => listeners.set(`trigger:${name}`, fn)) };
-    const activeLink = { focus: vi.fn(), addEventListener: vi.fn() };
-    const menu = { hidden: true, querySelector: vi.fn(() => activeLink), addEventListener: vi.fn() };
-    const root = { contains: vi.fn(() => false), querySelector: vi.fn((selector) => selector.includes('trigger') ? trigger : menu), querySelectorAll: vi.fn(() => []), addEventListener: vi.fn() };
-    const documentRef = { querySelector: vi.fn(() => root), addEventListener: vi.fn((name, fn) => listeners.set(`document:${name}`, fn)) };
-    initializeMapMobileControls(documentRef);
-    listeners.get('trigger:click')?.();
-    expect(menu.hidden).toBe(false);
-    expect(trigger.setAttribute).toHaveBeenCalledWith('aria-expanded', 'true');
-    expect(activeLink.focus).toHaveBeenCalledOnce();
-    listeners.get('document:keydown')?.({ key: 'Escape' });
-    expect(menu.hidden).toBe(true);
-    expect(trigger.focus).toHaveBeenCalledOnce();
-  });
-
-  it('styles the desktop sidebar with the same view and period language as mobile', async () => {
-    const render = createAuthenticatedPageRenderer();
-    const html = await render({
-      ...createAuthenticatedShellModel({ page: 'map' as const, user: { displayName: 'Pilot' }, mapHref: '/global' }),
-      page: 'map' as const,
-      mode: 'competitive',
-      period: 'current-month' as const,
-      location: null,
-      leaderboard: [],
-    });
-    expect(html).toContain('<h2>View</h2>');
-    expect(html).toContain('>My Flights</span>');
-    expect(html).toContain('>All Pilots</span>');
-    expect(html).toContain('class="map-desktop-period-controls"');
-    expect(html).toContain('class="map-desktop-month-control"');
-    expect(html).toContain('data-competition-period-option="all-time" aria-pressed="false"');
-    expect(html).toContain('data-competition-month-nav="previous" aria-label="Previous month">‹</button>');
-    expect(html).toContain('class="map-desktop-replay"');
-    expect(html).toContain('aria-label="Select a location"');
-    expect(html).not.toContain('Global Map');
-    expect(html).not.toContain('map-location__clear');
-    expect(html.match(/data-map-replay-sync/g)).toHaveLength(2);
-    expect(html).toContain('aria-label="Synchronize flight starts" aria-pressed="false" disabled');
-    expect(html).toContain('aria-label="Viewport Leaderboard"');
-    expect(html).toContain('class="map-leaderboard__scope">Viewport </span>Leaderboard');
-    expect(html).not.toContain('<h2>Your Stats</h2>');
-  });
-
-  it('shows a selected location with a clear link', async () => {
-    const render = createAuthenticatedPageRenderer();
-    const html = await render({
-      ...createAuthenticatedShellModel({ page: 'map' as const, user: { displayName: 'Pilot' }, mapHref: '/arena/us/boulder-745?month=2026-07&view=following' }),
-      page: 'map' as const,
-      mode: 'following',
-      period: 'current-month' as const,
-      location: 'Boulder',
-      locationClearHref: '/following?month=2026-07',
-      leaderboard: [],
-    });
-
-    expect(html).toContain('<span>Boulder</span>');
-    expect(html).toContain('class="map-location__clear" href="/following?month=2026-07"');
-    expect(html).toContain('aria-label="Clear location Boulder">×</a>');
-  });
-
-  it('offers All Time in the desktop Personal sidebar as well as mobile', async () => {
-    const render = createAuthenticatedPageRenderer();
-    const html = await render({
-      ...createAuthenticatedShellModel({ page: 'map' as const, user: { displayName: 'Pilot' }, mapHref: '/personal' }),
-      page: 'map' as const,
-      mode: 'personal',
-      period: 'current-month' as const,
-      location: null,
-      leaderboard: [],
-    });
-    const sidebar = html.match(/<aside class="map-sidebar"[\s\S]*?<\/aside>/)?.[0];
-
-    expect(sidebar).toContain('data-competition-period-option="all-time" aria-pressed="false"');
-    expect(sidebar).toContain('data-competition-period-option="current-month" aria-pressed="true"');
-    expect(sidebar).toContain('data-personal-stats aria-busy="true"');
-    expect(sidebar).toContain('data-personal-claimed-cells');
-    expect(sidebar).toContain('data-personal-claimed-area');
-    expect(sidebar).toContain('data-personal-flights');
-  });
-
-  it('turns period controls into links that preserve map URL state', () => {
-    const allTime = node();
-    allTime.dataset.mapPeriodLink = 'all-time';
-    const currentMonth = node();
-    currentMonth.dataset.mapPeriodLink = 'current-month';
-    const documentRef = {
-      querySelectorAll(selector: string) {
-        return selector === '[data-map-period-link]' ? [allTime, currentMonth] : [];
-      },
-    };
-
-    const historyRef = { replaceState: vi.fn() };
-    initializeMapUrlControls({
-      documentRef,
-      locationRef: { origin: 'https://glidehero.test', pathname: '/global', search: '?month=2026-06' },
-      historyRef,
-      now: () => new Date('2026-07-22T12:00:00Z'),
-    });
-
-    expect(allTime.href).toBe('/global?period=all-time');
-    expect(currentMonth.href).toBe('/global?month=2026-07');
-    expect(historyRef.replaceState).not.toHaveBeenCalled();
-  });
-
-  it('canonicalizes a bare map URL to the browser current month', () => {
-    const historyRef = { replaceState: vi.fn() };
-    const selection = initializeMapUrlControls({
-      documentRef: { querySelectorAll: () => [] },
-      locationRef: { origin: 'https://glidehero.test', pathname: '/personal', search: '?lat=39' },
-      historyRef,
-      now: () => new Date('2026-07-22T12:00:00Z'),
-    });
-
-    expect(selection).toEqual({ period: 'current-month', month: '2026-07' });
-    expect(historyRef.replaceState).toHaveBeenCalledWith(
-      null,
-      '',
-      '/personal?lat=39&month=2026-07',
-    );
-  });
-
-  it('focuses the always-visible Arena search from the location trigger', () => {
-    const trigger = node();
-    const search = node();
-    search.hidden = false;
-    const input = { focus: vi.fn() };
-    search.querySelector = vi.fn(() => input);
-    const documentRef = {
-      querySelectorAll(selector: string) {
-        return selector === '[data-map-period-link]' ? [] : [trigger];
-      },
-      querySelector(selector: string) {
-        return selector === '[data-map-arena-search]' ? search : undefined;
-      },
-    };
-
-    initializeMapUrlControls({ documentRef, locationRef: { origin: 'https://glidehero.test', pathname: '/global', search: '' } });
-    trigger.dispatch('click');
-
-    expect(search.hidden).toBe(false);
-    expect(input.focus).toHaveBeenCalledOnce();
-  });
-
-  it('disables forward month navigation at the browser-local current month', () => {
-    const previous = node(); previous.dataset.competitionMonthNav = 'previous';
-    const next = node(); next.dataset.competitionMonthNav = 'next';
-    const documentRef = { querySelectorAll(selector: string) {
-      return selector === '[data-competition-month-nav]' ? [previous, next] : [];
-    } };
-    initializeCompetitionPeriodControl({
-      documentRef,
-      locationRef: { pathname: '/global', search: '?month=2026-07' },
-      now: () => new Date('2026-07-24T12:00:00Z'),
-    });
-    expect(previous.disabled).toBe(false);
-    expect(next.disabled).toBe(true);
-    expect(next.getAttribute('aria-disabled')).toBe('true');
+    expect(css).toContain('grid-template-columns: minmax(416px, 440px) minmax(0, 1fr)');
+    expect(css).toContain('grid-template-columns: minmax(128px, 1.15fr) minmax(164px, 1.45fr) minmax(100px, .9fr)');
+    expect(css).toContain('.flight-browser.is-collapsed');
+    expect(css).toContain('.flight-browser.is-partial');
+    expect(css).toContain('.flight-browser.is-expanded');
+    expect(css).toContain('.flight-map-stage > .flight-map-canvas { position: absolute; inset: 0; width: 100%; height: 100%; }');
+    expect(css).toContain('@media (max-width: 390px)');
+    expect(css).toContain('@media (prefers-reduced-motion: reduce)');
   });
 });

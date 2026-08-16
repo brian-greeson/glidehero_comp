@@ -1,14 +1,10 @@
-import { initializeArenaSearch } from '../arenaSearch.js';
-import { initializeCompetitionCoverage } from '../competitionCoverageController.js';
-import {
-  ALL_TIME_COMPETITION_PERIOD,
-  mapPeriodFromSearch,
-} from '../competitionPeriod.js';
-import { initializePersonalDashboard } from '../personalDashboard.js';
-import { initializeMapMobileControls } from './mapMobileControls.js';
+import { initializeFlightMap } from './mapFlightBrowser.js';
 import { initializeMapSheet } from './mapSheet.js';
+import { initializeStyledSelects } from './styledSelect.js';
 
 export { initializeMapSheet } from './mapSheet.js';
+export { initializeFlightMap } from './mapFlightBrowser.js';
+export { initializeStyledSelects } from './styledSelect.js';
 
 export function initializeMapUrlControls({
   documentRef = document,
@@ -16,61 +12,16 @@ export function initializeMapUrlControls({
   historyRef = globalThis.history,
   now = () => new Date(),
 } = {}) {
-  const origin = locationRef?.origin ?? 'http://localhost';
-  const currentPath = locationRef?.pathname ?? '/map';
-  const currentDate = now();
-  const selection = mapPeriodFromSearch(locationRef?.search ?? '', currentDate);
-  const currentBrowserMonth = mapPeriodFromSearch('', currentDate).month;
-  const currentQuery = new URLSearchParams(locationRef?.search ?? '');
-  currentQuery.delete('month');
-  currentQuery.delete('period');
-  if (selection.month) currentQuery.set('month', selection.month);
-  else currentQuery.set('period', ALL_TIME_COMPETITION_PERIOD);
-  const canonicalUrl = `${currentPath}?${currentQuery}`;
-  if (`${currentPath}${locationRef?.search ?? ''}` !== canonicalUrl) {
-    historyRef?.replaceState?.(null, '', canonicalUrl);
-  }
-  for (const link of documentRef.querySelectorAll?.('[data-map-period-link]') ?? []) {
-    const url = new URL(link.getAttribute('href') || currentPath, origin);
-    const period = link.dataset.mapPeriodLink;
-    url.searchParams.delete('month');
-    url.searchParams.delete('period');
-    if (period === 'current-month') url.searchParams.set('month', currentBrowserMonth);
-    else url.searchParams.set('period', ALL_TIME_COMPETITION_PERIOD);
-    link.href = `${url.pathname}${url.search}`;
-  }
-  for (const trigger of documentRef.querySelectorAll?.('[data-map-location-trigger]') ?? []) {
-    trigger.addEventListener('click', () => {
-      const search = documentRef.querySelector('[data-map-arena-search]');
-      if (!search) return;
-      search.querySelector('input')?.focus?.();
-    });
-  }
-  return selection;
+  void documentRef; void historyRef; void now;
+  const query = new URLSearchParams(locationRef?.search ?? '');
+  return { period: query.get('period') ?? 'month', anchor: query.get('anchor') ?? query.get('month') };
 }
 
-export function initializeMapPage({ documentRef = document, maplibre = globalThis.window?.maplibregl, fetchImpl = globalThis.fetch?.bind(globalThis), locationRef = globalThis.location, historyRef = globalThis.history, now = () => new Date(), navigatorRef = globalThis.navigator, storage } = {}) {
-  const period = initializeMapUrlControls({ documentRef, locationRef, historyRef, now });
-  initializeMapMobileControls(documentRef);
-  const root = documentRef.querySelector('[data-map-page]');
-  const mapElement = documentRef.querySelector('[data-territory-map]');
-  initializeArenaSearch({
-    documentRef,
-    fetchImpl: fetchImpl ?? globalThis.fetch?.bind(globalThis),
-    locationRef,
-    periodSelection: period,
-    scope: mapElement?.dataset.coverageScope ?? null,
-  });
-  if (!root) return;
-  if (!maplibre || !fetchImpl) return;
-  if (root.dataset.dashboardMode === 'personal') {
-    initializePersonalDashboard({
-      documentRef, maplibre, fetchImpl, locationRef, historyRef, navigatorRef, storage,
-      periodSelection: period,
-    });
-  } else if (root.hasAttribute('data-competition-coverage')) {
-    initializeCompetitionCoverage({ documentRef, maplibre, fetchImpl, locationRef, historyRef, now, navigatorRef, storage });
-  }
+export function initializeMapPage(options = {}) {
+  const documentRef = options.documentRef ?? document;
+  initializeMapSheet({ documentRef });
+  initializeStyledSelects({ documentRef });
+  return initializeFlightMap({ ...options, documentRef });
 }
 
 if (typeof document !== 'undefined') initializeMapPage();

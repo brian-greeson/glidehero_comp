@@ -7,6 +7,7 @@ import { createDatabase, type Database } from '../db/client.js';
 import { createBucketClient } from '../resources/bucketClient.js';
 import { flightThumbnailKeys } from '../services/flightThumbnailService.js';
 import { USER_ACHIEVEMENT_PROGRESS_COMPLETE_VERSION } from '../services/userAchievementProgressService.js';
+import { FLIGHT_MAP_LOD_DEFINITIONS, FLIGHT_MAP_PROJECTION_VERSION } from '../domain/flightMap/flightMapGeometry.js';
 
 const SAMPLE_SIZE = 2;
 
@@ -23,6 +24,7 @@ type CheckStatus = 'PASS' | 'FAIL' | 'SKIP' | 'ERROR';
 type SampleRow = { id: string; artifactPresent: boolean };
 type UserAchievementProgressSample = { id: string; projectionVersion: number | string | null };
 type ThumbnailFlight = { id: string; userId: string };
+type FlightMapVerificationRow = { eligible: number | string; present: number | string; missingIds: string[] | null };
 
 export type ReleaseBackfillSpotCheck = {
   name: string;
@@ -44,6 +46,45 @@ export function summarizeReleaseBackfillSpotCheck(
     sampled: samples.length,
     present,
     missingIds: samples.filter((sample) => !sample.artifactPresent).map((sample) => sample.id),
+  };
+}
+
+/** Complete (not sampled) verification because the map cannot fall back to raw-point reconstruction. */
+export async function checkFlightMapGeometry(database: Database): Promise<ReleaseBackfillSpotCheck> {
+  const result = await database.execute<FlightMapVerificationRow>(sql`
+    WITH eligible AS (
+      SELECT flight.flight_id AS id,
+        (SELECT COUNT(*)::integer FROM track_points point WHERE point.flight_id = flight.flight_id) AS point_count
+      FROM flights flight
+      WHERE flight.processing_status = 'completed'
+        AND (SELECT COUNT(*) FROM track_points point WHERE point.flight_id = flight.flight_id) >= 2
+    ), checked AS (
+      SELECT eligible.id,
+        feature.flight_id IS NOT NULL
+        AND feature.projection_version = ${FLIGHT_MAP_PROJECTION_VERSION}
+        AND feature.source_point_count = eligible.point_count
+        AND ST_IsValid(feature.full_track)
+        AND (SELECT COUNT(*) FROM flight_map_geometry_lods lod
+             WHERE lod.flight_id = eligible.id
+               AND lod.projection_version = ${FLIGHT_MAP_PROJECTION_VERSION}) = ${FLIGHT_MAP_LOD_DEFINITIONS.length}
+        AS artifact_present
+      FROM eligible
+      LEFT JOIN flight_map_features feature ON feature.flight_id = eligible.id
+    )
+    SELECT COUNT(*)::integer AS eligible,
+      COUNT(*) FILTER (WHERE artifact_present)::integer AS present,
+      (ARRAY_AGG(id ORDER BY id) FILTER (WHERE NOT artifact_present))[1:10] AS "missingIds"
+    FROM checked
+  `);
+  const row = result.rows[0] ?? { eligible: 0, present: 0, missingIds: null };
+  const eligible = Number(row.eligible);
+  const present = Number(row.present);
+  return {
+    name: 'flight-map-geometry',
+    status: eligible === 0 ? 'SKIP' : eligible === present ? 'PASS' : 'FAIL',
+    sampled: eligible,
+    present,
+    missingIds: row.missingIds ?? [],
   };
 }
 
@@ -327,6 +368,7 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
     const checks: ReleaseBackfillSpotCheck[] = [];
     checks.push(await runCheck('flight-progress', () => checkFlightProgress(db)));
     checks.push(await runCheck('flight-altitudes', () => checkFlightAltitudes(db)));
+    checks.push(await runCheck('flight-map-geometry', () => checkFlightMapGeometry(db)));
     checks.push(await runCheck('flight-thumbnails', () => checkFlightThumbnails(
       db,
       s3Client,

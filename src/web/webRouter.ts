@@ -45,6 +45,7 @@ import { createFlightMapPayload, createFlightPageView, createFlightSocialPreview
 import type { PublicFlightPageRenderer } from '../views/publicFlight/renderer.js';
 import type { CellFlightTrackService } from '../services/cellFlightTrackService.js';
 import type { MapReplayService } from '../services/mapReplayService.js';
+import { FlightMapInputError, type FlightMapService } from '../services/flightMapService.js';
 import type { OnboardingService, OnboardingStepKey } from '../services/onboardingService.js';
 import { GroupError, type GroupService } from '../services/groupService.js';
 import { createOnboardingView } from '../views/authenticated/adapters/onboardingView.js';
@@ -52,6 +53,7 @@ import type { PlanService } from '../services/planService.js';
 import type { PlanExportService } from '../services/planExportService.js';
 import type { ThermalRasterCacheService } from '../services/thermalRasterCacheService.js';
 import { THERMAL_NATIVE_ZOOM, xyzYToTmsY } from '../domain/thermal/thermalTiles.js';
+import { flightMapListPageToPayload } from '../views/authenticated/adapters/flightMapView.js';
 
 const email = z.string().trim().toLowerCase().pipe(z.email());
 const password = z.string().min(3).max(128);
@@ -123,6 +125,50 @@ const viewportBoundsShape = {
 const viewportBoundsSchema = z.object(viewportBoundsShape)
   .strict()
   .refine((bounds) => bounds.south < bounds.north && bounds.west !== bounds.east);
+const flightMapScopeSchema = z.enum(['personal', 'following', 'all']);
+const flightMapPeriodSchema = z.enum(['day', 'month', 'year', 'all-time']);
+const flightMapAnchorSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
+const flightMapFilterShape = {
+  scope: flightMapScopeSchema,
+  period: flightMapPeriodSchema,
+  anchor: flightMapAnchorSchema.optional(),
+};
+const flightMapTrackQuerySchema = z.object({
+  ...flightMapFilterShape,
+  ...viewportBoundsShape,
+  zoom: z.coerce.number().finite().min(0).max(24),
+}).strict().superRefine((value, context) => {
+  if ((value.period === 'all-time') === (value.anchor !== undefined)) {
+    context.addIssue({ code: 'custom', message: 'Flight map period anchor is invalid.' });
+  }
+  if (value.south >= value.north || value.west === value.east) {
+    context.addIssue({ code: 'custom', message: 'Flight map viewport is invalid.' });
+  }
+});
+const flightMapListQuerySchema = z.object({
+  ...flightMapFilterShape,
+  geography: z.enum(['global', 'map-area']),
+  sort: z.enum(['distance', 'latest', 'duration']),
+  cursor: z.string().min(1).optional(),
+  west: finiteCoordinate.optional(),
+  south: finiteCoordinate.optional(),
+  east: finiteCoordinate.optional(),
+  north: finiteCoordinate.optional(),
+}).strict().superRefine((value, context) => {
+  if ((value.period === 'all-time') === (value.anchor !== undefined)) {
+    context.addIssue({ code: 'custom', message: 'Flight map period anchor is invalid.' });
+  }
+  const coordinates = [value.west, value.south, value.east, value.north];
+  const present = coordinates.filter((coordinate) => coordinate !== undefined).length;
+  if ((value.geography === 'map-area' && present !== 4) || (value.geography === 'global' && present !== 0)) {
+    context.addIssue({ code: 'custom', message: 'Flight map geography bounds are invalid.' });
+  }
+  if (present === 4 && (
+    value.west! < -180 || value.west! > 180 || value.east! < -180 || value.east! > 180
+    || value.south! < -90 || value.south! > 90 || value.north! < -90 || value.north! > 90
+    || value.south! >= value.north! || value.west === value.east
+  )) context.addIssue({ code: 'custom', message: 'Flight map viewport is invalid.' });
+});
 const competitionLeaderboardSchema = z.object({
   month: competitionMonthValue.optional(),
   scope: z.literal('following').optional(),
@@ -231,10 +277,12 @@ function mapPagePeriod(query: Request['query']): {
 } {
   const rawMonth = query.month;
   const rawPeriod = query.period;
+  const rawAnchor = query.anchor;
   if (
     (rawMonth !== undefined && typeof rawMonth !== 'string')
-    || (rawPeriod !== undefined && rawPeriod !== 'all-time')
-    || (rawMonth !== undefined && rawPeriod !== undefined)
+    || (rawPeriod !== undefined && (typeof rawPeriod !== 'string' || !['day', 'month', 'year', 'all-time'].includes(rawPeriod)))
+    || (rawAnchor !== undefined && typeof rawAnchor !== 'string')
+    || (rawMonth !== undefined && (rawPeriod !== undefined || rawAnchor !== undefined))
   ) {
     throw new AppError(400, 'invalid_request', 'Map period is invalid.');
   }
@@ -247,8 +295,22 @@ function mapPagePeriod(query: Request['query']): {
     };
   }
   if (rawPeriod === 'all-time') {
+    if (rawAnchor !== undefined) throw new AppError(400, 'invalid_request', 'Map period is invalid.');
     return { period: 'all-time', suffix: '?period=all-time' };
   }
+  if (rawPeriod === 'day' || rawPeriod === 'month' || rawPeriod === 'year') {
+    const parsedAnchor = flightMapAnchorSchema.safeParse(rawAnchor);
+    if (!parsedAnchor.success) throw new AppError(400, 'invalid_request', 'Map period is invalid.');
+    const parsedDate = new Date(`${parsedAnchor.data}T00:00:00.000Z`);
+    if (Number.isNaN(parsedDate.getTime()) || parsedDate.toISOString().slice(0, 10) !== parsedAnchor.data) {
+      throw new AppError(400, 'invalid_request', 'Map period is invalid.');
+    }
+    return {
+      period: 'current-month',
+      suffix: `?period=${rawPeriod}&anchor=${encodeURIComponent(parsedAnchor.data)}`,
+    };
+  }
+  if (rawAnchor !== undefined) throw new AppError(400, 'invalid_request', 'Map period is invalid.');
   return { period: 'current-month', suffix: '' };
 }
 
@@ -310,6 +372,7 @@ export function createWebRouter(dependencies: {
   flightDetail?: FlightDetailService;
   cellFlightTracks?: CellFlightTrackService;
   mapReplay?: MapReplayService;
+  flightMap?: FlightMapService;
   onboarding?: OnboardingService;
   groups?: GroupService;
   plans?: PlanService;
@@ -882,6 +945,57 @@ export function createWebRouter(dependencies: {
     }
   });
 
+  router.get('/v1/map-flights/tracks', async (req, res, next) => {
+    const currentUser = res.locals.currentUser;
+    if (!currentUser) return next(new AppError(401, 'unauthorized', 'Sign in before viewing map flights.'));
+    const parsed = flightMapTrackQuerySchema.safeParse(req.query);
+    if (!parsed.success) return next(new AppError(400, 'invalid_request', 'Flight map track query is invalid.'));
+    if (!dependencies.flightMap) throw new Error('Flight map service is not configured.');
+    const { west, south, east, north, zoom, scope, period, anchor } = parsed.data;
+    try {
+      const page = await dependencies.flightMap.listViewportTracks({
+        viewerUserId: currentUser.userId,
+        scope,
+        period,
+        ...(anchor === undefined ? {} : { anchor }),
+        viewport: { west, south, east, north },
+        zoom,
+      });
+      res.status(200).set('Cache-Control', 'private, no-store').json(page);
+    } catch (error) {
+      next(error instanceof FlightMapInputError ? new AppError(400, 'invalid_request', error.message) : error);
+    }
+  });
+
+  router.get('/v1/map-flights', async (req, res, next) => {
+    const currentUser = res.locals.currentUser;
+    if (!currentUser) return next(new AppError(401, 'unauthorized', 'Sign in before viewing map flights.'));
+    const parsed = flightMapListQuerySchema.safeParse(req.query);
+    if (!parsed.success) return next(new AppError(400, 'invalid_request', 'Flight map list query is invalid.'));
+    if (!dependencies.flightMap) throw new Error('Flight map service is not configured.');
+    const { scope, period, anchor, geography, sort, cursor, west, south, east, north } = parsed.data;
+    try {
+      const page = await dependencies.flightMap.listFlights({
+        viewerUserId: currentUser.userId,
+        scope,
+        period,
+        ...(anchor === undefined ? {} : { anchor }),
+        geography,
+        sort,
+        ...(cursor === undefined ? {} : { cursor }),
+        ...(geography === 'map-area'
+          ? { viewport: { west: west!, south: south!, east: east!, north: north! } }
+          : {}),
+      });
+      const thumbnailUrls = dependencies.thumbnailDelivery
+        ? await dependencies.thumbnailDelivery.signMany(page.items.map((item) => ({ userId: item.pilotUserId, flightId: item.flightId })))
+        : undefined;
+      res.status(200).set('Cache-Control', 'private, no-store').json(flightMapListPageToPayload(page, { thumbnailUrls }));
+    } catch (error) {
+      next(error instanceof FlightMapInputError ? new AppError(400, 'invalid_request', error.message) : error);
+    }
+  });
+
   router.get('/v1/map-replay', async (req, res, next) => {
     const currentUser = res.locals.currentUser;
     if (!currentUser) return next(new AppError(401, 'unauthorized', 'Sign in before viewing map replay.'));
@@ -889,6 +1003,30 @@ export function createWebRouter(dependencies: {
     if (!parsed.success || parsed.data.south < -90 || parsed.data.north > 90 || parsed.data.south >= parsed.data.north || parsed.data.west < -180 || parsed.data.west > 180 || parsed.data.east < -180 || parsed.data.east > 180 || parsed.data.west === parsed.data.east) return res.status(400).json({ error: { code: 'invalid_request', message: 'Invalid map replay parameters.' } });
     if (!dependencies.mapReplay) throw new Error('Map replay service is not configured.');
     try { res.json(await dependencies.mapReplay.getReplay({ ...parsed.data, userId: currentUser.userId })); } catch (error) { next(error); }
+  });
+
+  router.get('/v1/map-flights/:flightId/replay', async (req, res, next) => {
+    const currentUser = res.locals.currentUser;
+    if (!currentUser) {
+      next(new AppError(401, 'unauthorized', 'Sign in before replaying a map flight.'));
+      return;
+    }
+    const flightId = pilotUserIdSchema.safeParse(req.params.flightId);
+    if (!flightId.success) {
+      next();
+      return;
+    }
+    if (!dependencies.mapReplay) throw new Error('Map replay service is not configured.');
+    try {
+      const flight = await dependencies.mapReplay.getFlightReplay({ flightId: flightId.data });
+      if (!flight) {
+        next();
+        return;
+      }
+      res.status(200).set('Cache-Control', 'private, no-store').json({ flights: [flight] });
+    } catch (error) {
+      next(error);
+    }
   });
 
   router.get('/v1/competition-territory/tiles/:z/:x/:y.mvt', async (req, res, next) => {
@@ -1134,7 +1272,7 @@ export function createWebRouter(dependencies: {
 
   router.get('/', async (req, res) => {
     if (res.locals.currentUser) {
-      res.redirect(302, '/activity');
+      res.redirect(302, '/following');
       return;
     }
     await render(res, dependencies.renderPage, 200, {

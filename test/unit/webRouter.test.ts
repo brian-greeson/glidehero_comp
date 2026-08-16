@@ -31,6 +31,7 @@ import type { ThermalRasterCacheService } from '../../src/services/thermalRaster
 import type { PublicFlightPageRenderer } from '../../src/views/publicFlight/renderer.js';
 import type { FlightThumbnailDeliveryService } from '../../src/services/flightThumbnailDeliveryService.js';
 import type { GroupService } from '../../src/services/groupService.js';
+import type { FlightMapService } from '../../src/services/flightMapService.js';
 
 const viewportStats = {
   claimedCellCount: 2,
@@ -272,7 +273,14 @@ function dependencies() {
   const arenas = arenaService();
   const arenaProgress = arenaProgressService();
   const mapGrid = mapGridService();
-  const mapReplay: MapReplayService = { getReplay: vi.fn(async () => ({ flights: [] })) };
+  const mapReplay: MapReplayService = {
+    getReplay: vi.fn(async () => ({ flights: [] })),
+    getFlightReplay: vi.fn(async () => null),
+  };
+  const flightMap: FlightMapService = {
+    listViewportTracks: vi.fn(async () => ({ tracks: [], truncated: false })),
+    listFlights: vi.fn(async () => ({ items: [], nextCursor: null })),
+  };
   const plans: PlanService = { route: vi.fn(async (input) => ({
     anchors: input.anchors, route: input.anchors,
     legs: [{ directDistanceMeters: 1_000, maximumDistanceMeters: 1_200, routeDistanceMeters: 1_000 }],
@@ -300,6 +308,7 @@ function dependencies() {
     gridClaim,
     mapGrid,
     mapReplay,
+    flightMap,
     plans,
     planExports,
     thermalRasters,
@@ -323,6 +332,7 @@ function dependencies() {
     gridClaim,
     mapGrid,
     mapReplay,
+    flightMap,
     plans,
     planExports,
     thermalRasters,
@@ -1163,7 +1173,7 @@ describe('webRouter', () => {
         headers: { cookie: 'glidehero_session=valid-token' },
       });
       expect(authenticated.status).toBe(302);
-      expect(authenticated.headers.get('location')).toBe('/activity');
+      expect(authenticated.headers.get('location')).toBe('/following');
     });
   });
 
@@ -2400,6 +2410,113 @@ describe('webRouter', () => {
       expect((await fetch(`${baseUrl}/v1/map-replay?month=2026-07&mode=competitive&west=170&south=-10&east=-170&north=10`, { headers: { cookie: 'glidehero_session=valid-token' } })).status).toBe(200);
       expect((await fetch(`${baseUrl}/v1/map-replay?month=2026-07&mode=following&west=-105&south=39&east=-104&north=40`, { headers: { cookie: 'glidehero_session=valid-token' } })).status).toBe(200);
       expect(base.mapReplay.getReplay).toHaveBeenLastCalledWith({ month: '2026-07', mode: 'following', west: -105, south: 39, east: -104, north: 40, userId: user.userId });
+    });
+  });
+
+  it('serves viewport flight geometry through the authenticated map contract', async () => {
+    const base = dependencies();
+    const query = 'scope=following&period=month&anchor=2026-08-15&west=-106&south=39&east=-104&north=41&zoom=8';
+    await withServer(base.app, async (baseUrl) => {
+      expect((await fetch(`${baseUrl}/v1/map-flights/tracks?${query}`)).status).toBe(401);
+      const response = await fetch(`${baseUrl}/v1/map-flights/tracks?${query}`, {
+        headers: { cookie: 'glidehero_session=valid-token' },
+      });
+      expect(response.status).toBe(200);
+      expect(response.headers.get('cache-control')).toBe('private, no-store');
+      expect(await response.json()).toEqual({ tracks: [], truncated: false });
+      expect(base.flightMap.listViewportTracks).toHaveBeenCalledWith({
+        viewerUserId: user.userId,
+        scope: 'following',
+        period: 'month',
+        anchor: '2026-08-15',
+        viewport: { west: -106, south: 39, east: -104, north: 41 },
+        zoom: 8,
+      });
+    });
+  });
+
+  it('serves and adapts load-more flight cards with global or map-area geography', async () => {
+    const base = dependencies();
+    vi.mocked(base.flightMap.listFlights).mockResolvedValueOnce({
+      items: [{
+        flightId: '00000000-0000-4000-8000-000000000020',
+        pilotUserId: user.userId,
+        pilotDisplayName: 'Sky Pilot',
+        pilotColor: '#1769AA',
+        startedAt: '2026-08-15T15:00:00.000Z',
+        launchTimezone: 'America/Denver',
+        launchName: 'Wonderland Lake',
+        durationSeconds: 4_500,
+        fivePointDistanceMeters: 32_400,
+        launchLatitude: 40.05,
+        launchLongitude: -105.29,
+        landingLatitude: 40.1,
+        landingLongitude: -105.2,
+        bounds: { west: -105.3, south: 40, east: -105.1, north: 40.2, crossesAntimeridian: false },
+      }],
+      nextCursor: 'next-page',
+    });
+    await withServer(base.app, async (baseUrl) => {
+      const response = await fetch(`${baseUrl}/v1/map-flights?scope=all&period=all-time&geography=global&sort=distance`, {
+        headers: { cookie: 'glidehero_session=valid-token' },
+      });
+      expect(response.status).toBe(200);
+      expect(response.headers.get('cache-control')).toBe('private, no-store');
+      expect(await response.json()).toEqual(expect.objectContaining({
+        items: [expect.objectContaining({
+          id: '00000000-0000-4000-8000-000000000020',
+          href: '/flights/00000000-0000-4000-8000-000000000020',
+          distanceMeters: 32_400,
+          distanceLabel: '32.4 km',
+          location: 'Wonderland Lake',
+          pilot: expect.objectContaining({ displayName: 'Sky Pilot', initials: 'SP' }),
+        })],
+        nextCursor: 'next-page',
+      }));
+      expect(base.flightMap.listFlights).toHaveBeenCalledWith({
+        viewerUserId: user.userId,
+        scope: 'all',
+        period: 'all-time',
+        geography: 'global',
+        sort: 'distance',
+      });
+    });
+  });
+
+  it('rejects invalid flight-map periods and incomplete map-area bounds', async () => {
+    const base = dependencies();
+    const headers = { cookie: 'glidehero_session=valid-token' };
+    await withServer(base.app, async (baseUrl) => {
+      expect((await fetch(`${baseUrl}/v1/map-flights/tracks?scope=personal&period=all-time&anchor=2026-08-15&west=-106&south=39&east=-104&north=41&zoom=8`, { headers })).status).toBe(400);
+      expect((await fetch(`${baseUrl}/v1/map-flights?scope=following&period=month&anchor=2026-08-15&geography=map-area&sort=latest&west=-106`, { headers })).status).toBe(400);
+      expect((await fetch(`${baseUrl}/v1/map-flights?scope=following&period=month&anchor=2026-08-15&geography=map-area&sort=latest&west=-106&south=39&east=-106&north=41`, { headers })).status).toBe(400);
+      expect(base.flightMap.listViewportTracks).not.toHaveBeenCalled();
+      expect(base.flightMap.listFlights).not.toHaveBeenCalled();
+    });
+  });
+
+  it('serves focused raw-point replay for a selected map flight', async () => {
+    const base = dependencies();
+    const flightId = '00000000-0000-4000-8000-000000000020';
+    vi.mocked(base.mapReplay.getFlightReplay).mockResolvedValueOnce({
+      flightId,
+      pilotUserId: user.userId,
+      startOffsetMs: 0,
+      durationMs: 10_000,
+      points: [[-105, 40, 0, 1_500], [-104.9, 40.1, 10_000, 1_600]],
+    });
+    await withServer(base.app, async (baseUrl) => {
+      expect((await fetch(`${baseUrl}/v1/map-flights/${flightId}/replay`)).status).toBe(401);
+      const response = await fetch(`${baseUrl}/v1/map-flights/${flightId}/replay`, {
+        headers: { cookie: 'glidehero_session=valid-token' },
+      });
+      expect(response.status).toBe(200);
+      expect(response.headers.get('cache-control')).toBe('private, no-store');
+      expect(await response.json()).toEqual({ flights: [expect.objectContaining({ flightId, durationMs: 10_000 })] });
+      expect(base.mapReplay.getFlightReplay).toHaveBeenCalledWith({ flightId });
+      expect((await fetch(`${baseUrl}/v1/map-flights/not-a-flight/replay`, {
+        headers: { cookie: 'glidehero_session=valid-token' },
+      })).status).toBe(404);
     });
   });
 

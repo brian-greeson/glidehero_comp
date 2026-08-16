@@ -20,6 +20,7 @@ import { createGridClaimService } from './gridClaimService.js';
 import type { UserAchievementProgressService } from './userAchievementProgressService.js';
 import type { UserArenaProgressService } from './userArenaProgressService.js';
 import { lockArenaCatalogShared } from './arenaCatalogLock.js';
+import { projectFlightMapGeometry, scoringProtectedSequenceNumbers } from './flightMapProjectionService.js';
 
 const TRACK_POINT_INSERT_BATCH_SIZE = 1_000;
 export const duplicateFlightMessage = 'This flight has already been uploaded.';
@@ -243,6 +244,11 @@ export function createFlightProcessingService(
               .insert(trackPoints)
               .values(parsed.points.slice(start, start + TRACK_POINT_INSERT_BATCH_SIZE).map((point) => ({ flightId: flight.id, ...point })));
           }
+          await projectFlightMapGeometry(tx, {
+            flightId: flight.id,
+            points: parsed.points,
+            protectedSequenceNumbers: scoringProtectedSequenceNumbers(nPointDistanceMetadata),
+          });
 
           const claimInput = {
             flightId: flight.id,

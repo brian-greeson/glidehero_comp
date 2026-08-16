@@ -1,10 +1,13 @@
-import { asc, inArray, sql } from 'drizzle-orm';
+import { and, asc, eq, inArray, sql } from 'drizzle-orm';
 import type { Database } from '../db/client.js';
 import { flights, trackPoints } from '../db/schema.js';
 
 export type MapReplayInput = { month: string; mode: 'personal' | 'competitive' | 'following'; west: number; south: number; east: number; north: number; userId: string };
 export type MapReplayFlight = { flightId: string; pilotUserId: string; startOffsetMs: number; durationMs: number; points: Array<[number, number, number, number]> };
-export interface MapReplayService { getReplay(input: MapReplayInput): Promise<{ flights: MapReplayFlight[] }> }
+export interface MapReplayService {
+  getReplay(input: MapReplayInput): Promise<{ flights: MapReplayFlight[] }>;
+  getFlightReplay(input: { flightId: string }): Promise<MapReplayFlight | null>;
+}
 
 export function createMapReplayService(db: Database): MapReplayService {
   return { async getReplay(input) {
@@ -64,5 +67,41 @@ export function createMapReplayService(db: Database): MapReplayService {
       const mapped=ps.map(p=>[p.longitude,p.latitude,p.recordedAt.getTime()-first,p.gpsAltitudeMeters] as [number,number,number,number]);
       return [{ flightId: row.id, pilotUserId: row.user_id, startOffsetMs: first-replayStart, durationMs: mapped.at(-1)![2], points: mapped }];
     }) };
+  },
+
+  async getFlightReplay({ flightId }) {
+    const [flight] = await db
+      .select({ id: flights.id, pilotUserId: flights.userId })
+      .from(flights)
+      .where(and(eq(flights.id, flightId), eq(flights.processingStatus, 'completed')))
+      .limit(1);
+    if (!flight) return null;
+
+    const points = await db
+      .select({
+        longitude: trackPoints.longitude,
+        latitude: trackPoints.latitude,
+        recordedAt: trackPoints.recordedAt,
+        gpsAltitudeMeters: trackPoints.gpsAltitudeMeters,
+      })
+      .from(trackPoints)
+      .where(eq(trackPoints.flightId, flightId))
+      .orderBy(asc(trackPoints.sequenceNumber));
+    const first = points[0];
+    if (!first) return null;
+    const startedAt = first.recordedAt.getTime();
+    const replayPoints = points.map((point) => [
+      point.longitude,
+      point.latitude,
+      point.recordedAt.getTime() - startedAt,
+      point.gpsAltitudeMeters,
+    ] as [number, number, number, number]);
+    return {
+      flightId: flight.id,
+      pilotUserId: flight.pilotUserId,
+      startOffsetMs: 0,
+      durationMs: replayPoints.at(-1)?.[2] ?? 0,
+      points: replayPoints,
+    };
   }};
 }

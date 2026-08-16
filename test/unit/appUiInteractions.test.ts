@@ -68,7 +68,7 @@ describe('refreshed app UI interactions', () => {
     expect(two.attribute('aria-pressed')).toBe('true');
   });
 
-  it('expands the mobile map sheet by tap and upward swipe', () => {
+  it('moves the mobile map sheet through collapsed, partial, and expanded states', () => {
     const sheet = node(); const handle = node(); const label = { textContent: '' };
     const documentRef = { querySelector(selector: string) {
       if (selector === '[data-map-sheet]') return sheet;
@@ -82,7 +82,11 @@ describe('refreshed app UI interactions', () => {
     handle.dispatch('pointerdown', { button: 0, isPrimary: true, clientY: 180, pointerId: 1 });
     handle.dispatch('pointermove', { clientY: 100 });
     handle.dispatch('pointerup', { clientY: 100 });
+    expect(sheet.classList.contains('is-partial')).toBe(true);
+    handle.dispatch('pointerdown', { button: 0, isPrimary: true, clientY: 180, pointerId: 1 });
+    handle.dispatch('pointermove', { clientY: 100 });
+    handle.dispatch('pointerup', { clientY: 100 });
     expect(sheet.classList.contains('is-expanded')).toBe(true);
-    expect(label.textContent).toBe('Collapse map controls');
+    expect(label.textContent).toBe('Collapse flight browser');
   });
 });
