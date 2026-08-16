@@ -54,7 +54,7 @@ describe('flight map service input contracts', () => {
       anchor: '2026-08-01',
       geography: 'global',
       sort: 'distance',
-    })).rejects.toThrow('All-time does not accept an anchor date.');
+    })).rejects.toThrow('All-time does not accept date values.');
     await expect(service.listFlights({
       viewerUserId,
       scope: 'following',
@@ -63,6 +63,15 @@ describe('flight map service input contracts', () => {
       geography: 'map-area',
       sort: 'distance',
     })).rejects.toThrow('Map-area requires a viewport.');
+    await expect(service.listFlights({
+      viewerUserId,
+      scope: 'personal',
+      period: 'custom',
+      startDate: '2026-08-10',
+      endDate: '2026-08-01',
+      geography: 'global',
+      sort: 'latest',
+    })).rejects.toThrow('Flight map date range is reversed.');
     expect(database.execute).not.toHaveBeenCalled();
   });
 });
@@ -143,6 +152,7 @@ describe('flight map read mapping', () => {
       pilotColor: '#1769AA',
       startedAt: new Date('2026-08-01T12:00:00Z'),
       launchTimezone: 'America/Denver',
+      launchId: null,
       launchName: null,
       durationSeconds: 7200,
       fivePointDistanceMeters: 32000,
@@ -175,6 +185,7 @@ describe('flight map read mapping', () => {
       pilotColor: '#1769AA',
       startedAt: '2026-08-01T12:00:00.000Z',
       launchTimezone: 'America/Denver',
+      launchId: null,
       launchName: null,
       durationSeconds: 7200,
       fivePointDistanceMeters: 32000,
@@ -191,5 +202,24 @@ describe('flight map read mapping', () => {
       startedAt: '2026-08-01T12:00:00.000Z',
       flightId,
     });
+  });
+
+  it('maps personal summaries and faceted launch options', async () => {
+    const summaryDatabase = databaseWithRows([{
+      totalFlights: '4', fivePointDistanceMeters: '12345.5', airtimeSeconds: '9876', launchesVisited: '2', countriesVisited: '3',
+    }]);
+    const summary = await createFlightMapService(summaryDatabase as never).getPersonalSummary({
+      viewerUserId, scope: 'personal', period: 'all-time', geography: 'global',
+    });
+    expect(summary).toEqual({ totalFlights: 4, fivePointDistanceMeters: 12345.5, airtimeSeconds: 9876, launchesVisited: 2, countriesVisited: 3 });
+
+    const launchDatabase = databaseWithRows([
+      { launchId: '100', name: 'Known Launch', flightCount: '2' },
+      { launchId: null, name: null, flightCount: '1' },
+    ]);
+    const options = await createFlightMapService(launchDatabase as never).listPersonalLaunchOptions({
+      viewerUserId, scope: 'personal', period: 'all-time', geography: 'global',
+    });
+    expect(options).toEqual({ launches: [{ launchId: 100, name: 'Known Launch', flightCount: 2 }], hasUnknown: true });
   });
 });

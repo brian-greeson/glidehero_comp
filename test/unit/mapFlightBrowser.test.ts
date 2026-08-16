@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { readFile } from 'node:fs/promises';
 
 // @ts-expect-error Browser assets remain JavaScript.
-import { defaultPeriodAnchor, mapFlightListRequestUrl, mapTrackRequestUrl, normalizeFlightListPayload, normalizeTrackPayload, periodStateFromSearch, stepPeriod, trackStatusMessage } from '../../public/scripts/app-ui/mapFlightBrowser.js';
+import { defaultPeriodAnchor, mapFlightListRequestUrl, mapFlightSelectionRequestUrl, mapTrackRequestUrl, normalizeFlightListPayload, normalizeTrackPayload, periodStateFromSearch, stepPeriod, trackStatusMessage } from '../../public/scripts/app-ui/mapFlightBrowser.js';
 
 const bounds = { west: -106, south: 39, east: -105, north: 40 };
 
@@ -13,6 +13,9 @@ describe('flight map browser contracts', () => {
     expect(defaultPeriodAnchor('month', now)).toBe('2026-08-01');
     expect(defaultPeriodAnchor('year', now)).toBe('2026-01-01');
     expect(periodStateFromSearch('?month=2026-07', now)).toEqual({ period: 'month', anchor: '2026-07-01' });
+    expect(periodStateFromSearch('?period=custom&start=2026-06-01&end=2026-08-15', now)).toEqual({ period: 'custom', startDate: '2026-06-01', endDate: '2026-08-15' });
+    expect(periodStateFromSearch('?period=custom&start=2026-02-30&end=2026-03-01', now, 'all-time')).toEqual({ period: 'custom', startDate: '2026-08-15', endDate: '2026-08-15' });
+    expect(periodStateFromSearch('?period=day&anchor=2026-08-15', now, 'all-time')).toEqual({ period: 'all-time', anchor: '' });
   });
 
   it('steps calendar periods and leaves All Time stationary', () => {
@@ -33,6 +36,23 @@ describe('flight map browser contracts', () => {
   it('includes viewport bounds only when the list uses Map area', () => {
     const url = new URL(mapFlightListRequestUrl('/v1/map-flights', { scope: 'personal', period: { period: 'all-time', anchor: '' }, geography: 'map-area', sort: 'latest', bounds }), 'https://example.test');
     expect(Object.fromEntries(url.searchParams)).toMatchObject({ scope: 'personal', period: 'all-time', geography: 'map-area', west: '-106', east: '-105' });
+  });
+
+  it('carries catalog and Unknown launch filters through both flight requests', () => {
+    const period = { period: 'all-time', anchor: '' };
+    const track = new URL(mapTrackRequestUrl('/v1/map-flights/tracks', { scope: 'personal', period, bounds, zoom: 8, launch: '42' }), 'https://example.test');
+    const list = new URL(mapFlightListRequestUrl('/v1/map-flights', { scope: 'personal', period, geography: 'global', sort: 'latest', bounds, launch: 'unknown' }), 'https://example.test');
+    expect(track.searchParams.get('launch')).toBe('42');
+    expect(list.searchParams.get('launch')).toBe('unknown');
+  });
+
+  it('revalidates a selected flight against custom dates, launch, and map area', () => {
+    const url = new URL(mapFlightSelectionRequestUrl('/v1/map-flights/{flightId}', '00000000-0000-4000-8000-000000000010', {
+      scope: 'personal', period: { period: 'custom', startDate: '2026-06-01', endDate: '2026-08-15' },
+      geography: 'map-area', bounds, launch: 'unknown',
+    }), 'https://example.test');
+    expect(url.pathname).toBe('/v1/map-flights/00000000-0000-4000-8000-000000000010');
+    expect(Object.fromEntries(url.searchParams)).toMatchObject({ period: 'custom', start: '2026-06-01', end: '2026-08-15', geography: 'map-area', launch: 'unknown', west: '-106' });
   });
 
   it('normalizes query payload aliases at the browser boundary', () => {
@@ -66,5 +86,18 @@ describe('flight map browser contracts', () => {
     expect(source).toContain("card.querySelector('.flight-browser-card__select')");
     expect(source).not.toContain("item.setAttribute('role', 'button')");
     expect(source).not.toContain('item.tabIndex = 0');
+  });
+
+  it('revalidates and reinserts an off-page selection after sorting', async () => {
+    const source = await readFile('public/scripts/app-ui/mapFlightBrowser.js', 'utf8');
+    expect(source).toContain("sort?.addEventListener('change', () => { syncUrl({ push: true }); void refreshListAndSelection(); })");
+    expect(source).toContain('const refreshListAndSelection = async () => {');
+    expect(source).toContain('if (selectedFlightId) await revalidateSelectedFlight();');
+  });
+
+  it('ignores transient replay camera moveend events', async () => {
+    const source = await readFile('public/scripts/app-ui/mapFlightBrowser.js', 'utf8');
+    expect(source).toContain("map.on?.('moveend', (event) => {");
+    expect(source).toContain('if (isMapReplayCameraMoveEvent(event)) return;');
   });
 });

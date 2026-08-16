@@ -32,6 +32,7 @@ import type { PublicFlightPageRenderer } from '../../src/views/publicFlight/rend
 import type { FlightThumbnailDeliveryService } from '../../src/services/flightThumbnailDeliveryService.js';
 import type { GroupService } from '../../src/services/groupService.js';
 import type { FlightMapService } from '../../src/services/flightMapService.js';
+import type { LaunchMapService } from '../../src/services/launchMapService.js';
 
 const viewportStats = {
   claimedCellCount: 2,
@@ -280,6 +281,13 @@ function dependencies() {
   const flightMap: FlightMapService = {
     listViewportTracks: vi.fn(async () => ({ tracks: [], truncated: false })),
     listFlights: vi.fn(async () => ({ items: [], nextCursor: null })),
+    getFlight: vi.fn(async () => null),
+    getPersonalSummary: vi.fn(async () => ({ totalFlights: 0, fivePointDistanceMeters: 0, airtimeSeconds: 0, launchesVisited: 0, countriesVisited: 0 })),
+    listPersonalLaunchOptions: vi.fn(async () => ({ launches: [], hasUnknown: false })),
+  };
+  const launchMap: LaunchMapService = {
+    listViewportMarkers: vi.fn(async () => []),
+    getLaunchDetail: vi.fn(async () => null),
   };
   const plans: PlanService = { route: vi.fn(async (input) => ({
     anchors: input.anchors, route: input.anchors,
@@ -309,6 +317,7 @@ function dependencies() {
     mapGrid,
     mapReplay,
     flightMap,
+    launchMap,
     plans,
     planExports,
     thermalRasters,
@@ -333,6 +342,7 @@ function dependencies() {
     mapGrid,
     mapReplay,
     flightMap,
+    launchMap,
     plans,
     planExports,
     thermalRasters,
@@ -1222,7 +1232,7 @@ describe('webRouter', () => {
     });
   });
 
-  it('renders map pages as current-month by default and keeps all time explicit', async () => {
+  it('uses scope-aware map defaults and keeps explicit periods restorable', async () => {
     const { app, onboarding, renderAuthenticatedPage } = dependencies();
     await withServer(app, async (baseUrl) => {
       const headers = { cookie: 'glidehero_session=valid-token' };
@@ -1231,9 +1241,11 @@ describe('webRouter', () => {
       expect(renderAuthenticatedPage).toHaveBeenLastCalledWith(expect.objectContaining({
         mode: 'personal',
         location: null,
-        period: 'current-month',
+        period: 'all-time',
+        activeNavigationPage: 'my-flights',
         navigation: expect.arrayContaining([
-          expect.objectContaining({ page: 'map', href: '/personal' }),
+          expect.objectContaining({ page: 'map', href: '/following' }),
+          expect.objectContaining({ page: 'my-flights', href: '/personal' }),
         ]),
       }));
 
@@ -1266,7 +1278,7 @@ describe('webRouter', () => {
         mode: 'personal',
         period: 'current-month',
         navigation: expect.arrayContaining([
-          expect.objectContaining({ page: 'map', href: '/personal?month=2026-07' }),
+          expect.objectContaining({ page: 'my-flights', href: '/personal' }),
         ]),
       }));
 
@@ -2435,6 +2447,37 @@ describe('webRouter', () => {
     });
   });
 
+  it('serves launch markers, launch detail, and personal history through authenticated map contracts', async () => {
+    const base = dependencies();
+    vi.mocked(base.launchMap.listViewportMarkers).mockResolvedValueOnce([{ launchId: 42, name: 'Wonderland', longitude: -105.2, latitude: 40.1, visited: true }]);
+    vi.mocked(base.launchMap.getLaunchDetail).mockResolvedValueOnce({
+      launchId: 42, name: 'Wonderland', longitude: -105.2, latitude: 40.1,
+      city: 'Boulder', state: 'Colorado', country: 'United States', elevationMeters: 2100,
+      description: null, matchingFlightCount: 2, visited: true,
+    });
+    vi.mocked(base.flightMap.getPersonalSummary).mockResolvedValueOnce({ totalFlights: 2, fivePointDistanceMeters: 45_000, airtimeSeconds: 7_200, launchesVisited: 1, countriesVisited: 1 });
+    await withServer(base.app, async (baseUrl) => {
+      const headers = { cookie: 'glidehero_session=valid-token' };
+      expect((await fetch(`${baseUrl}/v1/map-launches?west=-106&south=39&east=-104&north=41`)).status).toBe(401);
+      const markers = await fetch(`${baseUrl}/v1/map-launches?west=-106&south=39&east=-104&north=41&scope=personal&period=all-time&launch=unknown`, { headers });
+      expect(await markers.json()).toEqual({ launches: [{ launchId: 42, name: 'Wonderland', longitude: -105.2, latitude: 40.1, visited: true }] });
+      expect(base.launchMap.listViewportMarkers).toHaveBeenCalledWith(expect.objectContaining({ launch: 'unknown' }));
+      const detail = await fetch(`${baseUrl}/v1/map-launches/42?scope=personal&period=all-time&launch=unknown`, { headers });
+      expect(await detail.json()).toEqual(expect.objectContaining({ launchId: 42, matchingFlightCount: 2 }));
+      expect(base.launchMap.getLaunchDetail).toHaveBeenCalledWith(expect.objectContaining({ launchId: 42, launch: 'unknown' }));
+      const summary = await fetch(`${baseUrl}/v1/personal-history/summary?scope=personal&period=custom&start=2026-08-01&end=2026-08-31&geography=global`, { headers });
+      expect(await summary.json()).toEqual(expect.objectContaining({ totalFlights: 2, fivePointDistanceMeters: 45_000 }));
+      expect(base.flightMap.getPersonalSummary).toHaveBeenCalledWith(expect.objectContaining({ period: 'custom', startDate: '2026-08-01', endDate: '2026-08-31' }));
+      const options = await fetch(`${baseUrl}/v1/personal-history/launches?scope=personal&period=all-time&geography=global`, { headers });
+      expect(await options.json()).toEqual({ launches: [], hasUnknown: false });
+      const selection = await fetch(`${baseUrl}/v1/map-flights/00000000-0000-4000-8000-000000000020?scope=personal&period=all-time&geography=global`, { headers });
+      expect(selection.status).toBe(404);
+      expect(base.flightMap.getFlight).toHaveBeenCalledWith(expect.objectContaining({ flightId: '00000000-0000-4000-8000-000000000020', geography: 'global' }));
+      expect((await fetch(`${baseUrl}/v1/personal-history/summary?scope=personal&period=day&anchor=2026-08-16&geography=global`, { headers })).status).toBe(400);
+      expect((await fetch(`${baseUrl}/personal?period=day&anchor=2026-08-16`, { headers })).status).toBe(400);
+    });
+  });
+
   it('serves and adapts load-more flight cards with global or map-area geography', async () => {
     const base = dependencies();
     vi.mocked(base.flightMap.listFlights).mockResolvedValueOnce({
@@ -2445,6 +2488,7 @@ describe('webRouter', () => {
         pilotColor: '#1769AA',
         startedAt: '2026-08-15T15:00:00.000Z',
         launchTimezone: 'America/Denver',
+        launchId: 42,
         launchName: 'Wonderland Lake',
         durationSeconds: 4_500,
         fivePointDistanceMeters: 32_400,

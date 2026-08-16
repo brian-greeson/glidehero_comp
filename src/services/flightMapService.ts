@@ -2,9 +2,10 @@ import { sql, type SQL } from 'drizzle-orm';
 import type { Database } from '../db/client.js';
 
 export type FlightMapScope = 'personal' | 'following' | 'all';
-export type FlightMapPeriod = 'day' | 'month' | 'year' | 'all-time';
+export type FlightMapPeriod = 'day' | 'month' | 'year' | 'custom' | 'all-time';
 export type FlightMapGeography = 'global' | 'map-area';
 export type FlightMapSort = 'distance' | 'latest' | 'duration';
+export type FlightMapLaunchFilter = number | 'unknown';
 
 export type FlightMapViewport = {
   west: number;
@@ -19,6 +20,10 @@ export type FlightMapFilter = {
   period: FlightMapPeriod;
   /** A YYYY-MM-DD date within the selected day, month, or year. Omit for all-time. */
   anchor?: string;
+  /** Inclusive launch-local dates. Required only for custom periods. */
+  startDate?: string;
+  endDate?: string;
+  launch?: FlightMapLaunchFilter;
 };
 
 export type FlightMapTrackInput = FlightMapFilter & {
@@ -62,6 +67,7 @@ export type FlightMapListItem = {
   pilotColor: string;
   startedAt: string;
   launchTimezone: string;
+  launchId: number | null;
   launchName: string | null;
   durationSeconds: number | null;
   fivePointDistanceMeters: number | null;
@@ -74,10 +80,26 @@ export type FlightMapListItem = {
 
 export type FlightMapTrackPage = { tracks: FlightMapTrack[]; truncated: boolean };
 export type FlightMapListPage = { items: FlightMapListItem[]; nextCursor: string | null };
+export type PersonalHistorySummary = {
+  totalFlights: number;
+  fivePointDistanceMeters: number;
+  airtimeSeconds: number;
+  launchesVisited: number;
+  countriesVisited: number;
+};
+export type FlightMapLaunchOption = { launchId: number; name: string; flightCount: number };
+export type FlightMapLaunchOptions = { launches: FlightMapLaunchOption[]; hasUnknown: boolean };
+export type FlightMapSummaryInput = FlightMapFilter & {
+  geography: FlightMapGeography;
+  viewport?: FlightMapViewport;
+};
 
 export interface FlightMapService {
   listViewportTracks(input: FlightMapTrackInput): Promise<FlightMapTrackPage>;
   listFlights(input: FlightMapListInput): Promise<FlightMapListPage>;
+  getFlight(input: FlightMapSummaryInput & { flightId: string }): Promise<FlightMapListItem | null>;
+  getPersonalSummary(input: FlightMapSummaryInput): Promise<PersonalHistorySummary>;
+  listPersonalLaunchOptions(input: FlightMapSummaryInput): Promise<FlightMapLaunchOptions>;
 }
 
 type Executor = Pick<Database, 'execute'>;
@@ -101,12 +123,21 @@ type StoredTrack = {
 
 type StoredListItem = Omit<StoredTrack, 'geometry' | 'geometryMinZoom'> & {
   launchTimezone: string | null;
+  launchId: number | string | null;
   launchName: string | null;
   launchLatitude: number | string | null;
   launchLongitude: number | string | null;
   landingLatitude: number | string | null;
   landingLongitude: number | string | null;
   sortValue: number | string | null;
+};
+
+type StoredPersonalHistorySummary = {
+  totalFlights: number | string;
+  fivePointDistanceMeters: number | string | null;
+  airtimeSeconds: number | string | null;
+  launchesVisited: number | string;
+  countriesVisited: number | string;
 };
 
 type FlightMapCursor = {
@@ -155,7 +186,7 @@ function validateScope(scope: string): asserts scope is FlightMapScope {
 }
 
 function validatePeriod(period: string): asserts period is FlightMapPeriod {
-  if (period !== 'day' && period !== 'month' && period !== 'year' && period !== 'all-time') throw new FlightMapInputError('Flight map period is invalid.');
+  if (period !== 'day' && period !== 'month' && period !== 'year' && period !== 'custom' && period !== 'all-time') throw new FlightMapInputError('Flight map period is invalid.');
 }
 
 function validateSort(sort: string): asserts sort is FlightMapSort {
@@ -180,22 +211,36 @@ export function validateFlightMapViewport(viewport: FlightMapViewport): FlightMa
   return viewport;
 }
 
-function validateAnchor(period: FlightMapPeriod, anchor: string | undefined): string | undefined {
-  if (period === 'all-time') {
-    if (anchor !== undefined) throw new FlightMapInputError('All-time does not accept an anchor date.');
-    return undefined;
-  }
-  const match = anchor?.match(ISO_DATE);
-  if (!match) throw new FlightMapInputError('Flight map anchor must be a YYYY-MM-DD date.');
+function parseIsoDate(value: string | undefined, label: string): string {
+  const match = value?.match(ISO_DATE);
+  if (!match) throw new FlightMapInputError(`${label} must be a YYYY-MM-DD date.`);
   const year = Number(match[1]);
   const month = Number(match[2]);
   const day = Number(match[3]);
-  const timestamp = Date.UTC(year, month - 1, day);
-  const date = new Date(timestamp);
+  const date = new Date(Date.UTC(year, month - 1, day));
   if (date.getUTCFullYear() !== year || date.getUTCMonth() !== month - 1 || date.getUTCDate() !== day) {
-    throw new FlightMapInputError('Flight map anchor date is invalid.');
+    throw new FlightMapInputError(`${label} is invalid.`);
   }
-  return anchor;
+  return value as string;
+}
+
+type ValidatedPeriod = { anchor?: string; startDate?: string; endDate?: string };
+
+function validatePeriodValues(input: FlightMapFilter): ValidatedPeriod {
+  const { period, anchor, startDate, endDate } = input;
+  if (period === 'all-time') {
+    if (anchor !== undefined || startDate !== undefined || endDate !== undefined) throw new FlightMapInputError('All-time does not accept date values.');
+    return {};
+  }
+  if (period === 'custom') {
+    if (anchor !== undefined) throw new FlightMapInputError('Custom range does not accept an anchor date.');
+    const validStart = parseIsoDate(startDate, 'Flight map start date');
+    const validEnd = parseIsoDate(endDate, 'Flight map end date');
+    if (validStart > validEnd) throw new FlightMapInputError('Flight map date range is reversed.');
+    return { startDate: validStart, endDate: validEnd };
+  }
+  if (startDate !== undefined || endDate !== undefined) throw new FlightMapInputError('Calendar periods do not accept a custom range.');
+  return { anchor: parseIsoDate(anchor, 'Flight map anchor date') };
 }
 
 function validateLimit(value: number | undefined, fallback: number, maximum: number): number {
@@ -204,11 +249,17 @@ function validateLimit(value: number | undefined, fallback: number, maximum: num
   return limit;
 }
 
-function validateFilter(input: FlightMapFilter): string | undefined {
+function validateLaunch(value: FlightMapLaunchFilter | undefined): void {
+  if (value === undefined || value === 'unknown') return;
+  if (!Number.isSafeInteger(value) || value <= 0) throw new FlightMapInputError('Flight map launch is invalid.');
+}
+
+function validateFilter(input: FlightMapFilter): ValidatedPeriod {
   validateUuid(input.viewerUserId, 'Viewer user ID');
   validateScope(input.scope);
   validatePeriod(input.period);
-  return validateAnchor(input.period, input.anchor);
+  validateLaunch(input.launch);
+  return validatePeriodValues(input);
 }
 
 function periodWindow(period: Exclude<FlightMapPeriod, 'all-time'>, anchor: string): { broadStart: Date; broadEnd: Date } {
@@ -249,9 +300,15 @@ function scopePredicate(scope: FlightMapScope, viewerUserId: string): SQL {
   return sql`true`;
 }
 
-function periodPredicate(period: FlightMapPeriod, anchor: string | undefined): SQL {
+function periodPredicate(period: FlightMapPeriod, values: ValidatedPeriod): SQL {
   if (period === 'all-time') return sql`true`;
-  const safeAnchor = anchor as string;
+  if (period === 'custom') {
+    return sql`(
+      timezone(COALESCE(NULLIF(flight.launch_timezone, ''), 'UTC'), flight.started_at)::date >= ${values.startDate}::date
+      AND timezone(COALESCE(NULLIF(flight.launch_timezone, ''), 'UTC'), flight.started_at)::date <= ${values.endDate}::date
+    )`;
+  }
+  const safeAnchor = values.anchor as string;
   const { broadStart, broadEnd } = periodWindow(period, safeAnchor);
   return sql`(
     flight.started_at >= ${broadStart}
@@ -261,6 +318,12 @@ function periodPredicate(period: FlightMapPeriod, anchor: string | undefined): S
     AND timezone(COALESCE(NULLIF(flight.launch_timezone, ''), 'UTC'), flight.started_at)
       < date_trunc(${period}, ${safeAnchor}::date::timestamp) + ${sql.raw(`interval '1 ${period}'`)}
   )`;
+}
+
+function launchPredicate(launch: FlightMapLaunchFilter | undefined): SQL {
+  if (launch === undefined) return sql`true`;
+  if (launch === 'unknown') return sql`flight.launch_id IS NULL`;
+  return sql`flight.launch_id = ${launch}`;
 }
 
 function viewportCte(viewport: FlightMapViewport): SQL {
@@ -342,6 +405,7 @@ function mapListItem(row: StoredListItem): FlightMapListItem {
     pilotColor: row.pilotColor,
     startedAt: isoDate(row.startedAt),
     launchTimezone: row.launchTimezone || 'UTC',
+    launchId: row.launchId === null ? null : finiteNumber(row.launchId),
     launchName: row.launchName,
     durationSeconds: nullableNumber(row.durationSeconds),
     fivePointDistanceMeters: nullableNumber(row.fivePointDistanceMeters),
@@ -356,7 +420,7 @@ function mapListItem(row: StoredListItem): FlightMapListItem {
 export function createFlightMapService(database: Executor): FlightMapService {
   return {
     async listViewportTracks(input) {
-      const anchor = validateFilter(input);
+      const periodValues = validateFilter(input);
       const viewport = validateFlightMapViewport(input.viewport);
       if (!Number.isFinite(input.zoom) || input.zoom < 0 || input.zoom > 24) throw new FlightMapInputError('Flight map zoom is invalid.');
       const zoomBucket = Math.floor(input.zoom);
@@ -395,7 +459,8 @@ export function createFlightMapService(database: Executor): FlightMapService {
         WHERE flight.processing_status = 'completed'
           AND flight.started_at IS NOT NULL
           AND ${scopePredicate(input.scope, input.viewerUserId)}
-          AND ${periodPredicate(input.period, anchor)}
+          AND ${periodPredicate(input.period, periodValues)}
+          AND ${launchPredicate(input.launch)}
           AND ${intersectionPredicate()}
         ORDER BY score.five_point_distance_meters DESC NULLS LAST, flight.started_at DESC, flight.flight_id DESC
         LIMIT ${limit + 1}
@@ -419,7 +484,7 @@ export function createFlightMapService(database: Executor): FlightMapService {
     },
 
     async listFlights(input) {
-      const anchor = validateFilter(input);
+      const periodValues = validateFilter(input);
       validateSort(input.sort);
       if (input.geography !== 'global' && input.geography !== 'map-area') throw new FlightMapInputError('Flight map geography is invalid.');
       if (input.geography === 'map-area' && !input.viewport) throw new FlightMapInputError('Map-area requires a viewport.');
@@ -441,19 +506,8 @@ export function createFlightMapService(database: Executor): FlightMapService {
           profile.territory_color AS "pilotColor",
           flight.started_at AS "startedAt",
           COALESCE(NULLIF(flight.launch_timezone, ''), 'UTC') AS "launchTimezone",
-          (
-            SELECT launch.name
-            FROM arenas launch
-            WHERE launch.arena_type = 'launch'
-              AND flight.launch_latitude IS NOT NULL
-              AND flight.launch_longitude IS NOT NULL
-              AND ST_Covers(
-                launch.area,
-                ST_Transform(ST_SetSRID(ST_MakePoint(flight.launch_longitude, flight.launch_latitude), 4326), 6933)
-              )
-            ORDER BY launch.source_id ASC, launch.id ASC
-            LIMIT 1
-          ) AS "launchName",
+          flight.launch_id AS "launchId",
+          catalog_launch.name AS "launchName",
           flight.duration_seconds AS "durationSeconds",
           score.five_point_distance_meters AS "fivePointDistanceMeters",
           flight.launch_latitude AS "launchLatitude",
@@ -470,10 +524,12 @@ export function createFlightMapService(database: Executor): FlightMapService {
         INNER JOIN profiles profile ON profile.user_id = flight.user_id
         INNER JOIN flight_map_features feature ON feature.flight_id = flight.flight_id
         LEFT JOIN flight_scores score ON score.flight_id = flight.flight_id
+        LEFT JOIN launches catalog_launch ON catalog_launch.id = flight.launch_id
         WHERE flight.processing_status = 'completed'
           AND flight.started_at IS NOT NULL
           AND ${scopePredicate(input.scope, input.viewerUserId)}
-          AND ${periodPredicate(input.period, anchor)}
+          AND ${periodPredicate(input.period, periodValues)}
+          AND ${launchPredicate(input.launch)}
           AND ${geographicPredicate}
           AND ${cursorPredicate(cursor, metric)}
         ORDER BY (${metric} IS NULL) ASC, ${metric} DESC NULLS LAST, flight.started_at DESC, flight.flight_id DESC
@@ -491,6 +547,138 @@ export function createFlightMapService(database: Executor): FlightMapService {
           startedAt: isoDate(last.startedAt),
           flightId: last.flightId,
         }) : null,
+      };
+    },
+
+    async getFlight(input) {
+      const periodValues = validateFilter(input);
+      validateUuid(input.flightId, 'Flight ID');
+      if (input.geography !== 'global' && input.geography !== 'map-area') throw new FlightMapInputError('Flight map geography is invalid.');
+      if (input.geography === 'map-area' && !input.viewport) throw new FlightMapInputError('Map-area requires a viewport.');
+      const viewport = input.geography === 'map-area' ? validateFlightMapViewport(input.viewport as FlightMapViewport) : undefined;
+      const cte = viewport ? sql`WITH ${viewportCte(viewport)}` : sql``;
+      const geographicPredicate = viewport ? intersectionPredicate() : sql`true`;
+      const result = await database.execute<StoredListItem>(sql`
+        ${cte}
+        SELECT
+          flight.flight_id AS "flightId",
+          flight.user_id AS "pilotUserId",
+          profile.display_name AS "pilotDisplayName",
+          profile.territory_color AS "pilotColor",
+          flight.started_at AS "startedAt",
+          COALESCE(NULLIF(flight.launch_timezone, ''), 'UTC') AS "launchTimezone",
+          flight.launch_id AS "launchId",
+          catalog_launch.name AS "launchName",
+          flight.duration_seconds AS "durationSeconds",
+          score.five_point_distance_meters AS "fivePointDistanceMeters",
+          flight.launch_latitude AS "launchLatitude",
+          flight.launch_longitude AS "launchLongitude",
+          feature.landing_latitude AS "landingLatitude",
+          feature.landing_longitude AS "landingLongitude",
+          feature.west,
+          feature.south,
+          feature.east,
+          feature.north,
+          feature.crosses_antimeridian AS "crossesAntimeridian",
+          EXTRACT(EPOCH FROM flight.started_at) AS "sortValue"
+        FROM flights flight
+        INNER JOIN profiles profile ON profile.user_id = flight.user_id
+        INNER JOIN flight_map_features feature ON feature.flight_id = flight.flight_id
+        LEFT JOIN flight_scores score ON score.flight_id = flight.flight_id
+        LEFT JOIN launches catalog_launch ON catalog_launch.id = flight.launch_id
+        WHERE flight.flight_id = ${input.flightId}::uuid
+          AND flight.processing_status = 'completed'
+          AND flight.started_at IS NOT NULL
+          AND ${scopePredicate(input.scope, input.viewerUserId)}
+          AND ${periodPredicate(input.period, periodValues)}
+          AND ${launchPredicate(input.launch)}
+          AND ${geographicPredicate}
+        LIMIT 1
+      `);
+      const row = result.rows[0];
+      return row ? mapListItem(row) : null;
+    },
+
+    async getPersonalSummary(input) {
+      const periodValues = validateFilter(input);
+      if (input.scope !== 'personal') throw new FlightMapInputError('Personal history summary requires personal scope.');
+      if (input.geography !== 'global' && input.geography !== 'map-area') throw new FlightMapInputError('Flight map geography is invalid.');
+      if (input.geography === 'map-area' && !input.viewport) throw new FlightMapInputError('Map-area requires a viewport.');
+      const viewport = input.geography === 'map-area' ? validateFlightMapViewport(input.viewport as FlightMapViewport) : undefined;
+      const cte = viewport ? sql`WITH ${viewportCte(viewport)}` : sql``;
+      const geographicPredicate = viewport ? intersectionPredicate() : sql`true`;
+      const result = await database.execute<StoredPersonalHistorySummary>(sql`
+        ${cte}
+        SELECT
+          COUNT(*)::integer AS "totalFlights",
+          COALESCE(SUM(score.five_point_distance_meters), 0)::double precision AS "fivePointDistanceMeters",
+          COALESCE(SUM(flight.duration_seconds), 0)::bigint AS "airtimeSeconds",
+          COUNT(DISTINCT CASE
+            WHEN flight.launch_id IS NOT NULL THEN 'catalog:' || flight.launch_id::text
+            WHEN flight.launch_latitude IS NOT NULL AND flight.launch_longitude IS NOT NULL
+              THEN 'unknown:' || flight.launch_latitude::text || ',' || flight.launch_longitude::text
+            ELSE NULL
+          END)::integer AS "launchesVisited",
+          COUNT(DISTINCT country.id)::integer AS "countriesVisited"
+        FROM flights flight
+        INNER JOIN flight_map_features feature ON feature.flight_id = flight.flight_id
+        LEFT JOIN flight_scores score ON score.flight_id = flight.flight_id
+        LEFT JOIN LATERAL (
+          SELECT area.id
+          FROM arenas area
+          WHERE area.arena_type = 'country'
+            AND flight.launch_latitude IS NOT NULL
+            AND flight.launch_longitude IS NOT NULL
+            AND area.area && ST_Transform(ST_SetSRID(ST_MakePoint(flight.launch_longitude, flight.launch_latitude), 4326), 6933)
+            AND ST_Covers(area.area, ST_Transform(ST_SetSRID(ST_MakePoint(flight.launch_longitude, flight.launch_latitude), 4326), 6933))
+          ORDER BY area.source_id, area.id
+          LIMIT 1
+        ) country ON true
+        WHERE flight.processing_status = 'completed'
+          AND flight.started_at IS NOT NULL
+          AND ${scopePredicate(input.scope, input.viewerUserId)}
+          AND ${periodPredicate(input.period, periodValues)}
+          AND ${launchPredicate(input.launch)}
+          AND ${geographicPredicate}
+      `);
+      const row = result.rows[0];
+      return {
+        totalFlights: Number(row?.totalFlights ?? 0),
+        fivePointDistanceMeters: Number(row?.fivePointDistanceMeters ?? 0),
+        airtimeSeconds: Number(row?.airtimeSeconds ?? 0),
+        launchesVisited: Number(row?.launchesVisited ?? 0),
+        countriesVisited: Number(row?.countriesVisited ?? 0),
+      };
+    },
+
+    async listPersonalLaunchOptions(input) {
+      const periodValues = validateFilter({ ...input, launch: undefined });
+      if (input.scope !== 'personal') throw new FlightMapInputError('Personal launch options require personal scope.');
+      if (input.geography !== 'global' && input.geography !== 'map-area') throw new FlightMapInputError('Flight map geography is invalid.');
+      if (input.geography === 'map-area' && !input.viewport) throw new FlightMapInputError('Map-area requires a viewport.');
+      const viewport = input.geography === 'map-area' ? validateFlightMapViewport(input.viewport as FlightMapViewport) : undefined;
+      const cte = viewport ? sql`WITH ${viewportCte(viewport)}` : sql``;
+      const geographicPredicate = viewport ? intersectionPredicate() : sql`true`;
+      const result = await database.execute<{ launchId: number | string | null; name: string | null; flightCount: number | string }>(sql`
+        ${cte}
+        SELECT flight.launch_id AS "launchId", catalog_launch.name,
+          COUNT(*)::integer AS "flightCount"
+        FROM flights flight
+        INNER JOIN flight_map_features feature ON feature.flight_id = flight.flight_id
+        LEFT JOIN launches catalog_launch ON catalog_launch.id = flight.launch_id
+        WHERE flight.processing_status = 'completed'
+          AND flight.started_at IS NOT NULL
+          AND ${scopePredicate(input.scope, input.viewerUserId)}
+          AND ${periodPredicate(input.period, periodValues)}
+          AND ${geographicPredicate}
+        GROUP BY flight.launch_id, catalog_launch.name
+        ORDER BY catalog_launch.name ASC NULLS LAST, flight.launch_id ASC
+      `);
+      return {
+        launches: result.rows.flatMap((row) => row.launchId === null || row.name === null ? [] : [{
+          launchId: finiteNumber(row.launchId), name: row.name, flightCount: Number(row.flightCount),
+        }]),
+        hasUnknown: result.rows.some((row) => row.launchId === null && Number(row.flightCount) > 0),
       };
     },
   };

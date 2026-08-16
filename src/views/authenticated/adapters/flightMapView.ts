@@ -46,15 +46,9 @@ function timeAgo(value: string, now: Date): string {
   return `${years}y ago`;
 }
 
-function coordinate(value: number | null): string | null {
-  return value === null || !Number.isFinite(value) ? null : value.toFixed(4);
-}
-
 function location(item: FlightMapListItem): string {
   if (item.launchName) return item.launchName;
-  const latitude = coordinate(item.launchLatitude);
-  const longitude = coordinate(item.launchLongitude);
-  return latitude !== null && longitude !== null ? `${latitude}, ${longitude}` : 'Unknown launch';
+  return 'Unknown launch';
 }
 
 export function flightMapListPageToPayload(
@@ -74,6 +68,7 @@ export function flightMapListPageToPayload(
         color: item.pilotColor,
       },
       startedAt: item.startedAt,
+      launchId: item.launchId,
       dateLabel: dateLabel(item.startedAt, item.launchTimezone),
       timeAgo: timeAgo(item.startedAt, now),
       location: location(item),

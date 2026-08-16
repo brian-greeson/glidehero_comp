@@ -139,7 +139,7 @@ a { color: inherit; }
   .public-flight-header__action { min-height: 40px; padding: .5rem .75rem; font-size: .72rem; }
   .initials-avatar--header { width: 40px; height: 40px; font-size: .85rem; }
   .app-ui-main { min-height: calc(100svh - var(--app-mobile-header-height) - var(--app-mobile-nav-height)); padding-bottom: var(--app-mobile-nav-height); }
-  .mobile-navigation { position: fixed; z-index: 40; right: 0; bottom: 0; left: 0; display: grid; grid-template-columns: repeat(5, 1fr); height: calc(var(--app-mobile-nav-height) + env(safe-area-inset-bottom)); padding: .45rem .25rem max(.45rem, env(safe-area-inset-bottom)); color: #fff; background: var(--app-navy-950); box-shadow: 0 -5px 22px rgb(3 20 38 / 16%); }
+  .mobile-navigation { position: fixed; z-index: 40; right: 0; bottom: 0; left: 0; display: grid; grid-template-columns: repeat(4, 1fr); height: calc(var(--app-mobile-nav-height) + env(safe-area-inset-bottom)); padding: .45rem .25rem max(.45rem, env(safe-area-inset-bottom)); color: #fff; background: var(--app-navy-950); box-shadow: 0 -5px 22px rgb(3 20 38 / 16%); }
   .mobile-navigation__item { display: grid; place-items: center; align-content: center; gap: .15rem; color: #fff; font-size: .64rem; text-decoration: none; }
   .mobile-navigation__item .app-icon { font-size: 1.35rem; }.mobile-navigation__item.is-active { color: var(--app-cyan); }
   .content-page { width: calc(100% - 1.25rem); margin-top: -1rem; padding-bottom: 1rem; }

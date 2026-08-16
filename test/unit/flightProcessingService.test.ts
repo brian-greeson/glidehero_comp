@@ -188,6 +188,10 @@ describe('FlightProcessingService', () => {
         expect.objectContaining({ sequenceNumber: 5 }),
       ]),
     );
+    expect(flightUpdates).toContainEqual(expect.objectContaining({
+      launchId: null,
+      launchMatchVersion: 1,
+    }));
     expect(insertedScores).toEqual([{
       flightId,
       totalDistanceMeters: expect.any(Number),

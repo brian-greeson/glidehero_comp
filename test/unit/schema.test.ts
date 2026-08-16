@@ -74,6 +74,7 @@ describe('launch schema', () => {
       'launches_country_idx',
       'launches_state_idx',
       'launches_xcontest_launch_site_idx',
+      'launches_location_geography_gist_idx',
     ]);
   });
 });

@@ -14,6 +14,7 @@ import {
 } from '../domain/igc/distance.js';
 import { IgcParseError } from '../domain/igc/errors.js';
 import { parseIgcFlight } from '../domain/igc/parseIgcFlight.js';
+import { FLIGHT_LAUNCH_MATCH_VERSION } from '../domain/launch/flightLaunchMatch.js';
 import { calculateNPointDistancesInWorker } from '../domain/igc/nPointDistanceWorkerAdapter.js';
 import { createActivityService } from './activityService.js';
 import { createGridClaimService } from './gridClaimService.js';
@@ -21,6 +22,7 @@ import type { UserAchievementProgressService } from './userAchievementProgressSe
 import type { UserArenaProgressService } from './userArenaProgressService.js';
 import { lockArenaCatalogShared } from './arenaCatalogLock.js';
 import { projectFlightMapGeometry, scoringProtectedSequenceNumbers } from './flightMapProjectionService.js';
+import { matchNearestCatalogLaunch } from './flightLaunchMatchService.js';
 
 const TRACK_POINT_INSERT_BATCH_SIZE = 1_000;
 export const duplicateFlightMessage = 'This flight has already been uploaded.';
@@ -180,6 +182,10 @@ export function createFlightProcessingService(
       try {
         await database.transaction(async (tx) => {
           await lockArenaCatalogShared(tx);
+          const launchMatch = await matchNearestCatalogLaunch(tx, {
+            latitude: parsed.launchLatitude,
+            longitude: parsed.launchLongitude,
+          });
           const fenced = await tx
             .update(flights)
             .set({
@@ -193,6 +199,8 @@ export function createFlightProcessingService(
               launchLatitude: parsed.launchLatitude,
               launchLongitude: parsed.launchLongitude,
               launchTimezone,
+              launchId: launchMatch.launchId,
+              launchMatchVersion: FLIGHT_LAUNCH_MATCH_VERSION,
             })
             .where(and(
               eq(flights.id, flight.id),

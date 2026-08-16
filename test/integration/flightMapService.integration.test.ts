@@ -13,7 +13,7 @@ const otherFlightId = '00000000-0000-4000-8000-000000000013';
 
 beforeAll(async () => { database = await resetAndMigrateTestDatabase(); });
 beforeEach(async () => {
-  await database.pool.query('TRUNCATE TABLE users CASCADE');
+  await database.pool.query('TRUNCATE TABLE launches, arenas, users CASCADE');
   await database.pool.query(`
     INSERT INTO users (user_id, email) VALUES
       ($1, 'viewer@example.com'), ($2, 'followed@example.com'), ($3, 'other@example.com')
@@ -209,5 +209,39 @@ describe('flight map service', () => {
     });
     expect(page.items.map((flight) => flight.flightId)).toEqual([crossingFlightId]);
     expect(page.items[0]?.bounds).toEqual({ west: 179, south: 10, east: -179, north: 10, crossesAntimeridian: true });
+  });
+
+  it('keeps summaries, launch facets, custom dates, and selected-flight eligibility on one filter contract', async () => {
+    await database.pool.query(`
+      INSERT INTO launches (
+        id, name, longitude, latitude, country, state, city, description,
+        xc_by_month, timezone_offset, xc_by_year, rank, elevation,
+        rank_1, rank_2, rank_3, rank_4, rank_5, rank_6, rank_7, rank_8,
+        rank_9, rank_10, rank_11, rank_12, xcontest_launch_site
+      ) VALUES (42, 'Known Launch', -105, 39, 'United States', 'Colorado', 'Boulder', '', '', 0, '', 0, 2000,
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 42)
+    `);
+    await database.pool.query(`
+      INSERT INTO arenas (source_id, name, country, country_code, area, arena_type, external_source, external_id)
+      VALUES (9000, 'United States', 'United States', 'US',
+        ST_Multi(ST_Transform(ST_MakeEnvelope(-110, 35, -100, 45, 4326), 6933))::geometry(MultiPolygon,6933),
+        'country', 'test-country', 'US')
+    `);
+    const service = createFlightMapService(database.db);
+    const filter = { viewerUserId: viewerId, scope: 'personal' as const, period: 'custom' as const, startDate: '2026-07-31', endDate: '2026-07-31', geography: 'global' as const };
+
+    await expect(service.getPersonalSummary({ ...filter, launch: 'unknown' })).resolves.toMatchObject({
+      totalFlights: 1, launchesVisited: 1,
+    });
+    await database.pool.query('UPDATE flights SET launch_id = 42, launch_match_version = 1 WHERE flight_id = $1', [ownFlightId]);
+
+    await expect(service.getPersonalSummary(filter)).resolves.toEqual({
+      totalFlights: 1, fivePointDistanceMeters: 10_000, airtimeSeconds: 3_600, launchesVisited: 1, countriesVisited: 1,
+    });
+    await expect(service.listPersonalLaunchOptions(filter)).resolves.toEqual({
+      launches: [{ launchId: 42, name: 'Known Launch', flightCount: 1 }], hasUnknown: false,
+    });
+    await expect(service.getFlight({ ...filter, flightId: ownFlightId })).resolves.toMatchObject({ flightId: ownFlightId, launchId: 42, launchName: 'Known Launch' });
+    await expect(service.getFlight({ ...filter, flightId: ownFlightId, launch: 'unknown' })).resolves.toBeNull();
   });
 });

@@ -39,14 +39,14 @@
       {{ if isGuest }}
         {{ include "authenticated/components/publicFlightHeader.vto" }}
       {{ else }}
-        {{ include "authenticated/components/appHeader.vto" { page, user, navigation, donateUrl, adminUrl, logoutUrl, gettingStarted: typeof gettingStarted !== 'undefined' ? gettingStarted : undefined } }}
+        {{ include "authenticated/components/appHeader.vto" { page, activeNavigationPage, user, navigation, donateUrl, adminUrl, logoutUrl, gettingStarted: typeof gettingStarted !== 'undefined' ? gettingStarted : undefined } }}
       {{ /if }}
       <main class="app-ui-main app-ui-main--{{ page }}" id="main-content">
         {{ content }}
       </main>
       {{ if showFooter }}{{ include "authenticated/components/appFooter.vto" }}{{ /if }}
       {{ if !isGuest }}
-        {{ include "authenticated/components/mobileBottomNav.vto" { page, navigation } }}
+        {{ include "authenticated/components/mobileBottomNav.vto" { page, activeNavigationPage, navigation } }}
         {{ include "authenticated/components/flightUploadDialog.vto" }}
       {{ /if }}
       {{ if page === 'activity' && typeof onboarding !== 'undefined' && onboarding && onboarding.selectedStep }}{{ include "authenticated/components/onboardingInstructionDialog.vto" { step: onboarding.selectedStep } }}{{ /if }}

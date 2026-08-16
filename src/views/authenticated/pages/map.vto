@@ -4,13 +4,18 @@
     data-initial-period="{{ if period === 'all-time' }}all-time{{ else }}month{{ /if }}"
     data-track-endpoint="{{ if typeof mapTrackEndpoint !== 'undefined' }}{{ mapTrackEndpoint }}{{ else }}/v1/map-flights/tracks{{ /if }}"
     data-list-endpoint="{{ if typeof mapFlightListEndpoint !== 'undefined' }}{{ mapFlightListEndpoint }}{{ else }}/v1/map-flights{{ /if }}"
+    data-selection-endpoint-template="{{ if typeof mapFlightSelectionEndpointTemplate !== 'undefined' }}{{ mapFlightSelectionEndpointTemplate }}{{ else }}/v1/map-flights/{flightId}{{ /if }}"
+    data-launch-endpoint="{{ if typeof mapLaunchEndpoint !== 'undefined' }}{{ mapLaunchEndpoint }}{{ else }}/v1/map-launches{{ /if }}"
+    data-launch-detail-endpoint-template="{{ if typeof mapLaunchDetailEndpointTemplate !== 'undefined' }}{{ mapLaunchDetailEndpointTemplate }}{{ else }}/v1/map-launches/{launchId}{{ /if }}"
     data-replay-endpoint-template="{{ if typeof mapReplayEndpointTemplate !== 'undefined' }}{{ mapReplayEndpointTemplate }}{{ else }}/v1/map-flights/{flightId}/replay{{ /if }}">
-    {{ include "authenticated/components/mapFlightBrowser.vto" { mode } }}
+    {{ include "authenticated/components/mapFlightBrowser.vto" { mode, defaultSort } }}
     <section class="flight-map-stage" aria-label="Flight map">
       <div class="flight-map-canvas" data-map-canvas
         data-map-style-url="{{ if typeof mapStyleUrl !== 'undefined' }}{{ mapStyleUrl }}{{ /if }}"></div>
       <p class="flight-map-status" data-map-status role="status" hidden></p>
-      {{ include "authenticated/components/mapTimeControls.vto" { period } }}
+      <button class="flight-map-launch-toggle" type="button" data-map-launch-toggle aria-pressed="true">Launches</button>
+      {{ include "authenticated/components/mapTimeControls.vto" { period, mode } }}
+      {{ include "authenticated/components/launchInfoPanel.vto" }}
     </section>
     <div class="flight-map-replay" data-selected-flight-replay hidden>
       <button type="button" data-map-replay-open hidden aria-controls="selected-flight-replay" aria-expanded="false">Replay</button>

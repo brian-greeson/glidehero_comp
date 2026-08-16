@@ -1,14 +1,16 @@
 import { readFile } from 'node:fs/promises';
 import { describe, expect, it } from 'vitest';
 import { createAuthenticatedShellModel } from '../../src/views/authenticated/adapters/shellModel.js';
+import { createMapPageModel } from '../../src/views/authenticated/adapters/mapView.js';
 import { createAuthenticatedPageRenderer } from '../../src/views/authenticated/renderer.js';
 
 function model(mode: 'personal' | 'following' | 'competitive' = 'following', period: 'current-month' | 'all-time' = 'current-month') {
   return {
-    ...createAuthenticatedShellModel({ page: 'map' as const, user: { displayName: 'Pilot' }, mapHref: '/following' }),
+    ...createAuthenticatedShellModel({ page: 'map' as const, user: { displayName: 'Pilot' }, mapHref: mode === 'personal' ? '/personal' : mode === 'competitive' ? '/global' : '/following' }),
     page: 'map' as const,
     mode,
     period,
+    defaultSort: mode === 'competitive' ? 'distance' as const : 'latest' as const,
     location: null,
     leaderboard: [],
   };
@@ -21,27 +23,50 @@ describe('flight-first map UI', () => {
     expect(html).toContain('aria-label="Flight browser"');
     expect(html).toContain('data-track-endpoint="/v1/map-flights/tracks"');
     expect(html).toContain('data-list-endpoint="/v1/map-flights"');
+    expect(html).toContain('data-launch-endpoint="/v1/map-launches"');
+    expect(html).toContain('data-launch-detail-endpoint-template="/v1/map-launches/{launchId}"');
     expect(html).not.toContain('data-territory-map');
     expect(html).not.toContain('data-territory-leaderboard');
     expect(html).not.toContain('Arena search');
   });
 
-  it('renders Personal, Following, and All Pilots in the flight browser', async () => {
+  it('renders the visible-by-default launch toggle and reusable information panel', async () => {
+    const html = await createAuthenticatedPageRenderer()(model('personal'));
+    expect(html).toContain('data-map-launch-toggle aria-pressed="true"');
+    expect(html).toContain('data-launch-info-panel');
+    expect(html).toContain('data-launch-info-name');
+    expect(html).toContain('data-launch-info-location');
+    expect(html).toContain('data-launch-info-elevation');
+    expect(html).toContain('data-launch-info-flight-count');
+    expect(html).toContain('data-launch-info-visited');
+    expect(html).toContain('data-launch-info-description');
+    expect(html).toContain('data-launch-info-filter>Show flights from this launch</button>');
+    expect(html).toContain('data-personal-history');
+    expect(html).toContain('data-map-launch-filter');
+    const following = await createAuthenticatedPageRenderer()(model('following'));
+    expect(following).not.toContain('data-personal-history');
+  });
+
+  it('removes the pilot selector from My Flights and offers only Following and All Pilots on Map', async () => {
     const personal = await createAuthenticatedPageRenderer()(model('personal'));
-    expect(personal).toContain('<option value="personal" selected>My Flights</option>');
-    expect(personal).toContain('<option value="following">Following</option>');
-    expect(personal).toContain('<option value="all">All Pilots</option>');
-    expect(personal).toContain('data-styled-select-trigger aria-haspopup="listbox"');
-    expect(personal).toContain('data-styled-select-option="following"');
+    expect(personal).not.toContain('data-map-scope');
+    expect(personal).not.toContain('data-styled-select-option="personal"');
+    const following = await createAuthenticatedPageRenderer()(model('following'));
+    expect(following).toContain('<option value="following" selected>Following</option>');
+    expect(following).toContain('<option value="all">All Pilots</option>');
+    expect(following).not.toContain('<option value="personal"');
+    expect(following).toContain('data-styled-select-option="following"');
     const all = await createAuthenticatedPageRenderer()(model('competitive'));
     expect(all).toContain('<option value="all" selected>All Pilots</option>');
   });
 
-  it('defaults to Global geography and Distance sort with explicit Load more', async () => {
-    const html = await createAuthenticatedPageRenderer()(model());
+  it('uses Latest for Following and My Flights, and Distance for All Pilots', async () => {
+    const html = await createAuthenticatedPageRenderer()(model('following'));
     expect(html).toContain('data-map-geography="global" aria-pressed="true"');
     expect(html).toContain('data-map-geography="map-area" aria-pressed="false"');
-    expect(html).toContain('<option value="distance" selected>Distance</option>');
+    expect(html).toContain('<option value="latest" selected>Latest</option>');
+    expect(await createAuthenticatedPageRenderer()(model('personal'))).toContain('<option value="latest" selected>Latest</option>');
+    expect(await createAuthenticatedPageRenderer()(model('competitive'))).toContain('<option value="distance" selected>Distance</option>');
     expect(html).toContain('data-flight-load-more hidden>Load more</button>');
   });
 
@@ -54,12 +79,33 @@ describe('flight-first map UI', () => {
     expect(html).toContain('data-styled-select-option="all-time"');
     const allTime = await createAuthenticatedPageRenderer()(model('following', 'all-time'));
     expect(allTime).toContain('<option value="all-time" selected>All Time</option>');
+    const personal = await createAuthenticatedPageRenderer()(model('personal', 'all-time'));
+    expect(personal).not.toContain('<option value="day">Day</option>');
+    expect(personal).toContain('<option value="custom">Custom Range</option>');
+    expect(personal).toContain('data-map-custom-start');
   });
 
-  it('keeps Activity and Achievements in navigation', async () => {
+  it('renders the four primary destinations and highlights My Flights independently', async () => {
     const html = await createAuthenticatedPageRenderer()(model());
-    expect(html).toContain('href="/activity"');
-    expect(html).toContain('href="/achievements"');
+    expect(html).toContain('href="/personal"');
+    expect(html).not.toContain('href="/achievements"');
+    const personal = await createAuthenticatedPageRenderer()(model('personal'));
+    expect(personal).toContain('desktop-navigation__item is-active" href="/personal" aria-current="page"');
+    expect(personal).not.toContain('desktop-navigation__item is-active" href="/following"');
+  });
+
+  it('applies scope-aware period and sort defaults without overriding explicit time state', () => {
+    const shell = createAuthenticatedShellModel({ page: 'map', user: { displayName: 'Pilot' }, mapHref: '/personal' });
+    const common = { location: null, currentUserId: 'pilot-id', territoryColor: '#1769AA' };
+    const personal = createMapPageModel(shell, { ...common, mode: 'personal', period: 'current-month', mapHref: '/personal' });
+    const explicitPersonal = createMapPageModel(shell, { ...common, mode: 'personal', period: 'current-month', mapHref: '/personal?period=month&anchor=2026-08-01' });
+    const following = createMapPageModel(createAuthenticatedShellModel({ page: 'map', user: { displayName: 'Pilot' }, mapHref: '/following' }), { ...common, mode: 'following', period: 'current-month', mapHref: '/following' });
+    const all = createMapPageModel(createAuthenticatedShellModel({ page: 'map', user: { displayName: 'Pilot' }, mapHref: '/global' }), { ...common, mode: 'competitive', period: 'current-month', mapHref: '/global' });
+
+    expect(personal).toMatchObject({ period: 'all-time', defaultSort: 'latest' });
+    expect(explicitPersonal).toMatchObject({ period: 'current-month', defaultSort: 'latest' });
+    expect(following).toMatchObject({ period: 'current-month', defaultSort: 'latest' });
+    expect(all).toMatchObject({ period: 'current-month', defaultSort: 'distance' });
   });
 
   it('styles a persistent desktop panel and three mobile sheet states', async () => {

@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
   checkFlightAltitudes,
+  checkFlightLaunchMatches,
   checkUserAchievementProgress,
   printReleaseBackfillSpotCheck,
   summarizeReleaseBackfillSpotCheck,
@@ -14,6 +15,20 @@ describe('release backfill spot checks', () => {
     ] })) };
     await expect(checkFlightAltitudes(database as never)).resolves.toEqual({
       name: 'flight-altitudes', status: 'FAIL', sampled: 2, present: 1, missingIds: ['missing'],
+    });
+  });
+
+  it('distinguishes matched, Unknown, and not-yet-evaluated launch projections', async () => {
+    const database = { execute: vi.fn(async () => ({ rows: [{
+      eligible: 5, evaluated: 4, matched: 3, unknown: 1, pendingIds: ['pending-flight'],
+    }] })) };
+    await expect(checkFlightLaunchMatches(database as never)).resolves.toEqual({
+      name: 'flight-launch-matches',
+      status: 'FAIL',
+      sampled: 5,
+      present: 4,
+      missingIds: ['pending-flight'],
+      detail: '3 matched, 1 unknown, 1 not evaluated',
     });
   });
   it('passes when every sampled artifact is present', () => {

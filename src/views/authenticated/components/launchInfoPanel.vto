@@ -1,0 +1,20 @@
+<aside class="launch-info-panel" data-launch-info-panel aria-labelledby="launch-info-title" hidden>
+  <header>
+    <div>
+      <p class="launch-info-panel__eyebrow">Launch</p>
+      <h2 id="launch-info-title" data-launch-info-name>Launch information</h2>
+    </div>
+    <button type="button" data-launch-info-close aria-label="Close launch information">×</button>
+  </header>
+  <p class="launch-info-panel__status" data-launch-info-status role="status"></p>
+  <div data-launch-info-content hidden>
+    <p data-launch-info-location></p>
+    <dl>
+      <div><dt>Elevation</dt><dd data-launch-info-elevation></dd></div>
+      <div><dt>Flights</dt><dd data-launch-info-flight-count></dd></div>
+      <div data-launch-info-visited-row hidden><dt>Your history</dt><dd data-launch-info-visited></dd></div>
+    </dl>
+    <p class="launch-info-panel__description" data-launch-info-description hidden></p>
+    <button class="launch-info-panel__filter" type="button" data-launch-info-filter>Show flights from this launch</button>
+  </div>
+</aside>

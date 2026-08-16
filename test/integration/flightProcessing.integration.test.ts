@@ -1,7 +1,9 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { igcFiles } from '../../src/db/schema.js';
+import { igcFiles, launches } from '../../src/db/schema.js';
+import type { LaunchImportRow } from '../../src/domain/launch/mysqlLaunchDump.js';
+import { parseIgcFlight } from '../../src/domain/igc/parseIgcFlight.js';
 import type { NPointDistances } from '../../src/domain/igc/distance.js';
 import { createAuthService } from '../../src/services/authService.js';
 import { createFlightProcessingService } from '../../src/services/flightProcessingService.js';
@@ -12,6 +14,17 @@ const fixturePath = new URL('../inputs/2026-05-10-XNA-54F3F9B76F42505D1B592F2172
 const fixture = readFileSync(fixturePath);
 const source = fixture.toString('utf8');
 const contentHash = createHash('sha256').update(fixture).digest('hex');
+const parsedFixture = parseIgcFlight(source);
+
+function fixtureLaunch(): LaunchImportRow {
+  return {
+    id: 745, name: 'Fixture Launch', longitude: parsedFixture.launchLongitude, latitude: parsedFixture.launchLatitude,
+    country: 'United States', state: 'Colorado', city: 'Boulder', description: '', xcByMonth: '',
+    timezoneOffset: 0, xcByYear: '', rank: 0, elevation: 0, rank1: 0, rank2: 0, rank3: 0,
+    rank4: 0, rank5: 0, rank6: 0, rank7: 0, rank8: 0, rank9: 0, rank10: 0, rank11: 0,
+    rank12: 0, xcontestLaunchSite: 0,
+  };
+}
 
 let database: Awaited<ReturnType<typeof resetAndMigrateTestDatabase>> | undefined;
 
@@ -129,6 +142,7 @@ describe('FlightProcessingService with a real IGC file', () => {
       resetHours: false,
     });
     const stored = await storeFile(pilot.user.userId, 'flights/known-good.igc', 'known-good.igc');
+    await database.db.insert(launches).values(fixtureLaunch());
 
     const result = await processor({ useRealNPointCalculator: true }).process({
       ownerUserId: pilot.user.userId,
@@ -144,6 +158,8 @@ describe('FlightProcessingService with a real IGC file', () => {
       processing_status: string;
       processed_at: Date;
       launch_timezone: string;
+      launch_id: string;
+      launch_match_version: number;
       grid_claim_count: number;
       competition_claim_count: number;
       competition_months: string[];
@@ -216,6 +232,8 @@ describe('FlightProcessingService with a real IGC file', () => {
       `SELECT f.processing_status,
               f.processed_at,
               f.launch_timezone,
+              f.launch_id,
+              f.launch_match_version,
               f.distance_meters AS cumulative_distance_meters,
               f.duration_seconds,
               (SELECT glider_hours_seconds FROM profiles WHERE user_id = f.user_id) AS glider_hours_seconds,
@@ -256,6 +274,8 @@ describe('FlightProcessingService with a real IGC file', () => {
         processing_status: 'completed',
         processed_at: expect.any(Date),
         launch_timezone: 'America/Denver',
+        launch_id: '745',
+        launch_match_version: 1,
         grid_claim_count: expect.any(Number),
         competition_claim_count: expect.any(Number),
         competition_months: ['2026-05-01'],

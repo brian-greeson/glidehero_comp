@@ -174,6 +174,8 @@ export const flights = pgTable(
     launchLatitude: doublePrecision('launch_latitude'),
     launchLongitude: doublePrecision('launch_longitude'),
     launchTimezone: text('launch_timezone'),
+    launchId: bigint('launch_id', { mode: 'number' }).references(() => launches.id, { onDelete: 'restrict' }),
+    launchMatchVersion: integer('launch_match_version'),
     ...timestamps,
   },
   (table) => [
@@ -183,6 +185,9 @@ export const flights = pgTable(
     index('flights_user_id_processed_at_flight_id_idx').on(table.userId, table.processedAt, table.id),
     index('flights_igc_file_id_idx').on(table.igcFileId),
     index('flights_started_at_idx').on(table.startedAt),
+    index('flights_launch_id_idx').on(table.launchId),
+    index('flights_launch_match_version_idx').on(table.launchMatchVersion),
+    check('flights_launch_match_version_positive', sql`${table.launchMatchVersion} IS NULL OR ${table.launchMatchVersion} > 0`),
   ],
 );
 
@@ -485,6 +490,10 @@ export const launches = pgTable(
     index('launches_country_idx').on(table.country),
     index('launches_state_idx').on(table.state),
     index('launches_xcontest_launch_site_idx').on(table.xcontestLaunchSite),
+    index('launches_location_geography_gist_idx').using(
+      'gist',
+      sql`(ST_SetSRID(ST_MakePoint(${table.longitude}, ${table.latitude}), 4326)::geography)`,
+    ),
   ],
 );
 

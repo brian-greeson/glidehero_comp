@@ -52,6 +52,7 @@ import { createOnboardingView } from '../views/authenticated/adapters/onboarding
 import type { PlanService } from '../services/planService.js';
 import type { PlanExportService } from '../services/planExportService.js';
 import type { ThermalRasterCacheService } from '../services/thermalRasterCacheService.js';
+import type { LaunchMapService } from '../services/launchMapService.js';
 import { THERMAL_NATIVE_ZOOM, xyzYToTmsY } from '../domain/thermal/thermalTiles.js';
 import { flightMapListPageToPayload } from '../views/authenticated/adapters/flightMapView.js';
 
@@ -126,21 +127,42 @@ const viewportBoundsSchema = z.object(viewportBoundsShape)
   .strict()
   .refine((bounds) => bounds.south < bounds.north && bounds.west !== bounds.east);
 const flightMapScopeSchema = z.enum(['personal', 'following', 'all']);
-const flightMapPeriodSchema = z.enum(['day', 'month', 'year', 'all-time']);
+const flightMapPeriodSchema = z.enum(['day', 'month', 'year', 'custom', 'all-time']);
 const flightMapAnchorSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 const flightMapFilterShape = {
   scope: flightMapScopeSchema,
   period: flightMapPeriodSchema,
   anchor: flightMapAnchorSchema.optional(),
+  start: flightMapAnchorSchema.optional(),
+  end: flightMapAnchorSchema.optional(),
+  launch: z.union([z.literal('unknown'), z.coerce.number().int().positive()]).optional(),
 };
+function isValidFlightMapDate(value: string | undefined): value is string {
+  if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const date = new Date(`${value}T00:00:00.000Z`);
+  return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value;
+}
+function refineFlightMapDates(value: { scope?: string; period: string; anchor?: string; start?: string; end?: string }, context: z.RefinementCtx) {
+  if (value.scope === 'personal' && value.period === 'day') context.addIssue({ code: 'custom', message: 'Personal history does not support a day period.' });
+  for (const dateValue of [value.anchor, value.start, value.end]) {
+    if (dateValue !== undefined && !isValidFlightMapDate(dateValue)) context.addIssue({ code: 'custom', message: 'Flight map date is invalid.' });
+  }
+  if (value.period === 'all-time') {
+    if (value.anchor !== undefined || value.start !== undefined || value.end !== undefined) context.addIssue({ code: 'custom', message: 'All-time does not accept date values.' });
+    return;
+  }
+  if (value.period === 'custom') {
+    if (value.anchor !== undefined || value.start === undefined || value.end === undefined || value.start > value.end) context.addIssue({ code: 'custom', message: 'Custom range is invalid.' });
+    return;
+  }
+  if (value.anchor === undefined || value.start !== undefined || value.end !== undefined) context.addIssue({ code: 'custom', message: 'Flight map period anchor is invalid.' });
+}
 const flightMapTrackQuerySchema = z.object({
   ...flightMapFilterShape,
   ...viewportBoundsShape,
   zoom: z.coerce.number().finite().min(0).max(24),
 }).strict().superRefine((value, context) => {
-  if ((value.period === 'all-time') === (value.anchor !== undefined)) {
-    context.addIssue({ code: 'custom', message: 'Flight map period anchor is invalid.' });
-  }
+  refineFlightMapDates(value, context);
   if (value.south >= value.north || value.west === value.east) {
     context.addIssue({ code: 'custom', message: 'Flight map viewport is invalid.' });
   }
@@ -155,9 +177,7 @@ const flightMapListQuerySchema = z.object({
   east: finiteCoordinate.optional(),
   north: finiteCoordinate.optional(),
 }).strict().superRefine((value, context) => {
-  if ((value.period === 'all-time') === (value.anchor !== undefined)) {
-    context.addIssue({ code: 'custom', message: 'Flight map period anchor is invalid.' });
-  }
+  refineFlightMapDates(value, context);
   const coordinates = [value.west, value.south, value.east, value.north];
   const present = coordinates.filter((coordinate) => coordinate !== undefined).length;
   if ((value.geography === 'map-area' && present !== 4) || (value.geography === 'global' && present !== 0)) {
@@ -168,6 +188,36 @@ const flightMapListQuerySchema = z.object({
     || value.south! < -90 || value.south! > 90 || value.north! < -90 || value.north! > 90
     || value.south! >= value.north! || value.west === value.east
   )) context.addIssue({ code: 'custom', message: 'Flight map viewport is invalid.' });
+});
+const personalHistoryQuerySchema = z.object({
+  ...flightMapFilterShape,
+  geography: z.enum(['global', 'map-area']),
+  west: finiteCoordinate.optional(),
+  south: finiteCoordinate.optional(),
+  east: finiteCoordinate.optional(),
+  north: finiteCoordinate.optional(),
+}).strict().superRefine((value, context) => {
+  refineFlightMapDates(value, context);
+  if (value.scope !== 'personal') context.addIssue({ code: 'custom', message: 'Personal history requires personal scope.' });
+  const coordinates = [value.west, value.south, value.east, value.north];
+  const present = coordinates.filter((coordinate) => coordinate !== undefined).length;
+  if ((value.geography === 'map-area' && present !== 4) || (value.geography === 'global' && present !== 0)) context.addIssue({ code: 'custom', message: 'Flight map geography bounds are invalid.' });
+  if (present === 4 && (
+    value.west! < -180 || value.west! > 180 || value.east! < -180 || value.east! > 180
+    || value.south! < -90 || value.south! > 90 || value.north! < -90 || value.north! > 90
+    || value.south! >= value.north! || value.west === value.east
+  )) context.addIssue({ code: 'custom', message: 'Flight map viewport is invalid.' });
+});
+const flightMapSelectionQuerySchema = z.object({
+  ...flightMapFilterShape,
+  geography: z.enum(['global', 'map-area']),
+  west: finiteCoordinate.optional(), south: finiteCoordinate.optional(), east: finiteCoordinate.optional(), north: finiteCoordinate.optional(),
+}).strict().superRefine((value, context) => {
+  refineFlightMapDates(value, context);
+  const coordinates = [value.west, value.south, value.east, value.north];
+  const present = coordinates.filter((coordinate) => coordinate !== undefined).length;
+  if ((value.geography === 'map-area' && present !== 4) || (value.geography === 'global' && present !== 0)) context.addIssue({ code: 'custom', message: 'Flight map geography bounds are invalid.' });
+  if (present === 4 && (value.south! >= value.north! || value.west === value.east)) context.addIssue({ code: 'custom', message: 'Flight map viewport is invalid.' });
 });
 const competitionLeaderboardSchema = z.object({
   month: competitionMonthValue.optional(),
@@ -270,7 +320,7 @@ function formatGroupLaunchTime(value: Date | string, timeZone: string | null): s
   }
 }
 
-function mapPagePeriod(query: Request['query']): {
+function mapPagePeriod(query: Request['query'], options: { allowDay?: boolean } = {}): {
   period: 'all-time' | 'current-month';
   month?: string;
   suffix: string;
@@ -278,11 +328,15 @@ function mapPagePeriod(query: Request['query']): {
   const rawMonth = query.month;
   const rawPeriod = query.period;
   const rawAnchor = query.anchor;
+  const rawStart = query.start;
+  const rawEnd = query.end;
   if (
     (rawMonth !== undefined && typeof rawMonth !== 'string')
-    || (rawPeriod !== undefined && (typeof rawPeriod !== 'string' || !['day', 'month', 'year', 'all-time'].includes(rawPeriod)))
+    || (rawPeriod !== undefined && (typeof rawPeriod !== 'string' || !['day', 'month', 'year', 'custom', 'all-time'].includes(rawPeriod)))
     || (rawAnchor !== undefined && typeof rawAnchor !== 'string')
-    || (rawMonth !== undefined && (rawPeriod !== undefined || rawAnchor !== undefined))
+    || (rawStart !== undefined && typeof rawStart !== 'string')
+    || (rawEnd !== undefined && typeof rawEnd !== 'string')
+    || (rawMonth !== undefined && (rawPeriod !== undefined || rawAnchor !== undefined || rawStart !== undefined || rawEnd !== undefined))
   ) {
     throw new AppError(400, 'invalid_request', 'Map period is invalid.');
   }
@@ -295,12 +349,13 @@ function mapPagePeriod(query: Request['query']): {
     };
   }
   if (rawPeriod === 'all-time') {
-    if (rawAnchor !== undefined) throw new AppError(400, 'invalid_request', 'Map period is invalid.');
+    if (rawAnchor !== undefined || rawStart !== undefined || rawEnd !== undefined) throw new AppError(400, 'invalid_request', 'Map period is invalid.');
     return { period: 'all-time', suffix: '?period=all-time' };
   }
   if (rawPeriod === 'day' || rawPeriod === 'month' || rawPeriod === 'year') {
+    if (rawPeriod === 'day' && options.allowDay === false) throw new AppError(400, 'invalid_request', 'Map period is invalid.');
     const parsedAnchor = flightMapAnchorSchema.safeParse(rawAnchor);
-    if (!parsedAnchor.success) throw new AppError(400, 'invalid_request', 'Map period is invalid.');
+    if (!parsedAnchor.success || rawStart !== undefined || rawEnd !== undefined) throw new AppError(400, 'invalid_request', 'Map period is invalid.');
     const parsedDate = new Date(`${parsedAnchor.data}T00:00:00.000Z`);
     if (Number.isNaN(parsedDate.getTime()) || parsedDate.toISOString().slice(0, 10) !== parsedAnchor.data) {
       throw new AppError(400, 'invalid_request', 'Map period is invalid.');
@@ -310,7 +365,13 @@ function mapPagePeriod(query: Request['query']): {
       suffix: `?period=${rawPeriod}&anchor=${encodeURIComponent(parsedAnchor.data)}`,
     };
   }
-  if (rawAnchor !== undefined) throw new AppError(400, 'invalid_request', 'Map period is invalid.');
+  if (rawPeriod === 'custom') {
+    const start = flightMapAnchorSchema.safeParse(rawStart);
+    const end = flightMapAnchorSchema.safeParse(rawEnd);
+    if (!start.success || !end.success || !isValidFlightMapDate(start.data) || !isValidFlightMapDate(end.data) || rawAnchor !== undefined || start.data > end.data) throw new AppError(400, 'invalid_request', 'Map period is invalid.');
+    return { period: 'current-month', suffix: `?period=custom&start=${encodeURIComponent(start.data)}&end=${encodeURIComponent(end.data)}` };
+  }
+  if (rawAnchor !== undefined || rawStart !== undefined || rawEnd !== undefined) throw new AppError(400, 'invalid_request', 'Map period is invalid.');
   return { period: 'current-month', suffix: '' };
 }
 
@@ -373,6 +434,7 @@ export function createWebRouter(dependencies: {
   cellFlightTracks?: CellFlightTrackService;
   mapReplay?: MapReplayService;
   flightMap?: FlightMapService;
+  launchMap?: LaunchMapService;
   onboarding?: OnboardingService;
   groups?: GroupService;
   plans?: PlanService;
@@ -945,19 +1007,79 @@ export function createWebRouter(dependencies: {
     }
   });
 
+  router.get('/v1/map-launches', async (req, res, next) => {
+    const currentUser = res.locals.currentUser;
+    if (!currentUser) return next(new AppError(401, 'unauthorized', 'Sign in before viewing map launches.'));
+    const parsed = z.object({ ...viewportBoundsShape, ...flightMapFilterShape }).strict().superRefine((value, context) => {
+      refineFlightMapDates(value, context);
+      if (value.south >= value.north || value.west === value.east) context.addIssue({ code: 'custom', message: 'Flight map viewport is invalid.' });
+    }).safeParse(req.query);
+    if (!parsed.success) return next(new AppError(400, 'invalid_request', 'Launch map viewport is invalid.'));
+    if (!dependencies.launchMap) throw new Error('Launch map service is not configured.');
+    try {
+      const { west, south, east, north, scope, period, anchor, start, end, launch } = parsed.data;
+      const launches = await dependencies.launchMap.listViewportMarkers({
+        viewport: { west, south, east, north }, viewerUserId: currentUser.userId, scope, period,
+        ...(launch === undefined ? {} : { launch }),
+        ...(anchor === undefined ? {} : { anchor }),
+        ...(start === undefined ? {} : { startDate: start }),
+        ...(end === undefined ? {} : { endDate: end }),
+      });
+      res.status(200).set('Cache-Control', 'private, no-store').json({ launches });
+    } catch (error) {
+      next(error instanceof FlightMapInputError ? new AppError(400, 'invalid_request', error.message) : error);
+    }
+  });
+
+  router.get('/v1/map-launches/:launchId', async (req, res, next) => {
+    const currentUser = res.locals.currentUser;
+    if (!currentUser) return next(new AppError(401, 'unauthorized', 'Sign in before viewing map launches.'));
+    const launchId = z.coerce.number().int().positive().safeParse(req.params.launchId);
+    const parsed = z.object({
+      scope: flightMapScopeSchema,
+      period: flightMapPeriodSchema,
+      anchor: flightMapAnchorSchema.optional(),
+      start: flightMapAnchorSchema.optional(),
+      end: flightMapAnchorSchema.optional(),
+      launch: z.union([z.literal('unknown'), z.coerce.number().int().positive()]).optional(),
+    }).strict().superRefine(refineFlightMapDates).safeParse(req.query);
+    if (!launchId.success || !parsed.success) return next(new AppError(400, 'invalid_request', 'Launch detail query is invalid.'));
+    if (!dependencies.launchMap) throw new Error('Launch map service is not configured.');
+    const { scope, period, anchor, start, end, launch: launchFilter } = parsed.data;
+    try {
+      const launch = await dependencies.launchMap.getLaunchDetail({
+        launchId: launchId.data,
+        viewerUserId: currentUser.userId,
+        scope,
+        period,
+        ...(launchFilter === undefined ? {} : { launch: launchFilter }),
+        ...(anchor === undefined ? {} : { anchor }),
+        ...(start === undefined ? {} : { startDate: start }),
+        ...(end === undefined ? {} : { endDate: end }),
+      });
+      if (!launch) return next(new AppError(404, 'not_found', 'Launch not found.'));
+      res.status(200).set('Cache-Control', 'private, no-store').json(launch);
+    } catch (error) {
+      next(error instanceof FlightMapInputError ? new AppError(400, 'invalid_request', error.message) : error);
+    }
+  });
+
   router.get('/v1/map-flights/tracks', async (req, res, next) => {
     const currentUser = res.locals.currentUser;
     if (!currentUser) return next(new AppError(401, 'unauthorized', 'Sign in before viewing map flights.'));
     const parsed = flightMapTrackQuerySchema.safeParse(req.query);
     if (!parsed.success) return next(new AppError(400, 'invalid_request', 'Flight map track query is invalid.'));
     if (!dependencies.flightMap) throw new Error('Flight map service is not configured.');
-    const { west, south, east, north, zoom, scope, period, anchor } = parsed.data;
+    const { west, south, east, north, zoom, scope, period, anchor, start, end, launch } = parsed.data;
     try {
       const page = await dependencies.flightMap.listViewportTracks({
         viewerUserId: currentUser.userId,
         scope,
         period,
         ...(anchor === undefined ? {} : { anchor }),
+        ...(start === undefined ? {} : { startDate: start }),
+        ...(end === undefined ? {} : { endDate: end }),
+        ...(launch === undefined ? {} : { launch }),
         viewport: { west, south, east, north },
         zoom,
       });
@@ -973,13 +1095,16 @@ export function createWebRouter(dependencies: {
     const parsed = flightMapListQuerySchema.safeParse(req.query);
     if (!parsed.success) return next(new AppError(400, 'invalid_request', 'Flight map list query is invalid.'));
     if (!dependencies.flightMap) throw new Error('Flight map service is not configured.');
-    const { scope, period, anchor, geography, sort, cursor, west, south, east, north } = parsed.data;
+    const { scope, period, anchor, start, end, launch, geography, sort, cursor, west, south, east, north } = parsed.data;
     try {
       const page = await dependencies.flightMap.listFlights({
         viewerUserId: currentUser.userId,
         scope,
         period,
         ...(anchor === undefined ? {} : { anchor }),
+        ...(start === undefined ? {} : { startDate: start }),
+        ...(end === undefined ? {} : { endDate: end }),
+        ...(launch === undefined ? {} : { launch }),
         geography,
         sort,
         ...(cursor === undefined ? {} : { cursor }),
@@ -991,6 +1116,80 @@ export function createWebRouter(dependencies: {
         ? await dependencies.thumbnailDelivery.signMany(page.items.map((item) => ({ userId: item.pilotUserId, flightId: item.flightId })))
         : undefined;
       res.status(200).set('Cache-Control', 'private, no-store').json(flightMapListPageToPayload(page, { thumbnailUrls }));
+    } catch (error) {
+      next(error instanceof FlightMapInputError ? new AppError(400, 'invalid_request', error.message) : error);
+    }
+  });
+
+  router.get('/v1/map-flights/:flightId', async (req, res, next) => {
+    const currentUser = res.locals.currentUser;
+    if (!currentUser) return next(new AppError(401, 'unauthorized', 'Sign in before viewing map flights.'));
+    const flightId = z.string().uuid().safeParse(req.params.flightId);
+    const parsed = flightMapSelectionQuerySchema.safeParse(req.query);
+    if (!flightId.success || !parsed.success) return next(new AppError(400, 'invalid_request', 'Flight map selection query is invalid.'));
+    if (!dependencies.flightMap) throw new Error('Flight map service is not configured.');
+    const { scope, period, anchor, start, end, launch, geography, west, south, east, north } = parsed.data;
+    try {
+      const flight = await dependencies.flightMap.getFlight({
+        flightId: flightId.data,
+        viewerUserId: currentUser.userId,
+        scope,
+        period,
+        ...(anchor === undefined ? {} : { anchor }),
+        ...(start === undefined ? {} : { startDate: start }),
+        ...(end === undefined ? {} : { endDate: end }),
+        ...(launch === undefined ? {} : { launch }),
+        geography,
+        ...(geography === 'map-area' ? { viewport: { west: west!, south: south!, east: east!, north: north! } } : {}),
+      });
+      if (!flight) return next(new AppError(404, 'not_found', 'Flight is not available in this map context.'));
+      const thumbnailUrls = dependencies.thumbnailDelivery
+        ? await dependencies.thumbnailDelivery.signMany([{ userId: flight.pilotUserId, flightId: flight.flightId }])
+        : undefined;
+      res.status(200).set('Cache-Control', 'private, no-store').json(flightMapListPageToPayload({ items: [flight], nextCursor: null }, { thumbnailUrls }).items[0]);
+    } catch (error) {
+      next(error instanceof FlightMapInputError ? new AppError(400, 'invalid_request', error.message) : error);
+    }
+  });
+
+  router.get('/v1/personal-history/summary', async (req, res, next) => {
+    const currentUser = res.locals.currentUser;
+    if (!currentUser) return next(new AppError(401, 'unauthorized', 'Sign in before viewing personal history.'));
+    const parsed = personalHistoryQuerySchema.safeParse(req.query);
+    if (!parsed.success) return next(new AppError(400, 'invalid_request', 'Personal history query is invalid.'));
+    if (!dependencies.flightMap) throw new Error('Flight map service is not configured.');
+    const { scope, period, anchor, start, end, launch, geography, west, south, east, north } = parsed.data;
+    try {
+      const result = await dependencies.flightMap.getPersonalSummary({
+        viewerUserId: currentUser.userId, scope, period, geography,
+        ...(anchor === undefined ? {} : { anchor }),
+        ...(start === undefined ? {} : { startDate: start }),
+        ...(end === undefined ? {} : { endDate: end }),
+        ...(launch === undefined ? {} : { launch }),
+        ...(geography === 'map-area' ? { viewport: { west: west!, south: south!, east: east!, north: north! } } : {}),
+      });
+      res.status(200).set('Cache-Control', 'private, no-store').json(result);
+    } catch (error) {
+      next(error instanceof FlightMapInputError ? new AppError(400, 'invalid_request', error.message) : error);
+    }
+  });
+
+  router.get('/v1/personal-history/launches', async (req, res, next) => {
+    const currentUser = res.locals.currentUser;
+    if (!currentUser) return next(new AppError(401, 'unauthorized', 'Sign in before viewing personal history.'));
+    const parsed = personalHistoryQuerySchema.safeParse(req.query);
+    if (!parsed.success) return next(new AppError(400, 'invalid_request', 'Personal history query is invalid.'));
+    if (!dependencies.flightMap) throw new Error('Flight map service is not configured.');
+    const { scope, period, anchor, start, end, geography, west, south, east, north } = parsed.data;
+    try {
+      const result = await dependencies.flightMap.listPersonalLaunchOptions({
+        viewerUserId: currentUser.userId, scope, period, geography,
+        ...(anchor === undefined ? {} : { anchor }),
+        ...(start === undefined ? {} : { startDate: start }),
+        ...(end === undefined ? {} : { endDate: end }),
+        ...(geography === 'map-area' ? { viewport: { west: west!, south: south!, east: east!, north: north! } } : {}),
+      });
+      res.status(200).set('Cache-Control', 'private, no-store').json(result);
     } catch (error) {
       next(error instanceof FlightMapInputError ? new AppError(400, 'invalid_request', error.message) : error);
     }
@@ -1323,7 +1522,7 @@ export function createWebRouter(dependencies: {
       return;
     }
     try {
-      const selection = mapPagePeriod(req.query);
+      const selection = mapPagePeriod(req.query, { allowDay: false });
       const mapHref = `/personal${selection.suffix}`;
       await renderAuthenticated(res, dependencies.renderAuthenticatedPage, 200, productionMap(currentUser, {
         mode: 'personal', period: selection.period, location: null, mapHref,

@@ -1,4 +1,4 @@
-import type { AuthenticatedPage, AuthenticatedShellInput, AuthenticatedShellModel, NavigationItemView } from '../models.js';
+import type { AuthenticatedPage, AuthenticatedShellInput, AuthenticatedShellModel, NavigationItemView, PrimaryNavigationPage } from '../models.js';
 
 const DEFAULT_DONATE_URL = 'https://ko-fi.com/U6U0I4TSK';
 const DEFAULT_ADMIN_URL = '/admin';
@@ -23,22 +23,33 @@ export function initialsForDisplayName(displayName: string): string {
 }
 
 function navigationFor(mapHref: string): NavigationItemView[] {
+  const mapDestination = mapHref.startsWith('/personal') ? '/following' : mapHref;
   return [
-    { page: 'map', label: 'Map', icon: 'map', href: mapHref },
+    { page: 'map', label: 'Map', icon: 'map', href: mapDestination },
     { page: 'plan', label: 'Plan', icon: 'plan', href: '/plan' },
-    { page: 'activity', label: 'Activity', icon: 'activity', href: '/activity' },
-    { page: 'achievements', label: 'Achievements', icon: 'trophy', href: '/achievements' },
+    { page: 'my-flights', label: 'My Flights', icon: 'flight', href: '/personal' },
     { page: 'profile', label: 'Profile', icon: 'profile', href: '/profile' },
   ];
+}
+
+function defaultActiveNavigationPage(input: AuthenticatedShellInput): PrimaryNavigationPage | null {
+  if (input.page === 'map' && input.mapHref?.startsWith('/personal')) return 'my-flights';
+  if (input.page === 'group') return 'map';
+  if (input.page === 'plan' || input.page === 'profile') return input.page;
+  return input.page === 'map' ? 'map' : null;
 }
 
 /** Build the shared shell for any authenticated refreshed-app page. */
 export function createAuthenticatedShellModel(input: AuthenticatedShellInput): AuthenticatedShellModel {
   const displayName = input.user.displayName.trim() || 'Pilot';
-  const title = input.title ?? `${pageLabels[input.page]} · GlideHero`;
+  const activeNavigationPage = input.activeNavigationPage !== undefined
+    ? input.activeNavigationPage
+    : defaultActiveNavigationPage(input);
+  const title = input.title ?? `${activeNavigationPage === 'my-flights' ? 'My Flights' : pageLabels[input.page]} · GlideHero`;
 
   return {
     page: input.page,
+    activeNavigationPage,
     title,
     user: {
       displayName,

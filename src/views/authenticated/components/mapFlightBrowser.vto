@@ -3,40 +3,41 @@
     <span aria-hidden="true"></span><span class="sr-only" data-map-sheet-label>Expand flight browser</span>
   </button>
   <div class="flight-browser__content" id="flight-browser-content">
+    {{ if mode === 'personal' }}{{ include "authenticated/components/personalHistorySummary.vto" }}{{ /if }}
     <div class="flight-browser__filters">
+      {{ if mode !== 'personal' }}
       <div class="map-select flight-browser__select flight-browser__select--scope" data-styled-select>
         <select data-map-scope data-styled-select-native hidden aria-label="Pilots">
           <option value="following"{{ if mode === 'following' }} selected{{ /if }}>Following</option>
-          <option value="personal"{{ if mode === 'personal' }} selected{{ /if }}>My Flights</option>
-          <option value="all"{{ if mode !== 'personal' && mode !== 'following' }} selected{{ /if }}>All Pilots</option>
+          <option value="all"{{ if mode !== 'following' }} selected{{ /if }}>All Pilots</option>
         </select>
         <button class="map-select__trigger map-select__trigger--pilots" type="button" data-styled-select-trigger aria-haspopup="listbox" aria-expanded="false">
           {{ include "authenticated/components/icon.vto" { name: "people" } }}
-          <span data-styled-select-value>{{ if mode === 'personal' }}My Flights{{ else if mode === 'following' }}Following{{ else }}All Pilots{{ /if }}</span>
+          <span data-styled-select-value>{{ if mode === 'following' }}Following{{ else }}All Pilots{{ /if }}</span>
           {{ include "authenticated/components/icon.vto" { name: "chevron-down" } }}
         </button>
         <div class="map-select__menu" data-styled-select-menu role="listbox" aria-label="Pilots" hidden>
           <button type="button" role="option" data-styled-select-option="following" aria-selected="{{ if mode === 'following' }}true{{ else }}false{{ /if }}"><span>Following</span><span class="map-select__check" aria-hidden="true">✓</span></button>
-          <button type="button" role="option" data-styled-select-option="personal" aria-selected="{{ if mode === 'personal' }}true{{ else }}false{{ /if }}"><span>My Flights</span><span class="map-select__check" aria-hidden="true">✓</span></button>
-          <button type="button" role="option" data-styled-select-option="all" aria-selected="{{ if mode !== 'personal' && mode !== 'following' }}true{{ else }}false{{ /if }}"><span>All Pilots</span><span class="map-select__check" aria-hidden="true">✓</span></button>
+          <button type="button" role="option" data-styled-select-option="all" aria-selected="{{ if mode !== 'following' }}true{{ else }}false{{ /if }}"><span>All Pilots</span><span class="map-select__check" aria-hidden="true">✓</span></button>
         </div>
       </div>
+      {{ /if }}
       <div class="flight-browser__geography" role="group" aria-label="Flight location">
         <button type="button" data-map-geography="global" aria-pressed="true">Global</button>
         <button type="button" data-map-geography="map-area" aria-pressed="false">Map area</button>
       </div>
       <div class="map-select flight-browser__select flight-browser__select--sort" data-styled-select>
         <select data-map-sort data-styled-select-native hidden aria-label="Sort flights">
-          <option value="distance" selected>Distance</option>
-          <option value="latest">Latest</option>
+          <option value="distance"{{ if defaultSort === 'distance' }} selected{{ /if }}>Distance</option>
+          <option value="latest"{{ if defaultSort === 'latest' }} selected{{ /if }}>Latest</option>
           <option value="duration">Duration</option>
         </select>
         <button class="map-select__trigger" type="button" data-styled-select-trigger aria-haspopup="listbox" aria-expanded="false">
-          <span data-styled-select-value>Distance</span>{{ include "authenticated/components/icon.vto" { name: "chevron-down" } }}
+          <span data-styled-select-value>{{ if defaultSort === 'latest' }}Latest{{ else }}Distance{{ /if }}</span>{{ include "authenticated/components/icon.vto" { name: "chevron-down" } }}
         </button>
         <div class="map-select__menu map-select__menu--right" data-styled-select-menu role="listbox" aria-label="Sort flights" hidden>
-          <button type="button" role="option" data-styled-select-option="distance" aria-selected="true"><span>Distance</span><span class="map-select__check" aria-hidden="true">✓</span></button>
-          <button type="button" role="option" data-styled-select-option="latest" aria-selected="false"><span>Latest</span><span class="map-select__check" aria-hidden="true">✓</span></button>
+          <button type="button" role="option" data-styled-select-option="distance" aria-selected="{{ if defaultSort === 'distance' }}true{{ else }}false{{ /if }}"><span>Distance</span><span class="map-select__check" aria-hidden="true">✓</span></button>
+          <button type="button" role="option" data-styled-select-option="latest" aria-selected="{{ if defaultSort === 'latest' }}true{{ else }}false{{ /if }}"><span>Latest</span><span class="map-select__check" aria-hidden="true">✓</span></button>
           <button type="button" role="option" data-styled-select-option="duration" aria-selected="false"><span>Duration</span><span class="map-select__check" aria-hidden="true">✓</span></button>
         </div>
       </div>

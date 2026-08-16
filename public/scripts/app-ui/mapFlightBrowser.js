@@ -1,15 +1,31 @@
 import { createMapReplayTimeline } from '../mapReplayTimeline.js';
 import { installMapReplayLayer } from '../mapReplayLayer.js';
-import { createMapReplayCamera } from '../mapReplayCamera.js';
+import { createMapReplayCamera, isMapReplayCameraMoveEvent } from '../mapReplayCamera.js';
 import { initializeReplayControls } from '../replayControlsController.js';
 import { normalizeViewportBounds, viewportSearchParams } from '../viewportQuery.js';
 import { mapViewportFromSearch } from '../mapViewportUrl.js';
+import { initializePersonalHistory } from './personalHistory.js';
+import {
+  LAUNCH_CLUSTER_LAYER_ID,
+  LAUNCH_MARKER_LAYER_ID,
+  LAUNCH_SOURCE_ID,
+  installLaunchLayers,
+  launchFeatureCollection,
+  launchLayerVisibleFromSearch,
+  launchLocationLabel,
+  mapLaunchDetailRequestUrl,
+  mapLaunchRequestUrl,
+  normalizeLaunchDetailPayload,
+  normalizeLaunchMarkerPayload,
+  selectedLaunchIdFromSearch,
+  setLaunchLayerVisibility,
+} from './mapLaunchLayer.js';
 
 export const FLIGHT_TRACK_SOURCE_ID = 'flight-map-tracks';
 export const FLIGHT_TRACK_LAYER_ID = 'flight-map-tracks-line';
 export const FLIGHT_TRACK_HIT_LAYER_ID = 'flight-map-tracks-hit';
 
-const PERIODS = new Set(['day', 'month', 'year', 'all-time']);
+const PERIODS = new Set(['day', 'month', 'year', 'custom', 'all-time']);
 const SCOPES = new Set(['personal', 'following', 'all']);
 const SORTS = new Set(['distance', 'latest', 'duration']);
 
@@ -20,8 +36,15 @@ function localIsoDate(date) {
   return `${year}-${month}-${day}`;
 }
 
+function validIsoDate(value) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value ?? '')) return false;
+  const [year, month, day] = value.split('-').map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day;
+}
+
 function validAnchor(period, value) {
-  if (period !== 'all-time') return /^\d{4}-\d{2}-\d{2}$/.test(value ?? '');
+  if (period !== 'all-time') return validIsoDate(value);
   return period === 'all-time';
 }
 
@@ -36,14 +59,24 @@ export function defaultPeriodAnchor(period, now = new Date()) {
 export function periodStateFromSearch(search = '', now = new Date(), initialPeriod = 'month') {
   const query = new URLSearchParams(search);
   const requested = query.get('period');
-  const period = PERIODS.has(requested) ? requested : (initialPeriod === 'all-time' ? 'all-time' : 'month');
+  const period = PERIODS.has(requested) && !(initialPeriod === 'all-time' && requested === 'day') ? requested : (initialPeriod === 'all-time' ? 'all-time' : 'month');
   const legacyMonth = query.get('month') ? `${query.get('month')}-01` : null;
+  if (period === 'custom') {
+    const startDate = query.get('start'); const endDate = query.get('end');
+    if (validIsoDate(startDate) && validIsoDate(endDate) && startDate <= endDate) {
+      return { period, startDate, endDate };
+    }
+    const today = localIsoDate(now);
+    return { period, startDate: today, endDate: today };
+  }
+  if (period === 'all-time') return { period, anchor: '' };
   const anchor = query.get('anchor') ?? (period === 'month' ? legacyMonth : null);
   return { period, anchor: validAnchor(period, anchor) ? (anchor ?? '') : defaultPeriodAnchor(period, now) };
 }
 
-export function stepPeriod({ period, anchor }, direction) {
-  if (period === 'all-time') return { period, anchor: '' };
+export function stepPeriod(state, direction) {
+  const { period, anchor } = state;
+  if (period === 'all-time' || period === 'custom') return period === 'custom' ? state : { period, anchor: '' };
   const sign = direction === 'previous' ? -1 : 1;
   const parts = anchor.split('-').map(Number);
   const date = period === 'year'
@@ -57,6 +90,7 @@ export function stepPeriod({ period, anchor }, direction) {
 
 export function periodLabel({ period, anchor }) {
   if (period === 'all-time') return 'All flights';
+  if (period === 'custom') return 'Custom range';
   const [year, month = 1, day = 1] = anchor.split('-').map(Number);
   const date = new Date(year, month - 1, day);
   if (period === 'day') return new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', year: 'numeric' }).format(date);
@@ -68,29 +102,45 @@ function normalizedScope(value) { return SCOPES.has(value) ? value : 'following'
 function normalizedSort(value) { return SORTS.has(value) ? value : 'distance'; }
 
 function requestPeriodValues(state) {
-  return state.period === 'all-time' ? { period: 'all-time' } : { period: state.period, anchor: state.anchor };
+  if (state.period === 'all-time') return { period: 'all-time' };
+  if (state.period === 'custom') return { period: 'custom', start: state.startDate, end: state.endDate };
+  return { period: state.period, anchor: state.anchor };
 }
 
-export function mapTrackRequestUrl(endpoint, { scope, period, bounds, zoom }) {
+export function mapTrackRequestUrl(endpoint, { scope, period, bounds, zoom, launch }) {
   const query = viewportSearchParams(bounds, {
     scope: normalizedScope(scope),
     ...requestPeriodValues(period),
     zoom: String(Math.max(0, Number(zoom) || 0)),
+    ...(launch ? { launch } : {}),
   });
   return `${endpoint}?${query}`;
 }
 
-export function mapFlightListRequestUrl(endpoint, { scope, period, geography, sort, bounds, cursor }) {
+export function mapFlightListRequestUrl(endpoint, { scope, period, geography, sort, bounds, cursor, launch }) {
   const values = {
     scope: normalizedScope(scope),
     ...requestPeriodValues(period),
     geography: geography === 'map-area' ? 'map-area' : 'global',
     sort: normalizedSort(sort),
+    ...(launch ? { launch } : {}),
     ...(cursor ? { cursor } : {}),
   };
   const query = geography === 'map-area' && bounds
     ? viewportSearchParams(bounds, values)
     : new URLSearchParams(values);
+  return `${endpoint}?${query}`;
+}
+
+export function mapFlightSelectionRequestUrl(endpointTemplate, flightId, { scope, period, geography, bounds, launch }) {
+  const endpoint = endpointTemplate.replace('{flightId}', encodeURIComponent(String(flightId)));
+  const values = {
+    scope: normalizedScope(scope),
+    ...requestPeriodValues(period),
+    geography: geography === 'map-area' ? 'map-area' : 'global',
+    ...(launch ? { launch } : {}),
+  };
+  const query = geography === 'map-area' && bounds ? viewportSearchParams(bounds, values) : new URLSearchParams(values);
   return `${endpoint}?${query}`;
 }
 
@@ -127,8 +177,7 @@ function dateLabel(item) {
 
 function locationLabel(item) {
   if (item?.location || item?.launchName) return String(item.location ?? item.launchName);
-  const latitude = Number(item?.launchLatitude); const longitude = Number(item?.launchLongitude);
-  return Number.isFinite(latitude) && Number.isFinite(longitude) ? `${latitude.toFixed(3)}, ${longitude.toFixed(3)}` : 'Unknown launch';
+  return 'Unknown launch';
 }
 
 function normalizeFlight(item) {
@@ -272,38 +321,128 @@ export function initializeFlightMap({ documentRef = document, maplibre = globalT
   const periodSelect = documentRef.querySelector('[data-map-period]');
   const periodLabelNode = documentRef.querySelector('[data-map-period-label]');
   const periodSteps = [...documentRef.querySelectorAll('[data-map-period-step]')];
+  const customRange = documentRef.querySelector('[data-map-custom-range]');
+  const customStart = documentRef.querySelector('[data-map-custom-start]');
+  const customEnd = documentRef.querySelector('[data-map-custom-end]');
+  const customApply = documentRef.querySelector('[data-map-custom-apply]');
   const geographyButtons = [...documentRef.querySelectorAll('[data-map-geography]')];
   const loadMore = documentRef.querySelector('[data-flight-load-more]');
   const listStatus = documentRef.querySelector('[data-flight-list-status]');
   const mapStatus = documentRef.querySelector('[data-map-status]');
   const replayRoot = documentRef.querySelector('[data-selected-flight-replay]');
   const browser = documentRef.querySelector('[data-flight-browser]');
+  const launchToggle = documentRef.querySelector('[data-map-launch-toggle]');
+  const launchPanel = documentRef.querySelector('[data-launch-info-panel]');
+  const launchPanelStatus = documentRef.querySelector('[data-launch-info-status]');
+  const launchPanelContent = documentRef.querySelector('[data-launch-info-content]');
+  const launchPanelName = documentRef.querySelector('[data-launch-info-name]');
+  const launchPanelLocation = documentRef.querySelector('[data-launch-info-location]');
+  const launchPanelElevation = documentRef.querySelector('[data-launch-info-elevation]');
+  const launchPanelFlightCount = documentRef.querySelector('[data-launch-info-flight-count]');
+  const launchPanelVisitedRow = documentRef.querySelector('[data-launch-info-visited-row]');
+  const launchPanelVisited = documentRef.querySelector('[data-launch-info-visited]');
+  const launchPanelDescription = documentRef.querySelector('[data-launch-info-description]');
+  const launchPanelFilter = documentRef.querySelector('[data-launch-info-filter]');
+  const launchPanelClose = documentRef.querySelector('[data-launch-info-close]');
   let period = periodStateFromSearch(locationRef?.search ?? '', now(), root.dataset.initialPeriod);
   let currentPath = locationRef?.pathname ?? '/following';
-  let geography = 'global'; let cursor = null; let tracks = []; let flights = new Map(); let selected = null;
-  let trackAbort = null; let listAbort = null; let replayLayer = null; let replayCamera = null;
+  let urlState = new URLSearchParams(locationRef?.search ?? '');
+  const initialLaunchFilter = urlState.get('launch');
+  let launchFilter = initialLaunchFilter === 'unknown' || (Number.isSafeInteger(Number(initialLaunchFilter)) && Number(initialLaunchFilter) > 0) ? initialLaunchFilter : null;
+  let launchLayerVisible = launchLayerVisibleFromSearch(locationRef?.search ?? '');
+  let selectedLaunchId = selectedLaunchIdFromSearch(locationRef?.search ?? '');
+  const initialSelectedFlight = urlState.get('selectedFlight');
+  let selectedFlightId = selectedLaunchId ? null : (/^[0-9a-f-]{36}$/i.test(initialSelectedFlight ?? '') ? initialSelectedFlight : null);
+  let geography = urlState.get('geography') === 'map-area' ? 'map-area' : 'global'; let cursor = null; let tracks = []; let flights = new Map(); let selected = null;
+  const initialSort = urlState.get('sort');
+  if (sort && SORTS.has(initialSort)) sort.value = initialSort;
+  geographyButtons.forEach((button) => button.setAttribute('aria-pressed', String(button.dataset.mapGeography === geography)));
+  let launches = [];
+  let personalHistory = null;
+  let trackAbort = null; let listAbort = null; let launchAbort = null; let launchDetailAbort = null; let selectionAbort = null; let replayLayer = null; let replayCamera = null;
 
   const initialViewport = mapViewportFromSearch(locationRef?.search ?? '');
   const map = new maplibre.Map({ container: mapNode, style: mapNode.dataset.mapStyleUrl, center: initialViewport?.center ?? [-106.2, 39.2], zoom: initialViewport?.zoom ?? 7, maxPitch: 0 });
   map.addControl?.(new maplibre.NavigationControl(), 'top-right');
 
   const show = (node, message) => { if (!node) return; node.textContent = message; node.hidden = !message; };
-  const parameters = () => ({ scope: scope?.value ?? root.dataset.initialScope, period, geography, sort: sort?.value ?? 'distance', bounds: map.getBounds?.(), zoom: map.getZoom?.() });
+  const parameters = () => ({ scope: scope?.value ?? root.dataset.initialScope, period, geography, sort: sort?.value ?? 'distance', bounds: map.getBounds?.(), zoom: map.getZoom?.(), launch: launchFilter });
   const updatePeriodUi = () => {
     if (periodSelect) periodSelect.value = period.period;
     periodSelect?.dispatchEvent?.(new Event('styled-select-sync'));
     if (periodLabelNode) periodLabelNode.textContent = periodLabel(period);
-    periodSteps.forEach((button) => { button.disabled = period.period === 'all-time'; });
+    periodSteps.forEach((button) => { button.disabled = period.period === 'all-time' || period.period === 'custom'; });
+    if (customRange) customRange.hidden = period.period !== 'custom';
+    if (period.period === 'custom') {
+      if (customStart) customStart.value = period.startDate;
+      if (customEnd) customEnd.value = period.endDate;
+    }
   };
-  const syncUrl = () => {
+  const syncUrl = ({ push = false } = {}) => {
     if (!historyRef?.replaceState || !locationRef) return;
-    const query = new URLSearchParams(locationRef.search ?? ''); query.delete('month');
-    query.set('period', period.period); if (period.anchor) query.set('anchor', period.anchor); else query.delete('anchor');
+    const query = new URLSearchParams(urlState); query.delete('month');
+    query.set('period', period.period);
+    if (period.anchor) query.set('anchor', period.anchor); else query.delete('anchor');
+    if (period.period === 'custom') { query.set('start', period.startDate); query.set('end', period.endDate); }
+    else { query.delete('start'); query.delete('end'); }
+    if (launchFilter) query.set('launch', launchFilter); else query.delete('launch');
+    query.set('sort', sort?.value ?? 'distance');
+    query.set('geography', geography);
+    if (launchLayerVisible) query.delete('launches'); else query.set('launches', 'off');
+    if (selectedLaunchId) query.set('selectedLaunch', String(selectedLaunchId)); else query.delete('selectedLaunch');
+    if (selectedFlightId) query.set('selectedFlight', selectedFlightId); else query.delete('selectedFlight');
     const center = map.getCenter?.(); const zoom = map.getZoom?.();
     if (center && Number.isFinite(zoom)) { query.set('lat', Number(center.lat).toFixed(5)); query.set('lng', Number(center.lng).toFixed(5)); query.set('zoom', Number(zoom).toFixed(2)); }
-    historyRef.replaceState(null, '', `${currentPath}?${query}`);
+    const method = push && historyRef.pushState ? 'pushState' : 'replaceState';
+    historyRef[method](null, '', `${currentPath}?${query}`);
+    urlState = query;
   };
   const setTrackData = () => map.getSource?.(FLIGHT_TRACK_SOURCE_ID)?.setData(featureCollection(tracks, selected?.id));
+  const setLaunchData = () => map.getSource?.(LAUNCH_SOURCE_ID)?.setData(launchFeatureCollection(launches, selectedLaunchId));
+
+  const clearLaunchSelection = ({ sync = false, push = false } = {}) => {
+    launchDetailAbort?.abort(); launchDetailAbort = null; selectedLaunchId = null;
+    if (launchPanel) launchPanel.hidden = true;
+    setLaunchData();
+    if (sync) syncUrl({ push });
+  };
+
+  const renderLaunchDetail = (launch) => {
+    if (!launchPanel || !launchPanelContent) return;
+    launchPanel.hidden = false; launchPanelContent.hidden = false;
+    if (launchPanelStatus) launchPanelStatus.textContent = '';
+    if (launchPanelName) launchPanelName.textContent = launch.name;
+    if (launchPanelLocation) launchPanelLocation.textContent = launchLocationLabel(launch) || 'Location unavailable';
+    if (launchPanelElevation) launchPanelElevation.textContent = launch.elevationMeters === null ? 'Unavailable' : `${Math.round(launch.elevationMeters).toLocaleString()} m`;
+    if (launchPanelFlightCount) launchPanelFlightCount.textContent = String(launch.matchingFlightCount);
+    if (launchPanelVisitedRow) launchPanelVisitedRow.hidden = parameters().scope !== 'personal';
+    if (launchPanelVisited) launchPanelVisited.textContent = launch.visited ? 'Visited' : 'Not visited';
+    if (launchPanelDescription) { launchPanelDescription.textContent = launch.description ?? ''; launchPanelDescription.hidden = !launch.description; }
+  };
+
+  const selectLaunch = async (launchId, { push = true } = {}) => {
+    if (!Number.isSafeInteger(Number(launchId)) || Number(launchId) < 1) return;
+    replayControls.close(); selected = null; selectedFlightId = null; if (replayRoot) replayRoot.hidden = true;
+    for (const card of list.querySelectorAll('[data-flight-id]')) card.classList.remove('is-selected');
+    setTrackData(); selectedLaunchId = Number(launchId); setLaunchData();
+    if (launchPanel) launchPanel.hidden = false;
+    if (launchPanelContent) launchPanelContent.hidden = true;
+    if (launchPanelName) launchPanelName.textContent = 'Launch information';
+    if (launchPanelStatus) launchPanelStatus.textContent = 'Loading launch information…';
+    syncUrl({ push });
+    launchDetailAbort?.abort(); launchDetailAbort = new AbortController();
+    try {
+      const response = await fetchImpl(mapLaunchDetailRequestUrl(root.dataset.launchDetailEndpointTemplate, selectedLaunchId, parameters()), { credentials: 'same-origin', headers: { accept: 'application/json' }, signal: launchDetailAbort.signal });
+      if (!response.ok) throw new Error(`Launch detail request failed (${response.status})`);
+      const detail = normalizeLaunchDetailPayload(await response.json());
+      if (!detail || detail.launchId !== selectedLaunchId) throw new Error('Launch detail response is invalid.');
+      renderLaunchDetail(detail);
+    } catch (error) {
+      if (error?.name !== 'AbortError' && selectedLaunchId === Number(launchId)) {
+        if (launchPanelStatus) launchPanelStatus.textContent = 'Unable to load launch information.';
+      }
+    }
+  };
 
   const replayControls = initializeReplayControls({ documentRef, root: replayRoot, onClose: () => {
     replayLayer?.close?.(); replayLayer = null; replayCamera?.destroy?.(); replayCamera = null;
@@ -322,10 +461,21 @@ export function initializeFlightMap({ documentRef = document, maplibre = globalT
     setTimeline(timeline); setStatus('');
   } });
 
-  const applySelection = (flight, { fit = true, scroll = true } = {}) => {
+  const clearFlightSelection = ({ sync = false } = {}) => {
+    selectionAbort?.abort(); selectionAbort = null;
+    replayControls.close(); selected = null; selectedFlightId = null;
+    if (replayRoot) replayRoot.hidden = true;
+    for (const card of list.querySelectorAll('[data-flight-id]')) card.classList.remove('is-selected');
+    setTrackData();
+    if (sync) syncUrl();
+  };
+
+  const applySelection = (flight, { fit = true, scroll = true, push = true } = {}) => {
     if (!flight?.id) return;
+    selectionAbort?.abort(); selectionAbort = null;
+    clearLaunchSelection();
     flights.set(flight.id, flight);
-    replayControls.close(); selected = flight; if (replayRoot) replayRoot.hidden = false;
+    replayControls.close(); selected = flight; selectedFlightId = flight.id; if (replayRoot) replayRoot.hidden = false;
     setTrackData();
     for (const card of list.querySelectorAll('[data-flight-id]')) card.classList.toggle('is-selected', card.dataset.flightId === flight.id);
     let card = list.querySelector(`[data-flight-id="${globalThis.CSS?.escape?.(flight.id) ?? flight.id}"]`);
@@ -337,6 +487,7 @@ export function initializeFlightMap({ documentRef = document, maplibre = globalT
       const padding = mobile ? { top: 96, right: 28, bottom: Math.min(browser?.offsetHeight ?? 280, 360) + 24, left: 28 } : { top: 40, right: 40, bottom: 40, left: (browser?.offsetWidth ?? 360) + 40 };
       map.fitBounds?.(fitted, { padding, duration: 500, maxZoom: 13 });
     }
+    syncUrl({ push });
     void replayControls.open();
   };
 
@@ -353,6 +504,7 @@ export function initializeFlightMap({ documentRef = document, maplibre = globalT
       flights.set(flight.id, flight);
       if (list.querySelector(`[data-flight-id="${globalThis.CSS?.escape?.(flight.id) ?? flight.id}"]`)) continue;
       const card = flightCard(documentRef, flight); bindCard(card); list.append(card);
+      card.classList.toggle('is-selected', flight.id === selectedFlightId);
     }
   };
 
@@ -381,19 +533,148 @@ export function initializeFlightMap({ documentRef = document, maplibre = globalT
     } catch (error) { if (error?.name !== 'AbortError') { show(listStatus, 'Unable to load flights.'); if (loadMore) loadMore.disabled = false; } }
   };
 
-  const refreshAll = () => { replayControls.close(); selected = null; if (replayRoot) replayRoot.hidden = true; syncUrl(); void refreshTracks(); void refreshList(); };
+  const revalidateSelectedFlight = async ({ restore = false } = {}) => {
+    if (!selectedFlightId) return;
+    selectionAbort?.abort();
+    const requestedFlightId = selectedFlightId;
+    const controller = new AbortController(); selectionAbort = controller;
+    try {
+      const response = await fetchImpl(mapFlightSelectionRequestUrl(root.dataset.selectionEndpointTemplate, requestedFlightId, parameters()), { credentials: 'same-origin', headers: { accept: 'application/json' }, signal: controller.signal });
+      if (response.status === 404) {
+        if (selectedFlightId === requestedFlightId) clearFlightSelection({ sync: true });
+        return;
+      }
+      if (!response.ok) throw new Error(`Flight selection request failed (${response.status})`);
+      const payload = normalizeFlightListPayload({ items: [await response.json()] });
+      const flight = payload.flights[0];
+      if (!flight || flight.id !== requestedFlightId) throw new Error('Flight selection response is invalid.');
+      if (selectedFlightId !== requestedFlightId) return;
+      applySelection(flight, { fit: restore, scroll: false, push: false });
+    } catch (error) {
+      if (error?.name !== 'AbortError' && restore) show(mapStatus, 'Unable to restore the selected flight.');
+    } finally {
+      if (selectionAbort === controller) selectionAbort = null;
+    }
+  };
+
+  const refreshListAndSelection = async () => {
+    await refreshList();
+    if (selectedFlightId) await revalidateSelectedFlight();
+  };
+
+  const refreshLaunches = async () => {
+    if (!launchLayerVisible) return;
+    const bounds = map.getBounds?.(); if (!bounds) return;
+    launchAbort?.abort(); launchAbort = new AbortController();
+    try {
+      const response = await fetchImpl(mapLaunchRequestUrl(root.dataset.launchEndpoint, bounds, parameters()), { credentials: 'same-origin', headers: { accept: 'application/json' }, signal: launchAbort.signal });
+      if (!response.ok) throw new Error(`Launch marker request failed (${response.status})`);
+      launches = normalizeLaunchMarkerPayload(await response.json()); setLaunchData();
+    } catch (error) {
+      if (error?.name !== 'AbortError') show(mapStatus, 'Unable to load launches for this map area.');
+    }
+  };
+
+  const refreshPersonalHistory = () => personalHistory?.refresh({
+    period,
+    geography,
+    bounds: map.getBounds?.(),
+    launch: launchFilter,
+  });
+
+  if (root.dataset.initialScope === 'personal') {
+    personalHistory = initializePersonalHistory({ documentRef, fetchImpl, onLaunchChange: (launch) => {
+      launchFilter = launch; syncUrl({ push: true });
+      void refreshTracks(); void refreshPersonalHistory();
+      void (async () => { await refreshList(); if (selectedFlightId) await revalidateSelectedFlight(); })();
+    } });
+  }
+
+  const refreshAll = ({ push = false } = {}) => {
+    replayControls.close(); syncUrl({ push });
+    void refreshTracks(); void refreshLaunches(); void refreshPersonalHistory();
+    void (async () => { await refreshList(); if (selectedFlightId) await revalidateSelectedFlight(); })();
+    if (selectedLaunchId) void selectLaunch(selectedLaunchId, { push: false });
+  };
   scope?.addEventListener('change', () => {
     currentPath = { personal: '/personal', following: '/following', all: '/global' }[normalizedScope(scope.value)];
-    refreshAll();
-  }); sort?.addEventListener('change', () => void refreshList());
-  geographyButtons.forEach((button) => button.addEventListener('click', () => { geography = button.dataset.mapGeography; geographyButtons.forEach((node) => node.setAttribute('aria-pressed', String(node === button))); void refreshList(); }));
-  periodSelect?.addEventListener('change', () => { period = { period: periodSelect.value, anchor: defaultPeriodAnchor(periodSelect.value, now()) }; updatePeriodUi(); refreshAll(); });
-  periodSteps.forEach((button) => button.addEventListener('click', () => { period = stepPeriod(period, button.dataset.mapPeriodStep); updatePeriodUi(); refreshAll(); }));
+    refreshAll({ push: true });
+  }); sort?.addEventListener('change', () => { syncUrl({ push: true }); void refreshListAndSelection(); });
+  geographyButtons.forEach((button) => button.addEventListener('click', () => { geography = button.dataset.mapGeography; geographyButtons.forEach((node) => node.setAttribute('aria-pressed', String(node === button))); syncUrl({ push: true }); void refreshPersonalHistory(); void (async () => { await refreshList(); if (selectedFlightId) await revalidateSelectedFlight(); })(); }));
+  periodSelect?.addEventListener('change', () => {
+    if (periodSelect.value === 'custom') {
+      const today = localIsoDate(now()); period = { period: 'custom', startDate: today, endDate: today }; updatePeriodUi(); return;
+    }
+    period = { period: periodSelect.value, anchor: defaultPeriodAnchor(periodSelect.value, now()) }; updatePeriodUi(); refreshAll({ push: true });
+  });
+  customApply?.addEventListener('click', () => {
+    const startDate = customStart?.value; const endDate = customEnd?.value;
+    const valid = validIsoDate(startDate) && validIsoDate(endDate) && startDate <= endDate;
+    customEnd?.setCustomValidity?.(valid ? '' : 'Choose an end date on or after the start date.');
+    if (!valid) { customEnd?.reportValidity?.(); return; }
+    period = { period: 'custom', startDate, endDate }; updatePeriodUi(); refreshAll({ push: true });
+  });
+  periodSteps.forEach((button) => button.addEventListener('click', () => { period = stepPeriod(period, button.dataset.mapPeriodStep); updatePeriodUi(); refreshAll({ push: true }); }));
   loadMore?.addEventListener('click', () => void refreshList({ append: true }));
+  launchToggle?.addEventListener('click', () => {
+    launchLayerVisible = !launchLayerVisible;
+    launchToggle.setAttribute('aria-pressed', String(launchLayerVisible));
+    setLaunchLayerVisibility(map, launchLayerVisible); syncUrl({ push: true });
+    if (launchLayerVisible) void refreshLaunches();
+  });
+  launchPanelClose?.addEventListener('click', () => clearLaunchSelection({ sync: true, push: true }));
+  launchPanelFilter?.addEventListener('click', () => {
+    if (!selectedLaunchId) return;
+    launchFilter = String(selectedLaunchId); syncUrl({ push: true });
+    const launchSelect = documentRef.querySelector('[data-map-launch-filter]');
+    if (launchSelect && !Array.from(launchSelect.options ?? []).some((option) => option.value === launchFilter)) {
+      const option = documentRef.createElement('option'); option.value = launchFilter;
+      option.textContent = launchPanelName?.textContent || `Launch ${launchFilter}`;
+      launchSelect.append(option);
+    }
+    if (launchSelect) launchSelect.value = launchFilter;
+    root.dispatchEvent?.(new CustomEvent('map-launch-filter-change', { detail: { launch: launchFilter } }));
+    void refreshTracks(); void refreshList(); void refreshPersonalHistory();
+    if (selectedFlightId) void revalidateSelectedFlight();
+  });
+
+  const handlePopState = () => {
+    urlState = new URLSearchParams(locationRef?.search ?? '');
+    currentPath = locationRef?.pathname ?? currentPath;
+    if (scope) {
+      scope.value = currentPath === '/global' ? 'all' : 'following';
+      scope.dispatchEvent?.(new Event('styled-select-sync'));
+    }
+    period = periodStateFromSearch(locationRef?.search ?? '', now(), root.dataset.initialPeriod);
+    const nextLaunch = urlState.get('launch');
+    launchFilter = nextLaunch === 'unknown' || (Number.isSafeInteger(Number(nextLaunch)) && Number(nextLaunch) > 0) ? nextLaunch : null;
+    geography = urlState.get('geography') === 'map-area' ? 'map-area' : 'global';
+    const nextSort = urlState.get('sort'); if (sort && SORTS.has(nextSort)) { sort.value = nextSort; sort.dispatchEvent?.(new Event('styled-select-sync')); }
+    geographyButtons.forEach((button) => button.setAttribute('aria-pressed', String(button.dataset.mapGeography === geography)));
+    launchLayerVisible = launchLayerVisibleFromSearch(locationRef?.search ?? '');
+    launchToggle?.setAttribute('aria-pressed', String(launchLayerVisible)); setLaunchLayerVisibility(map, launchLayerVisible);
+    selectedLaunchId = selectedLaunchIdFromSearch(locationRef?.search ?? '');
+    const flightValue = urlState.get('selectedFlight');
+    selectedFlightId = selectedLaunchId ? null : (/^[0-9a-f-]{36}$/i.test(flightValue ?? '') ? flightValue : null);
+    if (!selectedLaunchId) clearLaunchSelection();
+    const viewport = mapViewportFromSearch(locationRef?.search ?? '');
+    if (viewport) map.jumpTo?.({ center: viewport.center, zoom: viewport.zoom });
+    updatePeriodUi();
+    void refreshTracks(); void refreshPersonalHistory(); if (launchLayerVisible) void refreshLaunches();
+    if (selectedLaunchId) void selectLaunch(selectedLaunchId, { push: false });
+    else if (selectedFlightId) void (async () => { await refreshList(); await revalidateSelectedFlight({ restore: true }); })();
+    else { clearFlightSelection(); void refreshList(); }
+  };
+  globalThis.addEventListener?.('popstate', handlePopState);
 
   map.once?.('error', () => show(mapStatus, 'Map unavailable. Check your connection and try again.'));
   map.once?.('load', () => {
-    installFlightTrackLayers(map); updatePeriodUi(); void refreshTracks(); void refreshList();
+    installFlightTrackLayers(map); installLaunchLayers(map, { visible: launchLayerVisible }); updatePeriodUi();
+    sort?.dispatchEvent?.(new Event('styled-select-sync')); syncUrl();
+    if (launchToggle) launchToggle.setAttribute('aria-pressed', String(launchLayerVisible));
+    void refreshTracks(); void refreshLaunches(); void refreshPersonalHistory();
+    if (selectedLaunchId) void selectLaunch(selectedLaunchId, { push: false });
+    else void (async () => { await refreshList(); if (selectedFlightId) await revalidateSelectedFlight({ restore: true }); })();
     map.on?.('mouseenter', FLIGHT_TRACK_HIT_LAYER_ID, () => { map.getCanvas().style.cursor = 'pointer'; });
     map.on?.('mouseleave', FLIGHT_TRACK_HIT_LAYER_ID, () => { map.getCanvas().style.cursor = ''; });
     map.on?.('click', FLIGHT_TRACK_HIT_LAYER_ID, (event) => {
@@ -401,8 +682,26 @@ export function initializeFlightMap({ documentRef = document, maplibre = globalT
       const track = tracks.find((item) => item.id === id); const flight = flights.get(id) ?? track;
       if (flight) applySelection(flight);
     });
+    map.on?.('mouseenter', LAUNCH_MARKER_LAYER_ID, () => { map.getCanvas().style.cursor = 'pointer'; });
+    map.on?.('mouseleave', LAUNCH_MARKER_LAYER_ID, () => { map.getCanvas().style.cursor = ''; });
+    map.on?.('click', LAUNCH_MARKER_LAYER_ID, (event) => {
+      const launchId = Number(event.features?.[0]?.properties?.launchId);
+      if (Number.isSafeInteger(launchId) && launchId > 0) void selectLaunch(launchId);
+    });
+    map.on?.('click', LAUNCH_CLUSTER_LAYER_ID, async (event) => {
+      const feature = event.features?.[0]; const clusterId = Number(feature?.properties?.cluster_id);
+      const coordinates = feature?.geometry?.coordinates;
+      const source = map.getSource?.(LAUNCH_SOURCE_ID);
+      if (!Number.isSafeInteger(clusterId) || !Array.isArray(coordinates) || !source?.getClusterExpansionZoom) return;
+      const zoom = await source.getClusterExpansionZoom(clusterId);
+      map.easeTo?.({ center: coordinates, zoom });
+    });
   });
-  map.on?.('moveend', () => { syncUrl(); void refreshTracks(); if (geography === 'map-area') void refreshList(); });
+  map.on?.('moveend', (event) => {
+    if (isMapReplayCameraMoveEvent(event)) return;
+    syncUrl(); void refreshTracks(); void refreshLaunches();
+    if (geography === 'map-area') { void refreshPersonalHistory(); void (async () => { await refreshList(); if (selectedFlightId) await revalidateSelectedFlight(); })(); }
+  });
   updatePeriodUi();
-  return { map, refreshTracks, refreshList, selectFlight: applySelection, destroy() { trackAbort?.abort(); listAbort?.abort(); replayControls.destroy(); map.remove?.(); } };
+  return { map, refreshTracks, refreshList, refreshLaunches, selectFlight: applySelection, selectLaunch, destroy() { trackAbort?.abort(); listAbort?.abort(); launchAbort?.abort(); launchDetailAbort?.abort(); selectionAbort?.abort(); personalHistory?.destroy(); replayControls.destroy(); globalThis.removeEventListener?.('popstate', handlePopState); map.remove?.(); } };
 }

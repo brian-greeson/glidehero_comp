@@ -2,9 +2,14 @@
   <button type="button" data-map-period-step="previous" aria-label="Previous time period">‹</button>
   <div class="map-select flight-map-period__picker" data-styled-select>
     <select data-map-period data-styled-select-native hidden aria-label="Time period">
+      {{ if mode !== 'personal' }}
       <option value="day">Day</option>
+      {{ /if }}
       <option value="month"{{ if period !== 'all-time' }} selected{{ /if }}>Month</option>
       <option value="year">Year</option>
+      {{ if mode === 'personal' }}
+      <option value="custom">Custom Range</option>
+      {{ /if }}
       <option value="all-time"{{ if period === 'all-time' }} selected{{ /if }}>All Time</option>
     </select>
     <button class="map-select__trigger flight-map-period__trigger" type="button" data-styled-select-trigger aria-haspopup="listbox" aria-expanded="false">
@@ -12,11 +17,19 @@
     </button>
     <span data-map-period-label aria-live="polite"></span>
     <div class="map-select__menu" data-styled-select-menu role="listbox" aria-label="Time period" hidden>
-      <button type="button" role="option" data-styled-select-option="day" aria-selected="false"><span>Day</span><span class="map-select__check" aria-hidden="true">✓</span></button>
+      {{ if mode !== 'personal' }}<button type="button" role="option" data-styled-select-option="day" aria-selected="false"><span>Day</span><span class="map-select__check" aria-hidden="true">✓</span></button>{{ /if }}
       <button type="button" role="option" data-styled-select-option="month" aria-selected="{{ if period !== 'all-time' }}true{{ else }}false{{ /if }}"><span>Month</span><span class="map-select__check" aria-hidden="true">✓</span></button>
       <button type="button" role="option" data-styled-select-option="year" aria-selected="false"><span>Year</span><span class="map-select__check" aria-hidden="true">✓</span></button>
+      {{ if mode === 'personal' }}<button type="button" role="option" data-styled-select-option="custom" aria-selected="false"><span>Custom Range</span><span class="map-select__check" aria-hidden="true">✓</span></button>{{ /if }}
       <button type="button" role="option" data-styled-select-option="all-time" aria-selected="{{ if period === 'all-time' }}true{{ else }}false{{ /if }}"><span>All Time</span><span class="map-select__check" aria-hidden="true">✓</span></button>
     </div>
   </div>
   <button type="button" data-map-period-step="next" aria-label="Next time period">›</button>
+  {{ if mode === 'personal' }}
+  <div class="flight-map-period__custom" data-map-custom-range hidden>
+    <label>From <input type="date" data-map-custom-start></label>
+    <label>To <input type="date" data-map-custom-end></label>
+    <button type="button" data-map-custom-apply>Apply</button>
+  </div>
+  {{ /if }}
 </div>

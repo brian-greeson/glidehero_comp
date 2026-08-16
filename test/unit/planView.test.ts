@@ -70,8 +70,8 @@ describe('Plan page', () => {
     expect(html).toContain('data-plan-export-dialog');
   });
 
-  it('uses a five-column mobile navigation', async () => {
+  it('uses a four-column mobile navigation', async () => {
     const css = await readFile('public/styles/app-ui/app.css', 'utf8');
-    expect(css).toContain('grid-template-columns: repeat(5, 1fr)');
+    expect(css).toContain('grid-template-columns: repeat(4, 1fr)');
   });
 });

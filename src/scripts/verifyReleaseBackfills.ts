@@ -8,6 +8,7 @@ import { createBucketClient } from '../resources/bucketClient.js';
 import { flightThumbnailKeys } from '../services/flightThumbnailService.js';
 import { USER_ACHIEVEMENT_PROGRESS_COMPLETE_VERSION } from '../services/userAchievementProgressService.js';
 import { FLIGHT_MAP_LOD_DEFINITIONS, FLIGHT_MAP_PROJECTION_VERSION } from '../domain/flightMap/flightMapGeometry.js';
+import { FLIGHT_LAUNCH_MATCH_VERSION } from '../domain/launch/flightLaunchMatch.js';
 
 const SAMPLE_SIZE = 2;
 
@@ -25,6 +26,13 @@ type SampleRow = { id: string; artifactPresent: boolean };
 type UserAchievementProgressSample = { id: string; projectionVersion: number | string | null };
 type ThumbnailFlight = { id: string; userId: string };
 type FlightMapVerificationRow = { eligible: number | string; present: number | string; missingIds: string[] | null };
+type FlightLaunchVerificationRow = {
+  eligible: number | string;
+  evaluated: number | string;
+  matched: number | string;
+  unknown: number | string;
+  pendingIds: string[] | null;
+};
 
 export type ReleaseBackfillSpotCheck = {
   name: string;
@@ -33,6 +41,7 @@ export type ReleaseBackfillSpotCheck = {
   present: number;
   missingIds: string[];
   error?: string;
+  detail?: string;
 };
 
 export function summarizeReleaseBackfillSpotCheck(
@@ -85,6 +94,38 @@ export async function checkFlightMapGeometry(database: Database): Promise<Releas
     sampled: eligible,
     present,
     missingIds: row.missingIds ?? [],
+  };
+}
+
+/** Complete verification because NULL launch_id is a valid evaluated Unknown result. */
+export async function checkFlightLaunchMatches(database: Database): Promise<ReleaseBackfillSpotCheck> {
+  const result = await database.execute<FlightLaunchVerificationRow>(sql`
+    SELECT COUNT(*)::integer AS eligible,
+      COUNT(*) FILTER (WHERE launch_match_version = ${FLIGHT_LAUNCH_MATCH_VERSION})::integer AS evaluated,
+      COUNT(*) FILTER (
+        WHERE launch_match_version = ${FLIGHT_LAUNCH_MATCH_VERSION} AND launch_id IS NOT NULL
+      )::integer AS matched,
+      COUNT(*) FILTER (
+        WHERE launch_match_version = ${FLIGHT_LAUNCH_MATCH_VERSION} AND launch_id IS NULL
+      )::integer AS unknown,
+      (ARRAY_AGG(flight_id ORDER BY flight_id) FILTER (
+        WHERE launch_match_version IS DISTINCT FROM ${FLIGHT_LAUNCH_MATCH_VERSION}
+      ))[1:10] AS "pendingIds"
+    FROM flights
+    WHERE processing_status = 'completed'
+  `);
+  const row = result.rows[0] ?? { eligible: 0, evaluated: 0, matched: 0, unknown: 0, pendingIds: null };
+  const eligible = Number(row.eligible);
+  const evaluated = Number(row.evaluated);
+  const matched = Number(row.matched);
+  const unknown = Number(row.unknown);
+  return {
+    name: 'flight-launch-matches',
+    status: eligible === 0 ? 'SKIP' : eligible === evaluated ? 'PASS' : 'FAIL',
+    sampled: eligible,
+    present: evaluated,
+    missingIds: row.pendingIds ?? [],
+    detail: `${matched} matched, ${unknown} unknown, ${eligible - evaluated} not evaluated`,
   };
 }
 
@@ -331,6 +372,7 @@ export function printReleaseBackfillSpotCheck(
       ? check.error ?? 'unknown error'
       : `${check.present}/${check.sampled} sampled records have expected artifacts`;
   logger.log(`${check.status.padEnd(4)} ${check.name}: ${detail}`);
+  if (check.detail) logger.log(`     ${check.detail}`);
   if (check.missingIds.length > 0) logger.log(`     Missing sample IDs: ${check.missingIds.join(', ')}`);
 }
 
@@ -368,6 +410,7 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
     const checks: ReleaseBackfillSpotCheck[] = [];
     checks.push(await runCheck('flight-progress', () => checkFlightProgress(db)));
     checks.push(await runCheck('flight-altitudes', () => checkFlightAltitudes(db)));
+    checks.push(await runCheck('flight-launch-matches', () => checkFlightLaunchMatches(db)));
     checks.push(await runCheck('flight-map-geometry', () => checkFlightMapGeometry(db)));
     checks.push(await runCheck('flight-thumbnails', () => checkFlightThumbnails(
       db,

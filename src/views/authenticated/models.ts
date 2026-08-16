@@ -1,5 +1,7 @@
 export type AuthenticatedPage = 'map' | 'plan' | 'activity' | 'achievements' | 'profile' | 'flight' | 'group';
 
+export type PrimaryNavigationPage = 'map' | 'plan' | 'my-flights' | 'profile';
+
 export type AuthenticatedUserView = {
   displayName: string;
   initials: string;
@@ -7,9 +9,9 @@ export type AuthenticatedUserView = {
 };
 
 export type NavigationItemView = {
-  page: AuthenticatedPage;
+  page: PrimaryNavigationPage;
   label: string;
-  icon: 'map' | 'plan' | 'activity' | 'trophy' | 'profile';
+  icon: 'map' | 'plan' | 'flight' | 'profile';
   href: string;
 };
 
@@ -87,6 +89,7 @@ export type PersonalRecordView = {
 
 export type AuthenticatedShellModel = {
   page: AuthenticatedPage;
+  activeNavigationPage: PrimaryNavigationPage | null;
   title: string;
   user: AuthenticatedUserView;
   navigation: NavigationItemView[];
@@ -105,6 +108,7 @@ export type AuthenticatedShellModel = {
  */
 export type AuthenticatedShellInput = {
   page: AuthenticatedPage;
+  activeNavigationPage?: PrimaryNavigationPage | null;
   user: { displayName: string; email?: string };
   isAdmin?: boolean;
   mapHref?: string;
@@ -119,6 +123,7 @@ export type MapPageModel = AuthenticatedShellModel & {
   page: 'map';
   mode: 'personal' | 'following' | 'competitive';
   period: 'all-time' | 'current-month';
+  defaultSort: 'distance' | 'latest';
   location: string | null;
   locationClearHref?: string;
   leaderboard: Array<{ rank: number; pilot: PilotView; cells: string; isCurrent: boolean }>;

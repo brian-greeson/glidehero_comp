@@ -51,6 +51,7 @@ import { createUserHistoryRebuildService } from './services/userHistoryRebuildSe
 import { createFlightDetailService } from './services/flightDetailService.js';
 import { createMapReplayService } from './services/mapReplayService.js';
 import { createFlightMapService } from './services/flightMapService.js';
+import { createLaunchMapService } from './services/launchMapService.js';
 import { createCellFlightTrackService } from './services/cellFlightTrackService.js';
 import { createOnboardingService } from './services/onboardingService.js';
 import { createGroupService } from './services/groupService.js';
@@ -121,6 +122,7 @@ const activity = createActivityService(db);
 const flightDetail = createFlightDetailService(db, { cellSize: config.gridClaimCellSize });
 const mapReplay = createMapReplayService(db);
 const flightMap = createFlightMapService(db);
+const launchMap = createLaunchMapService(db);
 const uploadWorkflow = createFlightUploadWorkflowService(db);
 const uploadQueue = createFlightUploadQueueService(valkey, {
   s3Client,
@@ -194,6 +196,7 @@ const webMiddleware = [
     flightDetail,
     mapReplay,
     flightMap,
+    launchMap,
     gridClaim,
     mapGrid,
     coverage: monthlyCoverage,

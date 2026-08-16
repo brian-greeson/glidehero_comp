@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 // @ts-expect-error Browser asset is JavaScript.
-import { createMapReplayCamera, MAP_REPLAY_FOLLOW_LABEL, MAP_REPLAY_FOLLOW_ZOOM, MAP_REPLAY_RESUME_LABEL } from '../../public/scripts/mapReplayCamera.js';
+import { createMapReplayCamera, isMapReplayCameraMoveEvent, MAP_REPLAY_FOLLOW_LABEL, MAP_REPLAY_FOLLOW_ZOOM, MAP_REPLAY_RESUME_LABEL } from '../../public/scripts/mapReplayCamera.js';
 
 function controlElement() {
   const listeners = new Map<string, Function>();
@@ -29,11 +29,11 @@ describe('map replay camera', () => {
       center: [-105, 39],
       zoom: MAP_REPLAY_FOLLOW_ZOOM,
       duration: 0,
-    });
+    }, { glideheroReplayCamera: true });
     expect(map.easeTo).toHaveBeenNthCalledWith(2, {
       center: [-104.9, 39.1],
       duration: 0,
-    });
+    }, { glideheroReplayCamera: true });
   });
 
   it('switches to the next moving pilot after the current flight finishes', () => {
@@ -49,7 +49,7 @@ describe('map replay camera', () => {
       center: [-104, 40],
       zoom: MAP_REPLAY_FOLLOW_ZOOM,
       duration: 0,
-    });
+    }, { glideheroReplayCamera: true });
   });
 
   it('waits for an active pilot marker before moving the camera', () => {
@@ -74,7 +74,7 @@ describe('map replay camera', () => {
       { flightId: 'second', marker: [-103.9, 40.1], completed: true },
     ] });
 
-    expect(map.easeTo).toHaveBeenLastCalledWith({ center: [-103.9, 40.1], duration: 0 });
+    expect(map.easeTo).toHaveBeenLastCalledWith({ center: [-103.9, 40.1], duration: 0 }, { glideheroReplayCamera: true });
   });
 
   it('stops following after a user pan and resumes from the map control', () => {
@@ -100,12 +100,18 @@ describe('map replay camera', () => {
     expect(button.getAttribute('aria-pressed')).toBe('false');
 
     button.click();
-    expect(map.easeTo).toHaveBeenLastCalledWith({ center: [-104.9, 39.1], duration: 0 });
+    expect(map.easeTo).toHaveBeenLastCalledWith({ center: [-104.9, 39.1], duration: 0 }, { glideheroReplayCamera: true });
     expect(button.getAttribute('aria-label')).toBe(MAP_REPLAY_FOLLOW_LABEL);
     expect(button.getAttribute('aria-pressed')).toBe('true');
 
     camera.destroy();
     expect(map.off).toHaveBeenCalledWith('dragstart', expect.any(Function));
     expect(map.removeControl).toHaveBeenCalledOnce();
+  });
+
+  it('identifies replay camera move events without matching user map moves', () => {
+    expect(isMapReplayCameraMoveEvent({ glideheroReplayCamera: true })).toBe(true);
+    expect(isMapReplayCameraMoveEvent({ originalEvent: {} })).toBe(false);
+    expect(isMapReplayCameraMoveEvent(undefined)).toBe(false);
   });
 });

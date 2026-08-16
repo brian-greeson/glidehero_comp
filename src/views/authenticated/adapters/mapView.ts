@@ -18,14 +18,18 @@ export type ProductionMapInput = {
 
 /** Build an endpoint-backed map model. Map data is loaded by MapLibre after render. */
 export function createMapPageModel(
-  shell: Omit<MapPageModel, 'page' | 'mode' | 'period' | 'location' | 'leaderboard'>,
+  shell: Omit<MapPageModel, 'page' | 'mode' | 'period' | 'defaultSort' | 'location' | 'leaderboard'>,
   input: ProductionMapInput,
 ): MapPageModel {
+  const mapUrl = new URL(input.mapHref, 'http://glidehero.local');
+  const hasExplicitPeriod = mapUrl.searchParams.has('period') || mapUrl.searchParams.has('month');
+  const period = input.mode === 'personal' && !hasExplicitPeriod ? 'all-time' : input.period;
   return {
     ...shell,
     page: 'map',
     mode: input.mode,
-    period: input.period,
+    period,
+    defaultSort: input.mode === 'competitive' ? 'distance' : 'latest',
     location: input.location,
     ...(input.locationClearHref ? { locationClearHref: input.locationClearHref } : {}),
     leaderboard: [],
