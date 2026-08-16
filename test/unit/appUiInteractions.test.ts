@@ -15,6 +15,7 @@ function node() {
     addEventListener(name: string, listener: (event: any) => void) { listeners.set(name, listener); },
     dispatch(name: string, event: any = {}) { listeners.get(name)?.(event); },
     setAttribute(name: string, value: string) { attributes.set(name, value); },
+    getAttribute(name: string) { return attributes.get(name) ?? null; },
     attribute(name: string) { return attributes.get(name); },
     focus: vi.fn(),
     contains: vi.fn(() => false),
@@ -88,5 +89,19 @@ describe('refreshed app UI interactions', () => {
     handle.dispatch('pointerup', { clientY: 100 });
     expect(sheet.classList.contains('is-expanded')).toBe(true);
     expect(label.textContent).toBe('Collapse flight browser');
+  });
+
+  it('uses each sheet aria-label in the shared handle text', () => {
+    const sheet = node(); const handle = node(); const label = { textContent: '' };
+    sheet.setAttribute('aria-label', 'Flight details');
+    const documentRef = { querySelector(selector: string) {
+      if (selector === '[data-map-sheet]') return sheet;
+      if (selector === '[data-map-sheet-handle]') return handle;
+      return label;
+    } };
+    initializeMapSheet({ documentRef });
+    expect(label.textContent).toBe('Expand flight details');
+    handle.dispatch('click');
+    expect(label.textContent).toBe('Collapse flight details');
   });
 });

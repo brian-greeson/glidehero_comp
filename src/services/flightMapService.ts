@@ -87,8 +87,6 @@ export type PersonalHistorySummary = {
   launchesVisited: number;
   countriesVisited: number;
 };
-export type FlightMapLaunchOption = { launchId: number; name: string; flightCount: number };
-export type FlightMapLaunchOptions = { launches: FlightMapLaunchOption[]; hasUnknown: boolean };
 export type FlightMapSummaryInput = FlightMapFilter & {
   geography: FlightMapGeography;
   viewport?: FlightMapViewport;
@@ -99,7 +97,6 @@ export interface FlightMapService {
   listFlights(input: FlightMapListInput): Promise<FlightMapListPage>;
   getFlight(input: FlightMapSummaryInput & { flightId: string }): Promise<FlightMapListItem | null>;
   getPersonalSummary(input: FlightMapSummaryInput): Promise<PersonalHistorySummary>;
-  listPersonalLaunchOptions(input: FlightMapSummaryInput): Promise<FlightMapLaunchOptions>;
 }
 
 type Executor = Pick<Database, 'execute'>;
@@ -648,37 +645,6 @@ export function createFlightMapService(database: Executor): FlightMapService {
         airtimeSeconds: Number(row?.airtimeSeconds ?? 0),
         launchesVisited: Number(row?.launchesVisited ?? 0),
         countriesVisited: Number(row?.countriesVisited ?? 0),
-      };
-    },
-
-    async listPersonalLaunchOptions(input) {
-      const periodValues = validateFilter({ ...input, launch: undefined });
-      if (input.scope !== 'personal') throw new FlightMapInputError('Personal launch options require personal scope.');
-      if (input.geography !== 'global' && input.geography !== 'map-area') throw new FlightMapInputError('Flight map geography is invalid.');
-      if (input.geography === 'map-area' && !input.viewport) throw new FlightMapInputError('Map-area requires a viewport.');
-      const viewport = input.geography === 'map-area' ? validateFlightMapViewport(input.viewport as FlightMapViewport) : undefined;
-      const cte = viewport ? sql`WITH ${viewportCte(viewport)}` : sql``;
-      const geographicPredicate = viewport ? intersectionPredicate() : sql`true`;
-      const result = await database.execute<{ launchId: number | string | null; name: string | null; flightCount: number | string }>(sql`
-        ${cte}
-        SELECT flight.launch_id AS "launchId", catalog_launch.name,
-          COUNT(*)::integer AS "flightCount"
-        FROM flights flight
-        INNER JOIN flight_map_features feature ON feature.flight_id = flight.flight_id
-        LEFT JOIN launches catalog_launch ON catalog_launch.id = flight.launch_id
-        WHERE flight.processing_status = 'completed'
-          AND flight.started_at IS NOT NULL
-          AND ${scopePredicate(input.scope, input.viewerUserId)}
-          AND ${periodPredicate(input.period, periodValues)}
-          AND ${geographicPredicate}
-        GROUP BY flight.launch_id, catalog_launch.name
-        ORDER BY catalog_launch.name ASC NULLS LAST, flight.launch_id ASC
-      `);
-      return {
-        launches: result.rows.flatMap((row) => row.launchId === null || row.name === null ? [] : [{
-          launchId: finiteNumber(row.launchId), name: row.name, flightCount: Number(row.flightCount),
-        }]),
-        hasUnknown: result.rows.some((row) => row.launchId === null && Number(row.flightCount) > 0),
       };
     },
   };

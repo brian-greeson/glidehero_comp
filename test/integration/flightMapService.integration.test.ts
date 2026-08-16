@@ -211,7 +211,7 @@ describe('flight map service', () => {
     expect(page.items[0]?.bounds).toEqual({ west: 179, south: 10, east: -179, north: 10, crossesAntimeridian: true });
   });
 
-  it('keeps summaries, launch facets, custom dates, and selected-flight eligibility on one filter contract', async () => {
+  it('keeps summaries, custom dates, and selected-flight eligibility on one filter contract', async () => {
     await database.pool.query(`
       INSERT INTO launches (
         id, name, longitude, latitude, country, state, city, description,
@@ -237,9 +237,6 @@ describe('flight map service', () => {
 
     await expect(service.getPersonalSummary(filter)).resolves.toEqual({
       totalFlights: 1, fivePointDistanceMeters: 10_000, airtimeSeconds: 3_600, launchesVisited: 1, countriesVisited: 1,
-    });
-    await expect(service.listPersonalLaunchOptions(filter)).resolves.toEqual({
-      launches: [{ launchId: 42, name: 'Known Launch', flightCount: 1 }], hasUnknown: false,
     });
     await expect(service.getFlight({ ...filter, flightId: ownFlightId })).resolves.toMatchObject({ flightId: ownFlightId, launchId: 42, launchName: 'Known Launch' });
     await expect(service.getFlight({ ...filter, flightId: ownFlightId, launch: 'unknown' })).resolves.toBeNull();

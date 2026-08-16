@@ -1,6 +1,5 @@
 <section class="personal-history" data-personal-history
   data-summary-endpoint="/v1/personal-history/summary"
-  data-launches-endpoint="/v1/personal-history/launches"
   aria-label="Personal flying history">
   <dl class="personal-history__summary">
     <div><dt>Total flights</dt><dd data-personal-summary="totalFlights">0</dd></div>
@@ -9,10 +8,5 @@
     <div><dt>Launches visited</dt><dd data-personal-summary="launchesVisited">0</dd></div>
     <div><dt>Countries visited</dt><dd data-personal-summary="countriesVisited">0</dd></div>
   </dl>
-  <label class="personal-history__launch-filter">Launch
-    <select data-map-launch-filter>
-      <option value="">All launches</option>
-    </select>
-  </label>
   <p data-personal-history-status role="status" hidden></p>
 </section>

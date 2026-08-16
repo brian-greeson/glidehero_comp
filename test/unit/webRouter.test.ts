@@ -283,9 +283,9 @@ function dependencies() {
     listFlights: vi.fn(async () => ({ items: [], nextCursor: null })),
     getFlight: vi.fn(async () => null),
     getPersonalSummary: vi.fn(async () => ({ totalFlights: 0, fivePointDistanceMeters: 0, airtimeSeconds: 0, launchesVisited: 0, countriesVisited: 0 })),
-    listPersonalLaunchOptions: vi.fn(async () => ({ launches: [], hasUnknown: false })),
   };
   const launchMap: LaunchMapService = {
+    listLaunchOptions: vi.fn(async () => []),
     listViewportMarkers: vi.fn(async () => []),
     getLaunchDetail: vi.fn(async () => null),
   };
@@ -2468,13 +2468,66 @@ describe('webRouter', () => {
       const summary = await fetch(`${baseUrl}/v1/personal-history/summary?scope=personal&period=custom&start=2026-08-01&end=2026-08-31&geography=global`, { headers });
       expect(await summary.json()).toEqual(expect.objectContaining({ totalFlights: 2, fivePointDistanceMeters: 45_000 }));
       expect(base.flightMap.getPersonalSummary).toHaveBeenCalledWith(expect.objectContaining({ period: 'custom', startDate: '2026-08-01', endDate: '2026-08-31' }));
-      const options = await fetch(`${baseUrl}/v1/personal-history/launches?scope=personal&period=all-time&geography=global`, { headers });
-      expect(await options.json()).toEqual({ launches: [], hasUnknown: false });
       const selection = await fetch(`${baseUrl}/v1/map-flights/00000000-0000-4000-8000-000000000020?scope=personal&period=all-time&geography=global`, { headers });
       expect(selection.status).toBe(404);
       expect(base.flightMap.getFlight).toHaveBeenCalledWith(expect.objectContaining({ flightId: '00000000-0000-4000-8000-000000000020', geography: 'global' }));
       expect((await fetch(`${baseUrl}/v1/personal-history/summary?scope=personal&period=day&anchor=2026-08-16&geography=global`, { headers })).status).toBe(400);
       expect((await fetch(`${baseUrl}/personal?period=day&anchor=2026-08-16`, { headers })).status).toBe(400);
+    });
+  });
+
+  it('serves viewport and global launch options through a strict authenticated contract', async () => {
+    const base = dependencies();
+    vi.mocked(base.launchMap.listLaunchOptions).mockResolvedValueOnce([{
+      launchId: 42,
+      name: 'Wonderland',
+      state: 'Colorado',
+      country: 'United States',
+      longitude: -105.2,
+      latitude: 40.1,
+    }]);
+    const headers = { cookie: 'glidehero_session=valid-token' };
+    await withServer(base.app, async (baseUrl) => {
+      expect((await fetch(`${baseUrl}/v1/map-launches/options?q=wo`)).status).toBe(401);
+
+      const viewport = await fetch(
+        `${baseUrl}/v1/map-launches/options?west=179&south=-10&east=-179&north=10`,
+        { headers },
+      );
+      expect(viewport.status).toBe(200);
+      expect(viewport.headers.get('cache-control')).toBe('private, no-store');
+      expect(await viewport.json()).toEqual({ launches: [expect.objectContaining({ launchId: 42, name: 'Wonderland' })] });
+      expect(base.launchMap.listLaunchOptions).toHaveBeenNthCalledWith(1, {
+        viewport: { west: 179, south: -10, east: -179, north: 10 },
+      });
+
+      const search = await fetch(`${baseUrl}/v1/map-launches/options?q=%20Co%20`, { headers });
+      expect(search.status).toBe(200);
+      expect(base.launchMap.listLaunchOptions).toHaveBeenNthCalledWith(2, { query: 'Co' });
+    });
+  });
+
+  it('rejects malformed or mixed launch-option modes without querying the service', async () => {
+    const base = dependencies();
+    const headers = { cookie: 'glidehero_session=valid-token' };
+    await withServer(base.app, async (baseUrl) => {
+      const requests = [
+        '/v1/map-launches/options',
+        '/v1/map-launches/options?q=x',
+        `/v1/map-launches/options?q=${'x'.repeat(101)}`,
+        '/v1/map-launches/options?q=wo&west=-106&south=39&east=-104&north=41',
+        '/v1/map-launches/options?west=-106&south=39&east=-104',
+        '/v1/map-launches/options?west=-106&south=41&east=-104&north=39',
+        '/v1/map-launches/options?west=-106&south=39&east=-104&north=41&extra=1',
+      ];
+      for (const request of requests) {
+        const response = await fetch(`${baseUrl}${request}`, { headers });
+        expect(response.status).toBe(400);
+        expect(await response.json()).toEqual({
+          error: { code: 'invalid_request', message: 'Launch options query is invalid.' },
+        });
+      }
+      expect(base.launchMap.listLaunchOptions).not.toHaveBeenCalled();
     });
   });
 

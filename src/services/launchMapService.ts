@@ -17,6 +17,19 @@ export type LaunchMapMarker = {
   visited: boolean;
 };
 
+export type LaunchMapOption = {
+  launchId: number;
+  name: string;
+  state: string;
+  country: string;
+  longitude: number;
+  latitude: number;
+};
+
+export type LaunchMapOptionsInput =
+  | { viewport: FlightMapViewport; query?: never }
+  | { query: string; viewport?: never };
+
 export type LaunchMapDetail = LaunchMapMarker & {
   city: string;
   state: string;
@@ -41,6 +54,7 @@ export type LaunchMapDetailInput = FlightMapFilter & {
 };
 
 export interface LaunchMapService {
+  listLaunchOptions(input: LaunchMapOptionsInput): Promise<LaunchMapOption[]>;
   listViewportMarkers(input: LaunchMapMarkerInput): Promise<LaunchMapMarker[]>;
   getLaunchDetail(input: LaunchMapDetailInput): Promise<LaunchMapDetail | null>;
 }
@@ -62,6 +76,15 @@ type StoredDetail = Omit<StoredMarker, 'matchingFlightCount'> & {
   elevationMeters: number | string;
   description: string | null;
   matchingFlightCount: number | string;
+};
+
+type StoredOption = {
+  launchId: number | string;
+  name: string;
+  state: string;
+  country: string;
+  longitude: number | string;
+  latitude: number | string;
 };
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -233,8 +256,73 @@ function mapMarker(row: StoredMarker): LaunchMapMarker {
   };
 }
 
+function mapOption(row: StoredOption): LaunchMapOption {
+  return {
+    launchId: launchId(row.launchId),
+    name: row.name,
+    state: row.state,
+    country: row.country,
+    longitude: finiteNumber(row.longitude, 'longitude'),
+    latitude: finiteNumber(row.latitude, 'latitude'),
+  };
+}
+
+function validateLaunchSearch(query: string): string {
+  const trimmed = query.trim();
+  if (trimmed.length < 2 || trimmed.length > 100) {
+    throw new FlightMapInputError('Launch search must contain between 2 and 100 characters.');
+  }
+  return trimmed;
+}
+
 export function createLaunchMapService(database: Executor): LaunchMapService {
   return {
+    async listLaunchOptions(input) {
+      const select = sql`
+        SELECT
+          launch.id AS "launchId",
+          launch.name,
+          launch.state,
+          launch.country,
+          launch.longitude,
+          launch.latitude
+        FROM launches launch
+      `;
+      const orderAndLimit = sql`
+        ORDER BY lower(launch.name) ASC, launch.id ASC
+        LIMIT 25
+      `;
+
+      if ('query' in input && input.query !== undefined) {
+        const query = validateLaunchSearch(input.query);
+        const result = await database.execute<StoredOption>(sql`
+          ${select}
+          WHERE position(lower(${query}) in lower(launch.name)) > 0
+            OR position(lower(${query}) in lower(launch.state)) > 0
+            OR position(lower(${query}) in lower(launch.country)) > 0
+          ${orderAndLimit}
+        `);
+        return result.rows.map(mapOption);
+      }
+
+      const viewport = validateFlightMapViewport(input.viewport);
+      const result = await database.execute<StoredOption>(sql`
+        ${select}
+        WHERE launch.latitude >= ${viewport.south}
+          AND launch.latitude <= ${viewport.north}
+          AND (
+            (${viewport.west}::double precision <= ${viewport.east}::double precision
+              AND launch.longitude >= ${viewport.west}
+              AND launch.longitude <= ${viewport.east})
+            OR
+            (${viewport.west}::double precision > ${viewport.east}::double precision
+              AND (launch.longitude >= ${viewport.west} OR launch.longitude <= ${viewport.east}))
+          )
+        ${orderAndLimit}
+      `);
+      return result.rows.map(mapOption);
+    },
+
     async listViewportMarkers(input) {
       const viewport = validateFlightMapViewport(input.viewport);
       const dates = validateMarkerInput(input);

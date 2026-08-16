@@ -13,7 +13,7 @@
       <option value="all-time"{{ if period === 'all-time' }} selected{{ /if }}>All Time</option>
     </select>
     <button class="map-select__trigger flight-map-period__trigger" type="button" data-styled-select-trigger aria-haspopup="listbox" aria-expanded="false">
-      <span data-styled-select-value>{{ if period === 'all-time' }}All Time{{ else }}Month{{ /if }}</span>{{ include "authenticated/components/icon.vto" { name: "chevron-down" } }}
+      {{ include "authenticated/components/icon.vto" { name: "calendar" } }}<span data-styled-select-value>{{ if period === 'all-time' }}All Time{{ else }}Month{{ /if }}</span>{{ include "authenticated/components/icon.vto" { name: "chevron-down" } }}
     </button>
     <span data-map-period-label aria-live="polite"></span>
     <div class="map-select__menu" data-styled-select-menu role="listbox" aria-label="Time period" hidden>

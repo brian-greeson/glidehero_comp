@@ -5,6 +5,7 @@ export function initializeMapSheet({ documentRef = document, swipeThreshold = 40
   const handle = documentRef.querySelector('[data-map-sheet-handle]');
   const label = documentRef.querySelector('[data-map-sheet-label]');
   if (!sheet || !handle) return;
+  const sheetName = sheet.getAttribute?.('aria-label')?.trim().toLocaleLowerCase() || 'flight browser';
 
   let startY = null;
   let moved = false;
@@ -15,7 +16,7 @@ export function initializeMapSheet({ documentRef = document, swipeThreshold = 40
     sheet.dataset.sheetState = next;
     for (const value of STATES) sheet.classList.toggle(`is-${value}`, value === next);
     handle.setAttribute('aria-expanded', String(next === 'expanded'));
-    if (label) label.textContent = next === 'expanded' ? 'Collapse flight browser' : 'Expand flight browser';
+    if (label) label.textContent = `${next === 'expanded' ? 'Collapse' : 'Expand'} ${sheetName}`;
   }
 
   handle.addEventListener('click', () => {

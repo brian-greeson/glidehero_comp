@@ -188,13 +188,13 @@
 .flight-map-stage { position: relative; min-width: 0; min-height: 0; overflow: hidden; border-left: 1px solid var(--app-border); background: #9cafaa; }
 .flight-map-stage > .flight-map-canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
 .flight-map-status { position: absolute; z-index: 8; top: 1rem; left: 50%; max-width: min(26rem, calc(100% - 2rem)); padding: .65rem .9rem; margin: 0; transform: translateX(-50%); border: 1px solid var(--app-border); border-radius: .75rem; color: var(--app-ink); background: rgb(255 255 255 / 94%); box-shadow: var(--app-shadow-sm); font-size: .78rem; }
-.flight-map-period { position: absolute; z-index: 10; top: 1rem; left: 1rem; display: grid; min-height: 48px; grid-template-columns: 42px minmax(9.5rem, auto) 42px; overflow: visible; border: 1px solid rgb(126 145 158 / 50%); border-radius: 1rem; color: var(--app-ink); background: rgb(255 255 255 / 96%); box-shadow: 0 8px 24px rgb(17 39 67 / 16%); backdrop-filter: blur(12px); }
-.flight-map-period > button { border: 0; color: inherit; background: transparent; font: inherit; font-size: 1.45rem; cursor: pointer; }
-.flight-map-period > button:first-child { border-right: 1px solid var(--app-border); border-radius: 1rem 0 0 1rem; }.flight-map-period > button:last-child { border-left: 1px solid var(--app-border); border-radius: 0 1rem 1rem 0; }
+.flight-map-period { position: absolute; z-index: 10; top: 1rem; left: 1rem; display: grid; min-height: 42px; grid-template-columns: 36px minmax(8.75rem, auto) 36px; overflow: visible; border: 1px solid rgb(255 255 255 / 20%); border-radius: 999px; color: #fff; background: var(--app-navy-950); box-shadow: 0 8px 24px rgb(3 20 38 / 22%); }
+.flight-map-period > button { border: 0; color: inherit; background: transparent; font: inherit; font-size: 1.25rem; cursor: pointer; }
+.flight-map-period > button:first-child { border-right: 1px solid rgb(255 255 255 / 14%); border-radius: 999px 0 0 999px; }.flight-map-period > button:last-child { border-left: 1px solid rgb(255 255 255 / 14%); border-radius: 0 999px 999px 0; }
+.flight-map-period > button:hover:not(:disabled) { color: var(--app-cyan); background: rgb(255 255 255 / 8%); }
 .flight-map-period > button:disabled { cursor: default; opacity: .28; }
-.flight-map-period__picker { display: grid; min-width: 0; place-items: center; padding: .25rem .55rem; }
-.flight-map-period__trigger { min-height: 22px; justify-content: center; padding: 0; border: 0; }
-.flight-map-period [data-map-period-label] { color: var(--app-muted); font-size: .62rem; line-height: 1.25; white-space: nowrap; }
+.flight-map-period__picker { display: grid; min-width: 0; place-items: center; padding: .18rem .42rem; }
+.flight-map-period [data-map-period-label] { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; }
 .flight-map-period__custom { position: absolute; top: calc(100% + .45rem); left: 42px; display: grid; width: min(22rem, calc(100vw - 2rem)); grid-template-columns: 1fr 1fr auto; align-items: end; gap: .4rem; padding: .6rem; border: 1px solid var(--app-border); border-radius: .8rem; background: rgb(255 255 255 / 98%); box-shadow: 0 10px 26px rgb(17 39 67 / 18%); }.flight-map-period__custom[hidden] { display: none; }.flight-map-period__custom label { display: grid; gap: .2rem; color: var(--app-muted); font-size: .58rem; }.flight-map-period__custom input { min-width: 0; min-height: 36px; padding: .35rem; border: 1px solid var(--app-border); border-radius: .55rem; font: inherit; }.flight-map-period__custom button { min-height: 36px; padding: .4rem .65rem; border: 0; border-radius: .55rem; color: #fff; background: var(--app-blue); font: inherit; font-size: .68rem; font-weight: 760; cursor: pointer; }
 
 .map-select { position: relative; min-width: 0; }
@@ -207,12 +207,13 @@
 .map-select__menu button { display: flex; width: 100%; min-height: 42px; align-items: center; justify-content: space-between; gap: 1rem; padding: .55rem .7rem; border: 0; border-radius: .58rem; color: #344b68; background: transparent; font: inherit; font-size: .76rem; font-weight: 560; text-align: left; cursor: pointer; }
 .map-select__menu button:hover, .map-select__menu button:focus-visible { color: var(--app-ink); background: #f0f5fa; outline: 0; }.map-select__menu button[aria-selected='true'] { color: var(--app-ink); font-weight: 780; }
 .map-select__check { color: var(--app-blue); font-size: .9rem; opacity: 0; }.map-select__menu button[aria-selected='true'] .map-select__check { opacity: 1; }
-.flight-map-period .flight-map-period__trigger { min-height: 22px; justify-content: center; padding: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; font-size: .78rem; }
+.flight-map-period .flight-map-period__trigger { min-height: 20px; justify-content: center; padding: 0; border: 0; border-radius: 0; color: #fff; background: transparent; box-shadow: none; font-size: .74rem; }
+.flight-map-period .flight-map-period__trigger .app-icon:first-child { width: .92rem; height: .92rem; }
+.flight-map-period .flight-map-period__trigger .app-icon:last-child { width: .72rem; height: .72rem; }
 
 .flight-browser { position: relative; z-index: 12; display: flex; min-width: 0; min-height: 0; flex-direction: column; color: var(--app-ink); background: rgb(255 255 255 / 98%); box-shadow: 7px 0 22px rgb(17 39 67 / 9%); }
-.flight-browser__handle { display: none; }
-.flight-browser__content { min-height: 0; overflow-y: auto; padding: 1rem; overscroll-behavior: contain; }
-.personal-history { display: grid; gap: .7rem; padding: 0 0 .8rem; border-bottom: 1px solid var(--app-border); }.personal-history__summary { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: .4rem; margin: 0; }.personal-history__summary > div { min-width: 0; padding: .55rem .45rem; border-radius: .72rem; background: var(--app-surface-soft); }.personal-history__summary dt { color: var(--app-muted); font-size: .55rem; line-height: 1.2; }.personal-history__summary dd { margin: .2rem 0 0; overflow: hidden; color: var(--app-ink); font-size: .74rem; font-weight: 780; text-overflow: ellipsis; white-space: nowrap; }.personal-history__launch-filter { display: grid; gap: .25rem; color: var(--app-muted); font-size: .62rem; font-weight: 720; }.personal-history__launch-filter select { min-height: 40px; padding: .45rem .6rem; border: 1px solid var(--app-border); border-radius: .7rem; color: var(--app-ink); background: #fff; font: inherit; }.personal-history [data-personal-history-status] { margin: 0; color: var(--app-muted); font-size: .68rem; }
+.flight-browser__content { overflow-y: auto; padding: 1rem; }
+.personal-history { display: grid; gap: .7rem; padding: 0 0 .8rem; border-bottom: 1px solid var(--app-border); }.personal-history__summary { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: .4rem; margin: 0; }.personal-history__summary > div { min-width: 0; padding: .55rem .45rem; border-radius: .72rem; background: var(--app-surface-soft); }.personal-history__summary dt { color: var(--app-muted); font-size: .55rem; line-height: 1.2; }.personal-history__summary dd { margin: .2rem 0 0; overflow: hidden; color: var(--app-ink); font-size: .74rem; font-weight: 780; text-overflow: ellipsis; white-space: nowrap; }.personal-history [data-personal-history-status] { margin: 0; color: var(--app-muted); font-size: .68rem; }
 .flight-browser__filters { position: sticky; z-index: 2; top: -1rem; display: grid; grid-template-columns: minmax(128px, 1.15fr) minmax(164px, 1.45fr) minmax(100px, .9fr); gap: .5rem; padding: 1rem 0 .8rem; background: linear-gradient(#fff 80%, rgb(255 255 255 / 0%)); }
 .flight-map-page[data-initial-scope='personal'] .flight-browser__filters { grid-template-columns: minmax(164px, 1.45fr) minmax(100px, .9fr); }
 .flight-browser__geography { display: grid; grid-template-columns: 1fr 1fr; padding: .18rem; border: 1px solid var(--app-border); border-radius: .75rem; background: var(--app-surface-soft); }
@@ -256,23 +257,22 @@
   .flight-map-page { position: relative; display: block; height: 100svh; padding: var(--app-mobile-header-height) 0 calc(var(--app-mobile-nav-height) + env(safe-area-inset-bottom)); }
   .flight-map-stage { height: 100%; border: 0; }
   .flight-map-stage .maplibregl-ctrl-top-right { top: calc(.75rem + 62px); right: .75rem; }
+  .flight-map-status { top: 4.25rem; }
   .flight-map-launch-toggle { top: .75rem; right: .75rem; }
   .launch-info-panel { top: 4.65rem; right: .75rem; bottom: auto; width: min(22rem, calc(100% - 1.5rem)); max-height: min(52svh, 30rem); }
-  .flight-map-period { top: .75rem; left: .75rem; max-width: calc(100% - 1.5rem); min-height: 46px; grid-template-columns: 42px minmax(8.5rem, auto) 42px; }
-  .flight-browser { position: absolute; z-index: 35; right: 0; bottom: calc(var(--app-mobile-nav-height) + env(safe-area-inset-bottom)); left: 0; height: calc(100svh - var(--app-mobile-header-height) - var(--app-mobile-nav-height) - env(safe-area-inset-bottom)); max-height: none; border: 1px solid rgb(211 220 229 / 90%); border-radius: 1.8rem 1.8rem 0 0; box-shadow: 0 -8px 28px rgb(15 35 60 / 18%); transition: transform 220ms ease; }
+  .flight-map-period { top: .75rem; left: .75rem; max-width: calc(100% - 1.5rem); min-height: 40px; grid-template-columns: 34px minmax(7.8rem, auto) 34px; }
+  .flight-browser { position: absolute; z-index: 35; right: 0; bottom: calc(var(--app-mobile-nav-height) + env(safe-area-inset-bottom)); left: 0; height: calc(100svh - var(--app-mobile-header-height) - var(--app-mobile-nav-height) - env(safe-area-inset-bottom)); max-height: none; border: 1px solid rgb(211 220 229 / 90%); box-shadow: 0 -8px 28px rgb(15 35 60 / 18%); transition: transform 220ms ease; }
   .flight-browser.is-collapsed { transform: translateY(calc(100% - 58px)); }
   .flight-browser.is-partial { transform: translateY(calc(100% - min(47svh, 410px))); }
   .flight-browser.is-expanded { transform: translateY(0); }
-  .flight-browser__handle { display: grid; width: 100%; height: 40px; flex: 0 0 auto; place-items: center; padding: 0; border: 0; border-radius: inherit; background: transparent; cursor: ns-resize; touch-action: none; }
-  .flight-browser__handle > span[aria-hidden='true'] { width: 66px; height: 5px; border-radius: 999px; background: #a9adb3; }
   .flight-browser__content { padding: 0 .75rem 1rem; }
-  .flight-browser__filters { top: 0; grid-template-columns: minmax(0, .9fr) minmax(0, 1.35fr) minmax(0, .75fr); padding: .2rem 0 .75rem; }
+  .flight-browser__filters { top: 0; grid-template-columns: minmax(0, .9fr) minmax(0, 1.2fr) minmax(0, .8fr); padding: .05rem 0 .65rem; }
   .flight-browser-card__select { grid-template-columns: 48px minmax(0, 1fr); padding: .68rem .3rem .68rem .55rem; }
   .flight-map-replay { z-index: 36; right: .75rem; bottom: calc(var(--app-mobile-nav-height) + .65rem + env(safe-area-inset-bottom)); left: .75rem; width: auto; }
 }
 
 @media (max-width: 390px) {
-  .flight-map-period { right: 6.5rem; grid-template-columns: 38px minmax(0, 1fr) 38px; }
+  .flight-map-period { right: auto; width: min(13.5rem, calc(100vw - 7.25rem)); grid-template-columns: 32px minmax(0, 1fr) 32px; }
   .flight-map-period__custom { left: 0; width: calc(100vw - 1.5rem); }
   .flight-browser__filters { gap: .3rem; }.flight-browser__select .map-select__trigger, .flight-browser__geography button { padding-inline: .35rem; font-size: .64rem; }.map-select__trigger--pilots .app-icon:first-child { display: none; }
   .personal-history__summary { grid-template-columns: repeat(3, minmax(0, 1fr)); }.personal-history__summary > div:nth-child(n + 4) { grid-column: span 1; }

@@ -1,0 +1,46 @@
+<div class="launch-selector" data-launch-selector>
+  <button
+    class="launch-selector__trigger"
+    type="button"
+    data-launch-selector-trigger
+    aria-haspopup="listbox"
+    aria-expanded="false"
+  >
+    {{ include "authenticated/components/icon.vto" { name: "search", className: "launch-selector__search-icon" } }}
+    <span data-launch-selector-label>Launches</span>
+  </button>
+  <div class="launch-selector__popover" data-launch-selector-popover hidden>
+    <label class="sr-only" for="launch-selector-search">Search launches</label>
+    <input
+      id="launch-selector-search"
+      class="launch-selector__input"
+      type="search"
+      inputmode="search"
+      autocomplete="off"
+      placeholder="Search launches"
+      data-launch-selector-input
+      role="combobox"
+      aria-autocomplete="list"
+      aria-expanded="false"
+      aria-controls="launch-selector-options"
+    >
+    <div
+      id="launch-selector-options"
+      class="launch-selector__options"
+      data-launch-selector-options
+      role="listbox"
+      aria-label="Launches"
+    >
+      <div class="launch-selector__fixed-options" data-launch-selector-fixed>
+        <button id="launch-selector-option-all" type="button" role="option" aria-selected="true" data-launch-selector-option="all">
+          <span>All launches</span>
+        </button>
+        <button id="launch-selector-option-unknown" type="button" role="option" aria-selected="false" data-launch-selector-option="unknown">
+          <span>Unknown launch</span>
+        </button>
+      </div>
+      <div class="launch-selector__results" data-launch-selector-results></div>
+    </div>
+    <p class="launch-selector__status" data-launch-selector-status role="status" aria-live="polite"></p>
+  </div>
+</div>

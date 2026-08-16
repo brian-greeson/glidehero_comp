@@ -126,6 +126,10 @@ const viewportBoundsShape = {
 const viewportBoundsSchema = z.object(viewportBoundsShape)
   .strict()
   .refine((bounds) => bounds.south < bounds.north && bounds.west !== bounds.east);
+const launchOptionsQuerySchema = z.union([
+  viewportBoundsSchema,
+  z.object({ q: z.string().trim().min(2).max(100) }).strict(),
+]);
 const flightMapScopeSchema = z.enum(['personal', 'following', 'all']);
 const flightMapPeriodSchema = z.enum(['day', 'month', 'year', 'custom', 'all-time']);
 const flightMapAnchorSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
@@ -1031,6 +1035,21 @@ export function createWebRouter(dependencies: {
     }
   });
 
+  router.get('/v1/map-launches/options', async (req, res, next) => {
+    if (!res.locals.currentUser) return next(new AppError(401, 'unauthorized', 'Sign in before searching map launches.'));
+    const parsed = launchOptionsQuerySchema.safeParse(req.query);
+    if (!parsed.success) return next(new AppError(400, 'invalid_request', 'Launch options query is invalid.'));
+    if (!dependencies.launchMap) throw new Error('Launch map service is not configured.');
+    try {
+      const launches = 'q' in parsed.data
+        ? await dependencies.launchMap.listLaunchOptions({ query: parsed.data.q })
+        : await dependencies.launchMap.listLaunchOptions({ viewport: parsed.data });
+      res.status(200).set('Cache-Control', 'private, no-store').json({ launches });
+    } catch (error) {
+      next(error instanceof FlightMapInputError ? new AppError(400, 'invalid_request', error.message) : error);
+    }
+  });
+
   router.get('/v1/map-launches/:launchId', async (req, res, next) => {
     const currentUser = res.locals.currentUser;
     if (!currentUser) return next(new AppError(401, 'unauthorized', 'Sign in before viewing map launches.'));
@@ -1166,27 +1185,6 @@ export function createWebRouter(dependencies: {
         ...(start === undefined ? {} : { startDate: start }),
         ...(end === undefined ? {} : { endDate: end }),
         ...(launch === undefined ? {} : { launch }),
-        ...(geography === 'map-area' ? { viewport: { west: west!, south: south!, east: east!, north: north! } } : {}),
-      });
-      res.status(200).set('Cache-Control', 'private, no-store').json(result);
-    } catch (error) {
-      next(error instanceof FlightMapInputError ? new AppError(400, 'invalid_request', error.message) : error);
-    }
-  });
-
-  router.get('/v1/personal-history/launches', async (req, res, next) => {
-    const currentUser = res.locals.currentUser;
-    if (!currentUser) return next(new AppError(401, 'unauthorized', 'Sign in before viewing personal history.'));
-    const parsed = personalHistoryQuerySchema.safeParse(req.query);
-    if (!parsed.success) return next(new AppError(400, 'invalid_request', 'Personal history query is invalid.'));
-    if (!dependencies.flightMap) throw new Error('Flight map service is not configured.');
-    const { scope, period, anchor, start, end, geography, west, south, east, north } = parsed.data;
-    try {
-      const result = await dependencies.flightMap.listPersonalLaunchOptions({
-        viewerUserId: currentUser.userId, scope, period, geography,
-        ...(anchor === undefined ? {} : { anchor }),
-        ...(start === undefined ? {} : { startDate: start }),
-        ...(end === undefined ? {} : { endDate: end }),
         ...(geography === 'map-area' ? { viewport: { west: west!, south: south!, east: east!, north: north! } } : {}),
       });
       res.status(200).set('Cache-Control', 'private, no-store').json(result);

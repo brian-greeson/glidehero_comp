@@ -41,13 +41,11 @@ export function personalHistorySummaryLabels(summary) {
   };
 }
 
-export function initializePersonalHistory({ documentRef = document, fetchImpl = globalThis.fetch?.bind(globalThis), onLaunchChange } = {}) {
+export function initializePersonalHistory({ documentRef = document, fetchImpl = globalThis.fetch?.bind(globalThis) } = {}) {
   const root = documentRef.querySelector?.('[data-personal-history]');
   if (!root || !fetchImpl) return null;
   const summaryEndpoint = root.dataset.summaryEndpoint;
-  const launchesEndpoint = root.dataset.launchesEndpoint;
   const status = root.querySelector('[data-personal-history-status]');
-  const launchSelect = documentRef.querySelector('[data-map-launch-filter]');
   let abort = null;
 
   const setStatus = (message) => { if (status) { status.textContent = message; status.hidden = !message; } };
@@ -58,41 +56,15 @@ export function initializePersonalHistory({ documentRef = document, fetchImpl = 
       if (node) node.textContent = value;
     }
   };
-  const renderLaunches = (payload, selected) => {
-    if (!launchSelect) return;
-    const prior = String(selected ?? '');
-    const priorLabel = Array.from(launchSelect.options ?? []).find((option) => option.value === prior)?.textContent ?? '';
-    launchSelect.replaceChildren();
-    const all = documentRef.createElement('option'); all.value = ''; all.textContent = 'All launches'; launchSelect.append(all);
-    for (const launch of payload?.launches ?? []) {
-      const option = documentRef.createElement('option');
-      option.value = String(launch.launchId); option.textContent = `${launch.name} (${launch.flightCount})`;
-      launchSelect.append(option);
-    }
-    if (payload?.hasUnknown) { const option = documentRef.createElement('option'); option.value = 'unknown'; option.textContent = 'Unknown launch'; launchSelect.append(option); }
-    if (prior && !Array.from(launchSelect.options ?? []).some((option) => option.value === prior)) {
-      const option = documentRef.createElement('option'); option.value = prior;
-      option.textContent = prior === 'unknown' ? 'Unknown launch' : (priorLabel || `Launch ${prior}`);
-      launchSelect.append(option);
-    }
-    launchSelect.value = prior;
-  };
-
-  launchSelect?.addEventListener('change', () => onLaunchChange?.(launchSelect.value || null));
-
   return {
     async refresh(parameters) {
       abort?.abort(); abort = new AbortController();
       setStatus('Updating history…');
       const request = { ...parameters, launch: parameters.launch ?? null };
       try {
-        const [summaryResponse, launchesResponse] = await Promise.all([
-          fetchImpl(personalHistoryRequestUrl(summaryEndpoint, request), { credentials: 'same-origin', headers: { accept: 'application/json' }, signal: abort.signal }),
-          fetchImpl(personalHistoryRequestUrl(launchesEndpoint, { ...request, launch: null }), { credentials: 'same-origin', headers: { accept: 'application/json' }, signal: abort.signal }),
-        ]);
-        if (!summaryResponse.ok || !launchesResponse.ok) throw new Error('Personal history request failed.');
-        const [summary, launches] = await Promise.all([summaryResponse.json(), launchesResponse.json()]);
-        renderSummary(summary); renderLaunches(launches, parameters.launch); setStatus('');
+        const summaryResponse = await fetchImpl(personalHistoryRequestUrl(summaryEndpoint, request), { credentials: 'same-origin', headers: { accept: 'application/json' }, signal: abort.signal });
+        if (!summaryResponse.ok) throw new Error('Personal history request failed.');
+        renderSummary(await summaryResponse.json()); setStatus('');
       } catch (error) {
         if (error?.name !== 'AbortError') setStatus('Unable to update personal history.');
       }

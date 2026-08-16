@@ -5,6 +5,7 @@ import { initializeReplayControls } from '../replayControlsController.js';
 import { normalizeViewportBounds, viewportSearchParams } from '../viewportQuery.js';
 import { mapViewportFromSearch } from '../mapViewportUrl.js';
 import { initializePersonalHistory } from './personalHistory.js';
+import { initializeLaunchSelector } from './launchSelector.js';
 import {
   LAUNCH_CLUSTER_LAYER_ID,
   LAUNCH_MARKER_LAYER_ID,
@@ -89,7 +90,7 @@ export function stepPeriod(state, direction) {
 }
 
 export function periodLabel({ period, anchor }) {
-  if (period === 'all-time') return 'All flights';
+  if (period === 'all-time') return 'All Time';
   if (period === 'custom') return 'Custom range';
   const [year, month = 1, day = 1] = anchor.split('-').map(Number);
   const date = new Date(year, month - 1, day);
@@ -319,6 +320,7 @@ export function initializeFlightMap({ documentRef = document, maplibre = globalT
   const scope = documentRef.querySelector('[data-map-scope]');
   const sort = documentRef.querySelector('[data-map-sort]');
   const periodSelect = documentRef.querySelector('[data-map-period]');
+  const periodValueNode = documentRef.querySelector('.flight-map-period [data-styled-select-value]');
   const periodLabelNode = documentRef.querySelector('[data-map-period-label]');
   const periodSteps = [...documentRef.querySelectorAll('[data-map-period-step]')];
   const customRange = documentRef.querySelector('[data-map-custom-range]');
@@ -359,7 +361,9 @@ export function initializeFlightMap({ documentRef = document, maplibre = globalT
   geographyButtons.forEach((button) => button.setAttribute('aria-pressed', String(button.dataset.mapGeography === geography)));
   let launches = [];
   let personalHistory = null;
-  let trackAbort = null; let listAbort = null; let launchAbort = null; let launchDetailAbort = null; let selectionAbort = null; let replayLayer = null; let replayCamera = null;
+  let launchSelector = null;
+  let selectedLaunchDetail = null;
+  let trackAbort = null; let listAbort = null; let launchAbort = null; let launchDetailAbort = null; let launchFilterDetailAbort = null; let selectionAbort = null; let replayLayer = null; let replayCamera = null;
 
   const initialViewport = mapViewportFromSearch(locationRef?.search ?? '');
   const map = new maplibre.Map({ container: mapNode, style: mapNode.dataset.mapStyleUrl, center: initialViewport?.center ?? [-106.2, 39.2], zoom: initialViewport?.zoom ?? 7, maxPitch: 0 });
@@ -370,6 +374,7 @@ export function initializeFlightMap({ documentRef = document, maplibre = globalT
   const updatePeriodUi = () => {
     if (periodSelect) periodSelect.value = period.period;
     periodSelect?.dispatchEvent?.(new Event('styled-select-sync'));
+    if (periodValueNode) periodValueNode.textContent = periodLabel(period);
     if (periodLabelNode) periodLabelNode.textContent = periodLabel(period);
     periodSteps.forEach((button) => { button.disabled = period.period === 'all-time' || period.period === 'custom'; });
     if (customRange) customRange.hidden = period.period !== 'custom';
@@ -401,7 +406,7 @@ export function initializeFlightMap({ documentRef = document, maplibre = globalT
   const setLaunchData = () => map.getSource?.(LAUNCH_SOURCE_ID)?.setData(launchFeatureCollection(launches, selectedLaunchId));
 
   const clearLaunchSelection = ({ sync = false, push = false } = {}) => {
-    launchDetailAbort?.abort(); launchDetailAbort = null; selectedLaunchId = null;
+    launchDetailAbort?.abort(); launchDetailAbort = null; selectedLaunchId = null; selectedLaunchDetail = null;
     if (launchPanel) launchPanel.hidden = true;
     setLaunchData();
     if (sync) syncUrl({ push });
@@ -409,6 +414,7 @@ export function initializeFlightMap({ documentRef = document, maplibre = globalT
 
   const renderLaunchDetail = (launch) => {
     if (!launchPanel || !launchPanelContent) return;
+    selectedLaunchDetail = launch;
     launchPanel.hidden = false; launchPanelContent.hidden = false;
     if (launchPanelStatus) launchPanelStatus.textContent = '';
     if (launchPanelName) launchPanelName.textContent = launch.name;
@@ -418,6 +424,7 @@ export function initializeFlightMap({ documentRef = document, maplibre = globalT
     if (launchPanelVisitedRow) launchPanelVisitedRow.hidden = parameters().scope !== 'personal';
     if (launchPanelVisited) launchPanelVisited.textContent = launch.visited ? 'Visited' : 'Not visited';
     if (launchPanelDescription) { launchPanelDescription.textContent = launch.description ?? ''; launchPanelDescription.hidden = !launch.description; }
+    if (String(launchFilter) === String(launch.launchId)) launchSelector?.setSelection({ type: 'launch', launch });
   };
 
   const selectLaunch = async (launchId, { push = true } = {}) => {
@@ -441,6 +448,24 @@ export function initializeFlightMap({ documentRef = document, maplibre = globalT
       if (error?.name !== 'AbortError' && selectedLaunchId === Number(launchId)) {
         if (launchPanelStatus) launchPanelStatus.textContent = 'Unable to load launch information.';
       }
+    }
+  };
+
+  const hydrateLaunchFilter = async () => {
+    launchFilterDetailAbort?.abort(); launchFilterDetailAbort = null;
+    const launchId = Number(launchFilter);
+    if (!Number.isSafeInteger(launchId) || launchId < 1) return;
+    const controller = new AbortController(); launchFilterDetailAbort = controller;
+    try {
+      const response = await fetchImpl(mapLaunchDetailRequestUrl(root.dataset.launchDetailEndpointTemplate, launchId, parameters()), { credentials: 'same-origin', headers: { accept: 'application/json' }, signal: controller.signal });
+      if (!response.ok) throw new Error(`Launch detail request failed (${response.status})`);
+      const detail = normalizeLaunchDetailPayload(await response.json());
+      if (!detail || detail.launchId !== launchId) throw new Error('Launch detail response is invalid.');
+      if (launchFilterDetailAbort === controller && String(launchFilter) === String(launchId)) launchSelector?.setSelection({ type: 'launch', launch: detail });
+    } catch (error) {
+      if (error?.name !== 'AbortError' && launchFilterDetailAbort === controller) show(mapStatus, 'Unable to restore the launch filter label.');
+    } finally {
+      if (launchFilterDetailAbort === controller) launchFilterDetailAbort = null;
     }
   };
 
@@ -582,13 +607,40 @@ export function initializeFlightMap({ documentRef = document, maplibre = globalT
     launch: launchFilter,
   });
 
-  if (root.dataset.initialScope === 'personal') {
-    personalHistory = initializePersonalHistory({ documentRef, fetchImpl, onLaunchChange: (launch) => {
-      launchFilter = launch; syncUrl({ push: true });
-      void refreshTracks(); void refreshPersonalHistory();
-      void (async () => { await refreshList(); if (selectedFlightId) await revalidateSelectedFlight(); })();
-    } });
-  }
+  if (root.dataset.initialScope === 'personal') personalHistory = initializePersonalHistory({ documentRef, fetchImpl });
+
+  const refreshLaunchFilteredResults = () => {
+    void refreshTracks(); void refreshPersonalHistory();
+    void (async () => { await refreshList(); if (selectedFlightId) await revalidateSelectedFlight(); })();
+  };
+
+  const applyLaunchSelectorSelection = (selection) => {
+    launchFilterDetailAbort?.abort(); launchFilterDetailAbort = null;
+    if (selection?.type === 'all') {
+      launchFilter = null; clearLaunchSelection(); syncUrl({ push: true }); refreshLaunchFilteredResults();
+      return;
+    }
+    if (selection?.type === 'unknown') {
+      launchFilter = 'unknown'; clearLaunchSelection(); syncUrl({ push: true }); refreshLaunchFilteredResults();
+      return;
+    }
+    const launch = selection?.type === 'launch' ? selection.launch : null;
+    if (!Number.isSafeInteger(Number(launch?.launchId)) || !Number.isFinite(Number(launch?.longitude)) || !Number.isFinite(Number(launch?.latitude))) return;
+    launchFilter = String(launch.launchId);
+    map.easeTo?.({ center: [Number(launch.longitude), Number(launch.latitude)], zoom: 12, duration: 500 });
+    void selectLaunch(Number(launch.launchId), { push: true });
+    refreshLaunchFilteredResults();
+  };
+
+  launchSelector = initializeLaunchSelector({
+    documentRef,
+    fetchImpl,
+    getViewport: () => normalizeViewportBounds(map.getBounds?.()),
+    onSelect: applyLaunchSelectorSelection,
+  });
+  if (launchFilter === 'unknown') launchSelector?.setSelection({ type: 'unknown' });
+  else if (!launchFilter) launchSelector?.setSelection({ type: 'all' });
+  else void hydrateLaunchFilter();
 
   const refreshAll = ({ push = false } = {}) => {
     replayControls.close(); syncUrl({ push });
@@ -626,14 +678,7 @@ export function initializeFlightMap({ documentRef = document, maplibre = globalT
   launchPanelFilter?.addEventListener('click', () => {
     if (!selectedLaunchId) return;
     launchFilter = String(selectedLaunchId); syncUrl({ push: true });
-    const launchSelect = documentRef.querySelector('[data-map-launch-filter]');
-    if (launchSelect && !Array.from(launchSelect.options ?? []).some((option) => option.value === launchFilter)) {
-      const option = documentRef.createElement('option'); option.value = launchFilter;
-      option.textContent = launchPanelName?.textContent || `Launch ${launchFilter}`;
-      launchSelect.append(option);
-    }
-    if (launchSelect) launchSelect.value = launchFilter;
-    root.dispatchEvent?.(new CustomEvent('map-launch-filter-change', { detail: { launch: launchFilter } }));
+    if (selectedLaunchDetail) launchSelector?.setSelection({ type: 'launch', launch: selectedLaunchDetail });
     void refreshTracks(); void refreshList(); void refreshPersonalHistory();
     if (selectedFlightId) void revalidateSelectedFlight();
   });
@@ -648,6 +693,10 @@ export function initializeFlightMap({ documentRef = document, maplibre = globalT
     period = periodStateFromSearch(locationRef?.search ?? '', now(), root.dataset.initialPeriod);
     const nextLaunch = urlState.get('launch');
     launchFilter = nextLaunch === 'unknown' || (Number.isSafeInteger(Number(nextLaunch)) && Number(nextLaunch) > 0) ? nextLaunch : null;
+    launchFilterDetailAbort?.abort(); launchFilterDetailAbort = null;
+    if (launchFilter === 'unknown') launchSelector?.setSelection({ type: 'unknown' });
+    else if (!launchFilter) launchSelector?.setSelection({ type: 'all' });
+    else { launchSelector?.setSelection({ type: 'all' }); void hydrateLaunchFilter(); }
     geography = urlState.get('geography') === 'map-area' ? 'map-area' : 'global';
     const nextSort = urlState.get('sort'); if (sort && SORTS.has(nextSort)) { sort.value = nextSort; sort.dispatchEvent?.(new Event('styled-select-sync')); }
     geographyButtons.forEach((button) => button.setAttribute('aria-pressed', String(button.dataset.mapGeography === geography)));
@@ -699,9 +748,9 @@ export function initializeFlightMap({ documentRef = document, maplibre = globalT
   });
   map.on?.('moveend', (event) => {
     if (isMapReplayCameraMoveEvent(event)) return;
-    syncUrl(); void refreshTracks(); void refreshLaunches();
+    syncUrl(); void refreshTracks(); void refreshLaunches(); launchSelector?.refreshViewport();
     if (geography === 'map-area') { void refreshPersonalHistory(); void (async () => { await refreshList(); if (selectedFlightId) await revalidateSelectedFlight(); })(); }
   });
   updatePeriodUi();
-  return { map, refreshTracks, refreshList, refreshLaunches, selectFlight: applySelection, selectLaunch, destroy() { trackAbort?.abort(); listAbort?.abort(); launchAbort?.abort(); launchDetailAbort?.abort(); selectionAbort?.abort(); personalHistory?.destroy(); replayControls.destroy(); globalThis.removeEventListener?.('popstate', handlePopState); map.remove?.(); } };
+  return { map, refreshTracks, refreshList, refreshLaunches, selectFlight: applySelection, selectLaunch, destroy() { trackAbort?.abort(); listAbort?.abort(); launchAbort?.abort(); launchDetailAbort?.abort(); launchFilterDetailAbort?.abort(); selectionAbort?.abort(); launchSelector?.destroy(); personalHistory?.destroy(); replayControls.destroy(); globalThis.removeEventListener?.('popstate', handlePopState); map.remove?.(); } };
 }

@@ -1,4 +1,4 @@
-<header class="app-header">
+<header class="app-header{{ if page === 'map' }} app-header--map{{ /if }}">
   {{ for item of navigation }}{{ if item.page === 'map' }}<a class="app-brand" href="{{ item.href }}" aria-label="Glide Hero Map">{{ /if }}{{ /for }}
     <img src="/android-chrome-192x192.png" alt="">
     <span class="app-brand__wordmark"><strong>GLIDE</strong><strong>HERO</strong></span>
@@ -10,6 +10,7 @@
       </a>
     {{ /for }}
   </nav>
+  {{ if page === 'map' }}{{ include "authenticated/components/launchSelector.vto" }}{{ /if }}
   <div class="app-header__actions">
     <button class="app-upload-trigger" type="button" data-upload-trigger aria-controls="flight-upload-dialog">
     <span>Upload</span>

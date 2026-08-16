@@ -42,9 +42,12 @@ describe('flight-first map UI', () => {
     expect(html).toContain('data-launch-info-description');
     expect(html).toContain('data-launch-info-filter>Show flights from this launch</button>');
     expect(html).toContain('data-personal-history');
-    expect(html).toContain('data-map-launch-filter');
+    expect(html).toContain('data-launch-selector');
+    expect(html).toContain('data-launch-selector-input');
+    expect(html).not.toContain('data-map-launch-filter');
     const following = await createAuthenticatedPageRenderer()(model('following'));
     expect(following).not.toContain('data-personal-history');
+    expect(following).toContain('data-launch-selector');
   });
 
   it('removes the pilot selector from My Flights and offers only Following and All Pilots on Map', async () => {
@@ -110,6 +113,7 @@ describe('flight-first map UI', () => {
 
   it('styles a persistent desktop panel and three mobile sheet states', async () => {
     const css = await readFile('public/styles/app-ui/map.css', 'utf8');
+    const appCss = await readFile('public/styles/app-ui/app.css', 'utf8');
     expect(css).toContain('grid-template-columns: minmax(416px, 440px) minmax(0, 1fr)');
     expect(css).toContain('grid-template-columns: minmax(128px, 1.15fr) minmax(164px, 1.45fr) minmax(100px, .9fr)');
     expect(css).toContain('.flight-browser.is-collapsed');
@@ -118,5 +122,26 @@ describe('flight-first map UI', () => {
     expect(css).toContain('.flight-map-stage > .flight-map-canvas { position: absolute; inset: 0; width: 100%; height: 100%; }');
     expect(css).toContain('@media (max-width: 390px)');
     expect(css).toContain('@media (prefers-reduced-motion: reduce)');
+    expect(appCss).toContain('.app-ui-body .app-bottom-sheet { --app-bottom-sheet-handle-height: 24px; border-radius: 1.5rem 1.5rem 0 0; }');
+    expect(appCss).toContain('.app-bottom-sheet > .app-bottom-sheet__handle { display: grid;');
+    expect(css).not.toContain('.flight-browser__handle { display: grid;');
+    expect(css).toContain('grid-template-columns: minmax(0, .9fr) minmax(0, 1.2fr) minmax(0, .8fr);');
+    expect(css).toContain('.flight-map-status { top: 4.25rem; }');
+    const html = await createAuthenticatedPageRenderer()(model());
+    expect(html).toContain('flight-browser app-bottom-sheet is-partial');
+    expect(html).toContain('flight-browser__handle app-bottom-sheet__handle');
+    expect(html).toContain('flight-browser__content app-bottom-sheet__content');
+  });
+
+  it('places compact launch search in the map header and retains the floating time arrows', async () => {
+    const html = await createAuthenticatedPageRenderer()(model());
+    expect(html).toContain('app-header app-header--map');
+    expect(html.indexOf('data-launch-selector')).toBeLessThan(html.indexOf('data-upload-trigger'));
+    expect(html).toContain('data-map-period-step="previous"');
+    expect(html).toContain('icons.svg#icon-calendar');
+    expect(html).toContain('data-map-period-step="next"');
+    expect(html).toContain('icons.svg#icon-search');
+    const css = await readFile('public/styles/app-ui/app.css', 'utf8');
+    expect(css).toContain('.app-header--map { z-index: 39;');
   });
 });

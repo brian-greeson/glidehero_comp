@@ -184,6 +184,9 @@ describe('flight detail view', () => {
       flight: { ...createFlightPageView(summary), mapStyleUrl: 'https://maps.example/style.json' },
     });
     expect(html).toContain('data-flight-detail-map');
+    expect(html).toContain('class="flight-detail-panel mobile-map-sheet app-bottom-sheet"');
+    expect(html).toContain('class="mobile-map-sheet__handle app-bottom-sheet__handle"');
+    expect(html).toContain('class="mobile-map-sheet__content app-bottom-sheet__content"');
     expect(html).toContain(`data-map-data-url="/v1/flights/${flightId}/map"`);
     expect(html).toContain('data-default-distance="fivePoint"');
     expect(html).toContain('<h2 id="flight-stats-heading">Stats</h2>');
@@ -279,14 +282,26 @@ describe('flight detail view', () => {
     expect(css).toContain(
       '.flight-detail-map-stage > .flight-detail-map { position: absolute; inset: 0; width: 100%; height: 100%; }',
     );
-    expect(css).toContain('--flight-sheet-collapsed-height: min(132px, 15svh);');
+    expect(css).toContain('--flight-sheet-collapsed-height: min(116px, 14svh);');
     expect(css).toContain('height: var(--flight-sheet-collapsed-height);');
     expect(css).toContain('var(--flight-bottom-nav-height) + var(--flight-sheet-collapsed-height)');
     expect(css).toContain('.flight-detail-panel .mobile-map-sheet__content { display: none; }');
     expect(css).toContain('.flight-detail-panel.mobile-map-sheet.is-expanded .mobile-map-sheet__content { display: block;');
   });
 
-  it('stacks the mobile flight drawer above replay controls and below navigation', () => {
+  it('uses the compact shared bottom-sheet shell without changing its content states', () => {
+    const css = readFileSync('public/styles/app-ui/flight.css', 'utf8');
+    const appCss = readFileSync('public/styles/app-ui/app.css', 'utf8');
+
+    expect(css).toContain('--flight-sheet-collapsed-height: min(116px, 14svh);');
+    expect(appCss).toContain('.app-ui-body .app-bottom-sheet { --app-bottom-sheet-handle-height: 24px; border-radius: 1.5rem 1.5rem 0 0; }');
+    expect(appCss).toContain('.app-bottom-sheet > .app-bottom-sheet__handle { display: grid;');
+    expect(css).not.toContain('width: 38px; height: 4px;');
+    expect(css).toContain('height: calc(100% - var(--app-bottom-sheet-handle-height));');
+    expect(css).toContain('padding: .15rem .75rem .55rem;');
+  });
+
+  it('keeps the exact mobile replay, drawer, and navigation stacking contract', () => {
     const flightCss = readFileSync('public/styles/app-ui/flight.css', 'utf8');
     const appCss = readFileSync('public/styles/app-ui/app.css', 'utf8');
     const replayLayer = flightCss.match(/\.flight-detail-replay-mobile \{ position: absolute; z-index: (\d+);/)?.[1];
@@ -296,7 +311,8 @@ describe('flight detail view', () => {
     expect(replayLayer).toBeDefined();
     expect(drawerLayer).toBeDefined();
     expect(navigationLayer).toBeDefined();
-    expect(Number(drawerLayer)).toBeGreaterThan(Number(replayLayer));
-    expect(Number(drawerLayer)).toBeLessThan(Number(navigationLayer));
+    expect(Number(replayLayer)).toBe(30);
+    expect(Number(drawerLayer)).toBe(35);
+    expect(Number(navigationLayer)).toBe(40);
   });
 });

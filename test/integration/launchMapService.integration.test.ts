@@ -53,6 +53,64 @@ async function addFlight(id: string, userId: string, startedAt: string, launchId
 }
 
 describe('launch map service integration', () => {
+  it('lists at most 25 catalog options alphabetically within ordinary and antimeridian viewports', async () => {
+    const service = createLaunchMapService(database.db);
+    const ordinary = await service.listLaunchOptions({
+      viewport: { west: -1, south: 0, east: 1, north: 10 },
+    });
+    expect(ordinary).toEqual([expect.objectContaining({
+      launchId: 3,
+      name: 'Greenwich',
+      state: 'England',
+      country: 'United Kingdom',
+      longitude: 0,
+      latitude: 5,
+    })]);
+
+    const crossing = await service.listLaunchOptions({
+      viewport: { west: 179, south: 0, east: -179, north: 10 },
+    });
+    expect(crossing.map(({ name }) => name)).toEqual(['East Dateline', 'West Dateline']);
+  });
+
+  it('searches the whole catalog by literal case-insensitive name, state, or country substring', async () => {
+    const service = createLaunchMapService(database.db);
+
+    await expect(service.listLaunchOptions({ query: 'GREEN' })).resolves.toEqual([
+      expect.objectContaining({ launchId: 3, name: 'Greenwich' }),
+    ]);
+    await expect(service.listLaunchOptions({ query: 'land' })).resolves.toEqual([
+      expect.objectContaining({ launchId: 3, name: 'Greenwich' }),
+    ]);
+    await expect(service.listLaunchOptions({ query: 'fIj' })).resolves.toEqual([
+      expect.objectContaining({ launchId: 1, name: 'East Dateline' }),
+      expect.objectContaining({ launchId: 2, name: 'West Dateline' }),
+    ]);
+    await expect(service.listLaunchOptions({ query: '%_' })).resolves.toEqual([]);
+  });
+
+  it('caps broad option searches at the first 25 launch names', async () => {
+    const values = Array.from({ length: 30 }, (_, index) => {
+      const id = index + 100;
+      const name = `Searchable ${String(index).padStart(2, '0')}`;
+      return `(${id}, '${name}', 10, 10, 'Searchland', '', '', '', '', 0, '', 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, ${id})`;
+    }).join(',');
+    await database.pool.query(`
+      INSERT INTO launches (
+        id, name, longitude, latitude, country, state, city, description,
+        xc_by_month, timezone_offset, xc_by_year, rank, elevation,
+        rank_1, rank_2, rank_3, rank_4, rank_5, rank_6, rank_7, rank_8,
+        rank_9, rank_10, rank_11, rank_12, xcontest_launch_site
+      ) VALUES ${values}
+    `);
+    const service = createLaunchMapService(database.db);
+
+    const results = await service.listLaunchOptions({ query: 'searchable' });
+    expect(results).toHaveLength(25);
+    expect(results[0]?.name).toBe('Searchable 00');
+    expect(results[24]?.name).toBe('Searchable 24');
+  });
+
   it('lists catalog markers in ordinary and antimeridian-crossing viewports', async () => {
     const service = createLaunchMapService(database.db);
     const ordinary = await service.listViewportMarkers({

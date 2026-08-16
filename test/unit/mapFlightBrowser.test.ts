@@ -100,4 +100,22 @@ describe('flight map browser contracts', () => {
     expect(source).toContain("map.on?.('moveend', (event) => {");
     expect(source).toContain('if (isMapReplayCameraMoveEvent(event)) return;');
   });
+
+  it('keeps searchable launch filtering distinct from informational marker selection', async () => {
+    const source = await readFile('public/scripts/app-ui/mapFlightBrowser.js', 'utf8');
+    expect(source).toContain('launchSelector = initializeLaunchSelector({');
+    expect(source).toContain("launchFilter = String(launch.launchId);");
+    expect(source).toContain("map.easeTo?.({ center: [Number(launch.longitude), Number(launch.latitude)], zoom: 12, duration: 500 });");
+    expect(source).toContain("map.on?.('click', LAUNCH_MARKER_LAYER_ID, (event) => {");
+    expect(source).toContain('if (Number.isSafeInteger(launchId) && launchId > 0) void selectLaunch(launchId);');
+    expect(source).toContain('launchSelector?.refreshViewport();');
+  });
+
+  it('hydrates numeric launch-filter labels independently of the information panel', async () => {
+    const source = await readFile('public/scripts/app-ui/mapFlightBrowser.js', 'utf8');
+    expect(source).toContain('const hydrateLaunchFilter = async () => {');
+    expect(source).toContain("String(launchFilter) === String(launchId)");
+    expect(source).toContain('else void hydrateLaunchFilter();');
+    expect(source).toContain('launchFilterDetailAbort?.abort();');
+  });
 });

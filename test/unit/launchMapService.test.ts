@@ -45,6 +45,55 @@ describe('launch map viewport markers', () => {
   });
 });
 
+describe('launch map options', () => {
+  it('maps catalog launch options for an ordinary viewport', async () => {
+    const database = databaseWithRows([{
+      launchId: '42',
+      name: 'Boulder Launch',
+      state: 'Colorado',
+      country: 'United States',
+      longitude: '-105.25',
+      latitude: '40.02',
+    }]);
+    const service = createLaunchMapService(database as never);
+
+    await expect(service.listLaunchOptions({
+      viewport: { west: -106, south: 39, east: -104, north: 41 },
+    })).resolves.toEqual([{
+      launchId: 42,
+      name: 'Boulder Launch',
+      state: 'Colorado',
+      country: 'United States',
+      longitude: -105.25,
+      latitude: 40.02,
+    }]);
+    expect(database.execute).toHaveBeenCalledOnce();
+  });
+
+  it('accepts antimeridian bounds and rejects invalid bounds before querying', async () => {
+    const database = databaseWithRows([]);
+    const service = createLaunchMapService(database as never);
+
+    await expect(service.listLaunchOptions({
+      viewport: { west: 179, south: -10, east: -179, north: 10 },
+    })).resolves.toEqual([]);
+    await expect(service.listLaunchOptions({
+      viewport: { west: -181, south: -10, east: -179, north: 10 },
+    })).rejects.toThrow(FlightMapInputError);
+    expect(database.execute).toHaveBeenCalledTimes(1);
+  });
+
+  it('trims valid global searches and rejects searches outside the 2-100 character contract', async () => {
+    const database = databaseWithRows([]);
+    const service = createLaunchMapService(database as never);
+
+    await expect(service.listLaunchOptions({ query: '  Co  ' })).resolves.toEqual([]);
+    await expect(service.listLaunchOptions({ query: 'x' })).rejects.toThrow('Launch search must contain between 2 and 100 characters.');
+    await expect(service.listLaunchOptions({ query: `ab${'c'.repeat(99)}` })).rejects.toThrow('Launch search must contain between 2 and 100 characters.');
+    expect(database.execute).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe('launch map detail', () => {
   it('returns catalog information and filtered visit state', async () => {
     const database = databaseWithRows([{

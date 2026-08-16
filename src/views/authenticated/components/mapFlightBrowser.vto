@@ -1,8 +1,8 @@
-<aside class="flight-browser is-partial" data-flight-browser data-map-sheet data-sheet-state="partial" aria-label="Flight browser">
-  <button class="flight-browser__handle" type="button" data-map-sheet-handle aria-expanded="false" aria-controls="flight-browser-content">
+<aside class="flight-browser app-bottom-sheet is-partial" data-flight-browser data-map-sheet data-sheet-state="partial" aria-label="Flight browser">
+  <button class="flight-browser__handle app-bottom-sheet__handle" type="button" data-map-sheet-handle aria-expanded="false" aria-controls="flight-browser-content">
     <span aria-hidden="true"></span><span class="sr-only" data-map-sheet-label>Expand flight browser</span>
   </button>
-  <div class="flight-browser__content" id="flight-browser-content">
+  <div class="flight-browser__content app-bottom-sheet__content" id="flight-browser-content">
     {{ if mode === 'personal' }}{{ include "authenticated/components/personalHistorySummary.vto" }}{{ /if }}
     <div class="flight-browser__filters">
       {{ if mode !== 'personal' }}
