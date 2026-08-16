@@ -207,6 +207,7 @@
 .map-select__menu button { display: flex; width: 100%; min-height: 42px; align-items: center; justify-content: space-between; gap: 1rem; padding: .55rem .7rem; border: 0; border-radius: .58rem; color: #344b68; background: transparent; font: inherit; font-size: .76rem; font-weight: 560; text-align: left; cursor: pointer; }
 .map-select__menu button:hover, .map-select__menu button:focus-visible { color: var(--app-ink); background: #f0f5fa; outline: 0; }.map-select__menu button[aria-selected='true'] { color: var(--app-ink); font-weight: 780; }
 .map-select__check { color: var(--app-blue); font-size: .9rem; opacity: 0; }.map-select__menu button[aria-selected='true'] .map-select__check { opacity: 1; }
+.map-select__separator { padding: .2rem .7rem; color: #8a9aac; font-size: .72rem; line-height: 1; user-select: none; }
 .flight-map-period .flight-map-period__trigger { min-height: 20px; justify-content: center; padding: 0; border: 0; border-radius: 0; color: #fff; background: transparent; box-shadow: none; font-size: .74rem; }
 .flight-map-period .flight-map-period__trigger .app-icon:first-child { width: .92rem; height: .92rem; }
 .flight-map-period .flight-map-period__trigger .app-icon:last-child { width: .72rem; height: .72rem; }

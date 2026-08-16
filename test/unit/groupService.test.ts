@@ -3,6 +3,20 @@ import type { Database } from '../../src/db/client.js';
 import { createGroupService } from '../../src/services/groupService.js';
 
 describe('group service member read model', () => {
+  it('returns lightweight accepted group options in query order', async () => {
+    const execute = vi.fn().mockResolvedValueOnce({ rows: [
+      { groupId: 'group-2', name: 'alpine' },
+      { groupId: 'group-1', name: 'Weekend XC' },
+    ] });
+    const service = createGroupService({ execute } as unknown as Database);
+
+    await expect(service.listAcceptedGroupOptions('pilot')).resolves.toEqual([
+      { groupId: 'group-2', name: 'alpine' },
+      { groupId: 'group-1', name: 'Weekend XC' },
+    ]);
+    expect(execute).toHaveBeenCalledOnce();
+  });
+
   it('loads profile standings for every group in one aggregate query', async () => {
     const execute = vi.fn()
       .mockResolvedValueOnce({ rows: [

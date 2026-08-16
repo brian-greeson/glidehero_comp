@@ -56,8 +56,9 @@ export function selectedLaunchIdFromSearch(search = '') {
   return Number.isSafeInteger(value) && value > 0 ? value : null;
 }
 
-export function mapLaunchRequestUrl(endpoint, bounds, { scope, period, launch }) {
+export function mapLaunchRequestUrl(endpoint, bounds, { scope, groupId, period, launch }) {
   const values = { scope, period: period.period };
+  if (scope === 'group' && groupId) values.group = groupId;
   if (period.anchor) values.anchor = period.anchor;
   if (period.startDate) values.start = period.startDate;
   if (period.endDate) values.end = period.endDate;
@@ -65,9 +66,10 @@ export function mapLaunchRequestUrl(endpoint, bounds, { scope, period, launch })
   return `${endpoint}?${viewportSearchParams(normalizeViewportBounds(bounds), values)}`;
 }
 
-export function mapLaunchDetailRequestUrl(endpointTemplate, launchId, { scope, period, launch }) {
+export function mapLaunchDetailRequestUrl(endpointTemplate, launchId, { scope, groupId, period, launch }) {
   const endpoint = endpointTemplate.replace('{launchId}', encodeURIComponent(String(launchId)));
   const query = new URLSearchParams({ scope });
+  if (scope === 'group' && groupId) query.set('group', groupId);
   query.set('period', period.period);
   if (period.anchor) query.set('anchor', period.anchor);
   if (period.startDate ?? period.start) query.set('start', period.startDate ?? period.start);

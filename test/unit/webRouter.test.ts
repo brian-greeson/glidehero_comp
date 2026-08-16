@@ -226,6 +226,7 @@ function dependencies() {
     deleteGroup: vi.fn(async () => undefined), invite: vi.fn(async () => undefined), cancelInvitation: vi.fn(async () => undefined),
     acceptInvitation: vi.fn(async () => undefined), declineInvitation: vi.fn(async () => undefined), leave: vi.fn(async () => undefined), removeMember: vi.fn(async () => undefined),
     searchPilots: vi.fn(async () => []), canView: vi.fn(async () => true),
+    listAcceptedGroupOptions: vi.fn(async () => []),
     getProfileGroups: vi.fn(async () => ({ groups: [], invitations: [] })),
     getGroup: vi.fn(async ({ groupId }) => ({ groupId, name: 'Weekend XC', ownerUserId: user.userId, memberCount: 2, capacity: 200 })),
     getPage: vi.fn(async ({ groupId }) => ({
@@ -1283,6 +1284,39 @@ describe('webRouter', () => {
       }));
 
       expect((await fetch(`${baseUrl}/global?month=2026-07&period=all-time`, { headers })).status).toBe(400);
+    });
+  });
+
+  it('renders accepted map groups and restores an authorized group URL', async () => {
+    const base = dependencies();
+    const groupId = '00000000-0000-4000-8000-000000000101';
+    vi.mocked(base.groups.listAcceptedGroupOptions).mockResolvedValue([
+      { groupId, name: 'Weekend XC' },
+    ]);
+    await withServer(base.app, async (baseUrl) => {
+      const response = await fetch(`${baseUrl}/following?group=${groupId}`, {
+        headers: { cookie: 'glidehero_session=valid-token' },
+      });
+      expect(response.status).toBe(200);
+      expect(base.groups.listAcceptedGroupOptions).toHaveBeenCalledWith(user.userId);
+      expect(base.renderAuthenticatedPage).toHaveBeenLastCalledWith(expect.objectContaining({
+        mode: 'following',
+        groupOptions: [{ id: groupId, name: 'Weekend XC' }],
+        selectedGroup: { id: groupId, name: 'Weekend XC' },
+      }));
+    });
+  });
+
+  it('falls back to Following for malformed or unavailable group links', async () => {
+    const base = dependencies();
+    vi.mocked(base.groups.listAcceptedGroupOptions).mockResolvedValue([]);
+    await withServer(base.app, async (baseUrl) => {
+      const headers = { cookie: 'glidehero_session=valid-token' };
+      for (const group of ['not-a-uuid', '00000000-0000-4000-8000-000000000101']) {
+        const response = await fetch(`${baseUrl}/following?group=${group}`, { headers, redirect: 'manual' });
+        expect(response.status).toBe(302);
+        expect(response.headers.get('location')).toBe('/following');
+      }
     });
   });
 
@@ -2444,6 +2478,42 @@ describe('webRouter', () => {
         viewport: { west: -106, south: 39, east: -104, north: 41 },
         zoom: 8,
       });
+    });
+  });
+
+  it('passes a strict group scope through map flight and launch endpoints', async () => {
+    const base = dependencies();
+    const groupId = '00000000-0000-4000-8000-000000000101';
+    const headers = { cookie: 'glidehero_session=valid-token' };
+    await withServer(base.app, async (baseUrl) => {
+      const tracks = await fetch(
+        `${baseUrl}/v1/map-flights/tracks?scope=group&group=${groupId}&period=month&anchor=2026-08-15&west=-106&south=39&east=-104&north=41&zoom=8`,
+        { headers },
+      );
+      expect(tracks.status).toBe(200);
+      expect(base.flightMap.listViewportTracks).toHaveBeenLastCalledWith(expect.objectContaining({
+        viewerUserId: user.userId,
+        scope: 'group',
+        groupId,
+      }));
+
+      const launches = await fetch(
+        `${baseUrl}/v1/map-launches?scope=group&group=${groupId}&period=month&anchor=2026-08-15&west=-106&south=39&east=-104&north=41`,
+        { headers },
+      );
+      expect(launches.status).toBe(200);
+      expect(base.launchMap.listViewportMarkers).toHaveBeenLastCalledWith(expect.objectContaining({
+        viewerUserId: user.userId,
+        scope: 'group',
+        groupId,
+      }));
+
+      for (const query of [
+        'scope=group&period=all-time&geography=global&sort=latest',
+        `scope=following&group=${groupId}&period=all-time&geography=global&sort=latest`,
+      ]) {
+        expect((await fetch(`${baseUrl}/v1/map-flights?${query}`, { headers })).status).toBe(400);
+      }
     });
   });
 

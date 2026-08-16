@@ -17,6 +17,17 @@ function databaseWithRows(rows: unknown[]) {
 }
 
 describe('flight map service input contracts', () => {
+  it('requires a valid group ID for group scope', async () => {
+    const database = databaseWithRows([]);
+    const service = createFlightMapService(database as never);
+    const base = { viewerUserId, period: 'all-time' as const, geography: 'global' as const, sort: 'latest' as const };
+
+    await expect(service.listFlights({ ...base, scope: 'group', groupId: 'invalid' })).rejects.toThrow('Group ID is invalid.');
+    await expect(service.listFlights({ ...base, scope: 'group' } as never)).rejects.toThrow('Group ID is required for group scope.');
+    await expect(service.listFlights({ ...base, scope: 'following', groupId: viewerUserId } as never)).rejects.toThrow('Group ID is only valid for group scope.');
+    expect(database.execute).not.toHaveBeenCalled();
+  });
+
   it('accepts ordinary and antimeridian-crossing viewports', () => {
     expect(validateFlightMapViewport({ west: -106, south: 39, east: -104, north: 41 })).toEqual({
       west: -106,

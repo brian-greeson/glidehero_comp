@@ -27,7 +27,7 @@ export const FLIGHT_TRACK_LAYER_ID = 'flight-map-tracks-line';
 export const FLIGHT_TRACK_HIT_LAYER_ID = 'flight-map-tracks-hit';
 
 const PERIODS = new Set(['day', 'month', 'year', 'custom', 'all-time']);
-const SCOPES = new Set(['personal', 'following', 'all']);
+const SCOPES = new Set(['personal', 'following', 'all', 'group']);
 const SORTS = new Set(['distance', 'latest', 'duration']);
 
 function localIsoDate(date) {
@@ -102,15 +102,51 @@ export function periodLabel({ period, anchor }) {
 function normalizedScope(value) { return SCOPES.has(value) ? value : 'following'; }
 function normalizedSort(value) { return SORTS.has(value) ? value : 'distance'; }
 
+export function scopeStateFromLocation(pathname = '/following', search = '', availableGroupIds = []) {
+  if (pathname === '/personal') return { scope: 'personal', groupId: null, optionValue: 'personal', valid: true };
+  if (pathname === '/global') return { scope: 'all', groupId: null, optionValue: 'all', valid: true };
+  const query = new URLSearchParams(search);
+  if (pathname.startsWith('/arena/')) {
+    const arenaScope = query.get('view') === 'following' ? 'following' : 'all';
+    return { scope: arenaScope, groupId: null, optionValue: arenaScope, valid: true };
+  }
+  const requestedGroupId = query.get('group');
+  if (requestedGroupId && availableGroupIds.includes(requestedGroupId)) {
+    return { scope: 'group', groupId: requestedGroupId, optionValue: `group:${requestedGroupId}`, valid: true };
+  }
+  return { scope: 'following', groupId: null, optionValue: 'following', valid: !requestedGroupId };
+}
+
+export function scopeDefaults(scope, now = new Date()) {
+  return {
+    period: { period: 'month', anchor: defaultPeriodAnchor('month', now) },
+    sort: scope === 'all' ? 'distance' : 'latest',
+    geography: 'global',
+  };
+}
+
+export function restoredScopePath(pathname, scopeState, valid = true) {
+  if (valid && pathname.startsWith('/arena/') && scopeState.scope !== 'group') return pathname;
+  return scopeState.scope === 'all' ? '/global' : scopeState.scope === 'personal' ? '/personal' : '/following';
+}
+
+function requestScopeValues(scope, groupId) {
+  const normalized = normalizedScope(scope);
+  return {
+    scope: normalized,
+    ...(normalized === 'group' && groupId ? { group: groupId } : {}),
+  };
+}
+
 function requestPeriodValues(state) {
   if (state.period === 'all-time') return { period: 'all-time' };
   if (state.period === 'custom') return { period: 'custom', start: state.startDate, end: state.endDate };
   return { period: state.period, anchor: state.anchor };
 }
 
-export function mapTrackRequestUrl(endpoint, { scope, period, bounds, zoom, launch }) {
+export function mapTrackRequestUrl(endpoint, { scope, groupId, period, bounds, zoom, launch }) {
   const query = viewportSearchParams(bounds, {
-    scope: normalizedScope(scope),
+    ...requestScopeValues(scope, groupId),
     ...requestPeriodValues(period),
     zoom: String(Math.max(0, Number(zoom) || 0)),
     ...(launch ? { launch } : {}),
@@ -118,9 +154,9 @@ export function mapTrackRequestUrl(endpoint, { scope, period, bounds, zoom, laun
   return `${endpoint}?${query}`;
 }
 
-export function mapFlightListRequestUrl(endpoint, { scope, period, geography, sort, bounds, cursor, launch }) {
+export function mapFlightListRequestUrl(endpoint, { scope, groupId, period, geography, sort, bounds, cursor, launch }) {
   const values = {
-    scope: normalizedScope(scope),
+    ...requestScopeValues(scope, groupId),
     ...requestPeriodValues(period),
     geography: geography === 'map-area' ? 'map-area' : 'global',
     sort: normalizedSort(sort),
@@ -133,10 +169,10 @@ export function mapFlightListRequestUrl(endpoint, { scope, period, geography, so
   return `${endpoint}?${query}`;
 }
 
-export function mapFlightSelectionRequestUrl(endpointTemplate, flightId, { scope, period, geography, bounds, launch }) {
+export function mapFlightSelectionRequestUrl(endpointTemplate, flightId, { scope, groupId, period, geography, bounds, launch }) {
   const endpoint = endpointTemplate.replace('{flightId}', encodeURIComponent(String(flightId)));
   const values = {
-    scope: normalizedScope(scope),
+    ...requestScopeValues(scope, groupId),
     ...requestPeriodValues(period),
     geography: geography === 'map-area' ? 'map-area' : 'global',
     ...(launch ? { launch } : {}),
@@ -346,18 +382,27 @@ export function initializeFlightMap({ documentRef = document, maplibre = globalT
   const launchPanelDescription = documentRef.querySelector('[data-launch-info-description]');
   const launchPanelFilter = documentRef.querySelector('[data-launch-info-filter]');
   const launchPanelClose = documentRef.querySelector('[data-launch-info-close]');
-  let period = periodStateFromSearch(locationRef?.search ?? '', now(), root.dataset.initialPeriod);
   let currentPath = locationRef?.pathname ?? '/following';
   let urlState = new URLSearchParams(locationRef?.search ?? '');
+  const availableGroupIds = scope ? [...scope.options].map((option) => String(option.value ?? '')).filter((value) => value.startsWith('group:')).map((value) => value.slice(6)) : [];
+  let scopeState = scopeStateFromLocation(currentPath, locationRef?.search ?? '', availableGroupIds);
+  if (scope) {
+    scope.value = scopeState.optionValue;
+    scope.dispatchEvent?.(new Event('styled-select-sync'));
+  }
+  if (!scopeState.valid) { currentPath = '/following'; urlState.delete('group'); }
+  let period = scopeState.valid
+    ? periodStateFromSearch(locationRef?.search ?? '', now(), root.dataset.initialPeriod)
+    : scopeDefaults('following', now()).period;
   const initialLaunchFilter = urlState.get('launch');
-  let launchFilter = initialLaunchFilter === 'unknown' || (Number.isSafeInteger(Number(initialLaunchFilter)) && Number(initialLaunchFilter) > 0) ? initialLaunchFilter : null;
+  let launchFilter = scopeState.valid && (initialLaunchFilter === 'unknown' || (Number.isSafeInteger(Number(initialLaunchFilter)) && Number(initialLaunchFilter) > 0)) ? initialLaunchFilter : null;
   let launchLayerVisible = launchLayerVisibleFromSearch(locationRef?.search ?? '');
-  let selectedLaunchId = selectedLaunchIdFromSearch(locationRef?.search ?? '');
+  let selectedLaunchId = scopeState.valid ? selectedLaunchIdFromSearch(locationRef?.search ?? '') : null;
   const initialSelectedFlight = urlState.get('selectedFlight');
-  let selectedFlightId = selectedLaunchId ? null : (/^[0-9a-f-]{36}$/i.test(initialSelectedFlight ?? '') ? initialSelectedFlight : null);
-  let geography = urlState.get('geography') === 'map-area' ? 'map-area' : 'global'; let cursor = null; let tracks = []; let flights = new Map(); let selected = null;
+  let selectedFlightId = scopeState.valid && !selectedLaunchId && /^[0-9a-f-]{36}$/i.test(initialSelectedFlight ?? '') ? initialSelectedFlight : null;
+  let geography = scopeState.valid && urlState.get('geography') === 'map-area' ? 'map-area' : 'global'; let cursor = null; let tracks = []; let flights = new Map(); let selected = null;
   const initialSort = urlState.get('sort');
-  if (sort && SORTS.has(initialSort)) sort.value = initialSort;
+  if (sort) sort.value = scopeState.valid && SORTS.has(initialSort) ? initialSort : scopeDefaults(scopeState.scope, now()).sort;
   geographyButtons.forEach((button) => button.setAttribute('aria-pressed', String(button.dataset.mapGeography === geography)));
   let launches = [];
   let personalHistory = null;
@@ -370,7 +415,7 @@ export function initializeFlightMap({ documentRef = document, maplibre = globalT
   map.addControl?.(new maplibre.NavigationControl(), 'top-right');
 
   const show = (node, message) => { if (!node) return; node.textContent = message; node.hidden = !message; };
-  const parameters = () => ({ scope: scope?.value ?? root.dataset.initialScope, period, geography, sort: sort?.value ?? 'distance', bounds: map.getBounds?.(), zoom: map.getZoom?.(), launch: launchFilter });
+  const parameters = () => ({ scope: scopeState.scope, groupId: scopeState.groupId, period, geography, sort: sort?.value ?? 'distance', bounds: map.getBounds?.(), zoom: map.getZoom?.(), launch: launchFilter });
   const updatePeriodUi = () => {
     if (periodSelect) periodSelect.value = period.period;
     periodSelect?.dispatchEvent?.(new Event('styled-select-sync'));
@@ -390,6 +435,7 @@ export function initializeFlightMap({ documentRef = document, maplibre = globalT
     if (period.anchor) query.set('anchor', period.anchor); else query.delete('anchor');
     if (period.period === 'custom') { query.set('start', period.startDate); query.set('end', period.endDate); }
     else { query.delete('start'); query.delete('end'); }
+    if (scopeState.scope === 'group' && scopeState.groupId) query.set('group', scopeState.groupId); else query.delete('group');
     if (launchFilter) query.set('launch', launchFilter); else query.delete('launch');
     query.set('sort', sort?.value ?? 'distance');
     query.set('geography', geography);
@@ -648,8 +694,26 @@ export function initializeFlightMap({ documentRef = document, maplibre = globalT
     void (async () => { await refreshList(); if (selectedFlightId) await revalidateSelectedFlight(); })();
     if (selectedLaunchId) void selectLaunch(selectedLaunchId, { push: false });
   };
+  const resetForScopeChange = (nextScopeState) => {
+    scopeState = nextScopeState;
+    currentPath = scopeState.scope === 'all' ? '/global' : scopeState.scope === 'personal' ? '/personal' : '/following';
+    const defaults = scopeDefaults(scopeState.scope, now());
+    period = defaults.period; geography = defaults.geography;
+    if (sort) { sort.value = defaults.sort; sort.dispatchEvent?.(new Event('styled-select-sync')); }
+    geographyButtons.forEach((button) => button.setAttribute('aria-pressed', String(button.dataset.mapGeography === geography)));
+    launchFilterDetailAbort?.abort(); launchFilterDetailAbort = null; launchFilter = null;
+    launchSelector?.setSelection({ type: 'all' });
+    clearFlightSelection();
+    clearLaunchSelection();
+    updatePeriodUi();
+  };
   scope?.addEventListener('change', () => {
-    currentPath = { personal: '/personal', following: '/following', all: '/global' }[normalizedScope(scope.value)];
+    const value = String(scope.value ?? 'following');
+    const groupId = value.startsWith('group:') ? value.slice(6) : null;
+    const nextScopeState = groupId && availableGroupIds.includes(groupId)
+      ? { scope: 'group', groupId, optionValue: value, valid: true }
+      : { scope: normalizedScope(value), groupId: null, optionValue: normalizedScope(value), valid: true };
+    resetForScopeChange(nextScopeState);
     refreshAll({ push: true });
   }); sort?.addEventListener('change', () => { syncUrl({ push: true }); void refreshListAndSelection(); });
   geographyButtons.forEach((button) => button.addEventListener('click', () => { geography = button.dataset.mapGeography; geographyButtons.forEach((node) => node.setAttribute('aria-pressed', String(node === button))); syncUrl({ push: true }); void refreshPersonalHistory(); void (async () => { await refreshList(); if (selectedFlightId) await revalidateSelectedFlight(); })(); }));
@@ -686,29 +750,37 @@ export function initializeFlightMap({ documentRef = document, maplibre = globalT
   const handlePopState = () => {
     urlState = new URLSearchParams(locationRef?.search ?? '');
     currentPath = locationRef?.pathname ?? currentPath;
+    const restoredPathname = currentPath;
+    const restoredScopeState = scopeStateFromLocation(currentPath, locationRef?.search ?? '', availableGroupIds);
+    scopeState = restoredScopeState.valid ? restoredScopeState : { scope: 'following', groupId: null, optionValue: 'following', valid: true };
+    currentPath = restoredScopePath(restoredPathname, scopeState, restoredScopeState.valid);
     if (scope) {
-      scope.value = currentPath === '/global' ? 'all' : 'following';
+      scope.value = scopeState.optionValue;
       scope.dispatchEvent?.(new Event('styled-select-sync'));
     }
-    period = periodStateFromSearch(locationRef?.search ?? '', now(), root.dataset.initialPeriod);
+    period = restoredScopeState.valid
+      ? periodStateFromSearch(locationRef?.search ?? '', now(), root.dataset.initialPeriod)
+      : scopeDefaults('following', now()).period;
     const nextLaunch = urlState.get('launch');
-    launchFilter = nextLaunch === 'unknown' || (Number.isSafeInteger(Number(nextLaunch)) && Number(nextLaunch) > 0) ? nextLaunch : null;
+    launchFilter = restoredScopeState.valid && (nextLaunch === 'unknown' || (Number.isSafeInteger(Number(nextLaunch)) && Number(nextLaunch) > 0)) ? nextLaunch : null;
     launchFilterDetailAbort?.abort(); launchFilterDetailAbort = null;
     if (launchFilter === 'unknown') launchSelector?.setSelection({ type: 'unknown' });
     else if (!launchFilter) launchSelector?.setSelection({ type: 'all' });
     else { launchSelector?.setSelection({ type: 'all' }); void hydrateLaunchFilter(); }
-    geography = urlState.get('geography') === 'map-area' ? 'map-area' : 'global';
-    const nextSort = urlState.get('sort'); if (sort && SORTS.has(nextSort)) { sort.value = nextSort; sort.dispatchEvent?.(new Event('styled-select-sync')); }
+    geography = restoredScopeState.valid && urlState.get('geography') === 'map-area' ? 'map-area' : 'global';
+    const nextSort = urlState.get('sort');
+    if (sort) { sort.value = restoredScopeState.valid && SORTS.has(nextSort) ? nextSort : scopeDefaults(scopeState.scope, now()).sort; sort.dispatchEvent?.(new Event('styled-select-sync')); }
     geographyButtons.forEach((button) => button.setAttribute('aria-pressed', String(button.dataset.mapGeography === geography)));
     launchLayerVisible = launchLayerVisibleFromSearch(locationRef?.search ?? '');
     launchToggle?.setAttribute('aria-pressed', String(launchLayerVisible)); setLaunchLayerVisibility(map, launchLayerVisible);
-    selectedLaunchId = selectedLaunchIdFromSearch(locationRef?.search ?? '');
+    selectedLaunchId = restoredScopeState.valid ? selectedLaunchIdFromSearch(locationRef?.search ?? '') : null;
     const flightValue = urlState.get('selectedFlight');
-    selectedFlightId = selectedLaunchId ? null : (/^[0-9a-f-]{36}$/i.test(flightValue ?? '') ? flightValue : null);
+    selectedFlightId = restoredScopeState.valid && !selectedLaunchId && /^[0-9a-f-]{36}$/i.test(flightValue ?? '') ? flightValue : null;
     if (!selectedLaunchId) clearLaunchSelection();
     const viewport = mapViewportFromSearch(locationRef?.search ?? '');
     if (viewport) map.jumpTo?.({ center: viewport.center, zoom: viewport.zoom });
     updatePeriodUi();
+    if (!restoredScopeState.valid) syncUrl();
     void refreshTracks(); void refreshPersonalHistory(); if (launchLayerVisible) void refreshLaunches();
     if (selectedLaunchId) void selectLaunch(selectedLaunchId, { push: false });
     else if (selectedFlightId) void (async () => { await refreshList(); await revalidateSelectedFlight({ restore: true }); })();

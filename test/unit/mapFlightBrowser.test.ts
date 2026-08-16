@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { readFile } from 'node:fs/promises';
 
 // @ts-expect-error Browser assets remain JavaScript.
-import { defaultPeriodAnchor, mapFlightListRequestUrl, mapFlightSelectionRequestUrl, mapTrackRequestUrl, normalizeFlightListPayload, normalizeTrackPayload, periodStateFromSearch, stepPeriod, trackStatusMessage } from '../../public/scripts/app-ui/mapFlightBrowser.js';
+import { defaultPeriodAnchor, mapFlightListRequestUrl, mapFlightSelectionRequestUrl, mapTrackRequestUrl, normalizeFlightListPayload, normalizeTrackPayload, periodStateFromSearch, restoredScopePath, scopeDefaults, scopeStateFromLocation, stepPeriod, trackStatusMessage } from '../../public/scripts/app-ui/mapFlightBrowser.js';
 
 const bounds = { west: -106, south: 39, east: -105, north: 40 };
 
@@ -31,6 +31,40 @@ describe('flight map browser contracts', () => {
     expect(Object.fromEntries(track.searchParams)).toMatchObject({ scope: 'following', period: 'month', anchor: '2026-08-01', west: '-106', east: '-105', zoom: '8' });
     const list = new URL(mapFlightListRequestUrl('/v1/map-flights', { scope: 'all', period, geography: 'global', sort: 'distance', bounds, cursor: 'next' }), 'https://example.test');
     expect(Object.fromEntries(list.searchParams)).toEqual({ scope: 'all', period: 'month', anchor: '2026-08-01', geography: 'global', sort: 'distance', cursor: 'next' });
+  });
+
+  it('serializes a selected group through every flight request', () => {
+    const groupId = '00000000-0000-4000-8000-000000000042';
+    const parameters = { scope: 'group', groupId, period: { period: 'month', anchor: '2026-08-01' } };
+    const track = new URL(mapTrackRequestUrl('/v1/map-flights/tracks', { ...parameters, bounds, zoom: 8 }), 'https://example.test');
+    const list = new URL(mapFlightListRequestUrl('/v1/map-flights', { ...parameters, geography: 'global', sort: 'latest', bounds }), 'https://example.test');
+    const selection = new URL(mapFlightSelectionRequestUrl('/v1/map-flights/{flightId}', groupId, { ...parameters, geography: 'global', bounds }), 'https://example.test');
+    for (const url of [track, list, selection]) {
+      expect(url.searchParams.get('scope')).toBe('group');
+      expect(url.searchParams.get('group')).toBe(groupId);
+    }
+  });
+
+  it('restores only groups represented by the rendered scope options', () => {
+    const groupId = '00000000-0000-4000-8000-000000000042';
+    expect(scopeStateFromLocation('/following', `?group=${groupId}`, [groupId])).toEqual({ scope: 'group', groupId, optionValue: `group:${groupId}`, valid: true });
+    expect(scopeStateFromLocation('/following', `?group=${groupId}`, [])).toEqual({ scope: 'following', groupId: null, optionValue: 'following', valid: false });
+    expect(scopeStateFromLocation('/global', `?group=${groupId}`, [groupId])).toEqual({ scope: 'all', groupId: null, optionValue: 'all', valid: true });
+    expect(scopeStateFromLocation('/arena/us/boulder-745', '', [groupId])).toEqual({ scope: 'all', groupId: null, optionValue: 'all', valid: true });
+    expect(scopeStateFromLocation('/arena/us/boulder-745', '?view=following', [groupId])).toEqual({ scope: 'following', groupId: null, optionValue: 'following', valid: true });
+  });
+
+  it('defines the reset defaults for each pilot scope', () => {
+    expect(scopeDefaults('following', new Date(2026, 7, 15))).toEqual({ period: { period: 'month', anchor: '2026-08-01' }, sort: 'latest', geography: 'global' });
+    expect(scopeDefaults('group', new Date(2026, 7, 15))).toEqual({ period: { period: 'month', anchor: '2026-08-01' }, sort: 'latest', geography: 'global' });
+    expect(scopeDefaults('all', new Date(2026, 7, 15))).toEqual({ period: { period: 'month', anchor: '2026-08-01' }, sort: 'distance', geography: 'global' });
+  });
+
+  it('preserves an Arena pathname after popstate restoration', () => {
+    expect(restoredScopePath('/arena/us/boulder-745', { scope: 'all' }, true)).toBe('/arena/us/boulder-745');
+    expect(restoredScopePath('/arena/us/boulder-745', { scope: 'following' }, true)).toBe('/arena/us/boulder-745');
+    expect(restoredScopePath('/following', { scope: 'group' }, true)).toBe('/following');
+    expect(restoredScopePath('/following', { scope: 'following' }, false)).toBe('/following');
   });
 
   it('includes viewport bounds only when the list uses Map area', () => {
@@ -117,5 +151,14 @@ describe('flight map browser contracts', () => {
     expect(source).toContain("String(launchFilter) === String(launchId)");
     expect(source).toContain('else void hydrateLaunchFilter();');
     expect(source).toContain('launchFilterDetailAbort?.abort();');
+  });
+
+  it('resets dependent filters and selections on every scope change', async () => {
+    const source = await readFile('public/scripts/app-ui/mapFlightBrowser.js', 'utf8');
+    expect(source).toContain('const resetForScopeChange = (nextScopeState) => {');
+    expect(source).toContain('launchFilter = null;');
+    expect(source).toContain('clearFlightSelection();');
+    expect(source).toContain('clearLaunchSelection();');
+    expect(source).toContain("launchSelector?.setSelection({ type: 'all' });");
   });
 });

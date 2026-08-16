@@ -1,7 +1,7 @@
 import { sql, type SQL } from 'drizzle-orm';
 import type { Database } from '../db/client.js';
 
-export type FlightMapScope = 'personal' | 'following' | 'all';
+export type FlightMapScope = 'personal' | 'following' | 'all' | 'group';
 export type FlightMapPeriod = 'day' | 'month' | 'year' | 'custom' | 'all-time';
 export type FlightMapGeography = 'global' | 'map-area';
 export type FlightMapSort = 'distance' | 'latest' | 'duration';
@@ -14,9 +14,8 @@ export type FlightMapViewport = {
   north: number;
 };
 
-export type FlightMapFilter = {
+type FlightMapFilterBase = {
   viewerUserId: string;
-  scope: FlightMapScope;
   period: FlightMapPeriod;
   /** A YYYY-MM-DD date within the selected day, month, or year. Omit for all-time. */
   anchor?: string;
@@ -25,6 +24,11 @@ export type FlightMapFilter = {
   endDate?: string;
   launch?: FlightMapLaunchFilter;
 };
+
+export type FlightMapFilter = FlightMapFilterBase & (
+  | { scope: 'group'; groupId: string }
+  | { scope: Exclude<FlightMapScope, 'group'>; groupId?: never }
+);
 
 export type FlightMapTrackInput = FlightMapFilter & {
   viewport: FlightMapViewport;
@@ -179,7 +183,7 @@ function parseGeometry(value: FlightMapGeometry | string): FlightMapGeometry {
 }
 
 function validateScope(scope: string): asserts scope is FlightMapScope {
-  if (scope !== 'personal' && scope !== 'following' && scope !== 'all') throw new FlightMapInputError('Flight map scope is invalid.');
+  if (scope !== 'personal' && scope !== 'following' && scope !== 'all' && scope !== 'group') throw new FlightMapInputError('Flight map scope is invalid.');
 }
 
 function validatePeriod(period: string): asserts period is FlightMapPeriod {
@@ -254,6 +258,12 @@ function validateLaunch(value: FlightMapLaunchFilter | undefined): void {
 function validateFilter(input: FlightMapFilter): ValidatedPeriod {
   validateUuid(input.viewerUserId, 'Viewer user ID');
   validateScope(input.scope);
+  if (input.scope === 'group') {
+    if (!input.groupId) throw new FlightMapInputError('Group ID is required for group scope.');
+    validateUuid(input.groupId, 'Group ID');
+  } else if (input.groupId !== undefined) {
+    throw new FlightMapInputError('Group ID is only valid for group scope.');
+  }
   validatePeriod(input.period);
   validateLaunch(input.launch);
   return validatePeriodValues(input);
@@ -284,7 +294,7 @@ function periodWindow(period: Exclude<FlightMapPeriod, 'all-time'>, anchor: stri
   };
 }
 
-function scopePredicate(scope: FlightMapScope, viewerUserId: string): SQL {
+function scopePredicate(scope: FlightMapScope, viewerUserId: string, groupId?: string): SQL {
   if (scope === 'personal') return sql`flight.user_id = ${viewerUserId}`;
   if (scope === 'following') return sql`(
     flight.user_id = ${viewerUserId}
@@ -292,6 +302,20 @@ function scopePredicate(scope: FlightMapScope, viewerUserId: string): SQL {
       SELECT 1 FROM pilot_follows follow
       WHERE follow.follower_user_id = ${viewerUserId}
         AND follow.followed_user_id = flight.user_id
+    )
+  )`;
+  if (scope === 'group') return sql`(
+    EXISTS (
+      SELECT 1 FROM pilot_group_memberships viewer_membership
+      WHERE viewer_membership.group_id = ${groupId}
+        AND viewer_membership.user_id = ${viewerUserId}
+        AND viewer_membership.status = 'accepted'
+    )
+    AND EXISTS (
+      SELECT 1 FROM pilot_group_memberships roster_membership
+      WHERE roster_membership.group_id = ${groupId}
+        AND roster_membership.user_id = flight.user_id
+        AND roster_membership.status = 'accepted'
     )
   )`;
   return sql`true`;
@@ -455,7 +479,7 @@ export function createFlightMapService(database: Executor): FlightMapService {
         ) lod ON true
         WHERE flight.processing_status = 'completed'
           AND flight.started_at IS NOT NULL
-          AND ${scopePredicate(input.scope, input.viewerUserId)}
+          AND ${scopePredicate(input.scope, input.viewerUserId, input.groupId)}
           AND ${periodPredicate(input.period, periodValues)}
           AND ${launchPredicate(input.launch)}
           AND ${intersectionPredicate()}
@@ -524,7 +548,7 @@ export function createFlightMapService(database: Executor): FlightMapService {
         LEFT JOIN launches catalog_launch ON catalog_launch.id = flight.launch_id
         WHERE flight.processing_status = 'completed'
           AND flight.started_at IS NOT NULL
-          AND ${scopePredicate(input.scope, input.viewerUserId)}
+          AND ${scopePredicate(input.scope, input.viewerUserId, input.groupId)}
           AND ${periodPredicate(input.period, periodValues)}
           AND ${launchPredicate(input.launch)}
           AND ${geographicPredicate}
@@ -586,7 +610,7 @@ export function createFlightMapService(database: Executor): FlightMapService {
         WHERE flight.flight_id = ${input.flightId}::uuid
           AND flight.processing_status = 'completed'
           AND flight.started_at IS NOT NULL
-          AND ${scopePredicate(input.scope, input.viewerUserId)}
+          AND ${scopePredicate(input.scope, input.viewerUserId, input.groupId)}
           AND ${periodPredicate(input.period, periodValues)}
           AND ${launchPredicate(input.launch)}
           AND ${geographicPredicate}
@@ -633,7 +657,7 @@ export function createFlightMapService(database: Executor): FlightMapService {
         ) country ON true
         WHERE flight.processing_status = 'completed'
           AND flight.started_at IS NOT NULL
-          AND ${scopePredicate(input.scope, input.viewerUserId)}
+          AND ${scopePredicate(input.scope, input.viewerUserId, input.groupId)}
           AND ${periodPredicate(input.period, periodValues)}
           AND ${launchPredicate(input.launch)}
           AND ${geographicPredicate}

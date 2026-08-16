@@ -9,6 +9,16 @@ function databaseWithRows(rows: unknown[]) {
 }
 
 describe('launch map viewport markers', () => {
+  it('requires a valid group ID for group scope', async () => {
+    const database = databaseWithRows([]);
+    const service = createLaunchMapService(database as never);
+    const base = { viewport: { west: -106, south: 39, east: -104, north: 41 }, viewerUserId, period: 'all-time' as const };
+
+    await expect(service.listViewportMarkers({ ...base, scope: 'group' } as never)).rejects.toThrow('Group ID is required for group scope.');
+    await expect(service.listViewportMarkers({ ...base, scope: 'group', groupId: 'invalid' })).rejects.toThrow('Group ID is invalid.');
+    expect(database.execute).not.toHaveBeenCalled();
+  });
+
   it('maps catalog launches in an ordinary viewport', async () => {
     const database = databaseWithRows([{
       launchId: '42',

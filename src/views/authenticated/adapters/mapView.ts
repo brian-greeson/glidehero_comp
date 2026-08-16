@@ -1,4 +1,4 @@
-import type { MapPageModel } from '../models.js';
+import type { MapGroupOptionView, MapPageModel } from '../models.js';
 
 export type ProductionMapInput = {
   mode: MapPageModel['mode'];
@@ -14,16 +14,22 @@ export type ProductionMapInput = {
   territoryTileMaximumZoom?: number;
   arenaSourceId?: number;
   focusArenaSourceId?: number;
+  groupOptions?: MapGroupOptionView[];
+  selectedGroupId?: string;
 };
 
 /** Build an endpoint-backed map model. Map data is loaded by MapLibre after render. */
 export function createMapPageModel(
-  shell: Omit<MapPageModel, 'page' | 'mode' | 'period' | 'defaultSort' | 'location' | 'leaderboard'>,
+  shell: Omit<MapPageModel, 'page' | 'mode' | 'period' | 'defaultSort' | 'location' | 'leaderboard' | 'groupOptions' | 'selectedGroup'>,
   input: ProductionMapInput,
 ): MapPageModel {
   const mapUrl = new URL(input.mapHref, 'http://glidehero.local');
   const hasExplicitPeriod = mapUrl.searchParams.has('period') || mapUrl.searchParams.has('month');
   const period = input.mode === 'personal' && !hasExplicitPeriod ? 'all-time' : input.period;
+  const groupOptions = input.groupOptions ?? [];
+  const selectedGroup = input.selectedGroupId
+    ? groupOptions.find((group) => group.id === input.selectedGroupId) ?? null
+    : null;
   return {
     ...shell,
     page: 'map',
@@ -33,6 +39,8 @@ export function createMapPageModel(
     location: input.location,
     ...(input.locationClearHref ? { locationClearHref: input.locationClearHref } : {}),
     leaderboard: [],
+    groupOptions,
+    selectedGroup,
     currentUserId: input.currentUserId,
     territoryColor: input.territoryColor,
     ...(input.mapModeHrefs ? { mapModeHrefs: input.mapModeHrefs } : {}),

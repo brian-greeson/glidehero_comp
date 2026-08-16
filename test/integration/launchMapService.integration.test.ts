@@ -7,6 +7,8 @@ let database: Awaited<ReturnType<typeof resetAndMigrateTestDatabase>>;
 const viewerId = '00000000-0000-4000-8000-000000000001';
 const followedId = '00000000-0000-4000-8000-000000000002';
 const otherId = '00000000-0000-4000-8000-000000000003';
+const groupId = '00000000-0000-4000-8000-000000000101';
+const unauthorizedGroupId = '00000000-0000-4000-8000-000000000102';
 
 beforeAll(async () => { database = await resetAndMigrateTestDatabase(); });
 beforeEach(async () => {
@@ -32,6 +34,15 @@ beforeEach(async () => {
   await database.pool.query(`
     INSERT INTO pilot_follows (follower_user_id, followed_user_id) VALUES ($1, $2)
   `, [viewerId, followedId]);
+  await database.pool.query(`
+    INSERT INTO pilot_groups (group_id, owner_user_id, name) VALUES
+      ($1, $3, 'Launch Group'), ($2, $3, 'Unauthorized Group')
+  `, [groupId, unauthorizedGroupId, otherId]);
+  await database.pool.query(`
+    INSERT INTO pilot_group_memberships (group_id, user_id, status, accepted_at) VALUES
+      ($1, $2, 'accepted', now()), ($1, $3, 'accepted', now()),
+      ($1, $4, 'pending', NULL), ($5, $3, 'accepted', now())
+  `, [groupId, viewerId, otherId, followedId, unauthorizedGroupId]);
   await addFlight('00000000-0000-4000-8000-000000000011', viewerId, '2026-08-05T12:00:00Z', 1);
   await addFlight('00000000-0000-4000-8000-000000000012', followedId, '2026-07-05T12:00:00Z', 1);
   await addFlight('00000000-0000-4000-8000-000000000013', otherId, '2026-08-10T12:00:00Z', 1);
@@ -53,6 +64,22 @@ async function addFlight(id: string, userId: string, startedAt: string, launchId
 }
 
 describe('launch map service integration', () => {
+  it('counts only accepted roster flights when the viewer is an accepted group member', async () => {
+    const service = createLaunchMapService(database.db);
+    const filter = { viewerUserId: viewerId, scope: 'group' as const, groupId, period: 'all-time' as const };
+
+    await expect(service.getLaunchDetail({ ...filter, launchId: 1 })).resolves.toMatchObject({ matchingFlightCount: 2, visited: true });
+    await expect(service.listViewportMarkers({
+      ...filter, viewport: { west: 179, south: 0, east: -179, north: 10 },
+    })).resolves.toEqual([
+      expect.objectContaining({ launchId: 1, visited: true }),
+      expect.objectContaining({ launchId: 2, visited: false }),
+    ]);
+    await expect(service.getLaunchDetail({
+      ...filter, groupId: unauthorizedGroupId, launchId: 1,
+    })).resolves.toMatchObject({ matchingFlightCount: 0, visited: false });
+  });
+
   it('lists at most 25 catalog options alphabetically within ordinary and antimeridian viewports', async () => {
     const service = createLaunchMapService(database.db);
     const ordinary = await service.listLaunchOptions({

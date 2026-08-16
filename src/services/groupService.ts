@@ -5,6 +5,7 @@ type Executor = Pick<Database, 'execute'>;
 type Tx = Parameters<Parameters<Database['transaction']>[0]>[0];
 
 export type GroupSummary = { groupId: string; name: string; ownerUserId: string; memberCount: number; capacity: number };
+export type GroupOption = { groupId: string; name: string };
 export type GroupInvitation = GroupSummary & { invitedAt: Date; ownerDisplayName: string };
 export type GroupStanding = {
   userId: string; displayName: string; territoryColor: string; claimedCellCount: number; bestFivePointDistanceMeters: number | null;
@@ -26,6 +27,7 @@ export type GroupPageData = {
 };
 
 export interface GroupService {
+  listAcceptedGroupOptions(userId: string): Promise<GroupOption[]>;
   createGroup(input: { ownerUserId: string; name: string }): Promise<GroupSummary>;
   deleteGroup(input: { groupId: string; actorUserId: string }): Promise<void>;
   invite(input: { groupId: string; actorUserId: string; userId: string }): Promise<void>;
@@ -168,6 +170,17 @@ export function createGroupService(database: Database): GroupService {
     };
   }
   const service: GroupService = {
+    async listAcceptedGroupOptions(userId) {
+      const result = await database.execute<GroupOption>(sql`
+        SELECT g.group_id AS "groupId", g.name
+        FROM pilot_group_memberships membership
+        JOIN pilot_groups g ON g.group_id = membership.group_id
+        WHERE membership.user_id = ${userId}
+          AND membership.status = 'accepted'
+        ORDER BY lower(g.name), g.group_id
+      `);
+      return result.rows;
+    },
     async createGroup({ ownerUserId, name }) {
       return database.transaction(async (tx) => {
         const rows = await tx.execute<{ group_id: string }>(sql`INSERT INTO pilot_groups (owner_user_id,name) VALUES (${ownerUserId},${cleanName(name)}) RETURNING group_id`);

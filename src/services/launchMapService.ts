@@ -107,8 +107,17 @@ function validateLaunchId(value: number): void {
 }
 
 function validateScope(scope: string): asserts scope is FlightMapScope {
-  if (scope !== 'personal' && scope !== 'following' && scope !== 'all') {
+  if (scope !== 'personal' && scope !== 'following' && scope !== 'all' && scope !== 'group') {
     throw new FlightMapInputError('Flight map scope is invalid.');
+  }
+}
+
+function validateGroupScope(input: FlightMapFilter): void {
+  if (input.scope === 'group') {
+    if (!input.groupId) throw new FlightMapInputError('Group ID is required for group scope.');
+    if (!UUID.test(input.groupId)) throw new FlightMapInputError('Group ID is invalid.');
+  } else if (input.groupId !== undefined) {
+    throw new FlightMapInputError('Group ID is only valid for group scope.');
   }
 }
 
@@ -149,6 +158,7 @@ function validateDetailInput(input: LaunchMapDetailInput): ValidatedDates {
   validateLaunchFilter(input.launch);
   if (!UUID.test(input.viewerUserId)) throw new FlightMapInputError('Viewer user ID is invalid.');
   validateScope(input.scope);
+  validateGroupScope(input);
   if (input.period !== 'day' && input.period !== 'month' && input.period !== 'year' && input.period !== 'custom' && input.period !== 'all-time') {
     throw new FlightMapInputError('Flight map period is invalid.');
   }
@@ -168,6 +178,7 @@ function validateMarkerInput(input: LaunchMapMarkerInput): ValidatedDates {
   validateLaunchFilter(input.launch);
   if (!UUID.test(input.viewerUserId)) throw new FlightMapInputError('Viewer user ID is invalid.');
   validateScope(input.scope);
+  validateGroupScope(input);
   if (input.period !== 'day' && input.period !== 'month' && input.period !== 'year' && input.period !== 'custom' && input.period !== 'all-time') throw new FlightMapInputError('Flight map period is invalid.');
   if (input.period === 'custom') {
     if (input.anchor !== undefined) throw new FlightMapInputError('Custom range does not accept an anchor date.');
@@ -204,7 +215,7 @@ function periodWindow(period: Exclude<FlightMapPeriod, 'all-time'>, anchor: stri
   };
 }
 
-function scopePredicate(scope: FlightMapScope, viewerUserId: string): SQL {
+function scopePredicate(scope: FlightMapScope, viewerUserId: string, groupId?: string): SQL {
   if (scope === 'personal') return sql`flight.user_id = ${viewerUserId}`;
   if (scope === 'following') return sql`(
     flight.user_id = ${viewerUserId}
@@ -212,6 +223,20 @@ function scopePredicate(scope: FlightMapScope, viewerUserId: string): SQL {
       SELECT 1 FROM pilot_follows follow
       WHERE follow.follower_user_id = ${viewerUserId}
         AND follow.followed_user_id = flight.user_id
+    )
+  )`;
+  if (scope === 'group') return sql`(
+    EXISTS (
+      SELECT 1 FROM pilot_group_memberships viewer_membership
+      WHERE viewer_membership.group_id = ${groupId}
+        AND viewer_membership.user_id = ${viewerUserId}
+        AND viewer_membership.status = 'accepted'
+    )
+    AND EXISTS (
+      SELECT 1 FROM pilot_group_memberships roster_membership
+      WHERE roster_membership.group_id = ${groupId}
+        AND roster_membership.user_id = flight.user_id
+        AND roster_membership.status = 'accepted'
     )
   )`;
   return sql`true`;
@@ -338,7 +363,7 @@ export function createLaunchMapService(database: Executor): LaunchMapService {
           ON flight.launch_id = launch.id
           AND flight.processing_status = 'completed'
           AND flight.started_at IS NOT NULL
-          AND ${scopePredicate(input.scope, input.viewerUserId)}
+          AND ${scopePredicate(input.scope, input.viewerUserId, input.groupId)}
           AND ${periodPredicate(input.period, dates)}
           AND ${launchPredicate(input.launch)}
         WHERE launch.latitude >= ${viewport.south}
@@ -376,7 +401,7 @@ export function createLaunchMapService(database: Executor): LaunchMapService {
           ON flight.launch_id = launch.id
           AND flight.processing_status = 'completed'
           AND flight.started_at IS NOT NULL
-          AND ${scopePredicate(input.scope, input.viewerUserId)}
+          AND ${scopePredicate(input.scope, input.viewerUserId, input.groupId)}
           AND ${periodPredicate(input.period, dates)}
           AND ${launchPredicate(input.launch)}
         WHERE launch.id = ${input.launchId}

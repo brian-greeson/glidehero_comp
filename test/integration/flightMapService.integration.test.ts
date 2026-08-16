@@ -10,6 +10,8 @@ const otherId = '00000000-0000-4000-8000-000000000003';
 const ownFlightId = '00000000-0000-4000-8000-000000000011';
 const followedFlightId = '00000000-0000-4000-8000-000000000012';
 const otherFlightId = '00000000-0000-4000-8000-000000000013';
+const groupId = '00000000-0000-4000-8000-000000000101';
+const unauthorizedGroupId = '00000000-0000-4000-8000-000000000102';
 
 beforeAll(async () => { database = await resetAndMigrateTestDatabase(); });
 beforeEach(async () => {
@@ -25,6 +27,15 @@ beforeEach(async () => {
   await database.pool.query(`
     INSERT INTO pilot_follows (follower_user_id, followed_user_id) VALUES ($1, $2)
   `, [viewerId, followedId]);
+  await database.pool.query(`
+    INSERT INTO pilot_groups (group_id, owner_user_id, name) VALUES
+      ($1, $3, 'Map Group'), ($2, $3, 'Unauthorized Group')
+  `, [groupId, unauthorizedGroupId, otherId]);
+  await database.pool.query(`
+    INSERT INTO pilot_group_memberships (group_id, user_id, status, accepted_at) VALUES
+      ($1, $2, 'accepted', now()), ($1, $3, 'accepted', now()),
+      ($1, $4, 'pending', NULL), ($5, $3, 'accepted', now())
+  `, [groupId, viewerId, otherId, followedId, unauthorizedGroupId]);
   await addFlight({
     id: ownFlightId,
     userId: viewerId,
@@ -105,6 +116,27 @@ async function addFlight(input: {
 }
 
 describe('flight map service', () => {
+  it('authorizes group scope and includes only accepted roster flights across list, tracks, and selection', async () => {
+    const service = createFlightMapService(database.db);
+    const filter = { viewerUserId: viewerId, scope: 'group' as const, groupId, period: 'all-time' as const };
+
+    await expect(service.listFlights({ ...filter, geography: 'global', sort: 'latest' })).resolves.toMatchObject({
+      items: [expect.objectContaining({ flightId: ownFlightId }), expect.objectContaining({ flightId: otherFlightId })],
+    });
+    await expect(service.getFlight({ ...filter, geography: 'global', flightId: followedFlightId })).resolves.toBeNull();
+    await expect(service.getFlight({ ...filter, geography: 'global', flightId: otherFlightId })).resolves.toMatchObject({ flightId: otherFlightId });
+    await expect(service.listViewportTracks({
+      ...filter, viewport: { west: -107, south: 29, east: -78, north: 41 }, zoom: 8,
+    })).resolves.toMatchObject({ tracks: [
+      expect.objectContaining({ flightId: otherFlightId }),
+      expect.objectContaining({ flightId: ownFlightId }),
+    ] });
+
+    await expect(service.listFlights({
+      ...filter, groupId: unauthorizedGroupId, geography: 'global', sort: 'latest',
+    })).resolves.toMatchObject({ items: [] });
+  });
+
   it('lists completed historical flights by launch-local period, scope, distance, and stable cursor', async () => {
     const service = createFlightMapService(database.db);
     const first = await service.listFlights({

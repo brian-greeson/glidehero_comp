@@ -119,6 +119,11 @@ export type AuthenticatedShellInput = {
   title?: string;
 };
 
+export type MapGroupOptionView = {
+  id: string;
+  name: string;
+};
+
 export type MapPageModel = AuthenticatedShellModel & {
   page: 'map';
   mode: 'personal' | 'following' | 'competitive';
@@ -127,6 +132,8 @@ export type MapPageModel = AuthenticatedShellModel & {
   location: string | null;
   locationClearHref?: string;
   leaderboard: Array<{ rank: number; pilot: PilotView; cells: string; isCurrent: boolean }>;
+  groupOptions: MapGroupOptionView[];
+  selectedGroup: MapGroupOptionView | null;
   mapModeHrefs?: {
     personal: string;
     following: string;

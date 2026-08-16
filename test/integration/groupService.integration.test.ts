@@ -51,6 +51,25 @@ async function addClaimedFlight(input: {
 }
 
 describe('groupService', () => {
+  it('lists only accepted groups alphabetically without standings work', async () => {
+    if (!database) throw new Error('Test database was not initialized.');
+    const auth = createAuthService(database.db, { sessionTtlSeconds: 604800 });
+    const pilot = await auth.signup({ email: 'options@example.com', password: 'correct horse battery staple', displayName: 'Options Pilot' });
+    const owner = await auth.signup({ email: 'options-owner@example.com', password: 'correct horse battery staple', displayName: 'Options Owner' });
+    const service = createGroupService(database.db);
+    const weekend = await service.createGroup({ ownerUserId: pilot.user.userId, name: 'Weekend XC' });
+    const alpine = await service.createGroup({ ownerUserId: owner.user.userId, name: 'alpine Crew' });
+    const pending = await service.createGroup({ ownerUserId: owner.user.userId, name: 'Pending Crew' });
+    await service.invite({ groupId: alpine.groupId, actorUserId: owner.user.userId, userId: pilot.user.userId });
+    await service.acceptInvitation({ groupId: alpine.groupId, userId: pilot.user.userId });
+    await service.invite({ groupId: pending.groupId, actorUserId: owner.user.userId, userId: pilot.user.userId });
+
+    await expect(service.listAcceptedGroupOptions(pilot.user.userId)).resolves.toEqual([
+      { groupId: alpine.groupId, name: 'alpine Crew' },
+      { groupId: weekend.groupId, name: 'Weekend XC' },
+    ]);
+  });
+
   it('enforces invitation lifecycle, full roster counts, owner rules, and deletion cascades', async () => {
     if (!database) throw new Error('Test database was not initialized.');
     const auth = createAuthService(database.db, { sessionTtlSeconds: 604800 });

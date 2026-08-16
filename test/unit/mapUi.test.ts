@@ -4,7 +4,12 @@ import { createAuthenticatedShellModel } from '../../src/views/authenticated/ada
 import { createMapPageModel } from '../../src/views/authenticated/adapters/mapView.js';
 import { createAuthenticatedPageRenderer } from '../../src/views/authenticated/renderer.js';
 
-function model(mode: 'personal' | 'following' | 'competitive' = 'following', period: 'current-month' | 'all-time' = 'current-month') {
+function model(
+  mode: 'personal' | 'following' | 'competitive' = 'following',
+  period: 'current-month' | 'all-time' = 'current-month',
+  groups: Array<{ id: string; name: string }> = [],
+  selectedGroup?: { id: string; name: string },
+) {
   return {
     ...createAuthenticatedShellModel({ page: 'map' as const, user: { displayName: 'Pilot' }, mapHref: mode === 'personal' ? '/personal' : mode === 'competitive' ? '/global' : '/following' }),
     page: 'map' as const,
@@ -13,6 +18,8 @@ function model(mode: 'personal' | 'following' | 'competitive' = 'following', per
     defaultSort: mode === 'competitive' ? 'distance' as const : 'latest' as const,
     location: null,
     leaderboard: [],
+    groupOptions: groups,
+    selectedGroup: selectedGroup ?? null,
   };
 }
 
@@ -63,6 +70,39 @@ describe('flight-first map UI', () => {
     expect(all).toContain('<option value="all" selected>All Pilots</option>');
   });
 
+  it('renders accepted group choices after an unlabeled nonselectable separator', async () => {
+    const html = await createAuthenticatedPageRenderer()(model('following', 'current-month', [
+      { id: 'alpine-id', name: 'Alpine Club' },
+      { id: 'zephyr-id', name: 'Zephyr Pilots' },
+    ]));
+
+    expect(html.indexOf('data-styled-select-option="following"')).toBeLessThan(html.indexOf('data-styled-select-option="all"'));
+    expect(html.indexOf('data-styled-select-option="all"')).toBeLessThan(html.indexOf('class="map-select__separator"'));
+    expect(html.indexOf('class="map-select__separator"')).toBeLessThan(html.indexOf('data-styled-select-option="group:alpine-id"'));
+    expect(html.indexOf('data-styled-select-option="group:alpine-id"')).toBeLessThan(html.indexOf('data-styled-select-option="group:zephyr-id"'));
+    expect(html).toContain('<div class="map-select__separator" role="separator" aria-hidden="true">——</div>');
+    expect(html).not.toContain('data-styled-select-option="separator"');
+    expect(html).toContain('<option value="group:alpine-id">Alpine Club</option>');
+    expect(html).toContain('<option value="group:zephyr-id">Zephyr Pilots</option>');
+  });
+
+  it('shows the selected group name and omits group UI from empty and personal scopes', async () => {
+    const groups = [{ id: 'alpine-id', name: 'Alpine Club' }];
+    const selected = await createAuthenticatedPageRenderer()(model('following', 'current-month', groups, groups[0]));
+    expect(selected).toContain('<option value="group:alpine-id" selected>Alpine Club</option>');
+    expect(selected).toContain('<span data-styled-select-value>Alpine Club</span>');
+    expect(selected).toContain('data-styled-select-option="group:alpine-id" aria-selected="true"');
+
+    const empty = await createAuthenticatedPageRenderer()(model());
+    expect(empty).not.toContain('class="map-select__separator"');
+    expect(empty).not.toContain('data-styled-select-option="group:');
+
+    const personal = await createAuthenticatedPageRenderer()(model('personal', 'all-time', groups, groups[0]));
+    expect(personal).not.toContain('data-map-scope');
+    expect(personal).not.toContain('Alpine Club');
+    expect(personal).not.toContain('class="map-select__separator"');
+  });
+
   it('uses Latest for Following and My Flights, and Distance for All Pilots', async () => {
     const html = await createAuthenticatedPageRenderer()(model('following'));
     expect(html).toContain('data-map-geography="global" aria-pressed="true"');
@@ -109,6 +149,28 @@ describe('flight-first map UI', () => {
     expect(explicitPersonal).toMatchObject({ period: 'current-month', defaultSort: 'latest' });
     expect(following).toMatchObject({ period: 'current-month', defaultSort: 'latest' });
     expect(all).toMatchObject({ period: 'current-month', defaultSort: 'distance' });
+  });
+
+  it('resolves the selected group from accepted group options without changing map mode defaults', () => {
+    const shell = createAuthenticatedShellModel({ page: 'map', user: { displayName: 'Pilot' }, mapHref: '/following?group=alpine-id' });
+    const result = createMapPageModel(shell, {
+      mode: 'following',
+      period: 'current-month',
+      location: null,
+      mapHref: '/following?group=alpine-id',
+      currentUserId: 'pilot-id',
+      territoryColor: '#1769AA',
+      groupOptions: [{ id: 'alpine-id', name: 'Alpine Club' }],
+      selectedGroupId: 'alpine-id',
+    });
+
+    expect(result).toMatchObject({
+      mode: 'following',
+      period: 'current-month',
+      defaultSort: 'latest',
+      groupOptions: [{ id: 'alpine-id', name: 'Alpine Club' }],
+      selectedGroup: { id: 'alpine-id', name: 'Alpine Club' },
+    });
   });
 
   it('styles a persistent desktop panel and three mobile sheet states', async () => {

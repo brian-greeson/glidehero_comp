@@ -29,6 +29,15 @@ describe('map launch layer contracts', () => {
     expect(Object.fromEntries(detailUrl.searchParams)).toEqual({ scope: 'personal', period: 'month', anchor: '2026-08-01', launch: '42' });
   });
 
+  it('carries group scope through marker and detail requests', () => {
+    const groupId = '00000000-0000-4000-8000-000000000042';
+    const parameters = { scope: 'group', groupId, period: { period: 'month', anchor: '2026-08-01' } };
+    const markerUrl = new URL(mapLaunchRequestUrl('/v1/map-launches', { west: -106, south: 39, east: -105, north: 40 }, parameters), 'https://example.test');
+    const detailUrl = new URL(mapLaunchDetailRequestUrl('/v1/map-launches/{launchId}', 42, parameters), 'https://example.test');
+    expect(markerUrl.searchParams.get('group')).toBe(groupId);
+    expect(detailUrl.searchParams.get('group')).toBe(groupId);
+  });
+
   it('uses visible-by-default URL state and validates launch selection', () => {
     expect(launchLayerVisibleFromSearch('')).toBe(true);
     expect(launchLayerVisibleFromSearch('?launches=off')).toBe(false);

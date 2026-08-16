@@ -45,7 +45,7 @@ import { createFlightMapPayload, createFlightPageView, createFlightSocialPreview
 import type { PublicFlightPageRenderer } from '../views/publicFlight/renderer.js';
 import type { CellFlightTrackService } from '../services/cellFlightTrackService.js';
 import type { MapReplayService } from '../services/mapReplayService.js';
-import { FlightMapInputError, type FlightMapService } from '../services/flightMapService.js';
+import { FlightMapInputError, type FlightMapScope, type FlightMapService } from '../services/flightMapService.js';
 import type { OnboardingService, OnboardingStepKey } from '../services/onboardingService.js';
 import { GroupError, type GroupService } from '../services/groupService.js';
 import { createOnboardingView } from '../views/authenticated/adapters/onboardingView.js';
@@ -130,11 +130,12 @@ const launchOptionsQuerySchema = z.union([
   viewportBoundsSchema,
   z.object({ q: z.string().trim().min(2).max(100) }).strict(),
 ]);
-const flightMapScopeSchema = z.enum(['personal', 'following', 'all']);
+const flightMapScopeSchema = z.enum(['personal', 'following', 'all', 'group']);
 const flightMapPeriodSchema = z.enum(['day', 'month', 'year', 'custom', 'all-time']);
 const flightMapAnchorSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 const flightMapFilterShape = {
   scope: flightMapScopeSchema,
+  group: z.string().uuid().optional(),
   period: flightMapPeriodSchema,
   anchor: flightMapAnchorSchema.optional(),
   start: flightMapAnchorSchema.optional(),
@@ -146,7 +147,8 @@ function isValidFlightMapDate(value: string | undefined): value is string {
   const date = new Date(`${value}T00:00:00.000Z`);
   return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value;
 }
-function refineFlightMapDates(value: { scope?: string; period: string; anchor?: string; start?: string; end?: string }, context: z.RefinementCtx) {
+function refineFlightMapDates(value: { scope?: string; group?: string; period: string; anchor?: string; start?: string; end?: string }, context: z.RefinementCtx) {
+  if ((value.scope === 'group') !== (value.group !== undefined)) context.addIssue({ code: 'custom', message: 'Group scope requires exactly one group ID.' });
   if (value.scope === 'personal' && value.period === 'day') context.addIssue({ code: 'custom', message: 'Personal history does not support a day period.' });
   for (const dateValue of [value.anchor, value.start, value.end]) {
     if (dateValue !== undefined && !isValidFlightMapDate(dateValue)) context.addIssue({ code: 'custom', message: 'Flight map date is invalid.' });
@@ -160,6 +162,10 @@ function refineFlightMapDates(value: { scope?: string; period: string; anchor?: 
     return;
   }
   if (value.anchor === undefined || value.start !== undefined || value.end !== undefined) context.addIssue({ code: 'custom', message: 'Flight map period anchor is invalid.' });
+}
+
+function flightMapScopeValues(scope: FlightMapScope, group: string | undefined) {
+  return scope === 'group' ? { scope, groupId: group as string } : { scope };
 }
 const flightMapTrackQuerySchema = z.object({
   ...flightMapFilterShape,
@@ -748,6 +754,13 @@ export function createWebRouter(dependencies: {
     );
   }
 
+  async function acceptedMapGroupOptions(userId: string) {
+    const groups = dependencies.groups
+      ? await dependencies.groups.listAcceptedGroupOptions(userId)
+      : [];
+    return groups.map((group) => ({ id: group.groupId, name: group.name }));
+  }
+
   router.post('/v1/igc-uploads/intents', async (req, res, next) => {
     const currentUser = res.locals.currentUser;
     if (!currentUser) {
@@ -1021,9 +1034,9 @@ export function createWebRouter(dependencies: {
     if (!parsed.success) return next(new AppError(400, 'invalid_request', 'Launch map viewport is invalid.'));
     if (!dependencies.launchMap) throw new Error('Launch map service is not configured.');
     try {
-      const { west, south, east, north, scope, period, anchor, start, end, launch } = parsed.data;
+      const { west, south, east, north, scope, group, period, anchor, start, end, launch } = parsed.data;
       const launches = await dependencies.launchMap.listViewportMarkers({
-        viewport: { west, south, east, north }, viewerUserId: currentUser.userId, scope, period,
+        viewport: { west, south, east, north }, viewerUserId: currentUser.userId, ...flightMapScopeValues(scope, group), period,
         ...(launch === undefined ? {} : { launch }),
         ...(anchor === undefined ? {} : { anchor }),
         ...(start === undefined ? {} : { startDate: start }),
@@ -1054,22 +1067,15 @@ export function createWebRouter(dependencies: {
     const currentUser = res.locals.currentUser;
     if (!currentUser) return next(new AppError(401, 'unauthorized', 'Sign in before viewing map launches.'));
     const launchId = z.coerce.number().int().positive().safeParse(req.params.launchId);
-    const parsed = z.object({
-      scope: flightMapScopeSchema,
-      period: flightMapPeriodSchema,
-      anchor: flightMapAnchorSchema.optional(),
-      start: flightMapAnchorSchema.optional(),
-      end: flightMapAnchorSchema.optional(),
-      launch: z.union([z.literal('unknown'), z.coerce.number().int().positive()]).optional(),
-    }).strict().superRefine(refineFlightMapDates).safeParse(req.query);
+    const parsed = z.object(flightMapFilterShape).strict().superRefine(refineFlightMapDates).safeParse(req.query);
     if (!launchId.success || !parsed.success) return next(new AppError(400, 'invalid_request', 'Launch detail query is invalid.'));
     if (!dependencies.launchMap) throw new Error('Launch map service is not configured.');
-    const { scope, period, anchor, start, end, launch: launchFilter } = parsed.data;
+    const { scope, group, period, anchor, start, end, launch: launchFilter } = parsed.data;
     try {
       const launch = await dependencies.launchMap.getLaunchDetail({
         launchId: launchId.data,
         viewerUserId: currentUser.userId,
-        scope,
+        ...flightMapScopeValues(scope, group),
         period,
         ...(launchFilter === undefined ? {} : { launch: launchFilter }),
         ...(anchor === undefined ? {} : { anchor }),
@@ -1089,11 +1095,11 @@ export function createWebRouter(dependencies: {
     const parsed = flightMapTrackQuerySchema.safeParse(req.query);
     if (!parsed.success) return next(new AppError(400, 'invalid_request', 'Flight map track query is invalid.'));
     if (!dependencies.flightMap) throw new Error('Flight map service is not configured.');
-    const { west, south, east, north, zoom, scope, period, anchor, start, end, launch } = parsed.data;
+    const { west, south, east, north, zoom, scope, group, period, anchor, start, end, launch } = parsed.data;
     try {
       const page = await dependencies.flightMap.listViewportTracks({
         viewerUserId: currentUser.userId,
-        scope,
+        ...flightMapScopeValues(scope, group),
         period,
         ...(anchor === undefined ? {} : { anchor }),
         ...(start === undefined ? {} : { startDate: start }),
@@ -1114,11 +1120,11 @@ export function createWebRouter(dependencies: {
     const parsed = flightMapListQuerySchema.safeParse(req.query);
     if (!parsed.success) return next(new AppError(400, 'invalid_request', 'Flight map list query is invalid.'));
     if (!dependencies.flightMap) throw new Error('Flight map service is not configured.');
-    const { scope, period, anchor, start, end, launch, geography, sort, cursor, west, south, east, north } = parsed.data;
+    const { scope, group, period, anchor, start, end, launch, geography, sort, cursor, west, south, east, north } = parsed.data;
     try {
       const page = await dependencies.flightMap.listFlights({
         viewerUserId: currentUser.userId,
-        scope,
+        ...flightMapScopeValues(scope, group),
         period,
         ...(anchor === undefined ? {} : { anchor }),
         ...(start === undefined ? {} : { startDate: start }),
@@ -1147,12 +1153,12 @@ export function createWebRouter(dependencies: {
     const parsed = flightMapSelectionQuerySchema.safeParse(req.query);
     if (!flightId.success || !parsed.success) return next(new AppError(400, 'invalid_request', 'Flight map selection query is invalid.'));
     if (!dependencies.flightMap) throw new Error('Flight map service is not configured.');
-    const { scope, period, anchor, start, end, launch, geography, west, south, east, north } = parsed.data;
+    const { scope, group, period, anchor, start, end, launch, geography, west, south, east, north } = parsed.data;
     try {
       const flight = await dependencies.flightMap.getFlight({
         flightId: flightId.data,
         viewerUserId: currentUser.userId,
-        scope,
+        ...flightMapScopeValues(scope, group),
         period,
         ...(anchor === undefined ? {} : { anchor }),
         ...(start === undefined ? {} : { startDate: start }),
@@ -1177,10 +1183,10 @@ export function createWebRouter(dependencies: {
     const parsed = personalHistoryQuerySchema.safeParse(req.query);
     if (!parsed.success) return next(new AppError(400, 'invalid_request', 'Personal history query is invalid.'));
     if (!dependencies.flightMap) throw new Error('Flight map service is not configured.');
-    const { scope, period, anchor, start, end, launch, geography, west, south, east, north } = parsed.data;
+    const { scope, group, period, anchor, start, end, launch, geography, west, south, east, north } = parsed.data;
     try {
       const result = await dependencies.flightMap.getPersonalSummary({
-        viewerUserId: currentUser.userId, scope, period, geography,
+        viewerUserId: currentUser.userId, ...flightMapScopeValues(scope, group), period, geography,
         ...(anchor === undefined ? {} : { anchor }),
         ...(start === undefined ? {} : { startDate: start }),
         ...(end === undefined ? {} : { endDate: end }),
@@ -1485,10 +1491,15 @@ export function createWebRouter(dependencies: {
       return;
     }
     try {
+      if (req.query.group !== undefined) {
+        res.redirect(302, '/following');
+        return;
+      }
       const selection = mapPagePeriod(req.query);
       const mapHref = `/global${selection.suffix}`;
+      const groupOptions = await acceptedMapGroupOptions(currentUser.userId);
       await renderAuthenticated(res, dependencies.renderAuthenticatedPage, 200, productionMap(currentUser, {
-        mode: 'competitive', period: selection.period, location: null, mapHref,
+        mode: 'competitive', period: selection.period, location: null, mapHref, groupOptions,
       }));
     } catch (error) {
       next(error);
@@ -1502,11 +1513,24 @@ export function createWebRouter(dependencies: {
       return;
     }
     try {
+      const requestedGroup = z.string().uuid().safeParse(req.query.group);
+      if (req.query.group !== undefined && !requestedGroup.success) {
+        res.redirect(302, '/following');
+        return;
+      }
       const selection = mapPagePeriod(req.query);
+      const groupOptions = await acceptedMapGroupOptions(currentUser.userId);
+      const selectedGroupId = requestedGroup.success ? requestedGroup.data : undefined;
+      if (selectedGroupId && !groupOptions.some((group) => group.id === selectedGroupId)) {
+        res.redirect(302, '/following');
+        return;
+      }
       await dependencies.onboarding?.markCompetitiveMapViewed(currentUser.userId);
-      const mapHref = `/following${selection.suffix}`;
+      const mapUrl = new URL(`/following${selection.suffix}`, 'http://glidehero.local');
+      if (selectedGroupId) mapUrl.searchParams.set('group', selectedGroupId);
+      const mapHref = `${mapUrl.pathname}${mapUrl.search}`;
       await renderAuthenticated(res, dependencies.renderAuthenticatedPage, 200, productionMap(currentUser, {
-        mode: 'following', period: selection.period, location: null, mapHref,
+        mode: 'following', period: selection.period, location: null, mapHref, groupOptions, selectedGroupId,
       }));
     } catch (error) {
       next(error);
@@ -2198,6 +2222,10 @@ export function createWebRouter(dependencies: {
       return;
     }
     try {
+      if (req.query.group !== undefined) {
+        res.redirect(302, '/following');
+        return;
+      }
       const arena = await dependencies.arenas.getByRoute(req.params.countryCode, req.params.arenaSlug);
       if (!arena) {
         next();
@@ -2211,8 +2239,9 @@ export function createWebRouter(dependencies: {
         ? `${selection.suffix ? `${selection.suffix}&` : '?'}view=following`
         : selection.suffix;
       const mapHref = `${arena.path}${viewSuffix}`;
+      const groupOptions = await acceptedMapGroupOptions(currentUser.userId);
       await renderAuthenticated(res, dependencies.renderAuthenticatedPage, 200, productionMap(currentUser, {
-        mode: req.query.view === 'following' ? 'following' : 'competitive', period: selection.period, location: arena.name, mapHref,
+        mode: req.query.view === 'following' ? 'following' : 'competitive', period: selection.period, location: arena.name, mapHref, groupOptions,
         ...(arena.arenaType === 'launch'
           ? { focusArenaSourceId: arena.sourceId }
           : { arenaSourceId: arena.sourceId }),
