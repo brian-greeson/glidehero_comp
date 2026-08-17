@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   createErrorPageRenderer,
   createPageRenderer,
+  createPlanNotFoundPageRenderer,
 } from '../../src/views/renderer.js';
 import {
   createAdminAreaPageRenderer,
@@ -52,6 +53,17 @@ describe('Vento page renderer', () => {
     expect(html).toContain('Well… that landing could have gone better.');
     expect(html).toContain('/error-mascot.webp');
     expect(html).not.toContain('/scripts/dashboard.js');
+  });
+
+  it('renders a Plan-specific not-found page without revealing whether a private Plan exists', async () => {
+    const renderer = createPlanNotFoundPageRenderer();
+    const guestHtml = await renderer({ currentUser: null });
+    const authenticatedHtml = await renderer({ currentUser: user });
+    for (const html of [guestHtml, authenticatedHtml]) {
+      expect(html).toContain('Plan not found.');
+      expect(html).toContain('This Plan could not be found or is unavailable.');
+      expect(html).not.toContain('/scripts/dashboard.js');
+    }
   });
 
   it('renders admin pages without user dashboard assets', async () => {

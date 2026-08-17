@@ -27,6 +27,7 @@ import type { MapReplayService } from '../../src/services/mapReplayService.js';
 import type { OnboardingService } from '../../src/services/onboardingService.js';
 import type { PlanService } from '../../src/services/planService.js';
 import type { PlanExportService } from '../../src/services/planExportService.js';
+import { SavedPlanError, type SavedPlan, type SavedPlanService } from '../../src/services/savedPlanService.js';
 import type { ThermalRasterCacheService } from '../../src/services/thermalRasterCacheService.js';
 import type { PublicFlightPageRenderer } from '../../src/views/publicFlight/renderer.js';
 import type { FlightThumbnailDeliveryService } from '../../src/services/flightThumbnailDeliveryService.js';
@@ -295,14 +296,45 @@ function dependencies() {
     legs: [{ directDistanceMeters: 1_000, maximumDistanceMeters: 1_200, routeDistanceMeters: 1_000 }],
     directDistanceMeters: 1_000, maximumRouteDistanceMeters: 1_200, routeDistanceMeters: 1_000,
     actualExtraDistanceMeters: 0, actualDeviationPercent: 0, routingPriority: input.routingPriority,
-    thermalCoverage: 'unavailable' as const, claims: { direct: [], enclosed: [], newPersonal: input.userId ? [] : null },
+    thermalCoverage: 'unavailable' as const,
   })) };
   const planExports: PlanExportService = {
-    authorize: vi.fn(async () => '00000000-0000-4000-8000-000000000099'),
     export: vi.fn(async (input) => ({
       body: 'exported-task', contentType: `application/x-${input.format}`, filename: `glidehero-${input.variant}.${input.format}`,
     })),
   };
+  const savedPlan: SavedPlan = {
+    planId: '00000000-0000-4000-8000-000000000201',
+    ownerUserId: user.userId,
+    name: 'Boulder triangle',
+    turnpoints: [{ latitude: 39, longitude: -105 }, { latitude: 39.1, longitude: -104.9 }],
+    generatedRoute: {
+      route: [{ latitude: 39, longitude: -105 }, { latitude: 39.05, longitude: -104.95 }, { latitude: 39.1, longitude: -104.9 }],
+      legs: [{ directDistanceMeters: 1_000, maximumDistanceMeters: 1_200, routeDistanceMeters: 1_100 }],
+      directDistanceMeters: 1_000,
+      maximumRouteDistanceMeters: 1_200,
+      routeDistanceMeters: 1_100,
+      actualExtraDistanceMeters: 100,
+      actualDeviationPercent: 10,
+      thermalCoverage: 'available',
+    },
+    routingPriority: 'balanced',
+    isPrivate: true,
+    createdAt: '2026-08-15T12:00:00.000Z',
+    updatedAt: '2026-08-16T12:00:00.000Z',
+  };
+  const savedPlans: SavedPlanService = {
+    create: vi.fn(async (input) => ({ ...savedPlan, name: input.name.trim() })),
+    list: vi.fn(async () => [{ planId: savedPlan.planId, name: savedPlan.name, updatedAt: savedPlan.updatedAt }]),
+    get: vi.fn(async ({ planId }) => planId === savedPlan.planId
+      ? savedPlan
+      : Promise.reject(new SavedPlanError('not_found', 'Plan not found or unavailable.'))),
+    update: vi.fn(async (input) => ({ ...savedPlan, name: input.name.trim(), updatedAt: '2026-08-16T13:00:00.000Z' })),
+    delete: vi.fn(async ({ planId }) => {
+      if (planId !== savedPlan.planId) throw new SavedPlanError('not_found', 'Plan not found or unavailable.');
+    }),
+  };
+  const renderPlanNotFoundPage = vi.fn(async () => '<html><body><h1>Plan not found.</h1><p>This Plan could not be found or is unavailable.</p></body></html>');
   const thermalRasters: ThermalRasterCacheService = {
     get: vi.fn(async () => ({ body: Buffer.from('png'), contentType: 'image/png' as const, bucketKey: '12/2144/1378.png', cache: 'hit' as const })),
     cache: vi.fn(async () => null),
@@ -320,6 +352,7 @@ function dependencies() {
     flightMap,
     launchMap,
     plans,
+    savedPlans,
     planExports,
     thermalRasters,
     coverage,
@@ -330,6 +363,7 @@ function dependencies() {
     arenaProgress,
     renderPage,
     renderAuthenticatedPage,
+    renderPlanNotFoundPage,
     renderAuthenticatedActivityFeed,
     renderPublicFlightPage,
   });
@@ -345,6 +379,8 @@ function dependencies() {
     flightMap,
     launchMap,
     plans,
+    savedPlan,
+    savedPlans,
     planExports,
     thermalRasters,
     coverage,
@@ -355,6 +391,7 @@ function dependencies() {
     arenaProgress,
     renderPage,
     renderAuthenticatedPage,
+    renderPlanNotFoundPage,
     renderAuthenticatedActivityFeed,
     renderPublicFlightPage,
     cookie,
@@ -496,12 +533,9 @@ describe('webRouter', () => {
         }),
       });
       expect(guestRoute.status).toBe(200);
-      expect(base.plans.route).toHaveBeenLastCalledWith(expect.objectContaining({ userId: null, routingPriority: 'balanced' }));
-      expect(await guestRoute.json()).toEqual(expect.objectContaining({
-        claims: expect.objectContaining({ newPersonal: null }),
-      }));
-      expect(base.planExports.authorize).not.toHaveBeenCalled();
-
+      expect(base.plans.route).toHaveBeenLastCalledWith(expect.objectContaining({ routingPriority: 'balanced' }));
+      expect(base.plans.route).toHaveBeenLastCalledWith(expect.not.objectContaining({ userId: expect.anything() }));
+      expect(await guestRoute.json()).not.toHaveProperty('claims');
       const guestExport = await fetch(`${baseUrl}/v1/plan/export`, {
         method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}',
       });
@@ -530,27 +564,36 @@ describe('webRouter', () => {
         }),
       });
       expect(route.status).toBe(200);
-      expect(base.plans.route).toHaveBeenCalledWith(expect.objectContaining({ userId: user.userId, routingPriority: 'balanced' }));
-      const routeBody = await route.json() as { exportToken: string };
-      expect(routeBody.exportToken).toBe('00000000-0000-4000-8000-000000000099');
+      expect(base.plans.route).toHaveBeenCalledWith(expect.objectContaining({ routingPriority: 'balanced' }));
+      const routeBody = await route.json() as { anchors: unknown[]; route: unknown[] };
+      expect(routeBody.anchors).toHaveLength(2);
 
       const exported = await fetch(`${baseUrl}/v1/plan/export`, {
         method: 'POST', headers: { ...headers, 'content-type': 'application/json' },
         body: JSON.stringify({
           variant: 'optimized-track', format: 'xctsk', prefix: 'GH',
-          exportToken: '00000000-0000-4000-8000-000000000099',
+          anchors: base.savedPlan.turnpoints,
+          route: base.savedPlan.generatedRoute.route,
         }),
       });
       expect(exported.status).toBe(200);
       expect(exported.headers.get('content-disposition')).toContain('glidehero-optimized-track.xctsk');
       expect(await exported.text()).toBe('exported-task');
-      expect(base.planExports.export).toHaveBeenCalledWith(expect.objectContaining({ userId: user.userId, variant: 'optimized-track', format: 'xctsk' }));
+      expect(base.planExports.export).toHaveBeenCalledWith({
+        userId: user.userId,
+        variant: 'optimized-track',
+        format: 'xctsk',
+        prefix: 'GH',
+        anchors: base.savedPlan.turnpoints,
+        route: base.savedPlan.generatedRoute.route,
+      });
 
       const unsupportedExport = await fetch(`${baseUrl}/v1/plan/export`, {
         method: 'POST', headers: { ...headers, 'content-type': 'application/json' },
         body: JSON.stringify({
           variant: 'main-turnpoints', format: 'gpx', prefix: 'GH',
-          exportToken: '00000000-0000-4000-8000-000000000099',
+          anchors: base.savedPlan.turnpoints,
+          route: base.savedPlan.generatedRoute.route,
         }),
       });
       expect(unsupportedExport.status).toBe(422);
@@ -565,6 +608,113 @@ describe('webRouter', () => {
         }),
       });
       expect(oversizedRoute.status).toBe(422);
+    });
+  });
+
+  it('delivers saved Plan pages without recalculating stored routes and hides unavailable Plans behind one 404', async () => {
+    const base = dependencies();
+    const headers = { cookie: 'glidehero_session=valid-token' };
+    await withServer(base.app, async (baseUrl) => {
+      const index = await fetch(`${baseUrl}/plan`, { headers });
+      expect(index.status).toBe(200);
+      expect(index.headers.get('cache-control')).toBe('private, no-store');
+      expect(index.headers.get('vary')).toContain('Cookie');
+      expect(base.savedPlans.list).toHaveBeenCalledWith(user.userId);
+      expect(base.renderAuthenticatedPage).toHaveBeenLastCalledWith(expect.objectContaining({
+        page: 'plan',
+        activePlan: null,
+        savedPlans: [expect.objectContaining({
+          planId: base.savedPlan.planId,
+          updatedAtLabel: 'Aug 16, 2026',
+          href: `/plan/${base.savedPlan.planId}`,
+        })],
+      }));
+
+      const opened = await fetch(`${baseUrl}/plan/${base.savedPlan.planId}`, { headers });
+      expect(opened.status).toBe(200);
+      expect(opened.headers.get('cache-control')).toBe('private, no-store');
+      expect(opened.headers.get('vary')).toContain('Cookie');
+      expect(base.savedPlans.get).toHaveBeenCalledWith({ planId: base.savedPlan.planId, ownerUserId: user.userId });
+      expect(base.plans.route).not.toHaveBeenCalled();
+      expect(base.renderAuthenticatedPage).toHaveBeenLastCalledWith(expect.objectContaining({
+        defaultRoutingPriority: 'balanced',
+        activePlan: expect.objectContaining({
+          planId: base.savedPlan.planId,
+          generatedRoute: base.savedPlan.generatedRoute,
+        }),
+        planBootstrapJson: expect.stringContaining(base.savedPlan.planId),
+      }));
+
+      for (const request of [
+        fetch(`${baseUrl}/plan/not-a-uuid`, { headers }),
+        fetch(`${baseUrl}/plan/${base.savedPlan.planId}`),
+      ]) {
+        const response = await request;
+        expect(response.status).toBe(404);
+        expect(response.headers.get('cache-control')).toBe('private, no-store');
+        expect(response.headers.get('vary')).toContain('Cookie');
+        expect(await response.text()).toContain('Plan not found.');
+      }
+      expect(base.renderPlanNotFoundPage).toHaveBeenCalledWith({ currentUser: null });
+      expect(base.renderPlanNotFoundPage).toHaveBeenCalledWith({ currentUser: user });
+    });
+  });
+
+  it('provides authenticated saved Plan JSON CRUD with strict payloads and owner-scoped not-found responses', async () => {
+    const base = dependencies();
+    const auth = { cookie: 'glidehero_session=valid-token' };
+    const body = {
+      name: '  Boulder triangle  ',
+      turnpoints: base.savedPlan.turnpoints,
+      generatedRoute: base.savedPlan.generatedRoute,
+      routingPriority: 'balanced',
+    };
+    await withServer(base.app, async (baseUrl) => {
+      const unauthorized = await fetch(`${baseUrl}/v1/plans`);
+      expect(unauthorized.status).toBe(401);
+      expect(unauthorized.headers.get('cache-control')).toBe('private, no-store');
+      expect(unauthorized.headers.get('vary')).toContain('Cookie');
+
+      const listed = await fetch(`${baseUrl}/v1/plans`, { headers: auth });
+      expect(listed.status).toBe(200);
+      expect(await listed.json()).toEqual([{ planId: base.savedPlan.planId, name: base.savedPlan.name, updatedAt: base.savedPlan.updatedAt }]);
+
+      const created = await fetch(`${baseUrl}/v1/plans`, {
+        method: 'POST', headers: { ...auth, 'content-type': 'application/json' }, body: JSON.stringify(body),
+      });
+      expect(created.status).toBe(201);
+      expect(await created.json()).toEqual({ plan: expect.objectContaining({ name: 'Boulder triangle' }) });
+      expect(base.savedPlans.create).toHaveBeenCalledWith({ ownerUserId: user.userId, ...body });
+
+      const fetched = await fetch(`${baseUrl}/v1/plans/${base.savedPlan.planId}`, { headers: auth });
+      expect(fetched.status).toBe(200);
+      expect(await fetched.json()).toEqual(base.savedPlan);
+
+      const updated = await fetch(`${baseUrl}/v1/plans/${base.savedPlan.planId}`, {
+        method: 'PATCH', headers: { ...auth, 'content-type': 'application/json' }, body: JSON.stringify({ ...body, name: 'Updated' }),
+      });
+      expect(updated.status).toBe(200);
+      expect(await updated.json()).toEqual({ plan: expect.objectContaining({ name: 'Updated' }) });
+      expect(base.savedPlans.update).toHaveBeenCalledWith(expect.objectContaining({
+        planId: base.savedPlan.planId, ownerUserId: user.userId, name: 'Updated',
+      }));
+
+      const strict = await fetch(`${baseUrl}/v1/plans`, {
+        method: 'POST', headers: { ...auth, 'content-type': 'application/json' }, body: JSON.stringify({ ...body, isPrivate: false }),
+      });
+      expect(strict.status).toBe(422);
+      expect(base.savedPlans.create).toHaveBeenCalledOnce();
+
+      const missing = await fetch(`${baseUrl}/v1/plans/not-a-uuid`, { headers: auth });
+      expect(missing.status).toBe(404);
+      expect(await missing.json()).toEqual({ error: { code: 'not_found', message: 'Plan not found.' } });
+      expect(missing.headers.get('cache-control')).toBe('private, no-store');
+      expect(missing.headers.get('vary')).toContain('Cookie');
+
+      const deleted = await fetch(`${baseUrl}/v1/plans/${base.savedPlan.planId}`, { method: 'DELETE', headers: auth });
+      expect(deleted.status).toBe(204);
+      expect(await deleted.text()).toBe('');
+      expect(base.savedPlans.delete).toHaveBeenCalledWith({ planId: base.savedPlan.planId, ownerUserId: user.userId });
     });
   });
 

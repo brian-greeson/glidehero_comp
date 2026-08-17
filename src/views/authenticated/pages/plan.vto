@@ -1,5 +1,5 @@
 {{ layout "authenticated/layouts/appLayout.vto" }}
-  <section class="plan-page" data-plan-page data-plan-authenticated="{{ if isGuest }}false{{ else }}true{{ /if }}">
+  <section class="plan-page" data-plan-page data-plan-authenticated="{{ if isGuest }}false{{ else }}true{{ /if }}" data-plan-bootstrap="{{ planBootstrapJson }}">
     <section class="plan-map-stage" aria-label="Flight planning map">
       <div class="plan-map" data-plan-map
         data-map-style-url="{{ mapStyleUrl }}"
@@ -11,6 +11,26 @@
         <h1>Plan your next flight</h1>
         <p class="plan-intro">Click the map to place fixed route points. GlideHero will favor historical thermal activity according to your routing priority.</p>
       </div>
+      <details class="plan-saved-plans" data-plan-saved-sheet open>
+        <summary>Saved Plans</summary>
+        <div class="plan-saved-plans__content">
+          <section class="plan-editor" aria-label="Save this Plan">
+            <label for="plan-name">Plan name</label>
+            <input id="plan-name" type="text" maxlength="80" required autocomplete="off" placeholder="Name this Plan" data-plan-name>
+            <button type="button" class="plan-save" data-plan-save disabled>Save Plan</button>
+            <button type="button" class="plan-delete-saved" data-plan-delete-saved hidden>Delete Plan</button>
+            <p class="plan-mutation-status" data-plan-mutation-status role="status"></p>
+          </section>
+          <div class="plan-saved-heading">
+            <h2>Your Plans</h2>
+            <button type="button" data-plan-new>New Plan</button>
+          </div>
+          <p class="plan-saved-empty" data-plan-saved-empty{{ if savedPlans.length }} hidden{{ /if }}>No saved Plans yet.</p>
+          <ul class="plan-saved-list" data-plan-saved-list>
+            {{ for plan of savedPlans }}<li data-plan-list-item="{{ plan.planId }}"{{ if activePlan && activePlan.planId === plan.planId }} class="is-active"{{ /if }}><a href="{{ plan.href }}" data-plan-open><strong data-plan-list-name>{{ plan.name }}</strong><time datetime="{{ plan.updatedAt }}" data-plan-list-date>{{ plan.updatedAtLabel }}</time></a></li>{{ /for }}
+          </ul>
+        </div>
+      </details>
       <fieldset class="plan-priority">
         <legend>Routing priority</legend>
         <div role="radiogroup" aria-describedby="plan-priority-help">
@@ -54,13 +74,6 @@
           <div><dt>Direct distance</dt><dd data-plan-direct-distance>—</dd></div>
           <div><dt>Extra distance</dt><dd data-plan-extra-distance>—</dd></div>
           <div><dt>Maximum route</dt><dd data-plan-maximum-distance>—</dd></div>
-          <div><dt>Direct cells</dt><dd data-plan-direct-cells>0</dd></div>
-          <div><dt>Enclosed cells</dt><dd data-plan-enclosed-cells>0</dd></div>
-          {{ if isGuest }}
-            <div class="plan-personal-guest"><dt>Personal cells</dt><dd><button type="button" data-plan-collect-cells>Sign in to collect cells</button></dd></div>
-          {{ else }}
-            <div><dt>New Personal cells</dt><dd data-plan-new-cells>0</dd></div>
-          {{ /if }}
         </dl>
       </section>
       <p class="plan-status" data-plan-status role="status">Place at least two points to calculate a route.</p>

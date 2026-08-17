@@ -12,6 +12,53 @@ afterAll(async () => {
 });
 
 describe('authentication schema', () => {
+  it('stores private saved Plans with owner ordering and deletion semantics', async () => {
+    const columns = await database.pool.query<{
+      column_name: string;
+      data_type: string;
+      is_nullable: string;
+      column_default: string | null;
+    }>(
+      `SELECT column_name, data_type, is_nullable, column_default
+       FROM information_schema.columns
+       WHERE table_schema = 'public' AND table_name = 'plans'
+       ORDER BY column_name`,
+    );
+    expect(columns.rows).toEqual([
+      { column_name: 'created_at', data_type: 'timestamp with time zone', is_nullable: 'NO', column_default: 'now()' },
+      { column_name: 'generated_route', data_type: 'jsonb', is_nullable: 'NO', column_default: null },
+      { column_name: 'is_private', data_type: 'boolean', is_nullable: 'NO', column_default: 'true' },
+      { column_name: 'name', data_type: 'text', is_nullable: 'NO', column_default: null },
+      { column_name: 'owner_user_id', data_type: 'uuid', is_nullable: 'NO', column_default: null },
+      { column_name: 'plan_id', data_type: 'uuid', is_nullable: 'NO', column_default: 'gen_random_uuid()' },
+      { column_name: 'routing_priority', data_type: 'USER-DEFINED', is_nullable: 'NO', column_default: null },
+      { column_name: 'turnpoints', data_type: 'jsonb', is_nullable: 'NO', column_default: null },
+      { column_name: 'updated_at', data_type: 'timestamp with time zone', is_nullable: 'NO', column_default: 'now()' },
+    ]);
+
+    const constraints = await database.pool.query<{ conname: string; definition: string }>(
+      `SELECT conname, pg_get_constraintdef(oid) AS definition
+       FROM pg_constraint
+       WHERE conrelid = 'plans'::regclass
+       ORDER BY conname`,
+    );
+    expect(constraints.rows).toEqual(expect.arrayContaining([
+      { conname: 'plans_name_length', definition: 'CHECK (((char_length(name) >= 1) AND (char_length(name) <= 80)))' },
+      { conname: 'plans_name_normalized', definition: 'CHECK ((name = btrim(name)))' },
+      { conname: 'plans_owner_user_id_users_user_id_fkey', definition: 'FOREIGN KEY (owner_user_id) REFERENCES users(user_id) ON DELETE CASCADE' },
+      { conname: 'plans_pkey', definition: 'PRIMARY KEY (plan_id)' },
+    ]));
+
+    const indexes = await database.pool.query<{ indexname: string; indexdef: string }>(
+      `SELECT indexname, indexdef
+       FROM pg_indexes
+       WHERE schemaname = 'public' AND tablename = 'plans'
+         AND indexname = 'plans_owner_user_id_updated_at_plan_id_idx'`,
+    );
+    expect(indexes.rows).toHaveLength(1);
+    expect(indexes.rows[0]?.indexdef).toContain('(owner_user_id, updated_at, plan_id)');
+  });
+
   it('contains flight and track-point tables with the expected columns', async () => {
     const result = await database.pool.query<{ table_name: string }>(
       `SELECT table_name FROM information_schema.tables

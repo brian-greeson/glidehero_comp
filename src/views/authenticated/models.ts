@@ -156,11 +156,24 @@ export type GuestPlanShellModel = {
   showFooter: false;
 };
 
+export type SavedPlanListItemView = {
+  planId: string;
+  name: string;
+  updatedAt: string;
+  updatedAtLabel: string;
+  href: string;
+};
+
+export type ActivePlanView = import('../../services/savedPlanService.js').SavedPlan;
+
 export type PlanPageModel = (AuthenticatedShellModel & { isGuest?: false } | GuestPlanShellModel) & {
   page: 'plan';
   mapStyleUrl: string;
   thermalTileUrl: string;
   defaultRoutingPriority: 'shorter' | 'balanced' | 'thermal';
+  savedPlans: SavedPlanListItemView[];
+  activePlan: ActivePlanView | null;
+  planBootstrapJson: string;
 };
 
 export type ActivityEventView = {

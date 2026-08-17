@@ -11,6 +11,9 @@ describe('Plan page', () => {
       mapStyleUrl: 'https://maps.example.test/style.json',
       thermalTileUrl: '/v1/thermal/tiles/{z}/{x}/{y}.png',
       defaultRoutingPriority: 'balanced',
+      savedPlans: [{ planId: 'plan-1', name: 'Boulder triangle', updatedAt: '2026-08-16T12:00:00.000Z', updatedAtLabel: 'Aug 16, 2026', href: '/plan/plan-1' }],
+      activePlan: null,
+      planBootstrapJson: JSON.stringify({ savedPlans: [], activePlan: null }),
     });
     expect(html).toContain('Plan your next flight');
     expect(html).toContain('Routing priority');
@@ -26,14 +29,22 @@ describe('Plan page', () => {
     expect(html).toContain('/v1/thermal/tiles/{z}/{x}/{y}.png');
     expect(html).toContain('/scripts/app-ui/plan.js');
     expect(html).toContain('data-plan-authenticated="true"');
-    expect(html).toContain('New Personal cells');
+    expect(html).toContain('data-plan-bootstrap="{&quot;savedPlans&quot;:[]');
+    expect(html).toContain('data-plan-name');
+    expect(html).toContain('data-plan-save');
+    expect(html).toContain('data-plan-new');
+    expect(html).toContain('Boulder triangle');
+    expect(html).toContain('/plan/plan-1');
+    expect(html).not.toContain('Direct cells');
+    expect(html).not.toContain('Enclosed cells');
+    expect(html).not.toContain('Personal cells');
     expect(html).not.toContain('data-plan-auth-dialog');
     expect(html).not.toContain('data-plan-collect-cells');
     expect(html).not.toContain('probability');
     expect(html.match(/data-plan-route-distance/g)).toHaveLength(1);
   });
 
-  it('renders a public shell, personal-cell CTA, and branded account dialog for guests', async () => {
+  it('renders a public shell and branded account dialog for guest exports', async () => {
     const html = await createAuthenticatedPageRenderer()({
       page: 'plan',
       title: 'Plan a flight | GlideHero',
@@ -42,14 +53,16 @@ describe('Plan page', () => {
       mapStyleUrl: 'https://maps.example.test/style.json',
       thermalTileUrl: '/v1/thermal/tiles/{z}/{x}/{y}.png',
       defaultRoutingPriority: 'thermal',
+      savedPlans: [],
+      activePlan: null,
+      planBootstrapJson: JSON.stringify({ savedPlans: [], activePlan: null }),
     });
 
     expect(html).toContain('data-plan-authenticated="false"');
     expect(html).toContain('Join or sign in');
     expect(html).not.toContain('class="mobile-navigation"');
-    expect(html).not.toContain('New Personal cells');
-    expect(html).toContain('data-plan-collect-cells');
-    expect(html).toContain('Sign in to collect cells');
+    expect(html).not.toContain('collect Personal cells');
+    expect(html).not.toContain('data-plan-collect-cells');
     expect(html).toContain('data-plan-auth-dialog');
     expect(html).toContain('data-plan-auth-choice');
     expect(html).toContain('data-plan-auth-signin-panel');

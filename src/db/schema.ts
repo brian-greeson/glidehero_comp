@@ -55,6 +55,41 @@ export const pilotGroups = pgTable('pilot_groups', {
   index('pilot_groups_owner_user_id_idx').on(table.ownerUserId),
 ]);
 
+export type PlanTurnpoint = { latitude: number; longitude: number };
+
+export type StoredPlanRoute = {
+  route: PlanTurnpoint[];
+  legs: Array<{
+    directDistanceMeters: number;
+    maximumDistanceMeters: number;
+    routeDistanceMeters: number;
+  }>;
+  directDistanceMeters: number;
+  maximumRouteDistanceMeters: number;
+  routeDistanceMeters: number;
+  actualExtraDistanceMeters: number;
+  actualDeviationPercent: number;
+  thermalCoverage: 'available' | 'unavailable';
+};
+
+export const planRoutingPriority = pgEnum('plan_routing_priority', ['shorter', 'balanced', 'thermal']);
+
+/** Owner-scoped, durable snapshots of routes created in the planner. */
+export const plans = pgTable('plans', {
+  id: uuid('plan_id').primaryKey().defaultRandom(),
+  ownerUserId: uuid('owner_user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  name: text('name').notNull(),
+  turnpoints: jsonb('turnpoints').$type<PlanTurnpoint[]>().notNull(),
+  generatedRoute: jsonb('generated_route').$type<StoredPlanRoute>().notNull(),
+  routingPriority: planRoutingPriority('routing_priority').notNull(),
+  isPrivate: boolean('is_private').notNull().default(true),
+  ...timestamps,
+}, (table) => [
+  check('plans_name_normalized', sql`${table.name} = btrim(${table.name})`),
+  check('plans_name_length', sql`char_length(${table.name}) BETWEEN 1 AND 80`),
+  index('plans_owner_user_id_updated_at_plan_id_idx').on(table.ownerUserId, table.updatedAt, table.id),
+]);
+
 export const pilotGroupMemberships = pgTable('pilot_group_memberships', {
   groupId: uuid('group_id').notNull().references(() => pilotGroups.id, { onDelete: 'cascade' }),
   userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),

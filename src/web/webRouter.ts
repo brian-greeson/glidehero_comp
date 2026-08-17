@@ -10,7 +10,12 @@ import type { GridClaimService } from '../services/gridClaimService.js';
 import type { AdminFlightService } from '../services/adminFlightService.js';
 import type { ArenaService } from '../services/arenaService.js';
 import type { ArenaProgressService } from '../services/arenaProgressService.js';
-import type { PageModel, PageRenderer } from '../views/renderer.js';
+import {
+  createPlanNotFoundPageRenderer,
+  type PageModel,
+  type PageRenderer,
+  type PlanNotFoundPageRenderer,
+} from '../views/renderer.js';
 import type {
   AdminFlightProcessingPageRenderer,
   AdminMapSettingsPageRenderer,
@@ -51,6 +56,7 @@ import { GroupError, type GroupService } from '../services/groupService.js';
 import { createOnboardingView } from '../views/authenticated/adapters/onboardingView.js';
 import type { PlanService } from '../services/planService.js';
 import type { PlanExportService } from '../services/planExportService.js';
+import { SavedPlanError, type SavedPlanService } from '../services/savedPlanService.js';
 import type { ThermalRasterCacheService } from '../services/thermalRasterCacheService.js';
 import type { LaunchMapService } from '../services/launchMapService.js';
 import { THERMAL_NATIVE_ZOOM, xyzYToTmsY } from '../domain/thermal/thermalTiles.js';
@@ -90,7 +96,17 @@ const planExportSchema = z.object({
   variant: z.enum(['main-turnpoints', 'optimized-track']),
   format: z.enum(['cup', 'tsk', 'wpt', 'xctsk']),
   prefix: z.string().trim().toUpperCase().regex(/^[A-Z0-9]{1,8}$/),
-  exportToken: z.string().uuid(),
+  anchors: planRouteSchema.shape.anchors,
+  route: z.array(z.object({
+    latitude: z.number().finite().min(-85).max(85),
+    longitude: z.number().finite().min(-180).max(180),
+  }).strict()).min(2),
+}).strict();
+const savedPlanWriteSchema = z.object({
+  name: z.string(),
+  turnpoints: z.array(z.unknown()),
+  generatedRoute: z.record(z.string(), z.unknown()),
+  routingPriority: z.string(),
 }).strict();
 const onboardingStepSchema = z.enum(['profile', 'first-flight', 'personal-map', 'follow-pilots', 'competitive-map', 'groups', 'glider', 'history']);
 const activityQuerySchema = z.object({
@@ -448,13 +464,73 @@ export function createWebRouter(dependencies: {
   onboarding?: OnboardingService;
   groups?: GroupService;
   plans?: PlanService;
+  savedPlans?: SavedPlanService;
   planExports?: PlanExportService;
+  renderPlanNotFoundPage?: PlanNotFoundPageRenderer;
   thermalRasters?: ThermalRasterCacheService;
 }) {
   const router = Router();
   const territoryTileSettings = dependencies.territoryTileSettings ?? createTerritoryTileSettingsService();
   const adminEmails = new Set((dependencies.adminEmails ?? []).map((email) => email.trim().toLowerCase()));
   const isAdmin = (email: string) => adminEmails.has(email.trim().toLowerCase());
+  const renderPlanNotFoundPage = dependencies.renderPlanNotFoundPage ?? createPlanNotFoundPageRenderer();
+
+  function privateNoStore(res: Response) {
+    res.set('Cache-Control', 'private, no-store').vary('Cookie');
+    return res;
+  }
+
+  function requireSavedPlans(): SavedPlanService {
+    if (!dependencies.savedPlans) throw new Error('Saved Plans are not configured.');
+    return dependencies.savedPlans;
+  }
+
+  function savedPlanNotFoundJson(res: Response) {
+    privateNoStore(res).status(404).json({ error: { code: 'not_found', message: 'Plan not found.' } });
+  }
+
+  function savedPlanError(error: unknown, res: Response, next: NextFunction) {
+    if (error instanceof SavedPlanError) {
+      if (error.code === 'not_found') {
+        savedPlanNotFoundJson(res);
+        return;
+      }
+      next(new AppError(422, 'invalid_request', error.message));
+      return;
+    }
+    next(error);
+  }
+
+  function savedPlanListView(items: Awaited<ReturnType<SavedPlanService['list']>>) {
+    const formatter = new Intl.DateTimeFormat('en-US', {
+      month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC',
+    });
+    return items.map((item) => ({
+      ...item,
+      updatedAtLabel: formatter.format(new Date(item.updatedAt)),
+      href: `/plan/${item.planId}`,
+    }));
+  }
+
+  async function planPageModel(currentUser: AuthenticatedUser | null, activePlan: Awaited<ReturnType<SavedPlanService['get']>> | null = null) {
+    const shell = currentUser
+      ? { ...authenticatedShell('plan', currentUser, { showFooter: false }), isGuest: false as const }
+      : { page: 'plan' as const, title: 'Plan · GlideHero', isGuest: true as const, showFooter: false as const };
+    const savedPlans = currentUser
+      ? savedPlanListView(await requireSavedPlans().list(currentUser.userId))
+      : [];
+    const activePlanView = activePlan;
+    return {
+      ...shell,
+      page: 'plan' as const,
+      mapStyleUrl: dependencies.mapTilerStyleUrl ?? '',
+      thermalTileUrl: '/v1/thermal/tiles/{z}/{x}/{y}.png',
+      defaultRoutingPriority: activePlan?.routingPriority ?? 'balanced' as const,
+      savedPlans,
+      activePlan: activePlanView,
+      planBootstrapJson: JSON.stringify({ savedPlans, activePlan: activePlanView }),
+    };
+  }
 
   async function activateNextRegular(userId: string) {
     if (!dependencies.uploadWorkflow || !dependencies.uploadQueue) return null;
@@ -1554,18 +1630,99 @@ export function createWebRouter(dependencies: {
     }
   });
 
-  router.get('/plan', async (_req, res) => {
+  router.get('/plan', async (_req, res, next) => {
     const currentUser = res.locals.currentUser;
-    const shell = currentUser
-      ? { ...authenticatedShell('plan', currentUser, { showFooter: false }), isGuest: false as const }
-      : { page: 'plan' as const, title: 'Plan · GlideHero', isGuest: true as const, showFooter: false as const };
-    await renderAuthenticated(res, dependencies.renderAuthenticatedPage, 200, {
-      ...shell,
-      page: 'plan',
-      mapStyleUrl: dependencies.mapTilerStyleUrl ?? '',
-      thermalTileUrl: '/v1/thermal/tiles/{z}/{x}/{y}.png',
-      defaultRoutingPriority: 'balanced',
-    });
+    try {
+      privateNoStore(res);
+      await renderAuthenticated(res, dependencies.renderAuthenticatedPage, 200, await planPageModel(currentUser));
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.get('/plan/:planId', async (req, res, next) => {
+    const currentUser = res.locals.currentUser;
+    privateNoStore(res);
+    try {
+      if (!currentUser) {
+        res.status(404).type('html').send(await renderPlanNotFoundPage({ currentUser: null }));
+        return;
+      }
+      const activePlan = await requireSavedPlans().get({ planId: req.params.planId, ownerUserId: currentUser.userId });
+      await renderAuthenticated(res, dependencies.renderAuthenticatedPage, 200, await planPageModel(currentUser, activePlan));
+    } catch (error) {
+      if (error instanceof SavedPlanError && error.code === 'not_found') {
+        res.status(404).type('html').send(await renderPlanNotFoundPage({ currentUser }));
+        return;
+      }
+      next(error);
+    }
+  });
+
+  router.get('/v1/plans', async (_req, res, next) => {
+    const currentUser = res.locals.currentUser;
+    privateNoStore(res);
+    if (!currentUser) return next(new AppError(401, 'unauthorized', 'Sign in to access saved Plans.'));
+    try {
+      res.status(200).json(await requireSavedPlans().list(currentUser.userId));
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.post('/v1/plans', async (req, res, next) => {
+    const currentUser = res.locals.currentUser;
+    privateNoStore(res);
+    if (!currentUser) return next(new AppError(401, 'unauthorized', 'Sign in to save Plans.'));
+    const parsed = savedPlanWriteSchema.safeParse(req.body);
+    if (!parsed.success) return next(new AppError(422, 'invalid_request', 'Provide a valid saved Plan.'));
+    try {
+      const created = await requireSavedPlans().create({ ownerUserId: currentUser.userId, ...parsed.data });
+      res.status(201).json({ plan: created });
+    } catch (error) {
+      savedPlanError(error, res, next);
+    }
+  });
+
+  router.get('/v1/plans/:planId', async (req, res, next) => {
+    const currentUser = res.locals.currentUser;
+    privateNoStore(res);
+    if (!currentUser) return next(new AppError(401, 'unauthorized', 'Sign in to access saved Plans.'));
+    try {
+      res.status(200).json(await requireSavedPlans().get({ planId: req.params.planId, ownerUserId: currentUser.userId }));
+    } catch (error) {
+      savedPlanError(error, res, next);
+    }
+  });
+
+  router.patch('/v1/plans/:planId', async (req, res, next) => {
+    const currentUser = res.locals.currentUser;
+    privateNoStore(res);
+    if (!currentUser) return next(new AppError(401, 'unauthorized', 'Sign in to update saved Plans.'));
+    const parsed = savedPlanWriteSchema.safeParse(req.body);
+    if (!parsed.success) return next(new AppError(422, 'invalid_request', 'Provide a valid saved Plan.'));
+    try {
+      const updated = await requireSavedPlans().update({
+        planId: req.params.planId,
+        ownerUserId: currentUser.userId,
+        ...parsed.data,
+      });
+      res.status(200).json({ plan: updated });
+    } catch (error) {
+      savedPlanError(error, res, next);
+    }
+  });
+
+  router.delete('/v1/plans/:planId', async (req, res, next) => {
+    const currentUser = res.locals.currentUser;
+    privateNoStore(res);
+    if (!currentUser) return next(new AppError(401, 'unauthorized', 'Sign in to delete saved Plans.'));
+    try {
+      await requireSavedPlans().delete({ planId: req.params.planId, ownerUserId: currentUser.userId });
+      res.status(204).end();
+    } catch (error) {
+      savedPlanError(error, res, next);
+    }
   });
 
   router.get('/v1/thermal/tiles/:z/:x/:y.png', async (req, res, next) => {
@@ -1600,11 +1757,8 @@ export function createWebRouter(dependencies: {
     const parsed = planRouteSchema.safeParse(req.body);
     if (!parsed.success) return next(new AppError(422, 'invalid_request', 'Provide 2–24 valid route points and a routing priority.'));
     try {
-      const result = await dependencies.plans.route({ userId: currentUser?.userId ?? null, ...parsed.data });
-      const exportToken = currentUser && dependencies.planExports
-        ? await dependencies.planExports.authorize({ userId: currentUser.userId, anchors: result.anchors, route: result.route })
-        : undefined;
-      res.status(200).json({ ...result, exportToken });
+      const result = await dependencies.plans.route(parsed.data);
+      res.status(200).json(result);
     } catch (error) {
       if (error instanceof RangeError) return next(new AppError(422, 'invalid_request', error.message));
       next(error);
@@ -1616,7 +1770,7 @@ export function createWebRouter(dependencies: {
     if (!currentUser) return next(new AppError(401, 'unauthorized', 'Sign in before exporting a flight plan.'));
     if (!dependencies.planExports) throw new Error('Flight plan export is not configured.');
     const parsed = planExportSchema.safeParse(req.body);
-    if (!parsed.success) return next(new AppError(422, 'invalid_request', 'Choose a supported export format and provide a valid route export token.'));
+    if (!parsed.success) return next(new AppError(422, 'invalid_request', 'Choose a supported export format and provide a valid route.'));
     try {
       const result = await dependencies.planExports.export({ userId: currentUser.userId, ...parsed.data });
       res.status(200)

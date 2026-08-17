@@ -24,13 +24,6 @@ function anchorFeatures(points, selectedIndex) {
   };
 }
 
-function claimFeatures(claims) {
-  return {
-    type: 'FeatureCollection',
-    features: claims.map((cell) => ({ type: 'Feature', properties: { x: cell.x, y: cell.y }, geometry: cell.geometry })),
-  };
-}
-
 function formatDistance(meters) {
   if (!Number.isFinite(meters)) return '—';
   return `${(meters / 1000).toFixed(meters >= 100_000 ? 0 : 1)} km`;
@@ -47,11 +40,11 @@ export function routeBounds(points) {
 }
 
 export async function requestPlanExport({ fetchImpl, result, variant, format, prefix }) {
-  if (!result?.exportToken) throw new Error('Calculate a route before exporting.');
+  if (!Array.isArray(result?.anchors) || !Array.isArray(result?.route)) throw new Error('Calculate a route before exporting.');
   const response = await fetchImpl('/v1/plan/export', {
     method: 'POST',
     headers: { 'content-type': 'application/json', accept: '*/*' },
-    body: JSON.stringify({ variant, format, prefix, exportToken: result.exportToken }),
+    body: JSON.stringify({ variant, format, prefix, anchors: result.anchors, route: result.route }),
   });
   if (!response.ok) throw new Error('Flight plan export failed.');
   const filename = response.headers.get('content-disposition')?.match(/filename="([^"]+)"/)?.[1]
@@ -69,6 +62,14 @@ export function initializePlanPage({
   const mapNode = documentRef.querySelector('[data-plan-map]');
   if (!root || !mapNode || !maplibre || !fetchImpl) return null;
   const isAuthenticated = root.dataset?.planAuthenticated !== 'false';
+  let bootstrap = { savedPlans: [], activePlan: null };
+  try {
+    const parsed = JSON.parse(root.dataset?.planBootstrap || '{}');
+    bootstrap = {
+      savedPlans: Array.isArray(parsed?.savedPlans) ? parsed.savedPlans : [],
+      activePlan: parsed?.activePlan ?? null,
+    };
+  } catch { /* Use an empty planner if bootstrap data is unavailable. */ }
   const priorities = [...documentRef.querySelectorAll('[data-plan-priority]')];
   const mobilePriority = documentRef.querySelector('[data-plan-priority-mobile]');
   const status = documentRef.querySelector('[data-plan-status]');
@@ -86,7 +87,14 @@ export function initializePlanPage({
   const exportCancel = documentRef.querySelector('[data-plan-export-cancel]');
   const exportDownload = documentRef.querySelector('[data-plan-export-download]');
   const exportStatus = documentRef.querySelector('[data-plan-export-status]');
-  const collectCells = documentRef.querySelector('[data-plan-collect-cells]');
+  const planName = documentRef.querySelector('[data-plan-name]');
+  const savePlan = documentRef.querySelector('[data-plan-save]');
+  const deletePlan = documentRef.querySelector('[data-plan-delete-saved]');
+  const newPlan = documentRef.querySelector('[data-plan-new]');
+  const mutationStatus = documentRef.querySelector('[data-plan-mutation-status]');
+  const savedList = documentRef.querySelector('[data-plan-saved-list]');
+  const savedEmpty = documentRef.querySelector('[data-plan-saved-empty]');
+  const savedSheet = documentRef.querySelector('[data-plan-saved-sheet]');
   const authDialog = documentRef.querySelector('[data-plan-auth-dialog]');
   const authChoice = documentRef.querySelector('[data-plan-auth-choice]');
   const authSigninPanel = documentRef.querySelector('[data-plan-auth-signin-panel]');
@@ -104,9 +112,6 @@ export function initializePlanPage({
     route: documentRef.querySelector('[data-plan-route-distance]'),
     extra: documentRef.querySelector('[data-plan-extra-distance]'),
     maximum: documentRef.querySelector('[data-plan-maximum-distance]'),
-    directCells: documentRef.querySelector('[data-plan-direct-cells]'),
-    enclosedCells: documentRef.querySelector('[data-plan-enclosed-cells]'),
-    newCells: documentRef.querySelector('[data-plan-new-cells]'),
   };
   const map = new maplibre.Map({
     container: mapNode,
@@ -116,18 +121,27 @@ export function initializePlanPage({
     maxPitch: 0,
   });
   map.addControl(new maplibre.NavigationControl(), 'top-right');
+  if (savedSheet && windowRef?.matchMedia?.('(max-width: 760px)')?.matches) savedSheet.open = false;
   const collapseMobileAttribution = () => {
     if (!windowRef?.matchMedia?.('(max-width: 760px)')?.matches) return;
     mapNode.querySelector?.('.maplibregl-ctrl-attrib')?.removeAttribute?.('open');
   };
   collapseMobileAttribution();
-  const anchors = [];
+  const activeBootstrap = bootstrap.activePlan;
+  const anchors = Array.isArray(activeBootstrap?.turnpoints)
+    ? activeBootstrap.turnpoints.map((point) => ({ latitude: point.latitude, longitude: point.longitude }))
+    : [];
   let selectedIndex = -1;
   let draggingIndex = -1;
   let requestTimer;
   let requestController;
   let requestSequence = 0;
-  let lastResult = null;
+  let lastResult = activeBootstrap?.generatedRoute
+    ? { ...activeBootstrap.generatedRoute, anchors: activeBootstrap.turnpoints }
+    : null;
+  let activePlanId = activeBootstrap?.planId ?? null;
+  let baseline = null;
+  let mutationPending = false;
   let authResumeIntent = null;
   let restoredResumeIntent = null;
   let restoredMapPosition = null;
@@ -144,7 +158,7 @@ export function initializePlanPage({
       const parsed = JSON.parse(value);
       if (parsed?.version !== planResumeVersion || !Array.isArray(parsed.anchors)) return null;
       if (!parsed.anchors.every((anchor) => Number.isFinite(anchor?.latitude) && Number.isFinite(anchor?.longitude))) return null;
-      if (!['export', 'collect-cells'].includes(parsed.resumeIntent)) return null;
+      if (parsed.resumeIntent !== 'export' && parsed.resumeIntent !== 'save') return null;
       return parsed;
     } catch {
       try { storage.removeItem(planResumeStorageKey); } catch { /* Storage can be unavailable. */ }
@@ -154,12 +168,18 @@ export function initializePlanPage({
 
   const resumeState = readResumeState();
   if (resumeState) {
+    anchors.splice(0);
     anchors.push(...resumeState.anchors.map((anchor) => ({
       latitude: anchor.latitude,
       longitude: anchor.longitude,
     })));
     restoredResumeIntent = resumeState.resumeIntent;
     restoredMapPosition = resumeState.mapPosition;
+    activePlanId = null;
+    lastResult = null;
+    if (planName) planName.value = typeof resumeState.name === 'string' ? resumeState.name : '';
+  } else if (planName && activeBootstrap?.name) {
+    planName.value = activeBootstrap.name;
   }
 
   function selectedPriority() {
@@ -172,6 +192,7 @@ export function initializePlanPage({
   }
 
   if (resumeState?.priority) synchronizePriority(resumeState.priority);
+  else if (activeBootstrap?.routingPriority) synchronizePriority(activeBootstrap.routingPriority);
   if (thermalToggle && typeof resumeState?.thermalVisible === 'boolean') {
     thermalToggle.checked = resumeState.thermalVisible;
   }
@@ -185,30 +206,72 @@ export function initializePlanPage({
     map.getSource(name)?.setData(data);
   }
 
+  function snapshot() {
+    return JSON.stringify({
+      name: String(planName?.value ?? '').trim(),
+      anchors: anchors.map((anchor) => ({ latitude: anchor.latitude, longitude: anchor.longitude })),
+      routingPriority: selectedPriority(),
+      generatedRoute: lastResult ? {
+        route: lastResult.route,
+        legs: lastResult.legs,
+        directDistanceMeters: lastResult.directDistanceMeters,
+        maximumRouteDistanceMeters: lastResult.maximumRouteDistanceMeters,
+        routeDistanceMeters: lastResult.routeDistanceMeters,
+        actualExtraDistanceMeters: lastResult.actualExtraDistanceMeters,
+        actualDeviationPercent: lastResult.actualDeviationPercent,
+        thermalCoverage: lastResult.thermalCoverage,
+      } : null,
+    });
+  }
+
+  function isDirty() {
+    if (baseline === null) return anchors.length > 0 || Boolean(String(planName?.value ?? '').trim()) || selectedPriority() !== 'balanced';
+    return snapshot() !== baseline;
+  }
+
+  function validName() {
+    const name = String(planName?.value ?? '').trim();
+    return name.length >= 1 && name.length <= 80;
+  }
+
+  function setMutationStatus(message) {
+    if (mutationStatus) mutationStatus.textContent = message;
+  }
+
   function updateControls() {
     if (undo) undo.disabled = anchors.length === 0;
     if (reset) reset.disabled = anchors.length === 0;
     if (deleteSelected) deleteSelected.disabled = selectedIndex < 0;
     if (fitRoute) fitRoute.disabled = anchors.length === 0;
     if (exportOpen) exportOpen.disabled = !lastResult;
+    if (savePlan) savePlan.disabled = mutationPending || !validName() || !lastResult;
+    if (deletePlan) deletePlan.hidden = !activePlanId;
     setSource('plan-anchors', anchorFeatures(anchors, selectedIndex));
     setSource('plan-direct', lineFeature(anchors));
   }
 
   function clearResult() {
     lastResult = null;
+    setMutationStatus('');
     setSource('plan-route', emptyFeatureCollection());
-    setSource('plan-direct-cells', emptyFeatureCollection());
-    setSource('plan-enclosed-cells', emptyFeatureCollection());
-    setSource('plan-new-cells', emptyFeatureCollection());
-    values.direct.textContent = '—';
-    values.route.textContent = '—';
-    values.extra.textContent = '—';
-    values.maximum.textContent = '—';
-    values.directCells.textContent = '0';
-    values.enclosedCells.textContent = '0';
-    if (values.newCells) values.newCells.textContent = '0';
+    if (values.direct) values.direct.textContent = '—';
+    if (values.route) values.route.textContent = '—';
+    if (values.extra) values.extra.textContent = '—';
+    if (values.maximum) values.maximum.textContent = '—';
     if (exportOpen) exportOpen.disabled = true;
+    if (savePlan) savePlan.disabled = true;
+  }
+
+  function renderResult(result, message = 'Saved route ready.', mobileMessage = 'Route ready') {
+    lastResult = result;
+    setSource('plan-route', lineFeature(result.route));
+    if (values.direct) values.direct.textContent = formatDistance(result.directDistanceMeters);
+    if (values.route) values.route.textContent = formatDistance(result.routeDistanceMeters);
+    if (values.extra) values.extra.textContent = `+${formatDistance(result.actualExtraDistanceMeters)} (${result.actualDeviationPercent.toFixed(1)}%)`;
+    if (values.maximum) values.maximum.textContent = formatDistance(result.maximumRouteDistanceMeters);
+    if (exportOpen) exportOpen.disabled = false;
+    setStatus(message, mobileMessage);
+    updateControls();
   }
 
   async function calculate(sequence = ++requestSequence) {
@@ -231,31 +294,15 @@ export function initializePlanPage({
       if (!response.ok) throw new Error('Route calculation failed.');
       const result = await response.json();
       if (sequence !== requestSequence) return;
-      lastResult = result;
-      setSource('plan-route', lineFeature(result.route));
-      setSource('plan-direct-cells', claimFeatures(result.claims.direct));
-      setSource('plan-enclosed-cells', claimFeatures(result.claims.enclosed));
-      const newPersonalClaims = Array.isArray(result.claims.newPersonal) ? result.claims.newPersonal : [];
-      setSource('plan-new-cells', claimFeatures(newPersonalClaims));
-      values.direct.textContent = formatDistance(result.directDistanceMeters);
-      values.route.textContent = formatDistance(result.routeDistanceMeters);
-      values.extra.textContent = `+${formatDistance(result.actualExtraDistanceMeters)} (${result.actualDeviationPercent.toFixed(1)}%)`;
-      values.maximum.textContent = formatDistance(result.maximumRouteDistanceMeters);
-      values.directCells.textContent = String(result.claims.direct.length);
-      values.enclosedCells.textContent = String(result.claims.enclosed.length);
-      if (values.newCells) values.newCells.textContent = String(newPersonalClaims.length);
-      if (exportOpen) exportOpen.disabled = false;
-      setStatus(
+      renderResult(result,
         result.thermalCoverage === 'available'
           ? 'Route calculated using available historical thermal areas.'
           : 'No processed thermal areas are available here yet; showing the direct route.',
         result.thermalCoverage === 'available' ? 'Route ready' : 'Direct route',
       );
-      if (restoredResumeIntent === 'export' && result.exportToken && exportDialog?.showModal && !exportDialog.open) {
+      if (restoredResumeIntent === 'export' && exportDialog?.showModal && !exportDialog.open) {
         restoredResumeIntent = null;
         exportDialog.showModal();
-      } else if (restoredResumeIntent === 'collect-cells') {
-        restoredResumeIntent = null;
       }
     } catch (error) {
       if (error?.name === 'AbortError' || sequence !== requestSequence) return;
@@ -277,6 +324,8 @@ export function initializePlanPage({
     scheduleCalculation();
   }
 
+  baseline = snapshot();
+
   map.on('load', () => {
     collapseMobileAttribution();
     map.addSource('thermal-history', {
@@ -293,12 +342,9 @@ export function initializePlanPage({
       layout: { visibility: thermalToggle?.checked === false ? 'none' : 'visible' },
       paint: { 'raster-opacity': 0.72 },
     }, firstSymbol);
-    for (const name of ['plan-direct', 'plan-route', 'plan-direct-cells', 'plan-enclosed-cells', 'plan-new-cells', 'plan-anchors']) {
+    for (const name of ['plan-direct', 'plan-route', 'plan-anchors']) {
       map.addSource(name, { type: 'geojson', data: emptyFeatureCollection() });
     }
-    map.addLayer({ id: 'plan-direct-cells', type: 'fill', source: 'plan-direct-cells', paint: { 'fill-color': '#3b82f6', 'fill-opacity': 0.16, 'fill-outline-color': '#2563eb' } });
-    map.addLayer({ id: 'plan-enclosed-cells', type: 'fill', source: 'plan-enclosed-cells', paint: { 'fill-color': '#8b5cf6', 'fill-opacity': 0.2, 'fill-outline-color': '#7c3aed' } });
-    map.addLayer({ id: 'plan-new-cells', type: 'line', source: 'plan-new-cells', paint: { 'line-color': '#16a34a', 'line-width': 3 } });
     map.addLayer({ id: 'plan-direct', type: 'line', source: 'plan-direct', paint: { 'line-color': '#0f172a', 'line-width': 2, 'line-dasharray': [2, 2], 'line-opacity': 0.7 } });
     map.addLayer({ id: 'plan-route', type: 'line', source: 'plan-route', paint: { 'line-color': '#f97316', 'line-width': 4, 'line-opacity': 0.95 } });
     map.addLayer({ id: 'plan-anchors', type: 'circle', source: 'plan-anchors', paint: {
@@ -315,6 +361,7 @@ export function initializePlanPage({
       if (Number.isFinite(restoredMapPosition.zoom)) map.setZoom?.(restoredMapPosition.zoom);
     }
     if (resumeState) calculate();
+    else if (lastResult) renderResult(lastResult);
   });
 
   map.on('click', (event) => {
@@ -388,6 +435,158 @@ export function initializePlanPage({
     const bounds = routeBounds(lastResult?.route?.length ? lastResult.route : anchors);
     if (bounds) map.fitBounds(bounds, { padding: 64, maxZoom: 11, duration: 500 });
   });
+
+  function confirmDiscard() {
+    return !isDirty() || !windowRef?.confirm || windowRef.confirm('Discard unsaved changes to this Plan?');
+  }
+
+  function replacePlanUrl(planId = null) {
+    windowRef?.history?.replaceState?.({}, '', planId ? `/plan/${planId}` : '/plan');
+  }
+
+  function formatUpdatedAt(value) {
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return '';
+    return new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeZone: 'UTC' }).format(date);
+  }
+
+  function markActiveListItem() {
+    documentRef.querySelectorAll?.('[data-plan-list-item]').forEach((item) => {
+      item.classList?.toggle?.('is-active', item.dataset?.planListItem === activePlanId);
+    });
+  }
+
+  function upsertSavedListItem(plan) {
+    if (!savedList) return;
+    let item = savedList.querySelector?.(`[data-plan-list-item="${plan.planId}"]`);
+    if (!item && documentRef.createElement) {
+      item = documentRef.createElement('li');
+      item.dataset.planListItem = plan.planId;
+      const link = documentRef.createElement('a');
+      link.href = `/plan/${plan.planId}`;
+      link.dataset.planOpen = '';
+      const name = documentRef.createElement('strong');
+      name.dataset.planListName = '';
+      const date = documentRef.createElement('time');
+      date.dataset.planListDate = '';
+      link.append(name, date);
+      item.append(link);
+    }
+    const nameNode = item?.querySelector?.('[data-plan-list-name]');
+    const dateNode = item?.querySelector?.('[data-plan-list-date]');
+    if (nameNode) nameNode.textContent = plan.name;
+    if (dateNode) {
+      dateNode.dateTime = plan.updatedAt;
+      dateNode.textContent = plan.updatedAtLabel || formatUpdatedAt(plan.updatedAt);
+    }
+    if (item) savedList.prepend?.(item);
+    if (savedEmpty) savedEmpty.hidden = true;
+    markActiveListItem();
+  }
+
+  function clearToNewPlan() {
+    clearTimeout(requestTimer);
+    requestController?.abort();
+    requestSequence += 1;
+    anchors.splice(0);
+    selectedIndex = -1;
+    activePlanId = null;
+    if (planName) planName.value = '';
+    synchronizePriority('balanced');
+    clearResult();
+    updateControls();
+    setStatus('Place at least two points to calculate a route.', 'Place 2 points');
+    setMutationStatus('');
+    replacePlanUrl();
+    markActiveListItem();
+    baseline = snapshot();
+  }
+
+  async function responseMessage(response, fallback) {
+    try {
+      const payload = await response.json();
+      return payload?.error?.message ?? payload?.message ?? fallback;
+    } catch {
+      return fallback;
+    }
+  }
+
+  planName?.addEventListener('input', () => {
+    setMutationStatus('');
+    updateControls();
+  });
+  savePlan?.addEventListener('click', async () => {
+    if (!validName() || !lastResult || mutationPending) return;
+    if (!isAuthenticated) {
+      openAuth('save');
+      return;
+    }
+    mutationPending = true;
+    updateControls();
+    setMutationStatus('Saving…');
+    const { anchors: _anchors, ...generatedRoute } = lastResult;
+    try {
+      const response = await fetchImpl(activePlanId ? `/v1/plans/${activePlanId}` : '/v1/plans', {
+        method: activePlanId ? 'PATCH' : 'POST',
+        headers: { 'content-type': 'application/json', accept: 'application/json' },
+        body: JSON.stringify({
+          name: String(planName.value).trim(),
+          turnpoints: anchors,
+          generatedRoute,
+          routingPriority: selectedPriority(),
+        }),
+      });
+      if (!response.ok) throw new Error(await responseMessage(response, 'Plan could not be saved.'));
+      const payload = await response.json();
+      const plan = payload.plan;
+      if (!plan?.planId) throw new Error('Plan could not be saved.');
+      activePlanId = plan.planId;
+      if (planName) planName.value = plan.name;
+      replacePlanUrl(activePlanId);
+      upsertSavedListItem(plan);
+      baseline = snapshot();
+      setMutationStatus('Plan saved.');
+    } catch (error) {
+      setMutationStatus(error?.message || 'Plan could not be saved.');
+    } finally {
+      mutationPending = false;
+      updateControls();
+    }
+  });
+
+  newPlan?.addEventListener('click', () => {
+    if (confirmDiscard()) clearToNewPlan();
+  });
+
+  savedList?.addEventListener('click', (event) => {
+    const link = event.target?.closest?.('[data-plan-open]');
+    if (!link || !isDirty()) return;
+    event.preventDefault();
+    if (confirmDiscard()) windowRef?.location?.assign?.(link.href);
+  });
+
+  deletePlan?.addEventListener('click', async () => {
+    if (!activePlanId || mutationPending) return;
+    if (windowRef?.confirm && !windowRef.confirm('Delete this Plan?')) return;
+    const deletingId = activePlanId;
+    mutationPending = true;
+    updateControls();
+    setMutationStatus('Deleting…');
+    try {
+      const response = await fetchImpl(`/v1/plans/${deletingId}`, {
+        method: 'DELETE', headers: { accept: 'application/json' },
+      });
+      if (!response.ok) throw new Error(await responseMessage(response, 'Plan could not be deleted.'));
+      savedList?.querySelector?.(`[data-plan-list-item="${deletingId}"]`)?.remove?.();
+      if (savedEmpty && !savedList?.querySelector?.('[data-plan-list-item]')) savedEmpty.hidden = false;
+      clearToNewPlan();
+    } catch (error) {
+      setMutationStatus(error?.message || 'Plan could not be deleted.');
+    } finally {
+      mutationPending = false;
+      updateControls();
+    }
+  });
   const mobileBreakpoint = windowRef?.matchMedia?.('(max-width: 760px)');
   const synchronizeMetrics = () => {
     const isMobile = mobileBreakpoint?.matches === true;
@@ -440,6 +639,7 @@ export function initializePlanPage({
         version: planResumeVersion,
         anchors: anchors.map((anchor) => ({ latitude: anchor.latitude, longitude: anchor.longitude })),
         priority: selectedPriority(),
+        name: String(planName?.value ?? ''),
         thermalVisible: thermalToggle?.checked !== false,
         mapPosition: safeMapPosition(),
         resumeIntent: authResumeIntent,
@@ -493,7 +693,6 @@ export function initializePlanPage({
     }
     if (exportDialog?.showModal && !exportDialog.open) exportDialog.showModal();
   });
-  collectCells?.addEventListener('click', () => openAuth('collect-cells'));
   authSignin.forEach((control) => control.addEventListener('click', () => showAuthPanel('signin')));
   authSignup.forEach((control) => control.addEventListener('click', () => showAuthPanel('signup')));
   authBack.forEach((control) => control.addEventListener('click', () => showAuthPanel('choice')));

@@ -20,7 +20,7 @@ import { createMonthlyCoverageService } from './services/monthlyCoverageService.
 import { createMapGridService } from './services/mapGridService.js';
 import { createTerritoryTileService } from './services/territoryTileService.js';
 import { createTerritoryTileSettingsService } from './services/territoryTileSettingsService.js';
-import { createPageRenderer } from './views/renderer.js';
+import { createPageRenderer, createPlanNotFoundPageRenderer } from './views/renderer.js';
 import {
   createAdminAreaPageRenderer,
   createAdminFlightProcessingPageRenderer,
@@ -59,6 +59,7 @@ import { createThermalKkClient } from './resources/thermalKkClient.js';
 import { createThermalRasterCacheService } from './services/thermalRasterCacheService.js';
 import { createPlanService } from './services/planService.js';
 import { createPlanExportService } from './services/planExportService.js';
+import { createSavedPlanService } from './services/savedPlanService.js';
 import { createMapTilerElevationClient } from './resources/mapTilerElevationClient.js';
 import { createThermalCrawlService } from './services/thermalCrawlService.js';
 import { createThermalAreaMapService } from './services/thermalAreaMapService.js';
@@ -73,7 +74,8 @@ const thermalRasters = createThermalRasterCacheService(db, thermalKk, {
   s3Client,
   bucketName: config.bucket.thermalBucketName,
 });
-const plans = createPlanService(db, { cellSize: config.gridClaimCellSize });
+const plans = createPlanService(db);
+const savedPlans = createSavedPlanService(db);
 const thermalCrawl = createThermalCrawlService(db);
 const thermalAreaMap = createThermalAreaMapService(db);
 const thumbnails = createFlightThumbnailService({
@@ -191,6 +193,7 @@ const webMiddleware = [
     onboarding,
     groups,
     plans,
+    savedPlans,
     planExports,
     thermalRasters,
     flightDetail,
@@ -209,6 +212,7 @@ const webMiddleware = [
       territoryTileSettings,
     }),
     renderAuthenticatedPage: createAuthenticatedPageRenderer(),
+    renderPlanNotFoundPage: createPlanNotFoundPageRenderer(),
     renderAuthenticatedActivityFeed: createAuthenticatedActivityFeedRenderer(),
     renderPublicFlightPage: createPublicFlightPageRenderer(),
     publicOrigin: config.publicOrigin,

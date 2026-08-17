@@ -8,6 +8,7 @@ export const relations = defineRelations(schema, (r) => ({
     sessions: r.many.appSessions({ from: r.users.id, to: r.appSessions.userId }),
     igcFiles: r.many.igcFiles({ from: r.users.id, to: r.igcFiles.userId }),
     flights: r.many.flights({ from: r.users.id, to: r.flights.userId }),
+    plans: r.many.plans({ from: r.users.id, to: r.plans.ownerUserId }),
     flightProgress: r.many.flightProgress({ from: r.users.id, to: r.flightProgress.userId }),
     achievements: r.many.achievements({ from: r.users.id, to: r.achievements.userId }),
     achievementRecords: r.many.achievementRecords({ from: r.users.id, to: r.achievementRecords.userId }),
@@ -46,6 +47,9 @@ export const relations = defineRelations(schema, (r) => ({
     personalGridClaims: r.many.personalGridClaims({ from: r.flights.id, to: r.personalGridClaims.claimFlight }),
     competitionGridClaims: r.many.competitionGridClaims({ from: r.flights.id, to: r.competitionGridClaims.claimFlight }),
     activity: r.one.activities({ from: r.flights.id, to: r.activities.sourceFlightId }),
+  },
+  plans: {
+    owner: r.one.users({ from: r.plans.ownerUserId, to: r.users.id }),
   },
   userOnboardingState: {
     user: r.one.users({ from: r.userOnboardingState.userId, to: r.users.id }),

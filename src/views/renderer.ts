@@ -19,6 +19,9 @@ export type ErrorPageRenderer = (model: {
   currentUser: AuthenticatedUser | null;
   status: number;
 }) => Promise<string>;
+export type PlanNotFoundPageRenderer = (model: {
+  currentUser: AuthenticatedUser | null;
+}) => Promise<string>;
 
 function createEnvironment() {
   return vento({
@@ -83,4 +86,22 @@ export function createErrorPageRenderer(): ErrorPageRenderer {
       })
     ).content;
   };
+}
+
+export function createPlanNotFoundPageRenderer(): PlanNotFoundPageRenderer {
+  const environment = createEnvironment();
+
+  return async ({ currentUser }) => (
+    await environment.run('pages/error.vto', {
+      currentUser,
+      isDashboard: false,
+      isErrorPage: true,
+      errorStatus: 404,
+      errorEyebrow: 'Plan unavailable',
+      errorHeading: 'Plan not found.',
+      errorMessage: 'This Plan could not be found or is unavailable.',
+      pageStylesheet: undefined,
+      pageScript: undefined,
+    })
+  ).content;
 }

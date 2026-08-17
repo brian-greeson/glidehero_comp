@@ -3,15 +3,38 @@ import { describe, expect, it, vi } from 'vitest';
 import { initializePlanPage, requestPlanExport, routeBounds } from '../../public/scripts/app-ui/plan.js';
 
 const result = {
-  exportToken: '00000000-0000-4000-8000-000000000099',
   anchors: [{ latitude: 39, longitude: -105 }, { latitude: 40, longitude: -104 }],
   route: [{ latitude: 39, longitude: -105 }, { latitude: 39.5, longitude: -104.6 }, { latitude: 40, longitude: -104 }],
+};
+
+const generatedRoute = {
+  route: result.route,
+  legs: [{ directDistanceMeters: 1000, maximumDistanceMeters: 1250, routeDistanceMeters: 1100 }],
+  directDistanceMeters: 1000,
+  maximumRouteDistanceMeters: 1250,
+  routeDistanceMeters: 1100,
+  actualExtraDistanceMeters: 100,
+  actualDeviationPercent: 10,
+  thermalCoverage: 'available',
+};
+
+const activePlan = {
+  planId: '00000000-0000-4000-8000-000000000123',
+  ownerUserId: '00000000-0000-4000-8000-000000000456',
+  name: 'Boulder triangle',
+  turnpoints: result.anchors,
+  generatedRoute,
+  routingPriority: 'thermal',
+  isPrivate: true,
+  createdAt: '2026-08-15T12:00:00.000Z',
+  updatedAt: '2026-08-16T12:00:00.000Z',
 };
 
 function makePlanHarness({
   authenticated = true,
   fetchImpl = vi.fn(),
   storedResume = null as string | null,
+  bootstrap = { savedPlans: [], activePlan: null } as any,
 } = {}) {
   const handlers = new Map<string, (event?: any) => any>();
   const source = { setData: vi.fn() };
@@ -41,8 +64,9 @@ function makePlanHarness({
   const loginForm = node({ fields: [['email', 'pilot@example.com'], ['password', 'secret']] });
   const signupForm = node({ fields: [['email', 'new@example.com'], ['password', 'secret']] });
   const priorities = ['shorter', 'balanced', 'thermal'].map((value) => node({ value, checked: value === 'balanced' }));
+  const savedList = node({ querySelector: vi.fn(() => null), prepend: vi.fn() });
   const nodes = new Map<string, any>([
-    ['[data-plan-page]', { dataset: { planAuthenticated: String(authenticated) } }],
+    ['[data-plan-page]', { dataset: { planAuthenticated: String(authenticated), planBootstrap: JSON.stringify(bootstrap) } }],
     ['[data-plan-map]', { dataset: { mapStyleUrl: 'style', thermalTileUrl: 'tiles' }, querySelector: vi.fn() }],
     ['[data-plan-priority-mobile]', node({ value: 'balanced' })],
     ['[data-plan-thermal-toggle]', node({ checked: true })],
@@ -57,11 +81,17 @@ function makePlanHarness({
     ['[data-plan-login-status]', node()],
     ['[data-plan-signup-status]', node()],
     ['[data-plan-export-dialog]', exportDialog],
+    ['[data-plan-name]', node({ value: '' })],
+    ['[data-plan-save]', node({ disabled: true })],
+    ['[data-plan-delete-saved]', node({ hidden: true })],
+    ['[data-plan-new]', node()],
+    ['[data-plan-mutation-status]', node()],
+    ['[data-plan-saved-list]', savedList],
+    ['[data-plan-saved-empty]', node({ hidden: false })],
     ...[
       '[data-plan-status]', '[data-plan-status-mobile]', '[data-plan-undo]', '[data-plan-delete]', '[data-plan-reset]',
       '[data-plan-fit-route]', '[data-plan-direct-distance]', '[data-plan-route-distance]', '[data-plan-extra-distance]',
-      '[data-plan-maximum-distance]', '[data-plan-direct-cells]', '[data-plan-enclosed-cells]', '[data-plan-new-cells]',
-      '[data-plan-export-open]', '[data-plan-collect-cells]',
+      '[data-plan-maximum-distance]', '[data-plan-export-open]',
     ].map((selector) => [selector, node()] as const),
   ]);
   const back = node();
@@ -84,14 +114,16 @@ function makePlanHarness({
     removeItem: vi.fn((key: string) => storage.delete(key)),
   };
   const location = { assign: vi.fn() };
-  const windowRef = { sessionStorage, location, matchMedia: vi.fn(() => ({ matches: false, addEventListener: vi.fn() })) };
+  const history = { replaceState: vi.fn() };
+  const confirm = vi.fn(() => true);
+  const windowRef = { sessionStorage, location, history, confirm, matchMedia: vi.fn(() => ({ matches: false, addEventListener: vi.fn() })) };
   const controller = initializePlanPage({
     documentRef, fetchImpl, windowRef,
     maplibre: { Map: class { constructor() { return map; } }, NavigationControl: class {} },
   });
   const listener = (selector: string, event: string) => nodes.get(selector)?.addEventListener.mock.calls
     .find((call: any[]) => call[0] === event)?.[1];
-  return { controller, handlers, map, nodes, priorities, authDialog, exportDialog, back, close, sessionStorage, location, listener };
+  return { controller, handlers, map, nodes, priorities, authDialog, exportDialog, back, close, sessionStorage, location, history, confirm, listener };
 }
 
 describe('Plan export controller', () => {
@@ -103,7 +135,7 @@ describe('Plan export controller', () => {
     ])).toEqual([[-105, 39], [-103.5, 40]]);
     expect(routeBounds([])).toBeNull();
   });
-  it('requests a server-authorized export without resubmitting route coordinates', async () => {
+  it('exports the current turnpoints and generated route without an export key', async () => {
     const fetchImpl = vi.fn(async (_input: string, _init?: RequestInit) => new Response('task', {
       status: 200,
       headers: { 'content-disposition': 'attachment; filename="glidehero-main-turnpoints.cup"' },
@@ -116,13 +148,13 @@ describe('Plan export controller', () => {
     expect(exported.filename).toBe('glidehero-main-turnpoints.cup');
     expect(await exported.blob.text()).toBe('task');
     expect(JSON.parse(String(fetchImpl.mock.calls[0]![1]?.body))).toEqual({
-      variant: 'main-turnpoints', format: 'cup', prefix: 'GH', exportToken: result.exportToken,
+      variant: 'main-turnpoints', format: 'cup', prefix: 'GH', anchors: result.anchors, route: result.route,
     });
   });
 
-  it('rejects export attempts without a server authorization', async () => {
+  it('rejects export attempts without a calculated route', async () => {
     await expect(requestPlanExport({
-      fetchImpl: vi.fn(), result: { anchors: result.anchors, route: result.route },
+      fetchImpl: vi.fn(), result: { anchors: result.anchors },
       variant: 'main-turnpoints', format: 'cup', prefix: 'GH',
     })).rejects.toThrow('Calculate a route');
   });
@@ -157,8 +189,7 @@ describe('Plan export controller', () => {
         '[data-plan-status]', '[data-plan-status-mobile]', '[data-plan-undo]', '[data-plan-delete]', '[data-plan-reset]',
         '[data-plan-fit-route]',
         '[data-plan-direct-distance]', '[data-plan-route-distance]', '[data-plan-extra-distance]',
-        '[data-plan-maximum-distance]', '[data-plan-direct-cells]', '[data-plan-enclosed-cells]',
-        '[data-plan-new-cells]', '[data-plan-export-open]',
+        '[data-plan-maximum-distance]', '[data-plan-export-open]',
       ].map((selector) => [selector, control(selector)] as const),
     ]);
     const documentRef = {
@@ -169,7 +200,6 @@ describe('Plan export controller', () => {
       ...result,
       directDistanceMeters: 1_000, routeDistanceMeters: 1_000, actualExtraDistanceMeters: 0,
       actualDeviationPercent: 0, maximumRouteDistanceMeters: 1_250, thermalCoverage: 'unavailable',
-      claims: { direct: [], enclosed: [], newPersonal: [] },
     }), { status: 200, headers: { 'content-type': 'application/json' } }));
     const controller = initializePlanPage({
       documentRef, fetchImpl,
@@ -199,12 +229,11 @@ describe('Plan export controller', () => {
     expect(controls.get('[data-plan-route-distance]')?.textContent).toBe('—');
   });
 
-  it('gates a calculated guest export with the auth choice modal and accepts null personal claims', async () => {
+  it('gates a calculated guest export with the auth choice modal', async () => {
     const fetchImpl = vi.fn(async () => new Response(JSON.stringify({
-      ...result, exportToken: undefined,
+      ...result,
       directDistanceMeters: 1_000, routeDistanceMeters: 1_100, actualExtraDistanceMeters: 100,
       actualDeviationPercent: 10, maximumRouteDistanceMeters: 1_250, thermalCoverage: 'available',
-      claims: { direct: [], enclosed: [], newPersonal: null },
     }), { status: 200, headers: { 'content-type': 'application/json' } }));
     const harness = makePlanHarness({ authenticated: false, fetchImpl });
     harness.controller.anchors.push(...result.anchors);
@@ -217,9 +246,16 @@ describe('Plan export controller', () => {
     expect(harness.nodes.get('[data-plan-auth-choice]').hidden).toBe(false);
   });
 
-  it('opens both auth form steps from the guest modal and returns to its choice step', () => {
-    const harness = makePlanHarness({ authenticated: false });
-    harness.listener('[data-plan-collect-cells]', 'click')?.();
+  it('opens both auth form steps from the guest export modal and returns to its choice step', async () => {
+    const fetchImpl = vi.fn(async () => new Response(JSON.stringify({
+      ...result,
+      directDistanceMeters: 1_000, routeDistanceMeters: 1_000, actualExtraDistanceMeters: 0,
+      actualDeviationPercent: 0, maximumRouteDistanceMeters: 1_250, thermalCoverage: 'unavailable',
+    }), { status: 200, headers: { 'content-type': 'application/json' } }));
+    const harness = makePlanHarness({ authenticated: false, fetchImpl });
+    harness.controller.anchors.push(...result.anchors);
+    await harness.controller.calculate();
+    harness.listener('[data-plan-export-open]', 'click')?.();
     harness.listener('[data-plan-auth-signup]', 'click')?.();
     expect(harness.nodes.get('[data-plan-auth-signup-panel]').hidden).toBe(false);
     expect(harness.nodes.get('[data-plan-auth-choice]').hidden).toBe(true);
@@ -232,12 +268,19 @@ describe('Plan export controller', () => {
   });
 
   it('shows JSON auth errors inline without losing the guest route', async () => {
-    const fetchImpl = vi.fn(async () => new Response(JSON.stringify({
-      error: { code: 'INVALID_CREDENTIALS', message: 'Email or password is incorrect.' },
-    }), { status: 401, headers: { 'content-type': 'application/json' } }));
+    const fetchImpl = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        ...result,
+        directDistanceMeters: 1_000, routeDistanceMeters: 1_000, actualExtraDistanceMeters: 0,
+        actualDeviationPercent: 0, maximumRouteDistanceMeters: 1_250, thermalCoverage: 'unavailable',
+      }), { status: 200, headers: { 'content-type': 'application/json' } }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        error: { code: 'INVALID_CREDENTIALS', message: 'Email or password is incorrect.' },
+      }), { status: 401, headers: { 'content-type': 'application/json' } }));
     const harness = makePlanHarness({ authenticated: false, fetchImpl });
     harness.controller.anchors.push(...result.anchors);
-    harness.listener('[data-plan-collect-cells]', 'click')?.();
+    await harness.controller.calculate();
+    harness.listener('[data-plan-export-open]', 'click')?.();
     const originalFormData = globalThis.FormData;
     vi.stubGlobal('FormData', class {
       entries: [string, string][];
@@ -260,12 +303,19 @@ describe('Plan export controller', () => {
   });
 
   it('saves the Plan state after modal signup success and reloads Plan', async () => {
-    const fetchImpl = vi.fn(async () => new Response(JSON.stringify({ ok: true }), {
-      status: 200, headers: { 'content-type': 'application/json' },
-    }));
+    const fetchImpl = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        ...result,
+        directDistanceMeters: 1_000, routeDistanceMeters: 1_000, actualExtraDistanceMeters: 0,
+        actualDeviationPercent: 0, maximumRouteDistanceMeters: 1_250, thermalCoverage: 'unavailable',
+      }), { status: 200, headers: { 'content-type': 'application/json' } }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ ok: true }), {
+        status: 200, headers: { 'content-type': 'application/json' },
+      }));
     const harness = makePlanHarness({ authenticated: false, fetchImpl });
     harness.controller.anchors.push(...result.anchors);
-    harness.listener('[data-plan-collect-cells]', 'click')?.();
+    await harness.controller.calculate();
+    harness.listener('[data-plan-export-open]', 'click')?.();
     const originalFormData = globalThis.FormData;
     vi.stubGlobal('FormData', class {
       entries: [string, string][];
@@ -281,38 +331,181 @@ describe('Plan export controller', () => {
     const saved = JSON.parse(harness.sessionStorage.setItem.mock.calls[0]![1]);
     expect(saved).toMatchObject({
       version: 1, anchors: result.anchors, priority: 'balanced', thermalVisible: true,
-      mapPosition: { longitude: -104.5, latitude: 39.5, zoom: 8 }, resumeIntent: 'collect-cells',
+      mapPosition: { longitude: -104.5, latitude: 39.5, zoom: 8 }, resumeIntent: 'export',
     });
     expect(harness.location.assign).toHaveBeenCalledWith('/plan');
   });
 
-  it.each([
-    ['export', 1],
-    ['collect-cells', 0],
-  ])('restores a %s intent, recalculates, and only reopens export when authorized', async (resumeIntent, exportOpens) => {
+  it('restores an export intent, recalculates, and reopens export when authorized', async () => {
     const storedResume = JSON.stringify({
       version: 1, anchors: result.anchors, priority: 'thermal', thermalVisible: false,
-      mapPosition: { longitude: -104.7, latitude: 39.7, zoom: 9 }, resumeIntent,
+      mapPosition: { longitude: -104.7, latitude: 39.7, zoom: 9 }, resumeIntent: 'export',
     });
     const fetchImpl = vi.fn(async () => new Response(JSON.stringify({
       ...result,
       directDistanceMeters: 1_000, routeDistanceMeters: 1_000, actualExtraDistanceMeters: 0,
       actualDeviationPercent: 0, maximumRouteDistanceMeters: 1_250, thermalCoverage: 'unavailable',
-      claims: { direct: [], enclosed: [], newPersonal: [] },
     }), { status: 200, headers: { 'content-type': 'application/json' } }));
     const harness = makePlanHarness({ authenticated: true, fetchImpl, storedResume });
 
     await harness.handlers.get('load')?.();
     await vi.waitFor(() => expect(fetchImpl).toHaveBeenCalledWith('/v1/plan/route', expect.anything()));
-    if (resumeIntent === 'export') {
-      await vi.waitFor(() => expect(harness.exportDialog.showModal).toHaveBeenCalledOnce());
-    }
+    await vi.waitFor(() => expect(harness.exportDialog.showModal).toHaveBeenCalledOnce());
 
     expect(harness.controller.anchors).toEqual(result.anchors);
     expect(harness.priorities.find((priority) => priority.checked)?.value).toBe('thermal');
     expect(harness.map.setCenter).toHaveBeenCalledWith([-104.7, 39.7]);
     expect(harness.map.setZoom).toHaveBeenCalledWith(9);
-    expect(harness.exportDialog.showModal).toHaveBeenCalledTimes(exportOpens);
+    expect(harness.exportDialog.showModal).toHaveBeenCalledOnce();
     expect(harness.sessionStorage.removeItem).toHaveBeenCalledWith('glidehero.plan.resume.v1');
+  });
+
+  it('discards the removed collect-cells resume intent', async () => {
+    const storedResume = JSON.stringify({
+      version: 1, anchors: result.anchors, priority: 'balanced', thermalVisible: true,
+      mapPosition: { longitude: -104.7, latitude: 39.7, zoom: 9 }, resumeIntent: 'collect-cells',
+    });
+    const fetchImpl = vi.fn();
+    const harness = makePlanHarness({ authenticated: true, fetchImpl, storedResume });
+
+    await harness.handlers.get('load')?.();
+
+    expect(harness.controller.anchors).toEqual([]);
+    expect(fetchImpl).not.toHaveBeenCalled();
+    expect(harness.sessionStorage.removeItem).toHaveBeenCalledWith('glidehero.plan.resume.v1');
+  });
+});
+
+describe('Saved Plan controller', () => {
+  it('renders an active Plan snapshot without recalculating it', async () => {
+    const fetchImpl = vi.fn();
+    const harness = makePlanHarness({ fetchImpl, bootstrap: { savedPlans: [], activePlan } });
+
+    await harness.handlers.get('load')?.();
+
+    expect(fetchImpl).not.toHaveBeenCalled();
+    expect(harness.controller.anchors).toEqual(result.anchors);
+    expect(harness.nodes.get('[data-plan-name]').value).toBe('Boulder triangle');
+    expect(harness.nodes.get('[data-plan-route-distance]').textContent).toBe('1.1 km');
+    expect(harness.nodes.get('[data-plan-save]').disabled).toBe(false);
+    expect(harness.nodes.get('[data-plan-delete-saved]').hidden).toBe(false);
+  });
+
+  it('creates a ready named Plan and replaces the browser URL', async () => {
+    const created = { ...activePlan, name: 'Morning route' };
+    const fetchImpl = vi.fn(async (input: string) => input === '/v1/plan/route'
+      ? new Response(JSON.stringify({ ...generatedRoute, anchors: result.anchors }), { status: 200, headers: { 'content-type': 'application/json' } })
+      : new Response(JSON.stringify({ plan: created }), { status: 201, headers: { 'content-type': 'application/json' } }));
+    const harness = makePlanHarness({ fetchImpl });
+    harness.controller.anchors.push(...result.anchors);
+    await harness.controller.calculate();
+    harness.nodes.get('[data-plan-name]').value = '  Morning route  ';
+    harness.listener('[data-plan-name]', 'input')?.();
+
+    await harness.listener('[data-plan-save]', 'click')?.();
+
+    expect(fetchImpl).toHaveBeenLastCalledWith('/v1/plans', expect.objectContaining({ method: 'POST' }));
+    const createCall = fetchImpl.mock.calls.at(-1) as unknown as [string, RequestInit];
+    const body = JSON.parse(String(createCall[1].body));
+    expect(body).toMatchObject({ name: 'Morning route', turnpoints: result.anchors, routingPriority: 'balanced' });
+    expect(body.generatedRoute).not.toHaveProperty('anchors');
+    expect(harness.history.replaceState).toHaveBeenCalledWith({}, '', `/plan/${activePlan.planId}`);
+    expect(harness.nodes.get('[data-plan-mutation-status]').textContent).toBe('Plan saved.');
+
+    harness.nodes.get('[data-plan-name]').value = 'Morning route changed';
+    harness.listener('[data-plan-name]', 'input')?.();
+    expect(harness.nodes.get('[data-plan-mutation-status]').textContent).toBe('');
+  });
+
+  it('updates a name without recalculating the stored route', async () => {
+    const fetchImpl = vi.fn(async () => new Response(JSON.stringify({ plan: { ...activePlan, name: 'Renamed' } }), {
+      status: 200, headers: { 'content-type': 'application/json' },
+    }));
+    const harness = makePlanHarness({ fetchImpl, bootstrap: { savedPlans: [], activePlan } });
+    await harness.handlers.get('load')?.();
+    harness.nodes.get('[data-plan-name]').value = 'Renamed';
+    harness.listener('[data-plan-name]', 'input')?.();
+
+    await harness.listener('[data-plan-save]', 'click')?.();
+
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(fetchImpl).toHaveBeenCalledWith(`/v1/plans/${activePlan.planId}`, expect.objectContaining({ method: 'PATCH' }));
+  });
+
+  it('asks before clearing a dirty Plan and starts blank after confirmation', async () => {
+    const harness = makePlanHarness({ bootstrap: { savedPlans: [], activePlan } });
+    await harness.handlers.get('load')?.();
+    harness.nodes.get('[data-plan-name]').value = 'Changed';
+    harness.listener('[data-plan-name]', 'input')?.();
+    harness.confirm.mockReturnValueOnce(false).mockReturnValueOnce(true);
+
+    harness.listener('[data-plan-new]', 'click')?.();
+    expect(harness.controller.anchors).toEqual(result.anchors);
+    harness.listener('[data-plan-new]', 'click')?.();
+
+    expect(harness.controller.anchors).toEqual([]);
+    expect(harness.nodes.get('[data-plan-name]').value).toBe('');
+    expect(harness.history.replaceState).toHaveBeenCalledWith({}, '', '/plan');
+  });
+
+  it('asks before navigating from a dirty Plan to another saved Plan', async () => {
+    const harness = makePlanHarness({ bootstrap: { savedPlans: [], activePlan } });
+    await harness.handlers.get('load')?.();
+    harness.nodes.get('[data-plan-name]').value = 'Changed';
+    harness.listener('[data-plan-name]', 'input')?.();
+    const link = { href: '/plan/another', closest: vi.fn(() => null) };
+    const event = { target: { closest: vi.fn(() => link) }, preventDefault: vi.fn() };
+    harness.confirm.mockReturnValueOnce(false).mockReturnValueOnce(true);
+
+    harness.listener('[data-plan-saved-list]', 'click')?.(event);
+    expect(harness.location.assign).not.toHaveBeenCalled();
+    harness.listener('[data-plan-saved-list]', 'click')?.(event);
+
+    expect(event.preventDefault).toHaveBeenCalledTimes(2);
+    expect(harness.location.assign).toHaveBeenCalledWith('/plan/another');
+  });
+
+  it('preserves the name through guest authentication without automatically saving', async () => {
+    const fetchImpl = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ ...generatedRoute }), { status: 200, headers: { 'content-type': 'application/json' } }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ ok: true }), { status: 200, headers: { 'content-type': 'application/json' } }));
+    const harness = makePlanHarness({ authenticated: false, fetchImpl });
+    harness.controller.anchors.push(...result.anchors);
+    await harness.controller.calculate();
+    harness.nodes.get('[data-plan-name]').value = 'Guest route';
+    harness.listener('[data-plan-name]', 'input')?.();
+    harness.listener('[data-plan-save]', 'click')?.();
+    const originalFormData = globalThis.FormData;
+    vi.stubGlobal('FormData', class {
+      entries: [string, string][];
+      constructor(form: { fields: [string, string][] }) { this.entries = form.fields; }
+      forEach(callback: (value: string, key: string) => void) { this.entries.forEach(([key, value]) => callback(value, key)); }
+    });
+    try {
+      await harness.listener('[data-plan-login-form]', 'submit')?.({ preventDefault: vi.fn() });
+    } finally {
+      vi.stubGlobal('FormData', originalFormData);
+    }
+
+    const saved = JSON.parse(harness.sessionStorage.setItem.mock.calls[0]![1]);
+    expect(saved).toMatchObject({ name: 'Guest route', resumeIntent: 'save', anchors: result.anchors });
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    expect(harness.location.assign).toHaveBeenCalledWith('/plan');
+  });
+
+  it('deletes the active Plan only after confirmation and clears to a blank Plan', async () => {
+    const fetchImpl = vi.fn(async () => new Response(null, { status: 204 }));
+    const harness = makePlanHarness({ fetchImpl, bootstrap: { savedPlans: [], activePlan } });
+    await harness.handlers.get('load')?.();
+
+    await harness.listener('[data-plan-delete-saved]', 'click')?.();
+
+    expect(harness.confirm).toHaveBeenCalledWith('Delete this Plan?');
+    expect(fetchImpl).toHaveBeenCalledWith(`/v1/plans/${activePlan.planId}`, {
+      method: 'DELETE', headers: { accept: 'application/json' },
+    });
+    expect(harness.controller.anchors).toEqual([]);
+    expect(harness.nodes.get('[data-plan-name]').value).toBe('');
+    expect(harness.history.replaceState).toHaveBeenCalledWith({}, '', '/plan');
   });
 });
