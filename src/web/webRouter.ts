@@ -108,6 +108,17 @@ const savedPlanWriteSchema = z.object({
   generatedRoute: z.record(z.string(), z.unknown()),
   routingPriority: z.string(),
 }).strict();
+const savedPlanVisibilitySchema = z.object({
+  visibility: z.enum(['private', 'link', 'group']),
+  sharedGroupId: z.uuid().nullable().optional(),
+}).strict().superRefine((value, context) => {
+  if (value.visibility === 'group' && !value.sharedGroupId) {
+    context.addIssue({ code: 'custom', path: ['sharedGroupId'], message: 'Select a Group.' });
+  }
+  if (value.visibility !== 'group' && value.sharedGroupId) {
+    context.addIssue({ code: 'custom', path: ['sharedGroupId'], message: 'Only Group sharing accepts a Group.' });
+  }
+});
 const onboardingStepSchema = z.enum(['profile', 'first-flight', 'personal-map', 'follow-pilots', 'competitive-map', 'groups', 'glider', 'history']);
 const activityQuerySchema = z.object({
   q: z.string().max(100).optional(),
@@ -512,12 +523,15 @@ export function createWebRouter(dependencies: {
     }));
   }
 
-  async function planPageModel(currentUser: AuthenticatedUser | null, activePlan: Awaited<ReturnType<SavedPlanService['get']>> | null = null) {
+  async function planPageModel(currentUser: AuthenticatedUser | null, activePlan: Awaited<ReturnType<SavedPlanService['getForViewer']>> | null = null) {
     const shell = currentUser
       ? { ...authenticatedShell('plan', currentUser, { showFooter: false }), isGuest: false as const }
       : { page: 'plan' as const, title: 'Plan · GlideHero', isGuest: true as const, showFooter: false as const };
     const savedPlans = currentUser
       ? savedPlanListView(await requireSavedPlans().list(currentUser.userId))
+      : [];
+    const groupOptions = currentUser && activePlan?.isOwner
+      ? await acceptedMapGroupOptions(currentUser.userId)
       : [];
     const activePlanView = activePlan;
     return {
@@ -527,8 +541,9 @@ export function createWebRouter(dependencies: {
       thermalTileUrl: '/v1/thermal/tiles/{z}/{x}/{y}.png',
       defaultRoutingPriority: activePlan?.routingPriority ?? 'balanced' as const,
       savedPlans,
+      groupOptions,
       activePlan: activePlanView,
-      planBootstrapJson: JSON.stringify({ savedPlans, activePlan: activePlanView }),
+      planBootstrapJson: JSON.stringify({ savedPlans, groupOptions, activePlan: activePlanView }),
     };
   }
 
@@ -1644,11 +1659,10 @@ export function createWebRouter(dependencies: {
     const currentUser = res.locals.currentUser;
     privateNoStore(res);
     try {
-      if (!currentUser) {
-        res.status(404).type('html').send(await renderPlanNotFoundPage({ currentUser: null }));
-        return;
-      }
-      const activePlan = await requireSavedPlans().get({ planId: req.params.planId, ownerUserId: currentUser.userId });
+      const activePlan = await requireSavedPlans().getForViewer({
+        planId: req.params.planId,
+        viewerUserId: currentUser?.userId ?? null,
+      });
       await renderAuthenticated(res, dependencies.renderAuthenticatedPage, 200, await planPageModel(currentUser, activePlan));
     } catch (error) {
       if (error instanceof SavedPlanError && error.code === 'not_found') {
@@ -1687,9 +1701,30 @@ export function createWebRouter(dependencies: {
   router.get('/v1/plans/:planId', async (req, res, next) => {
     const currentUser = res.locals.currentUser;
     privateNoStore(res);
-    if (!currentUser) return next(new AppError(401, 'unauthorized', 'Sign in to access saved Plans.'));
     try {
-      res.status(200).json(await requireSavedPlans().get({ planId: req.params.planId, ownerUserId: currentUser.userId }));
+      res.status(200).json(await requireSavedPlans().getForViewer({
+        planId: req.params.planId,
+        viewerUserId: currentUser?.userId ?? null,
+      }));
+    } catch (error) {
+      savedPlanError(error, res, next);
+    }
+  });
+
+  router.patch('/v1/plans/:planId/visibility', async (req, res, next) => {
+    const currentUser = res.locals.currentUser;
+    privateNoStore(res);
+    if (!currentUser) return next(new AppError(401, 'unauthorized', 'Sign in to share saved Plans.'));
+    const parsed = savedPlanVisibilitySchema.safeParse(req.body);
+    if (!parsed.success) return next(new AppError(422, 'invalid_request', 'Choose a valid Plan visibility.'));
+    try {
+      const updated = await requireSavedPlans().updateVisibility({
+        planId: req.params.planId,
+        ownerUserId: currentUser.userId,
+        visibility: parsed.data.visibility,
+        sharedGroupId: parsed.data.sharedGroupId ?? null,
+      });
+      res.status(200).json({ plan: updated });
     } catch (error) {
       savedPlanError(error, res, next);
     }

@@ -12,7 +12,7 @@ afterAll(async () => {
 });
 
 describe('authentication schema', () => {
-  it('stores private saved Plans with owner ordering and deletion semantics', async () => {
+  it('stores saved Plans with constrained private, link, and Group visibility', async () => {
     const columns = await database.pool.query<{
       column_name: string;
       data_type: string;
@@ -27,14 +27,23 @@ describe('authentication schema', () => {
     expect(columns.rows).toEqual([
       { column_name: 'created_at', data_type: 'timestamp with time zone', is_nullable: 'NO', column_default: 'now()' },
       { column_name: 'generated_route', data_type: 'jsonb', is_nullable: 'NO', column_default: null },
-      { column_name: 'is_private', data_type: 'boolean', is_nullable: 'NO', column_default: 'true' },
       { column_name: 'name', data_type: 'text', is_nullable: 'NO', column_default: null },
       { column_name: 'owner_user_id', data_type: 'uuid', is_nullable: 'NO', column_default: null },
       { column_name: 'plan_id', data_type: 'uuid', is_nullable: 'NO', column_default: 'gen_random_uuid()' },
       { column_name: 'routing_priority', data_type: 'USER-DEFINED', is_nullable: 'NO', column_default: null },
+      { column_name: 'shared_group_id', data_type: 'uuid', is_nullable: 'YES', column_default: null },
       { column_name: 'turnpoints', data_type: 'jsonb', is_nullable: 'NO', column_default: null },
       { column_name: 'updated_at', data_type: 'timestamp with time zone', is_nullable: 'NO', column_default: 'now()' },
+      { column_name: 'visibility', data_type: 'USER-DEFINED', is_nullable: 'NO', column_default: "'private'::plan_visibility" },
     ]);
+
+    const visibilityValues = await database.pool.query<{ enumlabel: string }>(
+      `SELECT enumlabel
+       FROM pg_enum
+       WHERE enumtypid = 'plan_visibility'::regtype
+       ORDER BY enumsortorder`,
+    );
+    expect(visibilityValues.rows.map((row) => row.enumlabel)).toEqual(['private', 'link', 'group']);
 
     const constraints = await database.pool.query<{ conname: string; definition: string }>(
       `SELECT conname, pg_get_constraintdef(oid) AS definition
@@ -47,16 +56,23 @@ describe('authentication schema', () => {
       { conname: 'plans_name_normalized', definition: 'CHECK ((name = btrim(name)))' },
       { conname: 'plans_owner_user_id_users_user_id_fkey', definition: 'FOREIGN KEY (owner_user_id) REFERENCES users(user_id) ON DELETE CASCADE' },
       { conname: 'plans_pkey', definition: 'PRIMARY KEY (plan_id)' },
+      { conname: 'plans_shared_group_id_pilot_groups_group_id_fkey', definition: 'FOREIGN KEY (shared_group_id) REFERENCES pilot_groups(group_id)' },
     ]));
+    expect(constraints.rows.find((constraint) => constraint.conname === 'plans_group_visibility_requires_shared_group')?.definition)
+      .toContain("(visibility = 'group'::plan_visibility) = (shared_group_id IS NOT NULL)");
 
     const indexes = await database.pool.query<{ indexname: string; indexdef: string }>(
       `SELECT indexname, indexdef
        FROM pg_indexes
        WHERE schemaname = 'public' AND tablename = 'plans'
-         AND indexname = 'plans_owner_user_id_updated_at_plan_id_idx'`,
+         AND indexname IN ('plans_owner_user_id_updated_at_plan_id_idx', 'plans_shared_group_id_idx')
+       ORDER BY indexname`,
     );
-    expect(indexes.rows).toHaveLength(1);
-    expect(indexes.rows[0]?.indexdef).toContain('(owner_user_id, updated_at, plan_id)');
+    expect(indexes.rows).toHaveLength(2);
+    expect(indexes.rows.find((index) => index.indexname === 'plans_owner_user_id_updated_at_plan_id_idx')?.indexdef)
+      .toContain('(owner_user_id, updated_at, plan_id)');
+    expect(indexes.rows.find((index) => index.indexname === 'plans_shared_group_id_idx')?.indexdef)
+      .toContain('(shared_group_id)');
   });
 
   it('contains flight and track-point tables with the expected columns', async () => {

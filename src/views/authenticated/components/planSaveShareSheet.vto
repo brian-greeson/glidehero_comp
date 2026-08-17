@@ -1,0 +1,68 @@
+<aside class="plan-save-sheet app-bottom-sheet is-partial" data-map-sheet data-sheet-state="partial" aria-label="Plan controls">
+  <button class="plan-save-sheet__handle app-bottom-sheet__handle" type="button" data-map-sheet-handle aria-expanded="false" aria-controls="plan-save-sheet-content">
+    <span aria-hidden="true"></span><span class="sr-only" data-map-sheet-label>Expand Plan controls</span>
+  </button>
+  <div class="plan-save-sheet__peek" aria-hidden="true">
+    <span class="plan-save-sheet__peek-icon">{{ include "authenticated/components/icon.vto" { name: "plan" } }}</span>
+    <span><strong>Plan controls</strong><small>{{ if activePlan }}{{ activePlan.name }}{{ else }}Save this route for later{{ /if }}</small></span>
+  </div>
+  <div class="plan-save-sheet__content app-bottom-sheet__content" id="plan-save-sheet-content">
+    <details class="plan-save-sheet__section" name="plan-save-share" data-plan-save-section open>
+      <summary><span>{{ include "authenticated/components/icon.vto" { name: "plan" } }}<strong>Save</strong></span></summary>
+      <div class="plan-save-sheet__section-content">
+        <p>Save your route so you can come back to it later.</p>
+        <section class="plan-editor" aria-label="Save this Plan">
+          <label for="plan-name">Plan name</label>
+          <input id="plan-name" type="text" maxlength="80" required autocomplete="off" placeholder="e.g. Colorado Epic" data-plan-name>
+        </section>
+      </div>
+    </details>
+
+    <details class="plan-save-sheet__section" name="plan-save-share" data-plan-share-section>
+      <summary><span>{{ include "authenticated/components/icon.vto" { name: "people" } }}<strong>Share</strong></span></summary>
+      <div class="plan-save-sheet__section-content">
+        <fieldset class="plan-sharing-options">
+          <legend>Privacy</legend>
+          <label class="plan-sharing-option">
+            <input type="radio" name="plan-visibility" value="private" data-plan-visibility{{ if !activePlan || !activePlan.visibility || activePlan.visibility === 'private' }} checked{{ /if }}>
+            <span class="plan-sharing-option__icon" aria-hidden="true">{{ include "authenticated/components/icon.vto" { name: "shield" } }}</span>
+            <span><strong>Private</strong><small>Only you can view this Plan.</small></span>
+          </label>
+          <label class="plan-sharing-option">
+            <input type="radio" name="plan-visibility" value="link" data-plan-visibility{{ if activePlan && activePlan.visibility === 'link' }} checked{{ /if }}>
+            <span class="plan-sharing-option__icon" aria-hidden="true">{{ include "authenticated/components/icon.vto" { name: "paper-plane" } }}</span>
+            <span><strong>Anyone with the link</strong><small>People with this URL can view it. It will not be listed publicly.</small></span>
+          </label>
+          <label class="plan-sharing-option">
+            <input type="radio" name="plan-visibility" value="group" data-plan-visibility{{ if activePlan && activePlan.visibility === 'group' }} checked{{ /if }}{{ if !groupOptions.length }} disabled{{ /if }}>
+            <span class="plan-sharing-option__icon" aria-hidden="true">{{ include "authenticated/components/icon.vto" { name: "people" } }}</span>
+            <span><strong>Share to a Group</strong><small>{{ if groupOptions.length }}Accepted members can view it.{{ else }}Join or create a Group to use this option.{{ /if }}</small></span>
+          </label>
+        </fieldset>
+
+        <label class="plan-sharing-group" data-plan-sharing-group{{ if !activePlan || activePlan.visibility !== 'group' }} hidden{{ /if }}><span>Group</span><select data-plan-sharing-group-select>{{ for group of groupOptions }}<option value="{{ group.id }}"{{ if activePlan && activePlan.sharedGroupId === group.id }} selected{{ /if }}>{{ group.name }}</option>{{ /for }}</select></label>
+        <div class="plan-sharing-link" data-plan-sharing-link{{ if !activePlan || activePlan.visibility !== 'link' }} hidden{{ /if }}>
+          <label for="plan-share-url">Plan link</label>
+          <div><input id="plan-share-url" type="url" readonly placeholder="Available after saving" data-plan-sharing-url><button type="button" data-plan-sharing-copy{{ if !activePlan }} disabled{{ /if }}>Copy</button></div>
+        </div>
+      </div>
+    </details>
+
+    <button class="plan-save" type="button" data-plan-save disabled>{{ if activePlan }}Save changes{{ else }}Save Plan{{ /if }}</button>
+    <p class="plan-mutation-status" data-plan-mutation-status data-plan-sharing-status role="status"></p>
+
+    <div class="plan-save-sheet__secondary-actions">
+      <button type="button" data-plan-new>New Plan</button>
+    </div>
+
+    <details class="plan-saved-plans" data-plan-saved-sheet>
+      <summary>Saved Plans <span>{{ if savedPlans.length }}{{ savedPlans.length }}{{ else }}0{{ /if }}</span></summary>
+      <div class="plan-saved-plans__content">
+        <p class="plan-saved-empty" data-plan-saved-empty{{ if savedPlans.length }} hidden{{ /if }}>No saved Plans yet.</p>
+        <ul class="plan-saved-list" data-plan-saved-list>
+          {{ for plan of savedPlans }}<li data-plan-list-item="{{ plan.planId }}"{{ if activePlan && activePlan.planId === plan.planId }} class="is-active"{{ /if }}><a href="{{ plan.href }}" data-plan-open><strong data-plan-list-name>{{ plan.name }}</strong><time datetime="{{ plan.updatedAt }}" data-plan-list-date>{{ plan.updatedAtLabel }}</time></a><button type="button" class="plan-saved-list__delete" data-plan-delete-saved-id="{{ plan.planId }}" aria-label="Delete {{ plan.name }}">Delete</button></li>{{ /for }}
+        </ul>
+      </div>
+    </details>
+  </div>
+</aside>

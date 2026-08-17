@@ -50,6 +50,10 @@ export const relations = defineRelations(schema, (r) => ({
   },
   plans: {
     owner: r.one.users({ from: r.plans.ownerUserId, to: r.users.id }),
+    sharedGroup: r.one.pilotGroups({ from: r.plans.sharedGroupId, to: r.pilotGroups.id }),
+  },
+  pilotGroups: {
+    sharedPlans: r.many.plans({ from: r.pilotGroups.id, to: r.plans.sharedGroupId }),
   },
   userOnboardingState: {
     user: r.one.users({ from: r.userOnboardingState.userId, to: r.users.id }),

@@ -173,6 +173,7 @@ export type PlanPageModel = (AuthenticatedShellModel & { isGuest?: false } | Gue
   defaultRoutingPriority: 'shorter' | 'balanced' | 'thermal';
   savedPlans: SavedPlanListItemView[];
   activePlan: ActivePlanView | null;
+  groupOptions: Array<{ id: string; name: string }>;
   planBootstrapJson: string;
 };
 

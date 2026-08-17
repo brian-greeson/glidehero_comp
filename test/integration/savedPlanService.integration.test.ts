@@ -1,6 +1,7 @@
 import { sql } from 'drizzle-orm';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { createAuthService } from '../../src/services/authService.js';
+import { createGroupService } from '../../src/services/groupService.js';
 import { createSavedPlanService, SavedPlanError } from '../../src/services/savedPlanService.js';
 import { resetAndMigrateTestDatabase } from './database.js';
 
@@ -68,7 +69,9 @@ describe('savedPlanService', () => {
       turnpoints,
       generatedRoute,
       routingPriority: 'thermal',
-      isPrivate: true,
+      visibility: 'private',
+      sharedGroupId: null,
+      isOwner: true,
     });
     expect(created.createdAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
     expect(created.updatedAt).toBe(created.createdAt);
@@ -76,11 +79,11 @@ describe('savedPlanService', () => {
     expect(created.generatedRoute).not.toHaveProperty('transientClientField');
 
     await expect(service.get({ planId: created.planId, ownerUserId: owner })).resolves.toEqual(created);
-    const stored = await database.pool.query<{ isPrivate: boolean; route: typeof generatedRoute }>(
-      'SELECT is_private AS "isPrivate", generated_route AS route FROM plans WHERE plan_id = $1',
+    const stored = await database.pool.query<{ visibility: string; sharedGroupId: string | null; route: typeof generatedRoute }>(
+      'SELECT visibility, shared_group_id AS "sharedGroupId", generated_route AS route FROM plans WHERE plan_id = $1',
       [created.planId],
     );
-    expect(stored.rows).toEqual([{ isPrivate: true, route: generatedRoute }]);
+    expect(stored.rows).toEqual([{ visibility: 'private', sharedGroupId: null, route: generatedRoute }]);
   });
 
   it('allows duplicate names, lists only the owner, and orders most recently updated first', async () => {
@@ -121,9 +124,137 @@ describe('savedPlanService', () => {
       name: 'Updated',
       generatedRoute: updatedRoute,
       routingPriority: 'shorter',
-      isPrivate: true,
+      visibility: 'private',
+      sharedGroupId: null,
+      isOwner: true,
     });
     expect(new Date(updated.updatedAt).getTime()).toBeGreaterThan(new Date('2020-01-01T00:00:00Z').getTime());
+  });
+
+  it('authorizes viewer reads for owners, link sharing, and accepted Group membership', async () => {
+    if (!database) throw new Error('Test database was not initialized.');
+    const auth = createAuthService(database.db, { sessionTtlSeconds: 604800 });
+    const owner = await auth.signup({ email: 'sharing-owner@example.com', password: 'correct horse battery staple', displayName: 'Sharing Owner' });
+    const member = await auth.signup({ email: 'sharing-member@example.com', password: 'correct horse battery staple', displayName: 'Sharing Member' });
+    const pending = await auth.signup({ email: 'sharing-pending@example.com', password: 'correct horse battery staple', displayName: 'Sharing Pending' });
+    const unrelated = await auth.signup({ email: 'sharing-unrelated@example.com', password: 'correct horse battery staple', displayName: 'Sharing Unrelated' });
+    const ownerUserId = owner.user.userId;
+    const groupService = createGroupService(database.db);
+    const group = await groupService.createGroup({ ownerUserId, name: 'Plan Sharers' });
+    await groupService.invite({ groupId: group.groupId, actorUserId: ownerUserId, userId: member.user.userId });
+    await groupService.acceptInvitation({ groupId: group.groupId, userId: member.user.userId });
+    await groupService.invite({ groupId: group.groupId, actorUserId: ownerUserId, userId: pending.user.userId });
+    const service = createSavedPlanService(database.db);
+    const plan = await service.create({ ownerUserId, name: 'Shared route', turnpoints, generatedRoute, routingPriority: 'balanced' });
+
+    await expect(service.getForViewer({ planId: plan.planId, viewerUserId: ownerUserId })).resolves.toMatchObject({
+      visibility: 'private',
+      isOwner: true,
+    });
+    for (const viewerUserId of [null, member.user.userId, pending.user.userId, unrelated.user.userId]) {
+      await expect(service.getForViewer({ planId: plan.planId, viewerUserId })).rejects.toMatchObject({ code: 'not_found' });
+    }
+
+    const linked = await service.updateVisibility({
+      planId: plan.planId,
+      ownerUserId,
+      visibility: 'link',
+      sharedGroupId: group.groupId,
+    });
+    expect(linked).toMatchObject({ visibility: 'link', sharedGroupId: null, isOwner: true });
+    await expect(service.getForViewer({ planId: plan.planId, viewerUserId: null })).resolves.toMatchObject({ isOwner: false });
+    await expect(service.getForViewer({ planId: plan.planId, viewerUserId: unrelated.user.userId })).resolves.toMatchObject({ isOwner: false });
+    await expect(service.list(unrelated.user.userId)).resolves.toEqual([]);
+    await expect(service.update({
+      planId: plan.planId,
+      ownerUserId: unrelated.user.userId,
+      name: 'Stolen link Plan',
+      turnpoints,
+      generatedRoute,
+      routingPriority: 'balanced',
+    })).rejects.toMatchObject({ code: 'not_found' });
+    await expect(service.delete({ planId: plan.planId, ownerUserId: unrelated.user.userId })).rejects.toMatchObject({ code: 'not_found' });
+
+    const groupShared = await service.updateVisibility({
+      planId: plan.planId,
+      ownerUserId,
+      visibility: 'group',
+      sharedGroupId: group.groupId,
+    });
+    expect(groupShared).toMatchObject({ visibility: 'group', sharedGroupId: group.groupId, isOwner: true });
+    await expect(service.getForViewer({ planId: plan.planId, viewerUserId: member.user.userId })).resolves.toMatchObject({ isOwner: false });
+    for (const viewerUserId of [null, pending.user.userId, unrelated.user.userId]) {
+      await expect(service.getForViewer({ planId: plan.planId, viewerUserId })).rejects.toMatchObject({ code: 'not_found' });
+    }
+
+    await groupService.removeMember({ groupId: group.groupId, actorUserId: ownerUserId, userId: member.user.userId });
+    await expect(service.getForViewer({ planId: plan.planId, viewerUserId: member.user.userId })).rejects.toMatchObject({ code: 'not_found' });
+    await expect(service.getForViewer({ planId: plan.planId, viewerUserId: ownerUserId })).resolves.toMatchObject({ isOwner: true });
+    for (const unavailablePlanId of ['00000000-0000-4000-8000-000000000001', 'not-a-uuid']) {
+      await expect(service.getForViewer({ planId: unavailablePlanId, viewerUserId: ownerUserId })).rejects.toMatchObject({
+        code: 'not_found',
+        message: 'Plan not found or unavailable.',
+      });
+    }
+  });
+
+  it('keeps visibility owner-only, validates accepted Group selection, and preserves sharing during content updates', async () => {
+    if (!database) throw new Error('Test database was not initialized.');
+    const { owner, other } = await createPilots();
+    const groupService = createGroupService(database.db);
+    const ownedGroup = await groupService.createGroup({ ownerUserId: owner, name: 'Owned Group' });
+    const unavailableGroup = await groupService.createGroup({ ownerUserId: other, name: 'Unavailable Group' });
+    await groupService.invite({ groupId: unavailableGroup.groupId, actorUserId: other, userId: owner });
+    const service = createSavedPlanService(database.db);
+    const plan = await service.create({ ownerUserId: owner, name: 'Original', turnpoints, generatedRoute, routingPriority: 'balanced' });
+
+    await expect(service.updateVisibility({
+      planId: plan.planId,
+      ownerUserId: other,
+      visibility: 'link',
+      sharedGroupId: null,
+    })).rejects.toMatchObject({ code: 'not_found' });
+    await expect(service.updateVisibility({
+      planId: plan.planId,
+      ownerUserId: owner,
+      visibility: 'group',
+      sharedGroupId: null,
+    })).rejects.toMatchObject({ code: 'validation' });
+    await expect(service.updateVisibility({
+      planId: plan.planId,
+      ownerUserId: owner,
+      visibility: 'group',
+      sharedGroupId: unavailableGroup.groupId,
+    })).rejects.toMatchObject({ code: 'validation' });
+
+    await service.updateVisibility({
+      planId: plan.planId,
+      ownerUserId: owner,
+      visibility: 'group',
+      sharedGroupId: ownedGroup.groupId,
+    });
+    const updated = await service.update({
+      planId: plan.planId,
+      ownerUserId: owner,
+      name: 'Updated content',
+      turnpoints,
+      generatedRoute,
+      routingPriority: 'thermal',
+    });
+    expect(updated).toMatchObject({
+      name: 'Updated content',
+      visibility: 'group',
+      sharedGroupId: ownedGroup.groupId,
+      isOwner: true,
+    });
+
+    const madePrivate = await service.updateVisibility({
+      planId: plan.planId,
+      ownerUserId: owner,
+      visibility: 'private',
+      sharedGroupId: ownedGroup.groupId,
+    });
+    expect(madePrivate).toMatchObject({ visibility: 'private', sharedGroupId: null });
   });
 
   it('makes missing and non-owned reads, updates, and deletes indistinguishable', async () => {

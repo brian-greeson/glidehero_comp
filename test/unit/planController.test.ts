@@ -25,7 +25,9 @@ const activePlan = {
   turnpoints: result.anchors,
   generatedRoute,
   routingPriority: 'thermal',
-  isPrivate: true,
+  visibility: 'private',
+  sharedGroupId: null,
+  isOwner: true,
   createdAt: '2026-08-15T12:00:00.000Z',
   updatedAt: '2026-08-16T12:00:00.000Z',
 };
@@ -64,6 +66,7 @@ function makePlanHarness({
   const loginForm = node({ fields: [['email', 'pilot@example.com'], ['password', 'secret']] });
   const signupForm = node({ fields: [['email', 'new@example.com'], ['password', 'secret']] });
   const priorities = ['shorter', 'balanced', 'thermal'].map((value) => node({ value, checked: value === 'balanced' }));
+  const visibilityControls = ['private', 'link', 'group'].map((value) => node({ value, checked: value === 'private' }));
   const savedList = node({ querySelector: vi.fn(() => null), prepend: vi.fn() });
   const nodes = new Map<string, any>([
     ['[data-plan-page]', { dataset: { planAuthenticated: String(authenticated), planBootstrap: JSON.stringify(bootstrap) } }],
@@ -83,11 +86,20 @@ function makePlanHarness({
     ['[data-plan-export-dialog]', exportDialog],
     ['[data-plan-name]', node({ value: '' })],
     ['[data-plan-save]', node({ disabled: true })],
-    ['[data-plan-delete-saved]', node({ hidden: true })],
     ['[data-plan-new]', node()],
     ['[data-plan-mutation-status]', node()],
     ['[data-plan-saved-list]', savedList],
     ['[data-plan-saved-empty]', node({ hidden: false })],
+    ['[data-plan-save-section]', node({ open: true })],
+    ['[data-plan-share-section]', node({ open: false })],
+    ['[data-plan-sharing-group]', node({ hidden: true })],
+    ['[data-plan-sharing-group-select]', node({ value: 'group-1' })],
+    ['[data-plan-sharing-link]', node({ hidden: true })],
+    ['[data-plan-sharing-url]', node({ value: '', select: vi.fn() })],
+    ['[data-plan-sharing-copy]', node()],
+    ['[data-plan-sharing-save]', node()],
+    ['[data-plan-sharing-status]', node()],
+    ['[data-plan-sharing-label]', node()],
     ...[
       '[data-plan-status]', '[data-plan-status-mobile]', '[data-plan-undo]', '[data-plan-delete]', '[data-plan-reset]',
       '[data-plan-fit-route]', '[data-plan-direct-distance]', '[data-plan-route-distance]', '[data-plan-extra-distance]',
@@ -100,6 +112,7 @@ function makePlanHarness({
     querySelector: (selector: string) => nodes.get(selector) ?? null,
     querySelectorAll: (selector: string) => {
       if (selector === '[data-plan-priority]') return priorities;
+      if (selector === '[data-plan-visibility]') return visibilityControls;
       if (selector === '[data-plan-auth-signin]' || selector === '[data-plan-auth-signup]') return [nodes.get(selector)];
       if (selector === '[data-plan-auth-back]') return [back];
       if (selector === '[data-plan-auth-close]') return [close];
@@ -113,17 +126,18 @@ function makePlanHarness({
     setItem: vi.fn((key: string, value: string) => storage.set(key, value)),
     removeItem: vi.fn((key: string) => storage.delete(key)),
   };
-  const location = { assign: vi.fn() };
+  const location = { assign: vi.fn(), href: `https://glidehero.test/plan/${activePlan.planId}` };
   const history = { replaceState: vi.fn() };
   const confirm = vi.fn(() => true);
-  const windowRef = { sessionStorage, location, history, confirm, matchMedia: vi.fn(() => ({ matches: false, addEventListener: vi.fn() })) };
+  const clipboard = { writeText: vi.fn(async () => undefined) };
+  const windowRef = { sessionStorage, location, history, confirm, navigator: { clipboard }, matchMedia: vi.fn(() => ({ matches: false, addEventListener: vi.fn() })) };
   const controller = initializePlanPage({
     documentRef, fetchImpl, windowRef,
     maplibre: { Map: class { constructor() { return map; } }, NavigationControl: class {} },
   });
   const listener = (selector: string, event: string) => nodes.get(selector)?.addEventListener.mock.calls
     .find((call: any[]) => call[0] === event)?.[1];
-  return { controller, handlers, map, nodes, priorities, authDialog, exportDialog, back, close, sessionStorage, location, history, confirm, listener };
+  return { controller, handlers, map, nodes, priorities, visibilityControls, authDialog, exportDialog, back, close, sessionStorage, location, history, confirm, clipboard, listener };
 }
 
 describe('Plan export controller', () => {
@@ -377,6 +391,21 @@ describe('Plan export controller', () => {
 });
 
 describe('Saved Plan controller', () => {
+  it('keeps the Save and Share accordion sections mutually exclusive', () => {
+    const harness = makePlanHarness();
+    const saveSection = harness.nodes.get('[data-plan-save-section]');
+    const shareSection = harness.nodes.get('[data-plan-share-section]');
+
+    shareSection.open = true;
+    harness.listener('[data-plan-share-section]', 'toggle')?.();
+    expect(saveSection.open).toBe(false);
+
+    shareSection.open = false;
+    saveSection.open = true;
+    harness.listener('[data-plan-save-section]', 'toggle')?.();
+    expect(shareSection.open).toBe(false);
+  });
+
   it('renders an active Plan snapshot without recalculating it', async () => {
     const fetchImpl = vi.fn();
     const harness = makePlanHarness({ fetchImpl, bootstrap: { savedPlans: [], activePlan } });
@@ -388,7 +417,6 @@ describe('Saved Plan controller', () => {
     expect(harness.nodes.get('[data-plan-name]').value).toBe('Boulder triangle');
     expect(harness.nodes.get('[data-plan-route-distance]').textContent).toBe('1.1 km');
     expect(harness.nodes.get('[data-plan-save]').disabled).toBe(false);
-    expect(harness.nodes.get('[data-plan-delete-saved]').hidden).toBe(false);
   });
 
   it('creates a ready named Plan and replaces the browser URL', async () => {
@@ -404,13 +432,16 @@ describe('Saved Plan controller', () => {
 
     await harness.listener('[data-plan-save]', 'click')?.();
 
-    expect(fetchImpl).toHaveBeenLastCalledWith('/v1/plans', expect.objectContaining({ method: 'POST' }));
-    const createCall = fetchImpl.mock.calls.at(-1) as unknown as [string, RequestInit];
+    expect(fetchImpl).toHaveBeenCalledWith('/v1/plans', expect.objectContaining({ method: 'POST' }));
+    const createCall = fetchImpl.mock.calls.find(([input]) => input === '/v1/plans') as unknown as [string, RequestInit];
     const body = JSON.parse(String(createCall[1].body));
     expect(body).toMatchObject({ name: 'Morning route', turnpoints: result.anchors, routingPriority: 'balanced' });
     expect(body.generatedRoute).not.toHaveProperty('anchors');
     expect(harness.history.replaceState).toHaveBeenCalledWith({}, '', `/plan/${activePlan.planId}`);
-    expect(harness.nodes.get('[data-plan-mutation-status]').textContent).toBe('Plan saved.');
+    expect(fetchImpl).toHaveBeenCalledWith(`/v1/plans/${activePlan.planId}/visibility`, expect.objectContaining({
+      method: 'PATCH', body: JSON.stringify({ visibility: 'private', sharedGroupId: null }),
+    }));
+    expect(harness.nodes.get('[data-plan-mutation-status]').textContent).toBe('Plan saved privately.');
 
     harness.nodes.get('[data-plan-name]').value = 'Morning route changed';
     harness.listener('[data-plan-name]', 'input')?.();
@@ -428,8 +459,9 @@ describe('Saved Plan controller', () => {
 
     await harness.listener('[data-plan-save]', 'click')?.();
 
-    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
     expect(fetchImpl).toHaveBeenCalledWith(`/v1/plans/${activePlan.planId}`, expect.objectContaining({ method: 'PATCH' }));
+    expect(fetchImpl).toHaveBeenCalledWith(`/v1/plans/${activePlan.planId}/visibility`, expect.objectContaining({ method: 'PATCH' }));
   });
 
   it('asks before clearing a dirty Plan and starts blank after confirmation', async () => {
@@ -454,7 +486,7 @@ describe('Saved Plan controller', () => {
     harness.nodes.get('[data-plan-name]').value = 'Changed';
     harness.listener('[data-plan-name]', 'input')?.();
     const link = { href: '/plan/another', closest: vi.fn(() => null) };
-    const event = { target: { closest: vi.fn(() => link) }, preventDefault: vi.fn() };
+    const event = { target: { closest: vi.fn((selector: string) => selector === '[data-plan-open]' ? link : null) }, preventDefault: vi.fn() };
     harness.confirm.mockReturnValueOnce(false).mockReturnValueOnce(true);
 
     harness.listener('[data-plan-saved-list]', 'click')?.(event);
@@ -488,24 +520,104 @@ describe('Saved Plan controller', () => {
     }
 
     const saved = JSON.parse(harness.sessionStorage.setItem.mock.calls[0]![1]);
-    expect(saved).toMatchObject({ name: 'Guest route', resumeIntent: 'save', anchors: result.anchors });
+    expect(saved).toMatchObject({
+      name: 'Guest route', resumeIntent: 'save', anchors: result.anchors,
+      visibility: 'private', sharedGroupId: null,
+    });
     expect(fetchImpl).toHaveBeenCalledTimes(2);
     expect(harness.location.assign).toHaveBeenCalledWith('/plan');
   });
 
-  it('deletes the active Plan only after confirmation and clears to a blank Plan', async () => {
+  it('deletes the active Plan from its saved row and clears to a blank Plan', async () => {
     const fetchImpl = vi.fn(async () => new Response(null, { status: 204 }));
     const harness = makePlanHarness({ fetchImpl, bootstrap: { savedPlans: [], activePlan } });
     await harness.handlers.get('load')?.();
+    const savedItem = { remove: vi.fn() };
+    harness.nodes.get('[data-plan-saved-list]').querySelector.mockImplementation((selector: string) => (
+      selector === `[data-plan-list-item="${activePlan.planId}"]` ? savedItem : null
+    ));
+    const deleteButton = { dataset: { planDeleteSavedId: activePlan.planId } };
+    const event = { target: { closest: vi.fn((selector: string) => selector === '[data-plan-delete-saved-id]' ? deleteButton : null) }, preventDefault: vi.fn() };
 
-    await harness.listener('[data-plan-delete-saved]', 'click')?.();
+    await harness.listener('[data-plan-saved-list]', 'click')?.(event);
 
+    expect(event.preventDefault).toHaveBeenCalledOnce();
     expect(harness.confirm).toHaveBeenCalledWith('Delete this Plan?');
     expect(fetchImpl).toHaveBeenCalledWith(`/v1/plans/${activePlan.planId}`, {
       method: 'DELETE', headers: { accept: 'application/json' },
     });
     expect(harness.controller.anchors).toEqual([]);
+    expect(savedItem.remove).toHaveBeenCalledOnce();
     expect(harness.nodes.get('[data-plan-name]').value).toBe('');
     expect(harness.history.replaceState).toHaveBeenCalledWith({}, '', '/plan');
+  });
+
+  it('deletes an inactive saved Plan without clearing the active Plan', async () => {
+    const fetchImpl = vi.fn(async () => new Response(null, { status: 204 }));
+    const harness = makePlanHarness({ fetchImpl, bootstrap: { savedPlans: [], activePlan } });
+    await harness.handlers.get('load')?.();
+    const inactiveId = '00000000-0000-4000-8000-000000000999';
+    const savedItem = { remove: vi.fn() };
+    harness.nodes.get('[data-plan-saved-list]').querySelector.mockImplementation((selector: string) => (
+      selector === `[data-plan-list-item="${inactiveId}"]` ? savedItem : null
+    ));
+    const deleteButton = { dataset: { planDeleteSavedId: inactiveId } };
+    const event = { target: { closest: vi.fn((selector: string) => selector === '[data-plan-delete-saved-id]' ? deleteButton : null) }, preventDefault: vi.fn() };
+
+    await harness.listener('[data-plan-saved-list]', 'click')?.(event);
+
+    expect(fetchImpl).toHaveBeenCalledWith(`/v1/plans/${inactiveId}`, {
+      method: 'DELETE', headers: { accept: 'application/json' },
+    });
+    expect(savedItem.remove).toHaveBeenCalledOnce();
+    expect(harness.controller.anchors).toEqual(result.anchors);
+    expect(harness.history.replaceState).not.toHaveBeenCalledWith({}, '', '/plan');
+    expect(harness.nodes.get('[data-plan-mutation-status]').textContent).toBe('Plan deleted.');
+  });
+
+  it('saves visibility with the Plan and copies its link', async () => {
+    const fetchImpl = vi.fn(async () => new Response(JSON.stringify({ plan: { ...activePlan, visibility: 'link' } }), {
+      status: 200, headers: { 'content-type': 'application/json' },
+    }));
+    const harness = makePlanHarness({ fetchImpl, bootstrap: { savedPlans: [], activePlan, groupOptions: [{ id: 'group-1', name: 'Front Range' }] } });
+    harness.visibilityControls.forEach((control) => { control.checked = control.value === 'link'; });
+
+    harness.visibilityControls[0].addEventListener.mock.calls.find((call: any[]) => call[0] === 'change')?.[1]?.();
+    await harness.handlers.get('load')?.();
+    await harness.listener('[data-plan-save]', 'click')?.();
+    await harness.listener('[data-plan-sharing-copy]', 'click')?.();
+
+    expect(fetchImpl).toHaveBeenCalledWith(`/v1/plans/${activePlan.planId}/visibility`, expect.objectContaining({
+      method: 'PATCH', body: JSON.stringify({ visibility: 'link', sharedGroupId: null }),
+    }));
+    expect(harness.nodes.get('[data-plan-sharing-link]').hidden).toBe(false);
+    expect(harness.clipboard.writeText).toHaveBeenCalledWith(`https://glidehero.test/plan/${activePlan.planId}`);
+    expect(harness.nodes.get('[data-plan-sharing-status]').textContent).toBe('Link copied.');
+  });
+
+  it('keeps a shared non-owner Plan read-only while retaining view controls', async () => {
+    const readOnlyPlan = { ...activePlan, isOwner: false, visibility: 'link' };
+    const fetchImpl = vi.fn();
+    const harness = makePlanHarness({ fetchImpl, bootstrap: { savedPlans: [], activePlan: readOnlyPlan, groupOptions: [] } });
+    await harness.handlers.get('load')?.();
+
+    harness.handlers.get('click')?.({ point: {}, lngLat: { lat: 41, lng: -103 } });
+    harness.handlers.get('mousedown:plan-anchors')?.({ features: [{ properties: { index: 0 } }] });
+    harness.priorities[0].value = 'shorter';
+    harness.priorities[0].addEventListener.mock.calls.find((call: any[]) => call[0] === 'change')?.[1]?.();
+    await harness.listener('[data-plan-save]', 'click')?.();
+    const deleteButton = { dataset: { planDeleteSavedId: activePlan.planId } };
+    await harness.listener('[data-plan-saved-list]', 'click')?.({
+      target: { closest: (selector: string) => selector === '[data-plan-delete-saved-id]' ? deleteButton : null },
+      preventDefault: vi.fn(),
+    });
+
+    expect(harness.controller.anchors).toEqual(result.anchors);
+    expect(harness.map.dragPan.disable).not.toHaveBeenCalled();
+    expect(fetchImpl).not.toHaveBeenCalled();
+    expect(harness.nodes.get('[data-plan-save]').disabled).toBe(true);
+    expect(harness.nodes.get('[data-plan-export-open]').disabled).toBe(false);
+    harness.listener('[data-plan-fit-route]', 'click')?.();
+    expect(harness.map.fitBounds).toHaveBeenCalled();
   });
 });

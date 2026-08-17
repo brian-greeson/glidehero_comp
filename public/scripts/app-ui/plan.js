@@ -1,3 +1,5 @@
+import { initializeMapSheet } from './mapSheet.js';
+
 const emptyFeatureCollection = () => ({ type: 'FeatureCollection', features: [] });
 const planResumeStorageKey = 'glidehero.plan.resume.v1';
 const planResumeVersion = 1;
@@ -68,6 +70,7 @@ export function initializePlanPage({
     bootstrap = {
       savedPlans: Array.isArray(parsed?.savedPlans) ? parsed.savedPlans : [],
       activePlan: parsed?.activePlan ?? null,
+      groupOptions: Array.isArray(parsed?.groupOptions) ? parsed.groupOptions : [],
     };
   } catch { /* Use an empty planner if bootstrap data is unavailable. */ }
   const priorities = [...documentRef.querySelectorAll('[data-plan-priority]')];
@@ -89,12 +92,20 @@ export function initializePlanPage({
   const exportStatus = documentRef.querySelector('[data-plan-export-status]');
   const planName = documentRef.querySelector('[data-plan-name]');
   const savePlan = documentRef.querySelector('[data-plan-save]');
-  const deletePlan = documentRef.querySelector('[data-plan-delete-saved]');
   const newPlan = documentRef.querySelector('[data-plan-new]');
   const mutationStatus = documentRef.querySelector('[data-plan-mutation-status]');
   const savedList = documentRef.querySelector('[data-plan-saved-list]');
   const savedEmpty = documentRef.querySelector('[data-plan-saved-empty]');
   const savedSheet = documentRef.querySelector('[data-plan-saved-sheet]');
+  const saveSection = documentRef.querySelector('[data-plan-save-section]');
+  const shareSection = documentRef.querySelector('[data-plan-share-section]');
+  const visibilityControls = [...documentRef.querySelectorAll('[data-plan-visibility]')];
+  const sharingGroup = documentRef.querySelector('[data-plan-sharing-group]');
+  const sharingGroupSelect = documentRef.querySelector('[data-plan-sharing-group-select]');
+  const sharingLink = documentRef.querySelector('[data-plan-sharing-link]');
+  const sharingUrl = documentRef.querySelector('[data-plan-sharing-url]');
+  const sharingCopy = documentRef.querySelector('[data-plan-sharing-copy]');
+  const sharingStatus = documentRef.querySelector('[data-plan-sharing-status]');
   const authDialog = documentRef.querySelector('[data-plan-auth-dialog]');
   const authChoice = documentRef.querySelector('[data-plan-auth-choice]');
   const authSigninPanel = documentRef.querySelector('[data-plan-auth-signin-panel]');
@@ -120,6 +131,10 @@ export function initializePlanPage({
     zoom: 6,
     maxPitch: 0,
   });
+  initializeMapSheet({ documentRef });
+  if (saveSection?.open && shareSection?.open) shareSection.open = false;
+  saveSection?.addEventListener('toggle', () => { if (saveSection.open && shareSection) shareSection.open = false; });
+  shareSection?.addEventListener('toggle', () => { if (shareSection.open && saveSection) saveSection.open = false; });
   map.addControl(new maplibre.NavigationControl(), 'top-right');
   if (savedSheet && windowRef?.matchMedia?.('(max-width: 760px)')?.matches) savedSheet.open = false;
   const collapseMobileAttribution = () => {
@@ -128,6 +143,7 @@ export function initializePlanPage({
   };
   collapseMobileAttribution();
   const activeBootstrap = bootstrap.activePlan;
+  const isReadOnly = activeBootstrap?.isOwner === false;
   const anchors = Array.isArray(activeBootstrap?.turnpoints)
     ? activeBootstrap.turnpoints.map((point) => ({ latitude: point.latitude, longitude: point.longitude }))
     : [];
@@ -167,6 +183,12 @@ export function initializePlanPage({
   }
 
   const resumeState = readResumeState();
+  if (resumeState?.visibility === 'private' || resumeState?.visibility === 'link' || resumeState?.visibility === 'group') {
+    visibilityControls.forEach((control) => { control.checked = control.value === resumeState.visibility; });
+    if (resumeState.visibility === 'group' && sharingGroupSelect && typeof resumeState.sharedGroupId === 'string') {
+      sharingGroupSelect.value = resumeState.sharedGroupId;
+    }
+  }
   if (resumeState) {
     anchors.splice(0);
     anchors.push(...resumeState.anchors.map((anchor) => ({
@@ -239,13 +261,14 @@ export function initializePlanPage({
   }
 
   function updateControls() {
-    if (undo) undo.disabled = anchors.length === 0;
-    if (reset) reset.disabled = anchors.length === 0;
-    if (deleteSelected) deleteSelected.disabled = selectedIndex < 0;
+    if (undo) undo.disabled = isReadOnly || anchors.length === 0;
+    if (reset) reset.disabled = isReadOnly || anchors.length === 0;
+    if (deleteSelected) deleteSelected.disabled = isReadOnly || selectedIndex < 0;
     if (fitRoute) fitRoute.disabled = anchors.length === 0;
     if (exportOpen) exportOpen.disabled = !lastResult;
-    if (savePlan) savePlan.disabled = mutationPending || !validName() || !lastResult;
-    if (deletePlan) deletePlan.hidden = !activePlanId;
+    const groupSelectionMissing = selectedVisibility() === 'group' && !String(sharingGroupSelect?.value ?? '');
+    if (savePlan) savePlan.disabled = isReadOnly || mutationPending || !validName() || !lastResult || groupSelectionMissing;
+    if (sharingCopy) sharingCopy.disabled = !activePlanId;
     setSource('plan-anchors', anchorFeatures(anchors, selectedIndex));
     setSource('plan-direct', lineFeature(anchors));
   }
@@ -365,6 +388,7 @@ export function initializePlanPage({
   });
 
   map.on('click', (event) => {
+    if (isReadOnly) return;
     if (draggingIndex >= 0) return;
     const existing = map.queryRenderedFeatures(event.point, { layers: ['plan-anchors'] });
     if (existing.length) {
@@ -378,6 +402,7 @@ export function initializePlanPage({
   });
 
   function beginDrag(event) {
+    if (isReadOnly) return;
     const feature = event.features?.[0];
     if (!feature) return;
     draggingIndex = Number(feature.properties.index);
@@ -402,27 +427,32 @@ export function initializePlanPage({
   });
 
   priorities.forEach((priority) => priority.addEventListener('change', () => {
+    if (isReadOnly) return;
     synchronizePriority(priority.value);
     clearResult();
     scheduleCalculation();
   }));
   mobilePriority?.addEventListener('change', () => {
+    if (isReadOnly) return;
     synchronizePriority(mobilePriority.value);
     clearResult();
     scheduleCalculation();
   });
   undo?.addEventListener('click', () => {
+    if (isReadOnly) return;
     anchors.pop();
     selectedIndex = Math.min(selectedIndex, anchors.length - 1);
     changed();
   });
   deleteSelected?.addEventListener('click', () => {
+    if (isReadOnly) return;
     if (selectedIndex < 0) return;
     anchors.splice(selectedIndex, 1);
     selectedIndex = Math.min(selectedIndex, anchors.length - 1);
     changed();
   });
   reset?.addEventListener('click', () => {
+    if (isReadOnly) return;
     anchors.splice(0);
     selectedIndex = -1;
     changed();
@@ -469,16 +499,24 @@ export function initializePlanPage({
       name.dataset.planListName = '';
       const date = documentRef.createElement('time');
       date.dataset.planListDate = '';
+      const deleteButton = documentRef.createElement('button');
+      deleteButton.type = 'button';
+      deleteButton.className = 'plan-saved-list__delete';
+      deleteButton.dataset.planDeleteSavedId = plan.planId;
+      deleteButton.setAttribute('aria-label', `Delete ${plan.name}`);
+      deleteButton.textContent = 'Delete';
       link.append(name, date);
-      item.append(link);
+      item.append(link, deleteButton);
     }
     const nameNode = item?.querySelector?.('[data-plan-list-name]');
     const dateNode = item?.querySelector?.('[data-plan-list-date]');
+    const deleteNode = item?.querySelector?.('[data-plan-delete-saved-id]');
     if (nameNode) nameNode.textContent = plan.name;
     if (dateNode) {
       dateNode.dateTime = plan.updatedAt;
       dateNode.textContent = plan.updatedAtLabel || formatUpdatedAt(plan.updatedAt);
     }
+    deleteNode?.setAttribute?.('aria-label', `Delete ${plan.name}`);
     if (item) savedList.prepend?.(item);
     if (savedEmpty) savedEmpty.hidden = true;
     markActiveListItem();
@@ -492,6 +530,7 @@ export function initializePlanPage({
     selectedIndex = -1;
     activePlanId = null;
     if (planName) planName.value = '';
+    visibilityControls.forEach((control) => { control.checked = control.value === 'private'; });
     synchronizePriority('balanced');
     clearResult();
     updateControls();
@@ -499,6 +538,7 @@ export function initializePlanPage({
     setMutationStatus('');
     replacePlanUrl();
     markActiveListItem();
+    synchronizeSharingFields();
     baseline = snapshot();
   }
 
@@ -512,10 +552,12 @@ export function initializePlanPage({
   }
 
   planName?.addEventListener('input', () => {
+    if (isReadOnly) return;
     setMutationStatus('');
     updateControls();
   });
   savePlan?.addEventListener('click', async () => {
+    if (isReadOnly) return;
     if (!validName() || !lastResult || mutationPending) return;
     if (!isAuthenticated) {
       openAuth('save');
@@ -526,6 +568,9 @@ export function initializePlanPage({
     setMutationStatus('Saving…');
     const { anchors: _anchors, ...generatedRoute } = lastResult;
     try {
+      const visibility = selectedVisibility();
+      const sharedGroupId = visibility === 'group' ? String(sharingGroupSelect?.value ?? '') : null;
+      if (visibility === 'group' && !sharedGroupId) throw new Error('Choose a Group.');
       const response = await fetchImpl(activePlanId ? `/v1/plans/${activePlanId}` : '/v1/plans', {
         method: activePlanId ? 'PATCH' : 'POST',
         headers: { 'content-type': 'application/json', accept: 'application/json' },
@@ -544,8 +589,15 @@ export function initializePlanPage({
       if (planName) planName.value = plan.name;
       replacePlanUrl(activePlanId);
       upsertSavedListItem(plan);
+      const visibilityResponse = await fetchImpl(`/v1/plans/${activePlanId}/visibility`, {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json', accept: 'application/json' },
+        body: JSON.stringify({ visibility, sharedGroupId }),
+      });
+      if (!visibilityResponse.ok) throw new Error(await responseMessage(visibilityResponse, 'Plan saved, but sharing could not be updated.'));
+      synchronizeSharingFields();
       baseline = snapshot();
-      setMutationStatus('Plan saved.');
+      setMutationStatus(visibility === 'private' ? 'Plan saved privately.' : 'Plan saved and sharing updated.');
     } catch (error) {
       setMutationStatus(error?.message || 'Plan could not be saved.');
     } finally {
@@ -555,20 +607,27 @@ export function initializePlanPage({
   });
 
   newPlan?.addEventListener('click', () => {
+    if (isReadOnly) return;
     if (confirmDiscard()) clearToNewPlan();
   });
 
-  savedList?.addEventListener('click', (event) => {
+  savedList?.addEventListener('click', async (event) => {
+    const deleteButton = event.target?.closest?.('[data-plan-delete-saved-id]');
+    if (deleteButton) {
+      event.preventDefault?.();
+      await deleteSavedPlan(String(deleteButton.dataset?.planDeleteSavedId ?? ''));
+      return;
+    }
     const link = event.target?.closest?.('[data-plan-open]');
     if (!link || !isDirty()) return;
     event.preventDefault();
     if (confirmDiscard()) windowRef?.location?.assign?.(link.href);
   });
 
-  deletePlan?.addEventListener('click', async () => {
-    if (!activePlanId || mutationPending) return;
+  async function deleteSavedPlan(deletingId) {
+    if (isReadOnly) return;
+    if (!deletingId || mutationPending) return;
     if (windowRef?.confirm && !windowRef.confirm('Delete this Plan?')) return;
-    const deletingId = activePlanId;
     mutationPending = true;
     updateControls();
     setMutationStatus('Deleting…');
@@ -579,12 +638,47 @@ export function initializePlanPage({
       if (!response.ok) throw new Error(await responseMessage(response, 'Plan could not be deleted.'));
       savedList?.querySelector?.(`[data-plan-list-item="${deletingId}"]`)?.remove?.();
       if (savedEmpty && !savedList?.querySelector?.('[data-plan-list-item]')) savedEmpty.hidden = false;
-      clearToNewPlan();
+      if (deletingId === activePlanId) clearToNewPlan();
+      else setMutationStatus('Plan deleted.');
     } catch (error) {
       setMutationStatus(error?.message || 'Plan could not be deleted.');
     } finally {
       mutationPending = false;
       updateControls();
+    }
+  }
+
+  const selectedVisibility = () => visibilityControls.find((control) => control.checked)?.value ?? 'private';
+  const planShareUrl = () => {
+    if (!activePlanId) return '';
+    try { return new URL(`/plan/${activePlanId}`, windowRef?.location?.href).href; } catch { return `/plan/${activePlanId}`; }
+  };
+  const synchronizeSharingFields = () => {
+    const visibility = selectedVisibility();
+    if (sharingGroup) sharingGroup.hidden = visibility !== 'group';
+    if (sharingLink) sharingLink.hidden = visibility !== 'link' || !activePlanId;
+    if (sharingUrl) sharingUrl.value = planShareUrl();
+    if (sharingCopy) sharingCopy.disabled = !activePlanId;
+    if (sharingStatus) sharingStatus.textContent = '';
+    updateControls();
+  };
+  visibilityControls.forEach((control) => control.addEventListener('change', synchronizeSharingFields));
+  sharingGroupSelect?.addEventListener('change', () => {
+    if (sharingStatus) sharingStatus.textContent = '';
+    updateControls();
+  });
+  synchronizeSharingFields();
+  sharingCopy?.addEventListener('click', async () => {
+    const url = String(sharingUrl?.value ?? planShareUrl());
+    if (!url) return;
+    try {
+      const writeText = windowRef?.navigator?.clipboard?.writeText;
+      if (typeof writeText !== 'function') throw new Error('Clipboard unavailable.');
+      await writeText.call(windowRef.navigator.clipboard, url);
+      if (sharingStatus) sharingStatus.textContent = 'Link copied.';
+    } catch {
+      sharingUrl?.select?.();
+      if (sharingStatus) sharingStatus.textContent = 'Select and copy the link.';
     }
   });
   const mobileBreakpoint = windowRef?.matchMedia?.('(max-width: 760px)');
@@ -640,6 +734,8 @@ export function initializePlanPage({
         anchors: anchors.map((anchor) => ({ latitude: anchor.latitude, longitude: anchor.longitude })),
         priority: selectedPriority(),
         name: String(planName?.value ?? ''),
+        visibility: selectedVisibility(),
+        sharedGroupId: selectedVisibility() === 'group' ? String(sharingGroupSelect?.value ?? '') : null,
         thermalVisible: thermalToggle?.checked !== false,
         mapPosition: safeMapPosition(),
         resumeIntent: authResumeIntent,

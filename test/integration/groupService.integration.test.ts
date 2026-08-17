@@ -96,12 +96,29 @@ describe('groupService', () => {
     `);
     expect(onboarding.rows[0]?.groupsAt).toBeTruthy();
 
+    const sharedPlan = await database.db.execute<{ planId: string }>(sql`
+      INSERT INTO plans (
+        owner_user_id, name, turnpoints, generated_route, routing_priority,
+        visibility, shared_group_id
+      ) VALUES (
+        ${owner.user.userId}, 'Shared weekend route', '[]'::jsonb, '{}'::jsonb, 'balanced',
+        'group', ${group.groupId}
+      )
+      RETURNING plan_id AS "planId"
+    `);
+
     await service.deleteGroup({ groupId: group.groupId, actorUserId: owner.user.userId });
     expect(await service.canView({ groupId: group.groupId, userId: member.user.userId })).toBe(false);
     const memberships = await database.db.execute<{ count: number }>(sql`
       SELECT COUNT(*)::int AS count FROM pilot_group_memberships WHERE group_id=${group.groupId}
     `);
     expect(memberships.rows[0]?.count).toBe(0);
+    const privatizedPlan = await database.db.execute<{ visibility: string; sharedGroupId: string | null }>(sql`
+      SELECT visibility, shared_group_id AS "sharedGroupId"
+      FROM plans
+      WHERE plan_id = ${sharedPlan.rows[0]!.planId}
+    `);
+    expect(privatizedPlan.rows).toEqual([{ visibility: 'private', sharedGroupId: null }]);
   });
 
   it('counts accepted and pending pilots toward the 200-person capacity', async () => {

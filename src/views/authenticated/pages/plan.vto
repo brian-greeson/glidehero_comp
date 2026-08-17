@@ -1,5 +1,5 @@
 {{ layout "authenticated/layouts/appLayout.vto" }}
-  <section class="plan-page" data-plan-page data-plan-authenticated="{{ if isGuest }}false{{ else }}true{{ /if }}" data-plan-bootstrap="{{ planBootstrapJson }}">
+  <section class="plan-page{{ if activePlan && activePlan.isOwner === false }} plan-page--read-only{{ /if }}" data-plan-page data-plan-authenticated="{{ if isGuest }}false{{ else }}true{{ /if }}" data-plan-read-only="{{ if activePlan && activePlan.isOwner === false }}true{{ else }}false{{ /if }}" data-plan-bootstrap="{{ planBootstrapJson }}">
     <section class="plan-map-stage" aria-label="Flight planning map">
       <div class="plan-map" data-plan-map
         data-map-style-url="{{ mapStyleUrl }}"
@@ -11,32 +11,21 @@
         <h1>Plan your next flight</h1>
         <p class="plan-intro">Click the map to place fixed route points. GlideHero will favor historical thermal activity according to your routing priority.</p>
       </div>
-      <details class="plan-saved-plans" data-plan-saved-sheet open>
-        <summary>Saved Plans</summary>
-        <div class="plan-saved-plans__content">
-          <section class="plan-editor" aria-label="Save this Plan">
-            <label for="plan-name">Plan name</label>
-            <input id="plan-name" type="text" maxlength="80" required autocomplete="off" placeholder="Name this Plan" data-plan-name>
-            <button type="button" class="plan-save" data-plan-save disabled>Save Plan</button>
-            <button type="button" class="plan-delete-saved" data-plan-delete-saved hidden>Delete Plan</button>
-            <p class="plan-mutation-status" data-plan-mutation-status role="status"></p>
-          </section>
-          <div class="plan-saved-heading">
-            <h2>Your Plans</h2>
-            <button type="button" data-plan-new>New Plan</button>
-          </div>
-          <p class="plan-saved-empty" data-plan-saved-empty{{ if savedPlans.length }} hidden{{ /if }}>No saved Plans yet.</p>
-          <ul class="plan-saved-list" data-plan-saved-list>
-            {{ for plan of savedPlans }}<li data-plan-list-item="{{ plan.planId }}"{{ if activePlan && activePlan.planId === plan.planId }} class="is-active"{{ /if }}><a href="{{ plan.href }}" data-plan-open><strong data-plan-list-name>{{ plan.name }}</strong><time datetime="{{ plan.updatedAt }}" data-plan-list-date>{{ plan.updatedAtLabel }}</time></a></li>{{ /for }}
-          </ul>
-        </div>
-      </details>
+      {{ if activePlan && activePlan.isOwner === false }}
+      <section class="plan-viewer-card" aria-label="Shared Plan">
+        <span class="plan-read-only-badge">Read-only</span>
+        <strong>{{ activePlan.name }}</strong>
+        <small>{{ if activePlan.visibility === 'group' }}Shared with your Group{{ else }}Shared with you by link{{ /if }}</small>
+      </section>
+      {{ else }}
+      {{ include "authenticated/components/planSaveShareSheet.vto" }}
+      {{ /if }}
       <fieldset class="plan-priority">
         <legend>Routing priority</legend>
         <div role="radiogroup" aria-describedby="plan-priority-help">
-          <label><input type="radio" name="routing-priority" value="shorter" data-plan-priority {{ if defaultRoutingPriority === 'shorter' }}checked{{ /if }}><span>Shorter</span></label>
-          <label><input type="radio" name="routing-priority" value="balanced" data-plan-priority {{ if defaultRoutingPriority === 'balanced' }}checked{{ /if }}><span>Balanced</span></label>
-          <label><input type="radio" name="routing-priority" value="thermal" data-plan-priority {{ if defaultRoutingPriority === 'thermal' }}checked{{ /if }}><span>More thermal</span></label>
+          <label><input type="radio" name="routing-priority" value="shorter" data-plan-priority {{ if defaultRoutingPriority === 'shorter' }}checked{{ /if }}{{ if activePlan && activePlan.isOwner === false }} disabled{{ /if }}><span>Shorter</span></label>
+          <label><input type="radio" name="routing-priority" value="balanced" data-plan-priority {{ if defaultRoutingPriority === 'balanced' }}checked{{ /if }}{{ if activePlan && activePlan.isOwner === false }} disabled{{ /if }}><span>Balanced</span></label>
+          <label><input type="radio" name="routing-priority" value="thermal" data-plan-priority {{ if defaultRoutingPriority === 'thermal' }}checked{{ /if }}{{ if activePlan && activePlan.isOwner === false }} disabled{{ /if }}><span>More thermal</span></label>
         </div>
         <small id="plan-priority-help">Choose how strongly the optimized route trades distance for historical thermal activity.</small>
       </fieldset>
@@ -44,7 +33,7 @@
         <div class="plan-mode-row">
           <label class="plan-priority-mobile">
             <span class="plan-priority-icon" aria-hidden="true">{{ include "authenticated/components/icon.vto" { name: "sliders" } }}</span>
-            <select data-plan-priority-mobile aria-label="Routing priority">
+            <select data-plan-priority-mobile aria-label="Routing priority"{{ if activePlan && activePlan.isOwner === false }} disabled{{ /if }}>
               <option value="shorter" {{ if defaultRoutingPriority === 'shorter' }}selected{{ /if }}>Shorter</option>
               <option value="balanced" {{ if defaultRoutingPriority === 'balanced' }}selected{{ /if }}>Balanced</option>
               <option value="thermal" {{ if defaultRoutingPriority === 'thermal' }}selected{{ /if }}>More thermal</option>
@@ -53,7 +42,7 @@
           <p class="plan-status-mobile" data-plan-status-mobile role="status">Place 2 points</p>
         </div>
         <div class="plan-action-bar">
-          <div class="plan-actions">
+          <div class="plan-actions"{{ if activePlan && activePlan.isOwner === false }} hidden{{ /if }}>
             <button type="button" data-plan-undo disabled aria-label="Undo point"><span class="plan-action-icon" aria-hidden="true">{{ include "authenticated/components/icon.vto" { name: "undo" } }}</span><span>Undo</span></button>
             <button type="button" data-plan-delete disabled aria-label="Delete selected point"><span class="plan-action-icon" aria-hidden="true">{{ include "authenticated/components/icon.vto" { name: "trash" } }}</span><span>Delete</span></button>
             <button type="button" data-plan-reset disabled aria-label="Reset route"><span class="plan-action-icon" aria-hidden="true">{{ include "authenticated/components/icon.vto" { name: "reset" } }}</span><span>Reset</span></button>

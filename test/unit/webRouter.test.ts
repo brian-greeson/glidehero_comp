@@ -319,7 +319,9 @@ function dependencies() {
       thermalCoverage: 'available',
     },
     routingPriority: 'balanced',
-    isPrivate: true,
+    visibility: 'private',
+    sharedGroupId: null,
+    isOwner: true,
     createdAt: '2026-08-15T12:00:00.000Z',
     updatedAt: '2026-08-16T12:00:00.000Z',
   };
@@ -329,7 +331,17 @@ function dependencies() {
     get: vi.fn(async ({ planId }) => planId === savedPlan.planId
       ? savedPlan
       : Promise.reject(new SavedPlanError('not_found', 'Plan not found or unavailable.'))),
+    getForViewer: vi.fn(async ({ planId, viewerUserId }) => planId === savedPlan.planId
+      && (viewerUserId === savedPlan.ownerUserId || savedPlan.visibility === 'link')
+      ? { ...savedPlan, isOwner: viewerUserId === savedPlan.ownerUserId }
+      : Promise.reject(new SavedPlanError('not_found', 'Plan not found or unavailable.'))),
     update: vi.fn(async (input) => ({ ...savedPlan, name: input.name.trim(), updatedAt: '2026-08-16T13:00:00.000Z' })),
+    updateVisibility: vi.fn(async (input) => ({
+      ...savedPlan,
+      visibility: input.visibility,
+      sharedGroupId: input.visibility === 'group' ? input.sharedGroupId : null,
+      updatedAt: '2026-08-16T13:00:00.000Z',
+    })),
     delete: vi.fn(async ({ planId }) => {
       if (planId !== savedPlan.planId) throw new SavedPlanError('not_found', 'Plan not found or unavailable.');
     }),
@@ -634,13 +646,16 @@ describe('webRouter', () => {
       expect(opened.status).toBe(200);
       expect(opened.headers.get('cache-control')).toBe('private, no-store');
       expect(opened.headers.get('vary')).toContain('Cookie');
-      expect(base.savedPlans.get).toHaveBeenCalledWith({ planId: base.savedPlan.planId, ownerUserId: user.userId });
+      expect(base.savedPlans.getForViewer).toHaveBeenCalledWith({ planId: base.savedPlan.planId, viewerUserId: user.userId });
+      expect(base.groups.listAcceptedGroupOptions).toHaveBeenCalledWith(user.userId);
       expect(base.plans.route).not.toHaveBeenCalled();
       expect(base.renderAuthenticatedPage).toHaveBeenLastCalledWith(expect.objectContaining({
         defaultRoutingPriority: 'balanced',
+        groupOptions: [],
         activePlan: expect.objectContaining({
           planId: base.savedPlan.planId,
           generatedRoute: base.savedPlan.generatedRoute,
+          isOwner: true,
         }),
         planBootstrapJson: expect.stringContaining(base.savedPlan.planId),
       }));
@@ -657,6 +672,31 @@ describe('webRouter', () => {
       }
       expect(base.renderPlanNotFoundPage).toHaveBeenCalledWith({ currentUser: null });
       expect(base.renderPlanNotFoundPage).toHaveBeenCalledWith({ currentUser: user });
+    });
+  });
+
+  it('renders link-shared Plans to guests without listing or editing access', async () => {
+    const base = dependencies();
+    vi.mocked(base.savedPlans.getForViewer).mockResolvedValueOnce({
+      ...base.savedPlan,
+      visibility: 'link',
+      isOwner: false,
+    });
+    await withServer(base.app, async (baseUrl) => {
+      const response = await fetch(`${baseUrl}/plan/${base.savedPlan.planId}`);
+      expect(response.status).toBe(200);
+      expect(base.savedPlans.getForViewer).toHaveBeenCalledWith({
+        planId: base.savedPlan.planId,
+        viewerUserId: null,
+      });
+      expect(base.savedPlans.list).not.toHaveBeenCalled();
+      expect(base.groups.listAcceptedGroupOptions).not.toHaveBeenCalled();
+      expect(base.renderAuthenticatedPage).toHaveBeenLastCalledWith(expect.objectContaining({
+        isGuest: true,
+        savedPlans: [],
+        groupOptions: [],
+        activePlan: expect.objectContaining({ visibility: 'link', isOwner: false }),
+      }));
     });
   });
 
@@ -690,6 +730,18 @@ describe('webRouter', () => {
       expect(fetched.status).toBe(200);
       expect(await fetched.json()).toEqual(base.savedPlan);
 
+      const privateGuest = await fetch(`${baseUrl}/v1/plans/${base.savedPlan.planId}`);
+      expect(privateGuest.status).toBe(404);
+
+      vi.mocked(base.savedPlans.getForViewer).mockResolvedValueOnce({
+        ...base.savedPlan,
+        visibility: 'link',
+        isOwner: false,
+      });
+      const linkedGuest = await fetch(`${baseUrl}/v1/plans/${base.savedPlan.planId}`);
+      expect(linkedGuest.status).toBe(200);
+      expect(await linkedGuest.json()).toEqual(expect.objectContaining({ visibility: 'link', isOwner: false }));
+
       const updated = await fetch(`${baseUrl}/v1/plans/${base.savedPlan.planId}`, {
         method: 'PATCH', headers: { ...auth, 'content-type': 'application/json' }, body: JSON.stringify({ ...body, name: 'Updated' }),
       });
@@ -698,6 +750,33 @@ describe('webRouter', () => {
       expect(base.savedPlans.update).toHaveBeenCalledWith(expect.objectContaining({
         planId: base.savedPlan.planId, ownerUserId: user.userId, name: 'Updated',
       }));
+
+      const shared = await fetch(`${baseUrl}/v1/plans/${base.savedPlan.planId}/visibility`, {
+        method: 'PATCH', headers: { ...auth, 'content-type': 'application/json' },
+        body: JSON.stringify({ visibility: 'group', sharedGroupId: '00000000-0000-4000-8000-000000000101' }),
+      });
+      expect(shared.status).toBe(200);
+      expect(await shared.json()).toEqual({ plan: expect.objectContaining({
+        visibility: 'group', sharedGroupId: '00000000-0000-4000-8000-000000000101',
+      }) });
+      expect(base.savedPlans.updateVisibility).toHaveBeenCalledWith({
+        planId: base.savedPlan.planId,
+        ownerUserId: user.userId,
+        visibility: 'group',
+        sharedGroupId: '00000000-0000-4000-8000-000000000101',
+      });
+
+      const missingGroup = await fetch(`${baseUrl}/v1/plans/${base.savedPlan.planId}/visibility`, {
+        method: 'PATCH', headers: { ...auth, 'content-type': 'application/json' },
+        body: JSON.stringify({ visibility: 'group' }),
+      });
+      expect(missingGroup.status).toBe(422);
+
+      const anonymousShare = await fetch(`${baseUrl}/v1/plans/${base.savedPlan.planId}/visibility`, {
+        method: 'PATCH', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ visibility: 'link' }),
+      });
+      expect(anonymousShare.status).toBe(401);
 
       const strict = await fetch(`${baseUrl}/v1/plans`, {
         method: 'POST', headers: { ...auth, 'content-type': 'application/json' }, body: JSON.stringify({ ...body, isPrivate: false }),

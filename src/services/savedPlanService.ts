@@ -1,6 +1,7 @@
-import { and, desc, eq } from 'drizzle-orm';
+import { and, desc, eq, exists, or, sql } from 'drizzle-orm';
 import type { Database } from '../db/client.js';
 import {
+  pilotGroupMemberships,
   plans,
   type PlanTurnpoint,
   type StoredPlanRoute,
@@ -15,7 +16,9 @@ export type SavedPlan = {
   turnpoints: PlanTurnpoint[];
   generatedRoute: StoredPlanRoute;
   routingPriority: RoutingPriority;
-  isPrivate: boolean;
+  visibility: 'private' | 'link' | 'group';
+  sharedGroupId: string | null;
+  isOwner: boolean;
   createdAt: string;
   updatedAt: string;
 };
@@ -29,11 +32,20 @@ export type SavedPlanWriteInput = {
   routingPriority: unknown;
 };
 
+export type SavedPlanVisibility = SavedPlan['visibility'];
+
 export interface SavedPlanService {
   create(input: SavedPlanWriteInput & { ownerUserId: string }): Promise<SavedPlan>;
   list(ownerUserId: string): Promise<SavedPlanListItem[]>;
   get(input: { planId: string; ownerUserId: string }): Promise<SavedPlan>;
+  getForViewer(input: { planId: string; viewerUserId: string | null }): Promise<SavedPlan>;
   update(input: SavedPlanWriteInput & { planId: string; ownerUserId: string }): Promise<SavedPlan>;
+  updateVisibility(input: {
+    planId: string;
+    ownerUserId: string;
+    visibility: SavedPlanVisibility;
+    sharedGroupId: string | null;
+  }): Promise<SavedPlan>;
   delete(input: { planId: string; ownerUserId: string }): Promise<void>;
 }
 
@@ -166,7 +178,7 @@ function dateIso(value: Date | string): string {
   return date.toISOString();
 }
 
-function savedPlan(row: StoredPlanRow): SavedPlan {
+function savedPlan(row: StoredPlanRow, viewerUserId: string | null = row.ownerUserId): SavedPlan {
   return {
     planId: row.id,
     ownerUserId: row.ownerUserId,
@@ -174,7 +186,9 @@ function savedPlan(row: StoredPlanRow): SavedPlan {
     turnpoints: row.turnpoints,
     generatedRoute: row.generatedRoute,
     routingPriority: row.routingPriority,
-    isPrivate: row.isPrivate,
+    visibility: row.visibility,
+    sharedGroupId: row.sharedGroupId,
+    isOwner: viewerUserId === row.ownerUserId,
     createdAt: dateIso(row.createdAt),
     updatedAt: dateIso(row.updatedAt),
   };
@@ -191,7 +205,8 @@ export function createSavedPlanService(database: Database): SavedPlanService {
       const [created] = await database.insert(plans).values({
         ownerUserId: input.ownerUserId,
         ...values,
-        isPrivate: true,
+        visibility: 'private',
+        sharedGroupId: null,
       }).returning();
       if (!created) throw new Error('Saved Plan creation returned no row.');
       return savedPlan(created);
@@ -222,11 +237,80 @@ export function createSavedPlanService(database: Database): SavedPlanService {
       return savedPlan(row);
     },
 
+    async getForViewer({ planId, viewerUserId }) {
+      if (!validPlanId(planId)) notFound();
+      const access = viewerUserId === null
+        ? eq(plans.visibility, 'link')
+        : or(
+            eq(plans.ownerUserId, viewerUserId),
+            eq(plans.visibility, 'link'),
+            and(
+              eq(plans.visibility, 'group'),
+              exists(
+                database.select({ one: sql`1` })
+                  .from(pilotGroupMemberships)
+                  .where(and(
+                    eq(pilotGroupMemberships.groupId, plans.sharedGroupId),
+                    eq(pilotGroupMemberships.userId, viewerUserId),
+                    eq(pilotGroupMemberships.status, 'accepted'),
+                  )),
+              ),
+            ),
+          );
+      const [row] = await database.select().from(plans).where(and(
+        eq(plans.id, planId),
+        access,
+      )).limit(1);
+      if (!row) notFound();
+      return savedPlan(row, viewerUserId);
+    },
+
     async update(input) {
       if (!validPlanId(input.planId)) notFound();
       const values = cleanWrite(input);
       const [updated] = await database.update(plans).set({
         ...values,
+        updatedAt: new Date(),
+      }).where(and(
+        eq(plans.id, input.planId),
+        eq(plans.ownerUserId, input.ownerUserId),
+      )).returning();
+      if (!updated) notFound();
+      return savedPlan(updated);
+    },
+
+    async updateVisibility(input) {
+      if (!validPlanId(input.planId)) notFound();
+      if (input.visibility !== 'private' && input.visibility !== 'link' && input.visibility !== 'group') {
+        validation('Plan visibility is invalid.');
+      }
+      if (input.visibility === 'group') {
+        if (input.sharedGroupId === null || !validPlanId(input.sharedGroupId)) {
+          validation('A valid Group is required for Group sharing.');
+        }
+      }
+
+      const [owned] = await database.select({ planId: plans.id }).from(plans).where(and(
+        eq(plans.id, input.planId),
+        eq(plans.ownerUserId, input.ownerUserId),
+      )).limit(1);
+      if (!owned) notFound();
+
+      const sharedGroupId = input.visibility === 'group' ? input.sharedGroupId : null;
+      if (sharedGroupId !== null) {
+        const [membership] = await database.select({ groupId: pilotGroupMemberships.groupId })
+          .from(pilotGroupMemberships)
+          .where(and(
+            eq(pilotGroupMemberships.groupId, sharedGroupId),
+            eq(pilotGroupMemberships.userId, input.ownerUserId),
+            eq(pilotGroupMemberships.status, 'accepted'),
+          )).limit(1);
+        if (!membership) validation('The selected Group is unavailable.');
+      }
+
+      const [updated] = await database.update(plans).set({
+        visibility: input.visibility,
+        sharedGroupId,
         updatedAt: new Date(),
       }).where(and(
         eq(plans.id, input.planId),

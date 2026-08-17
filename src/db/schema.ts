@@ -73,6 +73,7 @@ export type StoredPlanRoute = {
 };
 
 export const planRoutingPriority = pgEnum('plan_routing_priority', ['shorter', 'balanced', 'thermal']);
+export const planVisibility = pgEnum('plan_visibility', ['private', 'link', 'group']);
 
 /** Owner-scoped, durable snapshots of routes created in the planner. */
 export const plans = pgTable('plans', {
@@ -82,12 +83,18 @@ export const plans = pgTable('plans', {
   turnpoints: jsonb('turnpoints').$type<PlanTurnpoint[]>().notNull(),
   generatedRoute: jsonb('generated_route').$type<StoredPlanRoute>().notNull(),
   routingPriority: planRoutingPriority('routing_priority').notNull(),
-  isPrivate: boolean('is_private').notNull().default(true),
+  visibility: planVisibility('visibility').notNull().default('private'),
+  sharedGroupId: uuid('shared_group_id').references(() => pilotGroups.id),
   ...timestamps,
 }, (table) => [
   check('plans_name_normalized', sql`${table.name} = btrim(${table.name})`),
   check('plans_name_length', sql`char_length(${table.name}) BETWEEN 1 AND 80`),
+  check(
+    'plans_group_visibility_requires_shared_group',
+    sql`(${table.visibility} = 'group') = (${table.sharedGroupId} IS NOT NULL)`,
+  ),
   index('plans_owner_user_id_updated_at_plan_id_idx').on(table.ownerUserId, table.updatedAt, table.id),
+  index('plans_shared_group_id_idx').on(table.sharedGroupId),
 ]);
 
 export const pilotGroupMemberships = pgTable('pilot_group_memberships', {

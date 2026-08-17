@@ -190,7 +190,17 @@ export function createGroupService(database: Database): GroupService {
         return summary(tx, groupId);
       });
     },
-    async deleteGroup({ groupId, actorUserId }) { await database.transaction(async tx => { await requireOwner(tx, groupId, actorUserId); await tx.execute(sql`DELETE FROM pilot_groups WHERE group_id=${groupId}`); }); },
+    async deleteGroup({ groupId, actorUserId }) {
+      await database.transaction(async tx => {
+        await requireOwner(tx, groupId, actorUserId);
+        await tx.execute(sql`
+          UPDATE plans
+          SET visibility = 'private', shared_group_id = NULL, updated_at = now()
+          WHERE shared_group_id = ${groupId}
+        `);
+        await tx.execute(sql`DELETE FROM pilot_groups WHERE group_id=${groupId}`);
+      });
+    },
     async invite({ groupId, actorUserId, userId }) {
       await database.transaction(async tx => {
         await requireOwner(tx, groupId, actorUserId);

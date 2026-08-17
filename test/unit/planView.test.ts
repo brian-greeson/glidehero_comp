@@ -13,6 +13,7 @@ describe('Plan page', () => {
       defaultRoutingPriority: 'balanced',
       savedPlans: [{ planId: 'plan-1', name: 'Boulder triangle', updatedAt: '2026-08-16T12:00:00.000Z', updatedAtLabel: 'Aug 16, 2026', href: '/plan/plan-1' }],
       activePlan: null,
+      groupOptions: [],
       planBootstrapJson: JSON.stringify({ savedPlans: [], activePlan: null }),
     });
     expect(html).toContain('Plan your next flight');
@@ -33,6 +34,8 @@ describe('Plan page', () => {
     expect(html).toContain('data-plan-name');
     expect(html).toContain('data-plan-save');
     expect(html).toContain('data-plan-new');
+    expect(html).toContain('data-plan-delete-saved-id="plan-1"');
+    expect(html).toContain('aria-label="Delete Boulder triangle"');
     expect(html).toContain('Boulder triangle');
     expect(html).toContain('/plan/plan-1');
     expect(html).not.toContain('Direct cells');
@@ -55,6 +58,7 @@ describe('Plan page', () => {
       defaultRoutingPriority: 'thermal',
       savedPlans: [],
       activePlan: null,
+      groupOptions: [],
       planBootstrapJson: JSON.stringify({ savedPlans: [], activePlan: null }),
     });
 
@@ -83,8 +87,68 @@ describe('Plan page', () => {
     expect(html).toContain('data-plan-export-dialog');
   });
 
+  it('renders mobile-first owner sharing controls for an active Plan', async () => {
+    const plan = {
+      planId: 'plan-1', ownerUserId: 'owner-1', name: 'Boulder triangle', turnpoints: [], generatedRoute: null,
+      routingPriority: 'balanced', visibility: 'group', sharedGroupId: 'group-2', isOwner: true,
+      createdAt: '2026-08-15T12:00:00.000Z', updatedAt: '2026-08-16T12:00:00.000Z',
+    } as any;
+    const html = await createAuthenticatedPageRenderer()({
+      ...createAuthenticatedShellModel({ page: 'plan', user: { displayName: 'Pilot' }, showFooter: false }),
+      page: 'plan', mapStyleUrl: 'style', thermalTileUrl: 'tiles', defaultRoutingPriority: 'balanced',
+      savedPlans: [], activePlan: plan, groupOptions: [{ id: 'group-2', name: 'Front Range Pilots' }],
+      planBootstrapJson: JSON.stringify({ savedPlans: [], activePlan: plan, groupOptions: [] }),
+    });
+
+    expect(html).toContain('class="plan-save-sheet app-bottom-sheet is-partial"');
+    expect(html).toContain('data-map-sheet');
+    expect(html).toContain('data-map-sheet-handle');
+    expect(html).toContain('class="plan-save-sheet__content app-bottom-sheet__content"');
+    expect(html).toContain('name="plan-save-share" data-plan-save-section open');
+    expect(html).toContain('<strong>Save</strong>');
+    expect(html).toContain('name="plan-save-share" data-plan-share-section>');
+    expect(html).toContain('<strong>Share</strong>');
+    expect(html).toContain('Anyone with the link');
+    expect(html).toContain('Share to a Group');
+    expect(html).toContain('Front Range Pilots');
+    expect(html).toContain('data-plan-sharing-copy');
+    expect(html).toContain('value="group" data-plan-visibility checked');
+  });
+
+  it('renders a shared Plan as read-only without owner controls', async () => {
+    const plan = {
+      planId: 'plan-1', ownerUserId: 'owner-1', name: 'Boulder triangle', turnpoints: [], generatedRoute: null,
+      routingPriority: 'balanced', visibility: 'link', sharedGroupId: null, isOwner: false,
+      createdAt: '2026-08-15T12:00:00.000Z', updatedAt: '2026-08-16T12:00:00.000Z',
+    } as any;
+    const html = await createAuthenticatedPageRenderer()({
+      page: 'plan', title: 'Shared Plan', isGuest: true, showFooter: false,
+      mapStyleUrl: 'style', thermalTileUrl: 'tiles', defaultRoutingPriority: 'balanced', savedPlans: [], activePlan: plan,
+      groupOptions: [], planBootstrapJson: JSON.stringify({ savedPlans: [], activePlan: plan, groupOptions: [] }),
+    });
+
+    expect(html).toContain('data-plan-read-only="true"');
+    expect(html).toContain('Read-only');
+    expect(html).toContain('Shared with you by link');
+    expect(html).not.toContain('data-plan-share-sheet');
+    expect(html).not.toContain('data-plan-name');
+    expect(html).not.toContain('data-plan-save');
+    expect(html).not.toContain('data-plan-delete-saved-id');
+    expect(html).toContain('data-plan-fit-route');
+    expect(html).toContain('data-plan-export-open');
+  });
+
   it('uses a four-column mobile navigation', async () => {
     const css = await readFile('public/styles/app-ui/app.css', 'utf8');
     expect(css).toContain('grid-template-columns: repeat(4, 1fr)');
+  });
+
+  it('keeps mobile drawer content intrinsically sized and touch-scrollable', async () => {
+    const css = await readFile('public/styles/app-ui/plan.css', 'utf8');
+    expect(css).toContain('grid-auto-rows: max-content');
+    expect(css).toContain('overflow-y: scroll');
+    expect(css).toContain('touch-action: pan-y');
+    expect(css).toContain('overscroll-behavior-y: contain');
+    expect(css).toContain('.plan-save-sheet__content > * { min-height: max-content; }');
   });
 });
